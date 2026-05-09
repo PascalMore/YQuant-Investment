@@ -25,12 +25,9 @@ from watchdog.events import FileSystemEventHandler, FileCreatedEvent, FileModifi
 
 # 本地模块
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from run_message_pipeline import run_pipeline as run_message_pipeline_async, parse_text_to_df, save_excel
-from extractors.paddleocr_image_extractor import PaddleOCRImageExtractor
-from transformers.paddleocr_excel_transformer import PaddleOCRExcelTransformer
-from transformers.image_portfolio_normalizer import normalize_all
-from validators.portfolio_validator import validate_basic_info, validate_nav, validate_position, ValidationResult
-from loaders.mongodb_loader import PortfolioMongoLoader
+from run_image_pipeline import run_pipeline as run_image_pipeline_async
+from run_message_pipeline import run_pipeline as run_message_pipeline_async
+
 
 # 配置日志
 logging.basicConfig(
@@ -71,77 +68,31 @@ class PortfolioPipeline:
     @staticmethod
     async def process_image(image_path: Path, date_str: Optional[str] = None) -> dict:
         """
-        处理图片持仓数据：OCR → Excel → Normalize → Validate → MongoDB
+        处理图片持仓数据：调用 run_image_pipeline.py 的 run_pipeline()
         """
         if date_str is None:
             date_str = datetime.now().strftime("%Y-%m-%d")
 
         # 确保目录存在（收到数据时才创建）
-        image_dir, message_dir = PortfolioPipeline.ensure_subdirs(date_str)
-
-        # 生成带秒级精度的新文件名（避免同一分钟内重名）
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        base_name = f"portfolio_{timestamp}"
-        new_image_path = image_dir / f"{base_name}{image_path.suffix}"
-        
-        # 重命名原始图片
-        import shutil
-        shutil.move(str(image_path), str(new_image_path))
-        image_path = new_image_path
+        PortfolioPipeline.ensure_subdirs(date_str)
 
         logger.info(f"[Image Pipeline] 开始处理: {image_path}")
 
         try:
-            # Step 1: OCR Image → Excel (与图片同名，仅扩展名不同)
-            extractor = PaddleOCRImageExtractor()
-            records = await extractor.extract(str(image_path))
-
-            if not records:
-                raise ValueError("OCR 未提取到数据")
-
-            df = records[0]["df"]
-            excel_path = image_path.with_suffix(".xlsx")
-
-            logger.info(f"[Image Pipeline] OCR 完成: {excel_path} ({len(df)} rows)")
-
-            # Step 2: Transform
-            transformer = PaddleOCRExcelTransformer()
-            nested = transformer.transform(records)
-            normalized = normalize_all(nested[0])
-
-            logger.info(f"[Image Pipeline] Normalized: basic={len(normalized['basic_info'])}, "
-                        f"nav={len(normalized['nav'])}, pos={len(normalized['position'])}")
-
-            # Step 3: Validate
-            vr_basic = validate_basic_info(normalized["basic_info"])
-            vr_nav = validate_nav(normalized["nav"])
-            vr_pos = validate_position(normalized["position"])
-            merged = ValidationResult()
-            merged.merge(vr_basic)
-            merged.merge(vr_nav)
-            merged.merge(vr_pos)
-
-            if merged.has_errors:
-                logger.error(f"[Image Pipeline] Validation errors: {merged.errors}")
-                raise ValueError(f"Validation failed: {'; '.join(merged.errors)}")
-
-            # Step 4: MongoDB
-            loader = PortfolioMongoLoader()
-            result = loader.load_all(normalized)
-
-            mongodb_result = {"inserted": result.get("inserted", 0), "updated": result.get("updated", 0), "skipped": result.get("skipped", 0)}
-            logger.info(f"[Image Pipeline] ✅ 完成: inserted={mongodb_result['inserted']}, "
-                        f"updated={mongodb_result['updated']}, skipped={mongodb_result['skipped']}")
-
+            result = await run_image_pipeline_async(
+                image_path=str(image_path),
+                date_str=date_str,
+                source_root=SOURCE_ROOT,
+                dry_run=False,
+            )
+            logger.info(f"[Image Pipeline] ✅ 完成: {result}")
             return {
                 "type": "image",
-                "source": str(image_path),
-                "excel": str(excel_path),
-                "rows": len(df),
-                "mongodb": mongodb_result,
-                "validation": {"valid": merged.valid, "errors": merged.errors, "warnings": merged.warnings},
+                "source": result.get("image"),
+                "excel": result.get("excel_path"),
+                "rows": result.get("rows"),
+                "mongodb": result.get("mongodb"),
             }
-
         except Exception as e:
             logger.error(f"[Image Pipeline] ❌ 失败: {e}")
             raise
@@ -149,77 +100,31 @@ class PortfolioPipeline:
     @staticmethod
     async def process_message(message_path: Path, date_str: Optional[str] = None) -> dict:
         """
-        处理文本持仓数据：Parse → Excel → Normalize → Validate → MongoDB
+        处理文本持仓数据：调用 run_message_pipeline.py 的 run_pipeline()
         """
         if date_str is None:
             date_str = datetime.now().strftime("%Y-%m-%d")
 
         # 确保目录存在（收到数据时才创建）
-        image_dir, message_dir = PortfolioPipeline.ensure_subdirs(date_str)
-
-        # 生成带秒级精度的新文件名（避免同一分钟内重名）
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        base_name = f"portfolio_{timestamp}"
-        new_message_path = message_dir / f"{base_name}{message_path.suffix}"
-        
-        # 重命名原始 message 文件
-        import shutil
-        shutil.move(str(message_path), str(new_message_path))
-        message_path = new_message_path
+        PortfolioPipeline.ensure_subdirs(date_str)
 
         logger.info(f"[Message Pipeline] 开始处理: {message_path}")
 
         try:
-            # Step 1: 读取文本并解析
-            raw_text = message_path.read_text(encoding="utf-8")
-            df = parse_text_to_df(raw_text)
-
-            if df.empty:
-                raise ValueError("解析后无有效数据")
-
-            # Step 2: 保存 Excel（与原始 message 文件同名，仅扩展名不同）
-            excel_path = save_excel(df, date_str, SOURCE_ROOT, input_filename=str(message_path))
-            logger.info(f"[Message Pipeline] Excel → {excel_path} ({len(df)} rows)")
-
-            # Step 3: Transform
-            transformer = PaddleOCRExcelTransformer()
-            records = [{"df": df}]
-            nested = transformer.transform(records)
-            normalized = normalize_all(nested[0])
-
-            logger.info(f"[Message Pipeline] Normalized: basic={len(normalized['basic_info'])}, "
-                        f"nav={len(normalized['nav'])}, pos={len(normalized['position'])}")
-
-            # Step 4: Validate
-            vr_basic = validate_basic_info(normalized["basic_info"])
-            vr_nav = validate_nav(normalized["nav"])
-            vr_pos = validate_position(normalized["position"])
-            merged = ValidationResult()
-            merged.merge(vr_basic)
-            merged.merge(vr_nav)
-            merged.merge(vr_pos)
-
-            if merged.has_errors:
-                logger.error(f"[Message Pipeline] Validation errors: {merged.errors}")
-                raise ValueError(f"Validation failed: {'; '.join(merged.errors)}")
-
-            # Step 5: MongoDB
-            loader = PortfolioMongoLoader()
-            result = loader.load_all(normalized)
-
-            mongodb_result = {"inserted": result.get("inserted", 0), "updated": result.get("updated", 0), "skipped": result.get("skipped", 0)}
-            logger.info(f"[Message Pipeline] ✅ 完成: inserted={mongodb_result['inserted']}, "
-                        f"updated={mongodb_result['updated']}, skipped={mongodb_result['skipped']}")
-
+            result = await run_message_pipeline_async(
+                raw_text=message_path.read_text(encoding="utf-8"),
+                date_str=date_str,
+                source_root=SOURCE_ROOT,
+                dry_run=False,
+            )
+            logger.info(f"[Message Pipeline] ✅ 完成: {result}")
             return {
                 "type": "message",
-                "source": str(message_path),
-                "excel": str(excel_path),
-                "rows": len(df),
-                "mongodb": mongodb_result,
-                "validation": {"valid": merged.valid, "errors": merged.errors, "warnings": merged.warnings},
+                "source": result.get("excel_path"),  # 原文件路径
+                "excel": result.get("excel_path"),
+                "rows": result.get("rows"),
+                "mongodb": result.get("mongodb"),
             }
-
         except Exception as e:
             logger.error(f"[Message Pipeline] ❌ 失败: {e}")
             raise
@@ -336,8 +241,7 @@ async def process_existing_files(processed_files: set) -> list[dict]:
         if str(path) in processed_files:
             continue
 
-        file_type = SmartMoneyHandler._get_file_type(None, path) if False else None
-        # 简单判断
+        # 简单判断文件类型
         if "image" in str(path):
             file_type = "image"
         elif "message" in str(path):

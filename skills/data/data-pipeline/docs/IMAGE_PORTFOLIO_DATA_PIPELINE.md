@@ -2,14 +2,14 @@
 
 ## 1. 整体流程
 
-### 路径 A：图片 OCR → Excel（paddleocr_table2excel 技能）
+### 路径 A：图片 OCR → Excel（MiniMax CLI Vision）
 
 ```
 Step 1: 图片采集保存
         用户发送多张图片 → 保存到 source/smart-money/YYYY-MM-DD/
 
 Step 2: OCR 识别 → 生成 Excel
-        PaddleOCRImageExtractor（调用 paddleocr_table2excel 技能）
+        MiniMaxImageExtractor（调用 mmx vision describe）
         → 扁平 DataFrame → 保存 Excel
 
 Step 3: 数据入库
@@ -30,14 +30,14 @@ Step 2: 数据标准化
 **两条路径在 Step 3 汇合，后续流程完全共用。**
 
 ### Step 2 技术选型（路径 A）
-- **技能**：`skills/common/paddleocr_table2excel/`
-- **引擎**：PaddlePaddle 3.0.0 + PaddleOCR 2.7.3（全程 CPU 推理，离线运行）
+- **工具**：MiniMax CLI (`mmx vision describe`)
+- **引擎**：MiniMax VLM 图像理解（云端 API，需网络连接）
 - **输入**：本地图片（.jpg/.png）
 - **输出**：标准 .xlsx Excel 文件，11 列
 - **调用方式**：
   ```python
-  from extractors import PaddleOCRImageExtractor
-  extractor = PaddleOCRImageExtractor()
+  from extractors import MiniMaxImageExtractor
+  extractor = MiniMaxImageExtractor()
   records = await extractor.extract("/path/to/image.jpg")
   # records: [{"df": DataFrame, "source_path": "..."}]
   ```

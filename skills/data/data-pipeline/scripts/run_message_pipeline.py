@@ -17,12 +17,14 @@ from pathlib import Path
 from typing import Optional
 
 import pandas as pd
+from openpyxl import load_workbook
+from openpyxl.styles import numbers
 
 # 复用 data-pipeline 模块
 _pipeline_root = Path(__file__).resolve().parents[2] / "data-pipeline" / "scripts"
 sys.path.insert(0, str(_pipeline_root))
 
-from transformers.paddleocr_excel_transformer import PaddleOCRExcelTransformer
+from transformers.portfolio_excel_transformer import PortfolioExcelTransformer
 from transformers.image_portfolio_normalizer import normalize_all
 from validators.portfolio_validator import (
     validate_basic_info, validate_nav, validate_position,
@@ -105,9 +107,12 @@ def parse_text_to_df(text: str) -> pd.DataFrame:
             df[col] = ""
     df = df[STANDARD_COLUMNS]
 
-    # 数值列
+    # 数值列（持仓比例需要转换为小数）
     for col in ["持仓比例", "数量", "市值（本币）", "最新净值", "最新份额", "最新规模"]:
-        df[col] = pd.to_numeric(df[col].astype(str).str.strip(), errors="coerce")
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col].astype(str).str.strip().str.replace("%", "", regex=False).str.replace("％", "", regex=False), errors="coerce")
+            if col == "持仓比例":
+                df[col] = df[col] / 100  # Convert percentage to decimal
 
     # 字符串列
     for col in ["截止日期", "产品名称", "产品代码", "Wind代码", "资产名称"]:
@@ -161,6 +166,23 @@ def save_excel(df: pd.DataFrame, date_str: str, source_root: Path, base_name: st
         counter += 1
 
     df.to_excel(excel_path, index=False, sheet_name="Sheet1")
+
+    # 应用 Excel 格式：持仓比例列设为百分比格式（保留2位小数）
+    # 如果是数值（如 5.77），需要除以 100 后 Excel 才能正确显示为 5.77%
+    wb = load_workbook(excel_path)
+    ws = wb.active
+
+    # 找到持仓比例列的索引（0-based，Excel列从1开始）
+    header = [cell.value for cell in ws[1]]
+    if "持仓比例" in header:
+        col_idx = header.index("持仓比例") + 1  # openpyxl列从1开始
+        for row in range(2, ws.max_row + 1):
+            cell = ws.cell(row=row, column=col_idx)
+            if cell.value is not None:
+                cell.value = cell.value / 100  # 转为小数（如 0.0577）
+                cell.number_format = '0.00%'   # Excel 百分比格式
+
+    wb.save(excel_path)
     return excel_path
 
 
@@ -193,7 +215,7 @@ async def run_pipeline(
 
     # Step 2: 读取 Excel → nested JSON（直接读取，不走 OCR）
     records = [{"df": df}]
-    transformer = PaddleOCRExcelTransformer()
+    transformer = PortfolioExcelTransformer()
     nested = transformer.transform(records)
     normalized = normalize_all(nested[0])
 
@@ -255,7 +277,7 @@ def main():
         sys.exit(1)
 
     # source_root: 向上两级到 workspace-yquant/skills/data/source/smart-money
-    source_root = Path(__file__).resolve().parents[3] / "data" / "source" / "smart-money"
+    source_root = Path(__file__).resolve().parents[2] / "source" / "smart-money"
 
     import asyncio
     result = asyncio.run(run_pipeline(raw_text, args.date, source_root, dry_run=args.dry_run))

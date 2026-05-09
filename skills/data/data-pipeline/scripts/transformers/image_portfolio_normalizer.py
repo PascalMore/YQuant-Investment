@@ -2,6 +2,7 @@
 
 Normalizes nested JSON from image OCR into flattened records ready for database insertion.
 """
+import math
 from typing import Any
 
 
@@ -51,9 +52,16 @@ def normalize_nav(daily_data: list[dict]) -> list[dict]:
             aum = product.get("最新规模")
             
             # 填充缺失的 aum: nav * share
-            if (aum is None or aum == "") and nav is not None and share is not None:
+            if (aum is None or aum == "" or (isinstance(aum, float) and math.isnan(aum))) and nav is not None and share is not None and not (isinstance(share, float) and math.isnan(share)):
                 try:
                     aum = float(nav) * float(share)
+                except (ValueError, TypeError):
+                    pass
+
+            # 填充缺失的 share: aum / nav
+            if (share is None or share == "" or (isinstance(share, float) and math.isnan(share))) and aum is not None and nav is not None and float(nav) != 0:
+                try:
+                    share = float(aum) / float(nav)
                 except (ValueError, TypeError):
                     pass
             
@@ -90,7 +98,7 @@ def normalize_position(daily_data: list[dict]) -> list[dict]:
                     "asset_name": pos.get("资产名称"),
                     "holding_ratio": pos.get("持仓比例"),
                     "shares": pos.get("数量"),
-                    "market_value": pos.get("市值（本币）"),
+                    "market_value": pos.get("market_value"),
                 })
     return records
 

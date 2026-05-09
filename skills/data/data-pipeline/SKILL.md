@@ -213,13 +213,13 @@ class DataPipeline:
 
 ```python
 from pipeline import DataPipeline
-from extractors.image_parser import ImageParserExtractor
+from extractors.minimax_image_extractor import MiniMaxImageExtractor
 from transformers.normalizer import NaNNormalizer
 from validators.schema_validator import SchemaValidator
 from loaders.mongodb_loader import MongoDBLoader
 
 pipeline = DataPipeline(
-    extractor=ImageParserExtractor(),
+    extractor=MiniMaxImageExtractor(),
     transformer=NaNNormalizer(),
     validator=SchemaValidator(schema_name="manual_input"),
     loader=MongoDBLoader(db_name="tradingagents", collection="manual_input_data")
@@ -234,7 +234,7 @@ result = await pipeline.run(source="/path/to/screenshot.png")
 
 | Extractor | 状态 | 说明 |
 |-----------|------|------|
-| `ImageParserExtractor` | 待实现 | 从图片解析结构化数据（Vision 模型） |
+| `MiniMaxImageExtractor` | ✅ 已完成 | 从图片解析结构化数据（MiniMax CLI Vision） |
 | `ApiExtractor` | 待实现 | 从 Tushare/AKShare API 拉取 |
 | `FileExtractor` | 待实现 | 从 CSV/Excel 导入 |
 | `MessageExtractor` | 待实现 | 从聊天消息解析结构化数据 |

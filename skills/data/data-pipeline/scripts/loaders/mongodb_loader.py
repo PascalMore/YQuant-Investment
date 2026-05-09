@@ -22,6 +22,7 @@ class PortfolioMongoLoader:
       - portfolio_basic_info  (UK: product_code)
       - portfolio_nav          (UK: nav_date + product_code)
       - portfolio_position    (UK: position_date + product_code + asset_wind_code)
+      - portfolio_trade        (UK: trade_date + product_code + asset_wind_code + direction)
 
     Config can be passed as a dict or loaded from environment variables:
       MONGODB_HOST, MONGODB_PORT, MONGODB_USERNAME, MONGODB_PASSWORD, MONGODB_DATABASE
@@ -68,20 +69,11 @@ class PortfolioMongoLoader:
     # -------------------------------------------------------------------------
 
     def upsert_basic_info(self, records: list[dict]) -> int:
-        """
-        Bulk upsert portfolio_basic_info by product_code.
-
-        Each record should contain: product_code, product_name, and optionally
-        latest_nav, latest_share, latest_aum (from most recent NAV).
-
-        Returns count of upserted documents.
-        """
+        """Bulk upsert portfolio_basic_info by product_code."""
         if not records:
             return 0
-
         coll = self._db()["portfolio_basic_info"]
         now = self._now()
-
         ops = [
             ReplaceOne(
                 {"product_code": r["product_code"]},
@@ -91,32 +83,19 @@ class PortfolioMongoLoader:
             for r in records
             if r.get("product_code")
         ]
-
         if not ops:
             return 0
-
         result = coll.bulk_write(ops, ordered=False)
         total = (result.upserted_count or 0) + (result.modified_count or 0)
-        logger.info(
-            f"[portfolio_basic_info] upserted={result.upserted_count}, "
-            f"modified={result.modified_count}"
-        )
+        logger.info(f"[portfolio_basic_info] upserted={result.upserted_count}, modified={result.modified_count}")
         return total
 
     def upsert_nav(self, records: list[dict]) -> int:
-        """
-        Bulk upsert portfolio_nav by compound key (nav_date, product_code).
-
-        Each record should contain: nav_date (YYYY-MM-DD), product_code, nav, aum, share.
-
-        Returns count of upserted documents.
-        """
+        """Bulk upsert portfolio_nav by compound key (nav_date, product_code)."""
         if not records:
             return 0
-
         coll = self._db()["portfolio_nav"]
         now = self._now()
-
         ops = [
             ReplaceOne(
                 {"nav_date": r["nav_date"], "product_code": r["product_code"]},
@@ -126,33 +105,18 @@ class PortfolioMongoLoader:
             for r in records
             if r.get("nav_date") and r.get("product_code")
         ]
-
         if not ops:
             return 0
-
         result = coll.bulk_write(ops, ordered=False)
-        logger.info(
-            f"[portfolio_nav] upserted={result.upserted_count}, "
-            f"modified={result.modified_count}"
-        )
+        logger.info(f"[portfolio_nav] upserted={result.upserted_count}, modified={result.modified_count}")
         return (result.upserted_count or 0) + (result.modified_count or 0)
 
     def upsert_position(self, records: list[dict]) -> int:
-        """
-        Bulk upsert portfolio_position by compound key
-        (position_date, product_code, asset_wind_code).
-
-        Each record should contain: position_date (YYYY-MM-DD), product_code,
-        asset_wind_code, asset_name, holding_ratio, shares, market_value.
-
-        Returns count of upserted documents.
-        """
+        """Bulk upsert portfolio_position by compound key."""
         if not records:
             return 0
-
         coll = self._db()["portfolio_position"]
         now = self._now()
-
         ops = [
             ReplaceOne(
                 {
@@ -166,46 +130,56 @@ class PortfolioMongoLoader:
             for r in records
             if r.get("position_date") and r.get("product_code") and r.get("asset_wind_code")
         ]
-
         if not ops:
             return 0
-
         result = coll.bulk_write(ops, ordered=False)
-        logger.info(
-            f"[portfolio_position] upserted={result.upserted_count}, "
-            f"modified={result.modified_count}"
-        )
+        logger.info(f"[portfolio_position] upserted={result.upserted_count}, modified={result.modified_count}")
+        return (result.upserted_count or 0) + (result.modified_count or 0)
+
+    def upsert_trade(self, records: list[dict]) -> int:
+        """Bulk upsert portfolio_trade by compound key (trade_date, product_code, asset_wind_code, direction)."""
+        if not records:
+            return 0
+        coll = self._db()["portfolio_trade"]
+        now = self._now()
+        ops = [
+            ReplaceOne(
+                {
+                    "trade_date": r["trade_date"],
+                    "product_code": r["product_code"],
+                    "asset_wind_code": r["asset_wind_code"],
+                    "direction": r["direction"],
+                },
+                {**r, "updated_at": now},
+                upsert=True,
+            )
+            for r in records
+            if r.get("trade_date") and r.get("product_code") and r.get("asset_wind_code") and r.get("direction")
+        ]
+        if not ops:
+            return 0
+        result = coll.bulk_write(ops, ordered=False)
+        logger.info(f"[portfolio_trade] upserted={result.upserted_count}, modified={result.modified_count}")
         return (result.upserted_count or 0) + (result.modified_count or 0)
 
     def _update_basic_info_latest_from_nav(self, product_codes: list[str]) -> None:
-        """
-        For each product_code, compute latest_nav/share/aum from portfolio_nav
-        (max nav_date row) and upsert into portfolio_basic_info.
-
-        This replaces the stale approach of reading latest_* directly from OCR payload.
-        """
+        """Update latest nav/share/aum fields from portfolio_nav for each product."""
         db = self._db()
         now = self._now()
-
         for code in product_codes:
-            # Get the latest NAV row by max(nav_date)
             row = db["portfolio_nav"].find_one(
                 {"product_code": code},
                 sort=[("nav_date", -1)],
                 projection={"nav": 1, "share": 1, "aum": 1},
             )
-
             if not row:
                 continue
-
-            # Fallback: compute aum from nav * share if missing
             aum = row.get("aum")
             if (aum is None or aum == "") and row.get("nav") and row.get("share"):
                 try:
                     aum = float(row["nav"]) * float(row["share"])
                 except (ValueError, TypeError):
                     aum = None
-
             db["portfolio_basic_info"].update_one(
                 {"product_code": code},
                 {
@@ -215,51 +189,33 @@ class PortfolioMongoLoader:
                         "latest_aum": aum,
                         "updated_at": now,
                     },
-                    "$setOnInsert": {
-                        "product_code": code,
-                    },
+                    "$setOnInsert": {"product_code": code},
                 },
                 upsert=True,
             )
-
         logger.info(f"[_update_basic_info_latest_from_nav] updated {len(product_codes)} products")
 
     def load_all(self, data: dict) -> dict:
-        """
-        Load all normalized portfolio data into MongoDB.
-
-        Args:
-            data: Dict with optional keys:
-                  - basic_info: list[dict] for portfolio_basic_info
-                  - nav: list[dict] for portfolio_nav
-                  - position: list[dict] for portfolio_position
-
-        Returns:
-            Dict with counts: {basic_info: int, nav: int, position: int}
-        """
-        counts = {
-            "basic_info": 0,
-            "nav": 0,
-            "position": 0,
-        }
-
+        """Load all normalized portfolio data into MongoDB."""
+        counts = {"basic_info": 0, "nav": 0, "position": 0}
         if data.get("nav"):
             counts["nav"] = self.upsert_nav(data["nav"])
-
         if data.get("position"):
             counts["position"] = self.upsert_position(data["position"])
-
-        # Always upsert basic_info first (product_code + product_name from OCR),
-        # then overwrite latest_nav/share/aum from the actual max(nav_date) row.
         if data.get("basic_info"):
             counts["basic_info"] = self.upsert_basic_info(data["basic_info"])
-
-        # Sync latest_* fields from portfolio_nav (most recent nav_date per product)
         if data.get("nav"):
-            codes_in_batch = list({r["product_code"] for r in data["nav"] if r.get("product_code")})
-            self._update_basic_info_latest_from_nav(codes_in_batch)
-
+            codes = list({r["product_code"] for r in data["nav"] if r.get("product_code")})
+            self._update_basic_info_latest_from_nav(codes)
         logger.info(f"[load_all] completed: {counts}")
+        return counts
+
+    def load_trade(self, data: dict) -> dict:
+        """Load normalized trade data into MongoDB."""
+        counts = {"trade": 0}
+        if data.get("trade"):
+            counts["trade"] = self.upsert_trade(data["trade"])
+        logger.info(f"[load_trade] completed: {counts}")
         return counts
 
     def close(self):
@@ -267,37 +223,3 @@ class PortfolioMongoLoader:
             self._client.close()
             self._client = None
             logger.info("MongoDB connection closed")
-
-
-# -----------------------------------------------------------------------------
-# Test / demo
-# -----------------------------------------------------------------------------
-if __name__ == "__main__":
-    import json, sys, os
-
-    # Add project root to path so normalizer can be imported
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-    from transformers.image_portfolio_normalizer import normalize_all
-
-    # Load mock data
-    mock_path = os.path.join(os.path.dirname(__file__), "..", "..", "examples", "mock_3days_decoded.json")
-    with open(mock_path) as f:
-        decoded = json.load(f)
-
-    normalized = normalize_all(decoded)
-
-    print("=== Normalized Record Summary ===")
-    print(f"basic_info : {len(normalized['basic_info'])} records")
-    print(f"nav        : {len(normalized['nav'])} records")
-    print(f"position   : {len(normalized['position'])} records")
-
-    # Connect and upsert
-    loader = PortfolioMongoLoader()
-    counts = loader.load_all(normalized)
-    print(f"\n=== MongoDB Upsert Results ===")
-    print(f"basic_info : {counts['basic_info']} upserted")
-    print(f"nav        : {counts['nav']} upserted")
-    print(f"position   : {counts['position']} upserted")
-    print("\n✅ MongoDB upsert completed successfully.")
-    loader.close()

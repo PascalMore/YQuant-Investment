@@ -1,9 +1,9 @@
 """
-Excel → Nested JSON Transformer for PaddleOCR output.
+Excel → Nested JSON Transformer for Portfolio data.
 
-Receives a pandas DataFrame from paddleocr_table2excel skill
-(e.g. portfolio_008.xlsx with columns: 截止日期/产品名称/产品代码/Wind代码/资产名称/
-持仓比例/数量/市值（本币）/最新净值/最新份额/最新规模),
+Receives a pandas DataFrame from any source (Message text or Image OCR)
+with columns: 截止日期/产品名称/产品代码/Wind代码/资产名称/
+持仓比例/数量/市值（本币）/最新净值/最新份额/最新规模,
 converts it into the nested JSON structure expected by image_portfolio_normalizer.
 
 Output structure:
@@ -24,7 +24,7 @@ Output structure:
                             "资产名称": "海康威视",
                             "持仓比例": 0.1169,
                             "数量": 2415,
-                            "市值（本币）": 2415,
+                            "market_value": 2415,
                         },
                         ...
                     ]
@@ -48,25 +48,46 @@ import pandas as pd
 from .base import BaseTransformer
 
 
-class PaddleOCRExcelTransformer(BaseTransformer):
+class PortfolioExcelTransformer(BaseTransformer):
     """
-    Converts Excel DataFrame from paddleocr_table2excel skill into nested JSON.
+    Converts Excel DataFrame from Message text or Image OCR into nested JSON.
 
-    Input DataFrame columns (from PaddleOCR):
+    Input DataFrame columns (both full-width and ASCII variants accepted):
         截止日期, 产品名称, 产品代码, Wind代码, 资产名称,
-        持仓比例, 数量, 市值（本币）, 最新净值, 最新份额, 最新规模
+        持仓比例, 数量, 市值（本币）/市值(本币), 最新净值, 最新份额, 最新规模
 
     Output: nested JSON dict with 'daily_data' key
     """
 
     def __init__(self):
-        self.source_type = "excel_from_paddleocr"
+        self.source_type = "excel_portfolio"
+
+    # Standard column names - all use full-width parentheses
+    _STD_COLS = {
+        "截止日期", "产品名称", "产品代码", "Wind代码", "资产名称",
+        "持仓比例", "数量", "最新净值", "最新份额", "最新规模",
+    }
+    # 市值(本币) has two common forms: full-width （） and ASCII ()
+    _MV_COLS = ("市值（本币）", "市值(本币)")
+
+    def _std_col(self, col: str) -> str | None:
+        """
+        Normalize column name to standard, or return None if not a standard col.
+        Handles the common case of full-width vs ASCII parentheses in 市值(本币).
+        """
+        col = col.strip()
+        if col in self._STD_COLS:
+            return col
+        # 市值(本币) → 市值（本币） regardless of parenthesis style
+        if col in self._MV_COLS:
+            return "市值（本币）"
+        return None
 
     def transform(self, records: list[dict]) -> list[dict]:
         """
         Args:
             records: List containing a single dict with keys:
-                - 'df': pandas DataFrame from PaddleOCR Excel
+                - 'df': pandas DataFrame from Excel or OCR
                 - 'source_path': original image path (optional, for logging)
 
         Returns:
@@ -88,31 +109,28 @@ class PaddleOCRExcelTransformer(BaseTransformer):
 
     def _convert(self, df: pd.DataFrame) -> list[dict]:
         """
-        Convert normalized Excel DataFrame into nested JSON structure.
+        Convert Excel DataFrame into nested JSON structure.
 
         Strategy:
+        - Normalize all column names first (handles full-width vs ASCII parens)
         - Group by (date, product_code) to build product-level records
         - Aggregate positions per product
-        - Pull latest_nav/share/aum from the last position row per product
         """
-        # Skip header rows (frozen pane leak: "持仓比例" appears as asset name)
-        HEADER_KEYWORDS = {
-            "持仓比例", "市值（本币）", "最新净值", "最新份额", "最新规模",
-            "Wind代码", "资产名称", "产品代码", "产品名称", "截止日期", "数量",
-        }
+        # ---- Normalize column names ----
+        # 市值(本币) (ASCII parens) → 市值（本币）(full-width) in one pass
+        rename_map = {c: self._std_col(c) for c in df.columns if self._std_col(c) is not None}
+        if rename_map:
+            df = df.rename(columns=rename_map)
+
         REQUIRED_COLS = ["截止日期", "产品代码", "资产名称", "持仓比例"]
         for col in REQUIRED_COLS:
             if col not in df.columns:
                 raise ValueError(f"Missing required column: {col}")
 
-        # Drop rows where 资产名称 is a header keyword (frozen pane artifact)
-        if "资产名称" in df.columns:
-            df = df[df["资产名称"].apply(lambda v: str(v or "") not in HEADER_KEYWORDS)]
-
-        # Clean up: drop rows where 产品代码 is null/empty
+        # Drop rows where 产品代码 is null/empty
         df = df[df["产品代码"].notna() & (df["产品代码"].astype(str).str.strip() != "")]
 
-        # Ensure numeric types
+        # Ensure numeric types (use standard col names after rename)
         for col in ["持仓比例", "数量", "市值（本币）", "最新净值", "最新份额", "最新规模"]:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -145,7 +163,7 @@ class PaddleOCRExcelTransformer(BaseTransformer):
                     "资产名称": str(row.get("资产名称") or "").strip(),
                     "持仓比例": self._to_float(row.get("持仓比例")),
                     "数量": self._to_int(row.get("数量")),
-                    "市值（本币）": self._to_int(row.get("市值（本币）")),
+                    "market_value": self._to_int(row.get("市值（本币）")),
                 }
                 products_map[code]["positions"].append(pos)
 
