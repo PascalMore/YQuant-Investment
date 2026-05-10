@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-08T13:06:09.122Z",
+  "updatedAt": "2026-05-10T14:32:16.315Z",
   "entries": {
     "memory:memory/2026-04-05.md:1:38": {
       "key": "memory:memory/2026-04-05.md:1:38",
@@ -5398,18 +5398,23 @@
       "endLine": 41,
       "source": "memory",
       "snippet": "# 2026-04-16 日记 ## 今日事件 ### 飞书问题排查（晚间） - **现象**：飞书发消息小Q无响应，提示 \"AI service is temporarily overloaded\" - **诊断过程**： 1. Context 满（99.9%）→ 重启 Gateway 后解决 2. 重启后飞书仍然无响应 3. dedup 文件显示 20:11 后就没有收到任何消息 4. 检查 `feishu-pairing.json` 发现是空的 `\"requests\": []` 5. Gateway status 显示 Feishu: OK，但实际消息接收断开 - **权限配置**（已确认正确）： - `contact:user.base:readonly` - `m:chat`, `m:message` - `im:message.group_at_msg:readonly` - `im:message.p2p_msg:readonly` - `im:message:send_as_bot` - `im:resource` - 事件订阅：`im.message.receive_v1` - 机器人能力：已开启 - **可能原因**： 1. 应用是「开发中」状态，只有管理员自己能找到 2. 需要发布应用才能让其他用户使用 3. 或者需要确认找的是正确的机器人（应用名而非\"小Q\"） - **待确认**：应用发布状态 + 是否找对了机器人 ## 系统状态 | 组件 | 状态 | 备注 | |-----",
-      "recallCount": 1,
+      "recallCount": 5,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 4.968810573126827,
       "maxScore": 1,
       "firstRecalledAt": "2026-05-04T15:27:25.167Z",
-      "lastRecalledAt": "2026-05-04T15:27:25.167Z",
+      "lastRecalledAt": "2026-05-10T14:32:16.315Z",
       "queryHashes": [
-        "9c35c9cb8382"
+        "9c35c9cb8382",
+        "ea73516fae01",
+        "9644cd8a478a",
+        "0b2c88928e9f",
+        "60c99e53dd1a"
       ],
       "recallDays": [
-        "2026-05-04"
+        "2026-05-04",
+        "2026-05-10"
       ],
       "conceptTags": [
         "gateway",
@@ -5429,18 +5434,20 @@
       "endLine": 27,
       "source": "memory",
       "snippet": "## Light Sleep <!-- openclaw:dreaming:light:start --> - Candidate: 飞书问题排查（晚间）: **现象**：飞书发消息小Q无响应，提示 \"AI service is temporarily overloaded\"; **诊断过程**：; Context 满（99.9%）→ 重启 Gateway 后解决; 重启后飞书仍然无响应 - confidence: 0.62 - evidence: memory/2026-04-16.md:6-9 - recalls: 0 - status: staged - Candidate: 飞书问题排查（晚间）: dedup 文件显示 20:11 后就没有收到任何消息; 检查 `feishu-pairing.json` 发现是空的 `\"requests\": []`; Gateway status 显示 Feishu: OK，但实际消息接收断开 - confidence: 0.62 - evidence: memory/2026-04-16.md:10-12 - recalls: 0 - status: staged - Candidate: 飞书问题排查（晚间）: **权限配置**（已确认正确）：; `contact:user.base:readonly`; `m:chat`, `m:message`; `im:message.group_at_msg:readonly` - confidence: 0.62 - evidence: memory",
-      "recallCount": 1,
+      "recallCount": 2,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 2,
       "maxScore": 1,
       "firstRecalledAt": "2026-05-04T15:27:25.167Z",
-      "lastRecalledAt": "2026-05-04T15:27:25.167Z",
+      "lastRecalledAt": "2026-05-10T14:31:16.466Z",
       "queryHashes": [
-        "9c35c9cb8382"
+        "9c35c9cb8382",
+        "0b2c88928e9f"
       ],
       "recallDays": [
-        "2026-05-04"
+        "2026-05-04",
+        "2026-05-10"
       ],
       "conceptTags": [
         "gateway",
@@ -5460,18 +5467,22 @@
       "endLine": 42,
       "source": "memory",
       "snippet": "# 2026-04-07 Daily Memory ## Daily Stock Analysis 项目配置 ### 环境变量 (.env) 路径 `~/.openclaw/workspace/skills/investment/research/daily_stock_analysis/.env` ### 当前自选股配置 `STOCK_LIST=002594,00981,01801` ⚠️ **已知问题：** 00981 和 01801 不是有效股票代码，只有 002594 能正常解析。需要确认正确的股票代码。 ### 已修复 Bug - **main.py AI分析器检查**：改为 `GeminiAnalyzer(config=config)` 统一 LiteLLM 管理（原来只检查 gemini_api_key/openai_api_key，漏掉 deepseek） - **socksio**：安装 `httpx[socks]` 解决 SOCKS 代理兼容问题 ### 代理配置 ``` USE_PROXY=true PROXY_HOST=172.25.240.1 # WSL2 Windows宿主机IP（Clash代理） PROXY_PORT=7897 ``` ### LLM 多渠道配置 ``` LLM_CHANNELS=minimax,deepseek,gemini LITELLM_MODEL=minimax/MiniMax-M2.7 LITELLM_FALLBACK_MODELS=deepseek/deepseek-chat,gemini/gemini-2",
-      "recallCount": 1,
+      "recallCount": 4,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 4,
       "maxScore": 1,
       "firstRecalledAt": "2026-05-04T15:27:25.167Z",
-      "lastRecalledAt": "2026-05-04T15:27:25.167Z",
+      "lastRecalledAt": "2026-05-10T14:31:16.466Z",
       "queryHashes": [
-        "9c35c9cb8382"
+        "9c35c9cb8382",
+        "ea73516fae01",
+        "9644cd8a478a",
+        "0b2c88928e9f"
       ],
       "recallDays": [
-        "2026-05-04"
+        "2026-05-04",
+        "2026-05-10"
       ],
       "conceptTags": [
         "openai",
@@ -5491,18 +5502,21 @@
       "endLine": 338,
       "source": "memory",
       "snippet": "- 上证指数: 3880.10 (↓1.00%) 深证成指: 13352.90 (↓0.99%) 创业板指: 3149.60 (↓0.73%) 科创50: 1256.21 (↓0.47%) 上涨 716 / 下跌 4746 涨停 38 / 跌停 46 成交额 16689亿 ``` ### 待完成 - [ ] 解决 litellm 代理问题（可能需要配置代理凭据或切换网络） - [ ] 补充 `analyzer_service` 模块 - [ ] 配置邮件推送（TOOLS.md 中已有 SMTP 配置） - [ ] 飞书 Webhook URL 待确认 - [ ] Tavily API Key（新闻搜索）待配置 --- ## 夜间调试记录 (2026-04-06 01:20-02:08) ### litellm/MiniMax 兼容性问题 ✅ 根因确认 **问题描述：** litellm 调用 MiniMax API 失败，报 `invalid api key (2049)` **根本原因：** - litellm MiniMax provider 使用 OpenAI 兼容端点 `/v1/chat/completions` - MiniMax 实际使用 Anthropic 兼容端点 `/v1/messages` - 即使配置了正确的 `base_url: \"https://api.minimaxi.com/anthropic\"`，litellm 内部仍然拼接错误路径 **测试验证：** - ✅ 直接用 `requests.post` 调用 MiniMax `/v1/me [con",
-      "recallCount": 1,
+      "recallCount": 3,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 3,
       "maxScore": 1,
       "firstRecalledAt": "2026-05-04T15:27:25.167Z",
-      "lastRecalledAt": "2026-05-04T15:27:25.167Z",
+      "lastRecalledAt": "2026-05-10T14:26:17.499Z",
       "queryHashes": [
-        "9c35c9cb8382"
+        "9c35c9cb8382",
+        "ea73516fae01",
+        "9644cd8a478a"
       ],
       "recallDays": [
-        "2026-05-04"
+        "2026-05-04",
+        "2026-05-10"
       ],
       "conceptTags": [
         "openai",
@@ -5522,18 +5536,21 @@
       "endLine": 302,
       "source": "memory",
       "snippet": "- Candidate: 上证指数: 3880.10 (↓1.00%) 深证成指: 13352.90 (↓0.99%) 创业板指: 3149.60 (↓0.73%) 科创50: 1256.21 (↓0.47%) 上涨 716 / 下跌 4746 涨停 38 / 跌停 46 成交额 16689亿 ``` ### 待完成 - [ ] 解决 litellm 代理问题（可能需要配置代理凭据或切换网络） - [ ] 补充 `analyzer_service` 模块 - [ ] 配置邮件推送（TOOLS.md 中已有 SMTP 配置） - [ ] 飞书 Webhook URL 待确认 - [ ] Tavily API Key（新闻搜索）待配置 --- ## 夜间调试记录 (2026-04-06 01:20-02:08) ### litellm/MiniMax 兼容性问题 ✅ 根因确认 **问题描述：** litellm 调用 MiniMax API 失败，报 `invalid api key (2049)` **根本原因：** - litellm MiniMax provider 使用 OpenAI 兼容端点 `/v1/chat/completions` - MiniMax 实际使用 Anthropic 兼容端点 `/v1/messages` - 即使配置了正确的 `base_url: \"https://api.minimaxi.com/anthropic\"`，litellm 内部仍然拼接错误路径 **测试验证：** - ✅ 直接用 `requests.post` 调用 MiniMax `",
-      "recallCount": 1,
+      "recallCount": 3,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 3,
       "maxScore": 1,
       "firstRecalledAt": "2026-05-04T15:27:25.167Z",
-      "lastRecalledAt": "2026-05-04T15:27:25.167Z",
+      "lastRecalledAt": "2026-05-10T14:26:17.499Z",
       "queryHashes": [
-        "9c35c9cb8382"
+        "9c35c9cb8382",
+        "ea73516fae01",
+        "9644cd8a478a"
       ],
       "recallDays": [
-        "2026-05-04"
+        "2026-05-04",
+        "2026-05-10"
       ],
       "conceptTags": [
         "openai",
@@ -5544,6 +5561,69 @@
         "0.99",
         "3149.60",
         "0.73"
+      ]
+    },
+    "memory:memory/2026-04-09.md:174:213": {
+      "key": "memory:memory/2026-04-09.md:174:213",
+      "path": "memory/2026-04-09.md",
+      "startLine": 174,
+      "endLine": 213,
+      "source": "memory",
+      "snippet": "## 重大事件：工作区状态丢失事故 ### 问题根因 1. **Apr 8 全天修改未提交** - market_data_adapter.py 的港股/美股修复保存在 .backup 文件中，但从未合并 2. **.backup 文件从未被使用** - Apr 9 的 commit 直接写了新版本，覆盖了修复 3. **无 git stash 习惯** - 大量更改游离于版本控制之外 ### 修复措施 1. ✅ 已将 .backup 中的港股/美股修复合并到 market_data_adapter.py 2. ✅ 已删除 .backup 文件 3. ✅ 已推送 git commit ### 预防规范 - 每完成一个功能模块立即 commit - 不用 .backup 文件，用 git stash 或分支 - 阶段性提交，不要等到一天结束 --- ## 技术修复记录 ### 1. MiniMax 端点配置错误 - **问题**: api.minimax.chat → 正确为 api.minimaxi.com - **修复**: 更新 .env 中 LLM_MINIMAX_BASE_URL - **相关文件**: ~/.openclaw/workspace/.env ### 2. MiniMax 协议未注册 - **问题**: SUPPORTED_LLM_CHANNEL_PROTOCOLS 不含 \"minimax\" - **修复**: 添加 \"minimax\" 到 src/config.py - **相关文件**: skills/investment/researc",
+      "recallCount": 2,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 2,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-05-10T14:26:06.634Z",
+      "lastRecalledAt": "2026-05-10T14:26:17.499Z",
+      "queryHashes": [
+        "ea73516fae01",
+        "9644cd8a478a"
+      ],
+      "recallDays": [
+        "2026-05-10"
+      ],
+      "conceptTags": [
+        "backup",
+        "market-data-adapter.py",
+        "的港股/美股修复保存在",
+        "中的港股/美股修复合并到",
+        "api.minimax.chat",
+        "api.minimaxi.com",
+        "llm-minimax-base-url",
+        "openclaw/workspace"
+      ]
+    },
+    "memory:memory/2026-04-17.md:18:47": {
+      "key": "memory:memory/2026-04-17.md:18:47",
+      "path": "memory/2026-04-17.md",
+      "startLine": 18,
+      "endLine": 47,
+      "source": "memory",
+      "snippet": "- Candidate: 飞书问题排查（晚间）: `im:message.p2p_msg:readonly`; `im:message:send_as_bot`; `im:resource`; 事件订阅：`im.message.receive_v1` - confidence: 0.62 - evidence: memory/2026-04-16.md:18-21 - recalls: 0 - status: staged - Candidate: 飞书问题排查（晚间）: 机器人能力：已开启 - confidence: 0.62 - evidence: memory/2026-04-16.md:22-22 - recalls: 0 - status: staged - Candidate: 飞书问题排查（晚间）: **可能原因**：; 应用是「开发中」状态，只有管理员自己能找到; 需要发布应用才能让其他用户使用; 或者需要确认找的是正确的机器人（应用名而非\"小Q\"） - confidence: 0.62 - evidence: memory/2026-04-16.md:24-27 - recalls: 0 - status: staged - Candidate: 飞书问题排查（晚间）: **待确认**：应用发布状态 + 是否找对了机器人 - confidence: 0.62 - evidence: memory/2026-04-16.md:29-29 - recalls: 0 - status: staged -",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 0.9515892546175213,
+      "maxScore": 0.9515892546175213,
+      "firstRecalledAt": "2026-05-10T14:32:16.315Z",
+      "lastRecalledAt": "2026-05-10T14:32:16.315Z",
+      "queryHashes": [
+        "60c99e53dd1a"
+      ],
+      "recallDays": [
+        "2026-05-10"
+      ],
+      "conceptTags": [
+        "message.p2p-msg",
+        "send-as-bot",
+        "im.message.receive-v1",
+        "0.62",
+        "memory/2026-04-16.md",
+        "18-21",
+        "22-22",
+        "24-27"
       ]
     }
   }

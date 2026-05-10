@@ -17,7 +17,7 @@ from pathlib import Path
 _scripts = Path(__file__).parent.resolve()
 sys.path.insert(0, str(_scripts))
 
-from pandas import read_csv
+from pandas import DataFrame, read_csv
 
 from transformers.portfolio_excel_transformer import PortfolioExcelTransformer
 from transformers.trade_excel_transformer import TradeExcelTransformer
@@ -75,6 +75,22 @@ def save_raw_txt(raw_text: str, date_str: str, source_root: Path, prefix: str, t
     return txt_path
 
 
+def normalize_percent_columns(df: DataFrame) -> DataFrame:
+    """Convert percentage strings in ratio columns to decimals.
+    
+    Handles 持仓比例, 变化比例 columns: '9.44%' -> 0.0944
+    """
+    df = df.copy()
+    for col in ["持仓比例", "变化比例"]:
+        if col in df.columns:
+            df[col] = df[col].apply(
+                lambda x: (float(str(x).replace("%", "").replace("％", "")) / 100)
+                if isinstance(x, str) and ("%" in x or "％" in x)
+                else x
+            )
+    return df
+
+
 def save_excel(df, date_str: str, source_root: Path, prefix: str, timestamp: str) -> Path:
     """Save DataFrame to Excel at {date}/message/ directory."""
     save_dir = source_root / date_str / "message"
@@ -84,7 +100,8 @@ def save_excel(df, date_str: str, source_root: Path, prefix: str, timestamp: str
     while excel_path.exists():
         excel_path = save_dir / f"{prefix}_{timestamp}_{counter:02d}.xlsx"
         counter += 1
-    df.to_excel(excel_path, index=False, sheet_name="Sheet1")
+    df_normalized = normalize_percent_columns(df)
+    df_normalized.to_excel(excel_path, index=False, sheet_name="Sheet1")
     return excel_path
 
 
@@ -187,15 +204,12 @@ def main():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--raw", help="Raw message text")
     group.add_argument("--input", help="Input CSV file path")
-    parser.add_argument("--date", default="", help="Date (YYYY-MM-DD)")
+    parser.add_argument("--date", default=datetime.now().strftime("%Y-%m-%d"), help="Date (YYYY-MM-DD), defaults to today")
     parser.add_argument("--dry-run", action="store_true", help="Skip MongoDB write")
     args = parser.parse_args()
 
     raw_text = Path(args.input).read_text() if args.input else args.raw
-    if not args.date:
-        raise ValueError("--date is required")
-
-    source_root = Path(__file__).parent.parent / "data" / "source" / "smart-money"
+    source_root = Path(__file__).resolve().parents[4] / "skills" / "data" / "source" / "smart-money"
     result = asyncio.run(run_pipeline(raw_text, args.date, source_root, dry_run=args.dry_run))
     logger.info(f"[Done] {result}")
 

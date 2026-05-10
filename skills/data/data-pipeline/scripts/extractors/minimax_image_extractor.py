@@ -10,6 +10,7 @@ import subprocess
 import json
 import re
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -50,22 +51,27 @@ class MiniMaxImageExtractor(BaseExtractor):
     def __init__(
         self,
         output_dir: str = None,
+        date_str: str = None,
     ):
         """
         Args:
             output_dir: Directory to save intermediate JSON files for debugging.
+            date_str: Date string (YYYY-MM-DD) for organizing debug output under {date}/image/.
         """
         if output_dir is None:
-            # Default: save JSON next to the source images
-            # from skills/data/data-pipeline/scripts/extractors/minimax_image_extractor.py
-            # images are at: skills/data/source/smart-money/YYYY-MM-DD/
             output_dir = (
                 Path(__file__).resolve().parents[4]
+                / "data"
                 / "source"
                 / "smart-money"
             )
         self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.date_str = date_str  # e.g. "2026-05-10"
+        if self.date_str:
+            self.debug_dir = self.output_dir / self.date_str / "image"
+        else:
+            self.debug_dir = self.output_dir
+        self.debug_dir.mkdir(parents=True, exist_ok=True)
 
     @property
     def source_type(self) -> str:
@@ -153,8 +159,8 @@ class MiniMaxImageExtractor(BaseExtractor):
         # Unwrap JSON wrapper from mmx CLI ({"content": "...", "base_resp": {...}})
         output = self._unwrap_mmx_response(output)
 
-        # Save raw output for debugging
-        debug_json = self.output_dir / f"{img_path.stem}_vision_raw.json"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        debug_json = self.debug_dir / f"pic_{timestamp}_vision_raw.json"
         debug_json.write_text(output)
 
         # Parse JSON from output

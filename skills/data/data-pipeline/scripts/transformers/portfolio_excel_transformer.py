@@ -133,7 +133,14 @@ class PortfolioExcelTransformer(BaseTransformer):
         # Ensure numeric types (use standard col names after rename)
         for col in ["持仓比例", "数量", "市值（本币）", "最新净值", "最新份额", "最新规模"]:
             if col in df.columns:
+                # Strip percentage suffix before numeric conversion
+                df[col] = df[col].apply(lambda x: str(x).replace('%', '').replace('％', '') if isinstance(x, str) else x)
                 df[col] = pd.to_numeric(df[col], errors="coerce")
+                # Convert percentage to decimal (e.g. 9.44% -> 0.0944)
+                # If value > 0.1, treat as percentage string from text message (need /100)
+                # If value <= 0.1, treat as already-decimal from image OCR (no /100)
+                if col == "持仓比例":
+                    df[col] = df[col].apply(lambda x: round(x / 100, 4) if x > 0.1 else x)
 
         daily_data = []
         for date, date_group in df.groupby("截止日期", sort=False):
@@ -177,7 +184,16 @@ class PortfolioExcelTransformer(BaseTransformer):
     @staticmethod
     def _to_float(v):
         try:
-            return float(v) if v is not None else None
+            if v is None:
+                return None
+            s = str(v).strip()
+            if s == "":
+                return None
+            # Handle percentage format like "9.44%" or "9.44％"
+            if "%" in s or "％" in s:
+                s = s.replace("%", "").replace("％", "")
+                return float(s) / 100
+            return float(s)
         except (ValueError, TypeError):
             return None
 

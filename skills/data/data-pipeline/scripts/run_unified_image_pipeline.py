@@ -94,7 +94,7 @@ async def run_pipeline(
 
     # Step 1: MiniMax OCR
     logger.info(f"[Step1] OCR: {image_path}")
-    extractor = MiniMaxImageExtractor()
+    extractor = MiniMaxImageExtractor(date_str=date_str)
     records = await extractor.extract(str(image_path))
     if not records:
         raise ValueError("OCR extracted no data")
@@ -187,11 +187,11 @@ async def run_pipeline(
 def main():
     parser = argparse.ArgumentParser(description="Unified Image Pipeline (Auto-detect portfolio vs trade)")
     parser.add_argument("--image", required=True, help="Path to image file")
-    parser.add_argument("--date", required=True, help="Date (YYYY-MM-DD)")
+    parser.add_argument("--date", default=datetime.now().strftime("%Y-%m-%d"), help="Date (YYYY-MM-DD), defaults to today")
     parser.add_argument("--dry-run", action="store_true", help="Skip MongoDB write")
     args = parser.parse_args()
 
-    source_root = Path(__file__).parent.parent / "data" / "source" / "smart-money"
+    source_root = Path(__file__).resolve().parents[4] / "skills" / "data" / "source" / "smart-money"
     result = asyncio.run(run_pipeline(args.image, args.date, source_root, dry_run=args.dry_run))
     logger.info(f"[Done] {result}")
 

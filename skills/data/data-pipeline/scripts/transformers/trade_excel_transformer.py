@@ -128,6 +128,12 @@ class TradeExcelTransformer(BaseTransformer):
         if "方向" in df.columns:
             df["方向"] = df["方向"].apply(lambda x: str(x).strip())
 
+        # Fix rows where 日期 is NaN but Generic (A) contains the actual date
+        if "Generic (A)" in df.columns and "日期" in df.columns:
+            mask = df["日期"].isna() & df["Generic (A)"].notna()
+            df.loc[mask, "日期"] = df.loc[mask, "Generic (A)"]
+            df = df.drop(columns=["Generic (A)"], errors="ignore")
+
         daily_data = []
         for date, date_group in df.groupby("日期", sort=False):
             products_map = {}
@@ -149,16 +155,16 @@ class TradeExcelTransformer(BaseTransformer):
 
                 # Normalize change_ratio: "0.26%" → 0.0026
                 # OCR may output "变化比例" or "持仓比例" depending on image content
-                change_ratio = row.get("变化比例") or row.get("持仓比例")
-                if pd.notna(change_ratio) and isinstance(change_ratio, str):
-                    if "%" in change_ratio:
-                        change_ratio = float(change_ratio.replace("%", "").strip()) / 100
+                change_ratio_raw = row.get("变化比例") or row.get("持仓比例")
+                if pd.notna(change_ratio_raw) and isinstance(change_ratio_raw, str):
+                    if "%" in change_ratio_raw:
+                        change_ratio = round(float(change_ratio_raw.replace("%", "").strip()) / 100, 4)
                     else:
-                        change_ratio = float(change_ratio)
-                elif pd.isna(change_ratio):
+                        change_ratio = round(float(change_ratio_raw), 4)
+                elif pd.isna(change_ratio_raw):
                     change_ratio = None
                 else:
-                    change_ratio = float(change_ratio)
+                    change_ratio = round(float(change_ratio_raw), 4)
 
                 # Append trade
                 trade = {
@@ -180,7 +186,15 @@ class TradeExcelTransformer(BaseTransformer):
     @staticmethod
     def _to_float(v):
         try:
-            return float(v) if v is not None else None
+            if v is None:
+                return None
+            s = str(v).strip()
+            if s == "":
+                return None
+            if "%" in s or "％" in s:
+                s = s.replace("%", "").replace("％", "")
+                return float(s) / 100
+            return float(s)
         except (ValueError, TypeError):
             return None
 
