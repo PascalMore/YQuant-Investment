@@ -65,3 +65,4 @@ temp/
 memory/*.md
 !memory/.gitkeep
 skills/data/source/
+.env
