@@ -56,18 +56,59 @@ class ValidationResult:
         self.warnings.extend(other.warnings)
 
 
-def validate_wind_code(code: Optional[str]) -> tuple[bool, str]:
-    """校验 Wind 代码格式。
+def validate_wind_code(code: Optional[str]) -> tuple[bool, str, Optional[str]]:
+    """校验 Wind 代码格式，支持自动纠错。
+    
+    自动纠错规则:
+    - A股少0: XXXX5.SH → XXXX05.SH (如68855.SH → 688055.SH)
+    - 港股少点: XXXXHK → XXXX.HK
+    - 美股少点: XXXXUS → XXXX.US
     
     Returns:
-        (is_valid, message)
+        (is_valid, message, corrected_code)
+        corrected_code 为自动纠错后的代码，若无需纠错则为 None
     """
     if not code:
-        return False, "Wind 代码为空"
+        return False, "Wind 代码为空", None
     code = str(code).strip()
-    if not WIND_CODE_RE.match(code):
-        return False, f"Wind 代码格式错误: {code} (期望 XXXXXX.SH/HK/US/SZ/CN/OF/RI/GB/SG/BJ)"
-    return True, ""
+    
+    # 先检查是否直接匹配
+    if WIND_CODE_RE.match(code):
+        return True, "", None
+    
+    # 尝试自动纠错
+    original = code
+    
+    # 纠错1: A股少0 (如68855.SH → 688055.SH)
+    # 匹配 X{4,5}.SH 或 X{4,5}.SZ 或 X{5}.BJ 等
+    m = re.match(r'^(\d{5})\.(SH|SZ|BJ|CN)$', code)
+    if m:
+        code = '0' + m.group(1) + '.' + m.group(2)
+        if WIND_CODE_RE.match(code):
+            return True, f"[自动纠错] {original} → {code}", code
+    
+    # 纠错2: A股少点 (如688055SH → 688055.SH)
+    m = re.match(r'^(\d{6})(SH|SZ|BJ|CN)$', code)
+    if m:
+        code = m.group(1) + '.' + m.group(2)
+        if WIND_CODE_RE.match(code):
+            return True, f"[自动纠错] {original} → {code}", code
+    
+    # 纠错3: 港股少点 (如0123HK → 0123.HK)
+    m = re.match(r'^(\d{4,5})(HK)$', code)
+    if m:
+        code = m.group(1) + '.' + m.group(2)
+        if WIND_CODE_RE.match(code):
+            return True, f"[自动纠错] {original} → {code}", code
+    
+    # 纠错4: 美股少点 (如AABBRUS → AABB.US, 或 MSFTUS → MSFT.US)
+    m = re.match(r'^([A-Z]{1,6})(US)$', code, re.IGNORECASE)
+    if m:
+        code = m.group(1).upper() + '.' + m.group(2).upper()
+        if WIND_CODE_RE.match(code):
+            return True, f"[自动纠错] {original} → {code}", code
+    
+    return False, f"Wind 代码格式错误: {code} (期望 XXXXXX.SH/HK/US/SZ/CN/OF/RI/GB/SG/BJ)", None
 
 
 def validate_holding_ratio(ratio: Any) -> tuple[bool, str]:
@@ -226,9 +267,13 @@ def validate_position(records: list[dict]) -> ValidationResult:
             result.add_error(f"[{i}] product_code is empty")
         
         wind_code = rec.get("asset_wind_code")
-        ok, msg = validate_wind_code(wind_code)
+        ok, msg, corrected = validate_wind_code(wind_code)
         if not ok:
             result.add_warning(f"[{i}] asset_wind_code: {msg}")
+        elif corrected:
+            result.add_warning(f"[{i}] asset_wind_code: {msg}")
+            # 将纠错后的代码写回记录
+            rec["asset_wind_code"] = corrected
         
         # 持仓比例：0-1 之间，4 位小数
         ratio = rec.get("holding_ratio")

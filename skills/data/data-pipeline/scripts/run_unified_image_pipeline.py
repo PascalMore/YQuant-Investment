@@ -54,6 +54,73 @@ def detect_format(df: pd.DataFrame) -> str:
     return "portfolio"
 
 
+def correct_year_if_ocr_error(records: list, date_str: str) -> list:
+    """
+    Fix common OCR year errors:
+    1. FUTURE year (e.g., OCR reads 2027, user confirms 2026): auto-correct
+    2. PAST year (e.g., OCR reads 2024, user confirms 2026): warn only
+    
+    Only applies when date_str year == current year (user says it's current year).
+    """
+    import re
+    current_year = datetime.now().year  # e.g. 2026
+
+    # Determine provided year from date_str
+    provided_year = None
+    if date_str:
+        m = re.match(r'^(\d{4})', str(date_str))
+        if m:
+            provided_year = int(m.group(1))
+
+    # Only apply correction when user says the data is from current year
+    if provided_year != current_year:
+        return records
+
+    DATE_FIELDS = ['截止日期', 'date', 'nav_date', 'position_date', 'trade_date']
+
+    def fix_record(rec: dict) -> dict:
+        for field in DATE_FIELDS:
+            if field in rec and rec[field]:
+                val = str(rec[field])
+                m = re.match(r'^(\d{4})-(\d{2})-(\d{2})$', val)
+                if not m:
+                    m = re.match(r'^(\d{4})/(\d{2})/(\d{2})$', val)
+                if m:
+                    year = int(m.group(1))
+                    if year > current_year:
+                        # Case 1: future year — auto-correct (e.g., 2027 → 2026)
+                        fixed = f"{current_year}-{m.group(2)}-{m.group(3)}"
+                        rec[field] = fixed
+                    elif year < current_year:
+                        if year <= current_year - 2:
+                            # Case 2a: OCR date is 2+ years earlier than current year → auto-correct
+                            # (e.g., current=2026, OCR reads 2024 → 2 years early = auto-correct)
+                            fixed = f"{current_year}-{m.group(2)}-{m.group(3)}"
+                            rec[field] = fixed
+                            logger.warning(
+                                f"[Step1b] OCR year corrected: field={field} {year}→{current_year} "
+                                f"(original value: {val}, auto-corrected 2+ year gap)"
+                            )
+                        else:
+                            # Case 2b: OCR date is within 1 year of current year → only warning
+                            # (e.g., current=2026, OCR reads 2025 → 1 year early = likely real historical data)
+                            logger.warning(
+                                f"[Step1b] OCR year warning: field={field} value={val} "
+                                f"(expected ~{current_year}, got {year}, might be real historical data)"
+                            )
+        return rec
+
+    corrected = [fix_record(r) for r in records]
+    changes = sum(
+        1 for a, b in zip(records, corrected)
+        if any(str(a.get(f, '')) != str(b.get(f, ''))
+               for f in DATE_FIELDS)
+    )
+    if changes:
+        logger.warning(f"[Step1b] OCR year auto-corrected {changes} records (future year → {current_year})")
+    return corrected
+
+
 def save_excel(df: pd.DataFrame, date_str: str, source_root: Path, base_name: str, subdir: str = "image") -> Path:
     """Save DataFrame to Excel at {date}/{subdir}/ directory."""
     save_dir = source_root / date_str / subdir
@@ -85,31 +152,51 @@ async def run_pipeline(
     image_path: str,
     date_str: str,
     source_root: Path,
+    folder_date: str = None,
+    output_dir: Path = None,
     dry_run: bool = False,
 ) -> dict:
-    """Full pipeline: Image → MiniMax OCR → Auto-detect → Transform → Validate → MongoDB."""
+    """Full pipeline: Image → MiniMax OCR → Auto-detect → Transform → Validate → MongoDB.
+    
+    Args:
+        date_str: Data date from spreadsheet content (used for OCR context and MongoDB records)
+        folder_date: System date when image was received (used for folder path). Defaults to date_str.
+        output_dir: Directory for raw JSON debug files. Defaults to source_root/folder_date/image.
+    """
+    # Folder date = system date (when image arrived), not data date
+    if folder_date is None:
+        folder_date = date_str
+
     image_path = Path(image_path)
     if not image_path.exists():
         raise FileNotFoundError(f"Image not found: {image_path}")
 
+    # output_dir for raw JSON = folder_date (system date)
+    if output_dir is None:
+        output_dir = source_root / folder_date / "image"
+
     # Step 1: MiniMax OCR
     logger.info(f"[Step1] OCR: {image_path}")
-    extractor = MiniMaxImageExtractor(date_str=date_str)
+    extractor = MiniMaxImageExtractor(output_dir=str(output_dir), date_str=date_str)
     records = await extractor.extract(str(image_path))
     if not records:
         raise ValueError("OCR extracted no data")
     df = records[0]["df"]
     logger.info(f"[Step1] Parsed: {len(df)} rows, columns: {list(df.columns)}")
 
-    # Step 1b: Detect format
+    # Step 1b: Fix OCR year errors (e.g., 2024 misread for 2026)
+    records = correct_year_if_ocr_error(records, date_str)
+    df = records[0]["df"]
+
+    # Step 1c: Detect format
     fmt = detect_format(df)
     logger.info(f"[Step1] Detected format: {fmt}")
     prefix = "trade" if fmt == "trade" else "portfolio"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     base_name = f"{prefix}_{timestamp}"
-    # Archive original image
-    new_path = archive_image(image_path, date_str, source_root, prefix, timestamp)
-    excel_path = save_excel(df, date_str, source_root, base_name, "image")
+    # Archive original image to folder_date (system date), not data date
+    new_path = archive_image(image_path, folder_date, source_root, prefix, timestamp)
+    excel_path = save_excel(df, folder_date, source_root, base_name, "image")
     logger.info(f"[Step1] Saved: {new_path}, {excel_path}")
 
     if dry_run:
@@ -187,12 +274,15 @@ async def run_pipeline(
 def main():
     parser = argparse.ArgumentParser(description="Unified Image Pipeline (Auto-detect portfolio vs trade)")
     parser.add_argument("--image", required=True, help="Path to image file")
-    parser.add_argument("--date", default=datetime.now().strftime("%Y-%m-%d"), help="Date (YYYY-MM-DD), defaults to today")
+    parser.add_argument("--date", default=datetime.now().strftime("%Y-%m-%d"), help="Data date (YYYY-MM-DD), i.e. the date in the spreadsheet. Used for OCR and MongoDB records.")
     parser.add_argument("--dry-run", action="store_true", help="Skip MongoDB write")
     args = parser.parse_args()
 
+
+    # Folder date is always system date (when the image was received/uploaded)
+    folder_date = datetime.now().strftime("%Y-%m-%d")
     source_root = Path(__file__).resolve().parents[4] / "skills" / "data" / "source" / "smart-money"
-    result = asyncio.run(run_pipeline(args.image, args.date, source_root, dry_run=args.dry_run))
+    result = asyncio.run(run_pipeline(args.image, args.date, source_root, folder_date=folder_date, dry_run=args.dry_run))
     logger.info(f"[Done] {result}")
 
 

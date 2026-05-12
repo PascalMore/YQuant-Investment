@@ -67,10 +67,9 @@ class MiniMaxImageExtractor(BaseExtractor):
             )
         self.output_dir = Path(output_dir)
         self.date_str = date_str  # e.g. "2026-05-10"
-        if self.date_str:
-            self.debug_dir = self.output_dir / self.date_str / "image"
-        else:
-            self.debug_dir = self.output_dir
+        # output_dir is the full path (already includes date when passed from run_pipeline).
+        # date_str is for OCR context only (not used for folder path when output_dir was explicit).
+        self.debug_dir = self.output_dir
         self.debug_dir.mkdir(parents=True, exist_ok=True)
 
     @property

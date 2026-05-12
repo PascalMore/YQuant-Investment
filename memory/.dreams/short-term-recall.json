@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-11T00:32:05.167Z",
+  "updatedAt": "2026-05-12T15:46:54.518Z",
   "entries": {
     "memory:memory/2026-04-05.md:1:38": {
       "key": "memory:memory/2026-04-05.md:1:38",
@@ -5752,6 +5752,99 @@
         "litellm-config",
         "127.0.0.1",
         "analyzer-service"
+      ]
+    },
+    "memory:memory/2026-04-17.md:73:87": {
+      "key": "memory:memory/2026-04-17.md:73:87",
+      "path": "memory/2026-04-17.md",
+      "startLine": 73,
+      "endLine": 87,
+      "source": "memory",
+      "snippet": "- Candidate: Assistant: **📊 18:00 个股分析 - 仍然失败** 进程启动后约 20 秒被 SIGKILL。问题持续。 **今日状态：** - ✅ 市场日报（06:27） - ❌ 个股分析（SIGKILL - 约20秒后被kill） **长期问题：** - Cron jobs 失效（nextRun=null） - 个股分析 SIGKILL 这两个问题需要 Pascal 介入排查。要我明天继续尝试，还是你现在想深入排查？ - confidence: 0.58 - evidence: memory/.dreams/session-corpus/2026-04-14.txt:7-7 - recalls: 0 - status: staged - Candidate: Assistant: It's 23:33 (11:33 PM) on Tuesday. According to HEARTBEAT.md: - 每个交易日 08:30 - 市场日报 - tomorrow (Wednesday) 08:30 - 每个交易日 18:00 - 个股分析 - tomorrow (Wednesday) 18:00 - 每周五 17:00 - 周度业绩归因 - not today - 每月 1 号 - 月度资产配置回顾 - not today Both scheduled tasks for today are done or - confidence: 0.58 - evidence: memory/.dreams/session-cor",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-05-12T15:46:54.518Z",
+      "lastRecalledAt": "2026-05-12T15:46:54.518Z",
+      "queryHashes": [
+        "583f4d68e420"
+      ],
+      "recallDays": [
+        "2026-05-12"
+      ],
+      "conceptTags": [
+        "0.58",
+        "7-7",
+        "heartbeat.md",
+        "dreams/session-cor",
+        "candidate",
+        "assistant",
+        "分析",
+        "仍然"
+      ]
+    },
+    "memory:memory/2026-04-17.md:58:74": {
+      "key": "memory:memory/2026-04-17.md:58:74",
+      "path": "memory/2026-04-17.md",
+      "startLine": 58,
+      "endLine": 74,
+      "source": "memory",
+      "snippet": "- Candidate: User: Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK. When reading HEARTBEAT.md, use workspace file /home/pascal/.openclaw/workspace/HEARTBEAT.md (exact case - confidence: 0.58 - evidence: memory/.dreams/session-corpus/2026-04-14.txt:2-2 - recalls: 0 - status: staged - Candidate: Assistant: 周二 6:27 AM。运行今日市场日报（提前于 08:30）： - confidence: 0.58 - evidence: memory/.dreams/session-corpus/2026-04-14.txt:4-4 - recalls: 0 - status: staged - Candidate: Assistant: **📊 每日市场日报已生成（06:27 AM）** **今日待办：** - ✅ 市场日报（06:27，提前于 08:30） - ⏳ 18:00 个股分析（SIGKILL 问题待解",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-05-12T15:46:54.518Z",
+      "lastRecalledAt": "2026-05-12T15:46:54.518Z",
+      "queryHashes": [
+        "583f4d68e420"
+      ],
+      "recallDays": [
+        "2026-05-12"
+      ],
+      "conceptTags": [
+        "heartbeat.md",
+        "heartbeat-ok",
+        "home/pascal",
+        "openclaw/workspace/heartbeat.md",
+        "0.58",
+        "2-2",
+        "4-4",
+        "candidate"
+      ]
+    },
+    "memory:memory/2026-04-17.md:167:192": {
+      "key": "memory:memory/2026-04-17.md:167:192",
+      "path": "memory/2026-04-17.md",
+      "startLine": 167,
+      "endLine": 192,
+      "source": "memory",
+      "snippet": "- status: staged - Candidate: User: Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK. When reading HEARTBEAT.md, use workspace file /home/pascal/.openclaw/workspace/HEARTBEAT.md (exact case - confidence: 0.58 - evidence: memory/.dreams/session-corpus/2026-04-15.txt:1-1 - recalls: 0 - status: staged - Candidate: Assistant: 周三 5:42 AM。Cron 失效，运行今日市场日报（提前于 08:30）： - confidence: 0.58 - evidence: memory/.dreams/session-corpus/2026-04-15.txt:2-2 - recalls: 0 - status: staged - Candidate: Assistant: **📊 每日市场日报已生成（05:42 AM）** **今日待办：** - ✅ 市场日报（05:42） - ⏳ 18:00",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-05-12T15:46:54.518Z",
+      "lastRecalledAt": "2026-05-12T15:46:54.518Z",
+      "queryHashes": [
+        "583f4d68e420"
+      ],
+      "recallDays": [
+        "2026-05-12"
+      ],
+      "conceptTags": [
+        "heartbeat.md",
+        "heartbeat-ok",
+        "home/pascal",
+        "openclaw/workspace/heartbeat.md",
+        "0.58",
+        "1-1",
+        "2-2",
+        "status"
       ]
     }
   }

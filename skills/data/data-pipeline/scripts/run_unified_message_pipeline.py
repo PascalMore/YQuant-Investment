@@ -105,18 +105,32 @@ def save_excel(df, date_str: str, source_root: Path, prefix: str, timestamp: str
     return excel_path
 
 
-async def run_pipeline(raw_text: str, date_str: str, source_root: Path, dry_run: bool = False) -> dict:
-    """Full pipeline: text → parse → detect format → transform → validate → MongoDB."""
+async def run_pipeline(raw_text: str, date_str: str, source_root: Path, folder_date: str = None, dry_run: bool = False) -> dict:
+    """Full pipeline: text → parse → detect format → transform → validate → MongoDB.
+    
+    Args:
+        date_str: Data date from spreadsheet content (used for MongoDB records)
+        folder_date: System date when message arrived (used for folder path). Defaults to date_str.
+    """
+    # Folder date = system date (when message arrived), not data date
+    if folder_date is None:
+        folder_date = date_str
+
     logger.info(f"[Step1] Parsing text ({len(raw_text)} chars)")
     df = parse_text_to_df(raw_text)
     logger.info(f"[Step1] Parsed {len(df)} rows, columns: {list(df.columns)}")
 
     fmt = detect_format(df)
     logger.info(f"[Step1] Detected format: {fmt}")
+    # Fill 截止日期 from date_str if missing
+    if fmt == "portfolio" and "截止日期" not in df.columns:
+        df["截止日期"] = date_str
+        logger.info(f"[Step1] Added 截止日期 = {date_str}")
     prefix = "trade" if fmt == "trade" else "portfolio"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    txt_path = save_raw_txt(raw_text, date_str, source_root, prefix, timestamp)
-    excel_path = save_excel(df, date_str, source_root, prefix, timestamp)
+    # Archive to folder_date (system date), not data date
+    txt_path = save_raw_txt(raw_text, folder_date, source_root, prefix, timestamp)
+    excel_path = save_excel(df, folder_date, source_root, prefix, timestamp)
     logger.info(f"[Step1] Saved: {txt_path}, {excel_path}")
 
     if fmt == "trade":
@@ -209,8 +223,10 @@ def main():
     args = parser.parse_args()
 
     raw_text = Path(args.input).read_text() if args.input else args.raw
+    # Folder date is always system date (when the message arrived)
+    folder_date = datetime.now().strftime("%Y-%m-%d")
     source_root = Path(__file__).resolve().parents[4] / "skills" / "data" / "source" / "smart-money"
-    result = asyncio.run(run_pipeline(raw_text, args.date, source_root, dry_run=args.dry_run))
+    result = asyncio.run(run_pipeline(raw_text, args.date, source_root, folder_date=folder_date, dry_run=args.dry_run))
     logger.info(f"[Done] {result}")
 
 
