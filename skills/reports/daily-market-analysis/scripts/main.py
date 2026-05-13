@@ -166,12 +166,11 @@ def _get_portfolio_latest_date():
 
 def _should_skip_report(report_date: date) -> bool:
     """
-    检查今日是否应该跳过报告生成。
+    检查今日是否应该跳过报告生成（市场日报）。
     逻辑：
-    - 获取组合持仓数据的最新日期（portfolio_trade）
-    - 如果组合最新日期 < 报告日期，说明组合数据未更新今日内容，不发送报告
-    - 如果组合最新日期 >= 报告日期，正常发送
-    - 如果无法连接 MongoDB，不跳过（不阻断报告）
+    - 检查标记文件是否已存在且为今日创建
+    - 如果是，跳过发送
+    - 不检查组合数据日期（那是 SmartMoney 报告的逻辑）
     """
     marker = Path(os.path.expanduser('~/.openclaw/workspace-yquant/skills/reports/daily-market-analysis/.last_sent'))
     today = date.today()
@@ -189,13 +188,6 @@ def _should_skip_report(report_date: date) -> bool:
                 return True
         except Exception:
             pass
-
-    # 检查组合数据日期
-    portfolio_date = _get_portfolio_latest_date()
-    if portfolio_date is not None:
-        print(f"[跳过检查] 组合数据最新日期: {portfolio_date}, 报告日期: {report_date}")
-        if portfolio_date < report_date:
-            return True  # 组合数据未更新，跳过
 
     return False
 
@@ -215,10 +207,10 @@ def main():
     print(f"🚀 开始生成 {args.date} 的市场报告...")
     print("=" * 60)
     
-    # ── 检查是否需要跳过（基于组合实际数据日期）────────────────────────
+    # ── 检查是否需要跳过（基于标记文件）────────────────────────
     report_date = datetime.strptime(args.date, "%Y-%m-%d").date()
     if not args.force and _should_skip_report(report_date):
-        print(f"⏭️  今日报告已发送（组合数据未更新），跳过报告生成")
+        print(f"⏭️  今日报告已发送，跳过报告生成")
         return
 
     # 加载配置

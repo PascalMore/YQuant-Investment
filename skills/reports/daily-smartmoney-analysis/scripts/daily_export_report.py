@@ -9,7 +9,7 @@
 import argparse
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 
 import pandas as pd
@@ -297,15 +297,84 @@ def get_chat_id_by_name(token: str, group_name: str = "DailyHappyGroup") -> str:
         return None
 
 
+def _should_skip_report(report_date: date) -> bool:
+    """
+    检查今日是否应该跳过报告生成。
+    逻辑：
+    - 获取数据库中组合持仓/交易数据的最新日期
+    - 与 .last_sent 中记录的最新发送日期比对
+    - 如果数据库最新日期 <= 已发送日期 → 跳过
+    - 如果没有 .last_sent 文件 → 不跳过（发送）
+    - 非当日报告不检查
+    """
+    marker = Path(os.path.expanduser('~/.openclaw/workspace-yquant/skills/reports/daily-smartmoney-analysis/.last_sent'))
+    today = date.today()
+
+    # 非当日报告不检查
+    if report_date != today:
+        return False
+
+    # 如果没有标记文件，不跳过
+    if not marker.exists():
+        print(f"[跳过检查] 无 .last_sent 标记文件，不跳过")
+        return False
+
+    # 获取已发送的日期（文件内容存储）
+    try:
+        last_sent = datetime.strptime(marker.read_text().strip(), "%Y-%m-%d").date()
+        print(f"[跳过检查] 上次发送数据日期: {last_sent}")
+    except Exception as e:
+        print(f"[跳过检查] 无法读取 .last_sent ({e})，不跳过")
+        return False
+
+    # 检查数据库最新日期
+    try:
+        client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+        client.admin.command('ping')
+        db = client[MONGODB_DB]
+
+        position_date = get_latest_date(db, "portfolio_position")
+        trade_date = get_latest_date(db, "portfolio_trade")
+
+        client.close()
+
+        # 取最大日期
+        latest_db_date = max(
+            pd.Timestamp(position_date) if position_date else pd.Timestamp.min,
+            pd.Timestamp(trade_date) if trade_date else pd.Timestamp.min
+        ).date()
+
+        print(f"[跳过检查] 数据库最新日期: {latest_db_date}, 上次发送日期: {last_sent}")
+
+        # 如果数据库最新日期 <= 上次发送日期，跳过
+        if latest_db_date <= last_sent:
+            print(f"⏭️  数据库未更新，跳过")
+            return True
+        else:
+            print(f"✅ 数据库有新数据，继续发送")
+            return False
+
+    except Exception as e:
+        print(f"[跳过检查] MongoDB 查询失败: {e}，不跳过")
+        return False
+
+
 def main():
     parser = argparse.ArgumentParser(description="每日导出持仓和交易报告")
     parser.add_argument("--env", default=DEFAULT_ENV_PATH, help="环境变量文件路径")
     parser.add_argument("--test", action="store_true", help="测试模式：发送到 Pascal 个人账号而非群组")
+    parser.add_argument("--force", action="store_true", help="强制执行（跳过组合数据日期检查）")
     args = parser.parse_args()
     
     print("=" * 50)
     print("📊 每日导出报告脚本")
     print("=" * 50)
+    
+    # ── 检查是否需要跳过（基于组合实际数据日期）────────────────────────
+    today = date.today()
+    if not args.force and _should_skip_report(today):
+        print(f"⏭️  今日报告已发送（组合数据未更新），跳过报告生成")
+        return
     
     # 1. 加载配置
     print("\n[1/6] 加载配置...")
@@ -382,7 +451,10 @@ def main():
     if bot_token:
         success = send_telegram_file(bot_token, target_chat_id, excel_path, caption)
         if success:
-            print("\n✅ 任务完成!")
+            # 更新发送标记文件（存储实际数据日期）
+            marker = Path(os.path.expanduser('~/.openclaw/workspace-yquant/skills/reports/daily-smartmoney-analysis/.last_sent'))
+            marker.write_text(str(latest_date))
+            print(f"\n✅ 任务完成! (已记录数据日期: {latest_date})")
         else:
             print("\n⚠️ Telegram 发送失败，请检查配置")
     else:

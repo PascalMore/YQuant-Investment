@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-12T15:46:54.518Z",
+  "updatedAt": "2026-05-13T14:24:52.850Z",
   "entries": {
     "memory:memory/2026-04-05.md:1:38": {
       "key": "memory:memory/2026-04-05.md:1:38",
@@ -5042,37 +5042,6 @@
         "evidence"
       ]
     },
-    "memory:memory/2026-04-17.md:313:317": {
-      "key": "memory:memory/2026-04-17.md:313:317",
-      "path": "memory/2026-04-17.md",
-      "startLine": 313,
-      "endLine": 317,
-      "source": "memory",
-      "snippet": "- Candidate: 2. **功能**：全球宏观、A股、港股、美股、数字货币、大宗商品各3条 3. **⚠️ 网络问题**：akshare 新闻接口全部超时（WSL环境网络配置问题） ### WSL 网络问题 1. **现象**：curl 可以访问外网，但 Python requests 超时 2. **原因**：可能是 WSL 网络代理配置问题 3. **影响**：akshare 新闻、baidu 新闻等都无法获取 4. **状态**：邮件报告已能正常推送（使用缓存/备用数据） ### 待办事项 - [ ] 解决 WSL 网络配置问题（让 Python 能访问外网） - [ ] 配置 NO_PROXY 使 Binance API 直连 - [ ] 为 BNB、PEPE 找到合适的数据源 - [ ] 确认飞书 Webhook URL - [ ] 确认自选股完整列表 - confidence: 0.67 - evidence: memory/2026-04-08.md:53-68 - recalls: 1 - status: staged",
-      "recallCount": 1,
-      "dailyCount": 0,
-      "groundedCount": 0,
-      "totalScore": 1,
-      "maxScore": 1,
-      "firstRecalledAt": "2026-04-30T23:32:09.793Z",
-      "lastRecalledAt": "2026-04-30T23:32:09.793Z",
-      "queryHashes": [
-        "16b59d3b628a"
-      ],
-      "recallDays": [
-        "2026-05-01"
-      ],
-      "conceptTags": [
-        "网络",
-        "使用缓存/备用数据",
-        "no-proxy",
-        "0.67",
-        "memory/2026-04-08.md",
-        "53-68",
-        "candidate",
-        "功能"
-      ]
-    },
     "memory:memory/2026-04-17.md:308:313": {
       "key": "memory:memory/2026-04-17.md:308:313",
       "path": "memory/2026-04-17.md",
@@ -5398,23 +5367,25 @@
       "endLine": 41,
       "source": "memory",
       "snippet": "# 2026-04-16 日记 ## 今日事件 ### 飞书问题排查（晚间） - **现象**：飞书发消息小Q无响应，提示 \"AI service is temporarily overloaded\" - **诊断过程**： 1. Context 满（99.9%）→ 重启 Gateway 后解决 2. 重启后飞书仍然无响应 3. dedup 文件显示 20:11 后就没有收到任何消息 4. 检查 `feishu-pairing.json` 发现是空的 `\"requests\": []` 5. Gateway status 显示 Feishu: OK，但实际消息接收断开 - **权限配置**（已确认正确）： - `contact:user.base:readonly` - `m:chat`, `m:message` - `im:message.group_at_msg:readonly` - `im:message.p2p_msg:readonly` - `im:message:send_as_bot` - `im:resource` - 事件订阅：`im.message.receive_v1` - 机器人能力：已开启 - **可能原因**： 1. 应用是「开发中」状态，只有管理员自己能找到 2. 需要发布应用才能让其他用户使用 3. 或者需要确认找的是正确的机器人（应用名而非\"小Q\"） - **待确认**：应用发布状态 + 是否找对了机器人 ## 系统状态 | 组件 | 状态 | 备注 | |-----",
-      "recallCount": 5,
+      "recallCount": 6,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 4.968810573126827,
+      "totalScore": 5.968810573126827,
       "maxScore": 1,
       "firstRecalledAt": "2026-05-04T15:27:25.167Z",
-      "lastRecalledAt": "2026-05-10T14:32:16.315Z",
+      "lastRecalledAt": "2026-05-13T14:24:52.850Z",
       "queryHashes": [
         "9c35c9cb8382",
         "ea73516fae01",
         "9644cd8a478a",
         "0b2c88928e9f",
-        "60c99e53dd1a"
+        "60c99e53dd1a",
+        "55501e3ac390"
       ],
       "recallDays": [
         "2026-05-04",
-        "2026-05-10"
+        "2026-05-10",
+        "2026-05-13"
       ],
       "conceptTags": [
         "gateway",
@@ -5504,21 +5475,23 @@
       "endLine": 338,
       "source": "memory",
       "snippet": "- 上证指数: 3880.10 (↓1.00%) 深证成指: 13352.90 (↓0.99%) 创业板指: 3149.60 (↓0.73%) 科创50: 1256.21 (↓0.47%) 上涨 716 / 下跌 4746 涨停 38 / 跌停 46 成交额 16689亿 ``` ### 待完成 - [ ] 解决 litellm 代理问题（可能需要配置代理凭据或切换网络） - [ ] 补充 `analyzer_service` 模块 - [ ] 配置邮件推送（TOOLS.md 中已有 SMTP 配置） - [ ] 飞书 Webhook URL 待确认 - [ ] Tavily API Key（新闻搜索）待配置 --- ## 夜间调试记录 (2026-04-06 01:20-02:08) ### litellm/MiniMax 兼容性问题 ✅ 根因确认 **问题描述：** litellm 调用 MiniMax API 失败，报 `invalid api key (2049)` **根本原因：** - litellm MiniMax provider 使用 OpenAI 兼容端点 `/v1/chat/completions` - MiniMax 实际使用 Anthropic 兼容端点 `/v1/messages` - 即使配置了正确的 `base_url: \"https://api.minimaxi.com/anthropic\"`，litellm 内部仍然拼接错误路径 **测试验证：** - ✅ 直接用 `requests.post` 调用 MiniMax `/v1/me [con",
-      "recallCount": 3,
+      "recallCount": 4,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 3,
+      "totalScore": 4,
       "maxScore": 1,
       "firstRecalledAt": "2026-05-04T15:27:25.167Z",
-      "lastRecalledAt": "2026-05-10T14:26:17.499Z",
+      "lastRecalledAt": "2026-05-13T14:24:52.850Z",
       "queryHashes": [
         "9c35c9cb8382",
         "ea73516fae01",
-        "9644cd8a478a"
+        "9644cd8a478a",
+        "55501e3ac390"
       ],
       "recallDays": [
         "2026-05-04",
-        "2026-05-10"
+        "2026-05-10",
+        "2026-05-13"
       ],
       "conceptTags": [
         "openai",
@@ -5597,37 +5570,6 @@
         "api.minimaxi.com",
         "llm-minimax-base-url",
         "openclaw/workspace"
-      ]
-    },
-    "memory:memory/2026-04-17.md:18:47": {
-      "key": "memory:memory/2026-04-17.md:18:47",
-      "path": "memory/2026-04-17.md",
-      "startLine": 18,
-      "endLine": 47,
-      "source": "memory",
-      "snippet": "- Candidate: 飞书问题排查（晚间）: `im:message.p2p_msg:readonly`; `im:message:send_as_bot`; `im:resource`; 事件订阅：`im.message.receive_v1` - confidence: 0.62 - evidence: memory/2026-04-16.md:18-21 - recalls: 0 - status: staged - Candidate: 飞书问题排查（晚间）: 机器人能力：已开启 - confidence: 0.62 - evidence: memory/2026-04-16.md:22-22 - recalls: 0 - status: staged - Candidate: 飞书问题排查（晚间）: **可能原因**：; 应用是「开发中」状态，只有管理员自己能找到; 需要发布应用才能让其他用户使用; 或者需要确认找的是正确的机器人（应用名而非\"小Q\"） - confidence: 0.62 - evidence: memory/2026-04-16.md:24-27 - recalls: 0 - status: staged - Candidate: 飞书问题排查（晚间）: **待确认**：应用发布状态 + 是否找对了机器人 - confidence: 0.62 - evidence: memory/2026-04-16.md:29-29 - recalls: 0 - status: staged -",
-      "recallCount": 1,
-      "dailyCount": 0,
-      "groundedCount": 0,
-      "totalScore": 0.9515892546175213,
-      "maxScore": 0.9515892546175213,
-      "firstRecalledAt": "2026-05-10T14:32:16.315Z",
-      "lastRecalledAt": "2026-05-10T14:32:16.315Z",
-      "queryHashes": [
-        "60c99e53dd1a"
-      ],
-      "recallDays": [
-        "2026-05-10"
-      ],
-      "conceptTags": [
-        "message.p2p-msg",
-        "send-as-bot",
-        "im.message.receive-v1",
-        "0.62",
-        "memory/2026-04-16.md",
-        "18-21",
-        "22-22",
-        "24-27"
       ]
     },
     "memory:memory/2026-04-09.md:1:40": {
@@ -5754,68 +5696,6 @@
         "analyzer-service"
       ]
     },
-    "memory:memory/2026-04-17.md:73:87": {
-      "key": "memory:memory/2026-04-17.md:73:87",
-      "path": "memory/2026-04-17.md",
-      "startLine": 73,
-      "endLine": 87,
-      "source": "memory",
-      "snippet": "- Candidate: Assistant: **📊 18:00 个股分析 - 仍然失败** 进程启动后约 20 秒被 SIGKILL。问题持续。 **今日状态：** - ✅ 市场日报（06:27） - ❌ 个股分析（SIGKILL - 约20秒后被kill） **长期问题：** - Cron jobs 失效（nextRun=null） - 个股分析 SIGKILL 这两个问题需要 Pascal 介入排查。要我明天继续尝试，还是你现在想深入排查？ - confidence: 0.58 - evidence: memory/.dreams/session-corpus/2026-04-14.txt:7-7 - recalls: 0 - status: staged - Candidate: Assistant: It's 23:33 (11:33 PM) on Tuesday. According to HEARTBEAT.md: - 每个交易日 08:30 - 市场日报 - tomorrow (Wednesday) 08:30 - 每个交易日 18:00 - 个股分析 - tomorrow (Wednesday) 18:00 - 每周五 17:00 - 周度业绩归因 - not today - 每月 1 号 - 月度资产配置回顾 - not today Both scheduled tasks for today are done or - confidence: 0.58 - evidence: memory/.dreams/session-cor",
-      "recallCount": 1,
-      "dailyCount": 0,
-      "groundedCount": 0,
-      "totalScore": 1,
-      "maxScore": 1,
-      "firstRecalledAt": "2026-05-12T15:46:54.518Z",
-      "lastRecalledAt": "2026-05-12T15:46:54.518Z",
-      "queryHashes": [
-        "583f4d68e420"
-      ],
-      "recallDays": [
-        "2026-05-12"
-      ],
-      "conceptTags": [
-        "0.58",
-        "7-7",
-        "heartbeat.md",
-        "dreams/session-cor",
-        "candidate",
-        "assistant",
-        "分析",
-        "仍然"
-      ]
-    },
-    "memory:memory/2026-04-17.md:58:74": {
-      "key": "memory:memory/2026-04-17.md:58:74",
-      "path": "memory/2026-04-17.md",
-      "startLine": 58,
-      "endLine": 74,
-      "source": "memory",
-      "snippet": "- Candidate: User: Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK. When reading HEARTBEAT.md, use workspace file /home/pascal/.openclaw/workspace/HEARTBEAT.md (exact case - confidence: 0.58 - evidence: memory/.dreams/session-corpus/2026-04-14.txt:2-2 - recalls: 0 - status: staged - Candidate: Assistant: 周二 6:27 AM。运行今日市场日报（提前于 08:30）： - confidence: 0.58 - evidence: memory/.dreams/session-corpus/2026-04-14.txt:4-4 - recalls: 0 - status: staged - Candidate: Assistant: **📊 每日市场日报已生成（06:27 AM）** **今日待办：** - ✅ 市场日报（06:27，提前于 08:30） - ⏳ 18:00 个股分析（SIGKILL 问题待解",
-      "recallCount": 1,
-      "dailyCount": 0,
-      "groundedCount": 0,
-      "totalScore": 1,
-      "maxScore": 1,
-      "firstRecalledAt": "2026-05-12T15:46:54.518Z",
-      "lastRecalledAt": "2026-05-12T15:46:54.518Z",
-      "queryHashes": [
-        "583f4d68e420"
-      ],
-      "recallDays": [
-        "2026-05-12"
-      ],
-      "conceptTags": [
-        "heartbeat.md",
-        "heartbeat-ok",
-        "home/pascal",
-        "openclaw/workspace/heartbeat.md",
-        "0.58",
-        "2-2",
-        "4-4",
-        "candidate"
-      ]
-    },
     "memory:memory/2026-04-17.md:167:192": {
       "key": "memory:memory/2026-04-17.md:167:192",
       "path": "memory/2026-04-17.md",
@@ -5845,6 +5725,223 @@
         "1-1",
         "2-2",
         "status"
+      ]
+    },
+    "memory:memory/2026-05-01.md:77:110": {
+      "key": "memory:memory/2026-05-01.md:77:110",
+      "path": "memory/2026-05-01.md",
+      "startLine": 77,
+      "endLine": 110,
+      "source": "memory",
+      "snippet": "- 每日增量同步需要传入 `start_date` 参数（从数据库读取最新 report_period） - 或使用 `start_date=19900101 + _deep_merge_raw()` 兜底方案（调用量大） # 2026-05-01 记忆（下午补充） ## TushareSyncService 增量同步修复 ### 问题发现 - 每日定时任务（03:00）调用 `TushareSyncService.sync_financial_data()` - 对 `report_period=null` 的股票（4只），原 `limit=20` 只能拉约5年数据 - 需要改为 `limit=500` 全量拉取，确保历史财务数据不丢失 ### 代码修复 **文件**: `tradingagents/dataflows/providers/china/tushare.py` - `get_financial_data()` 新增 `limit` 参数，默认 500 - 调用处 `TushareSyncService` 传入 `limit=20`（日常增量） **文件**: `app/worker/tushare_sync_service.py` - 首次同步（`report_period=null`）时 `limit=500` - 增量同步时 `limit=20` ## 下午手动触发全量同步 ### 执行方式 - 通过 systemd service `tradingagents-cn.service` 执行 `sync_financial_all.py` - 命",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-05-13T14:23:45.300Z",
+      "lastRecalledAt": "2026-05-13T14:23:45.300Z",
+      "queryHashes": [
+        "c120cd0aada4"
+      ],
+      "recallDays": [
+        "2026-05-13"
+      ],
+      "conceptTags": [
+        "start-date",
+        "report-period",
+        "deep-merge-raw",
+        "get-financial-data",
+        "tradingagents-cn.service",
+        "sync-financial-all.py",
+        "每日",
+        "增量"
+      ]
+    },
+    "memory:memory/2026-04-30.md:40:70": {
+      "key": "memory:memory/2026-04-30.md:40:70",
+      "path": "memory/2026-04-30.md",
+      "startLine": 40,
+      "endLine": 70,
+      "source": "memory",
+      "snippet": "- `stock_financial_data`：财务报告数据（有上述 report_period 不一致问题） ## 今日调度记录 | 时间 | 任务 | 状态 | |------|------|------| | 00:21 | 财务数据同步（Tushare） | ❌ 失败（AsyncIOExecutor bug） | | 08:21 | 历史数据同步（手动） | ✅ 完成 | | 10:23 | 财务数据同步（手动） | ❌ 卡住被僵尸检测终止 | | 16:40 | 历史股票数据同步（Tushare） | ⏳ 待执行 | # 2026-04-30 记忆 ## APScheduler async job bug（已修复） **问题**：`ThreadPoolExecutor` 无法执行 `async def` 函数，导致财务数据同步等异步任务\"成功执行\"但实际什么都没做。 **根因**：APScheduler 的 `ThreadPoolExecutor` 收到 async 函数时，会创建一个 coroutine 对象但从不 await，任务静默失败。 **修复文件**：`skills/apps/TradingAgents-CN/app/main.py` - 改用 `AsyncIOExecutor()` 作为 default executor - `AsyncIOExecutor` 能正确处理 async def（通过事件循环）和普通 sync 函数（通过 `run_in_executor`） ## 财务数据同步 report_period 不一致 bug（已",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-05-13T14:23:45.300Z",
+      "lastRecalledAt": "2026-05-13T14:23:45.300Z",
+      "queryHashes": [
+        "c120cd0aada4"
+      ],
+      "recallDays": [
+        "2026-05-13"
+      ],
+      "conceptTags": [
+        "stock-financial-data",
+        "report-period",
+        "run-in-executor",
+        "财务",
+        "报告",
+        "数据",
+        "上述",
+        "不一致"
+      ]
+    },
+    "memory:memory/2026-04-30.md:123:156": {
+      "key": "memory:memory/2026-04-30.md:123:156",
+      "path": "memory/2026-04-30.md",
+      "startLine": 123,
+      "endLine": 156,
+      "source": "memory",
+      "snippet": "清理重复记录时，应该比较 `len(raw_data.income)` 而不是 `report_period`。**report_period 新 ≠ 数据完整**。 ## 数据库状态 - **MongoDB**：`172.25.240.1:27017`，database `tradingagents` - `stock_daily_quotes`：16,554,020 条，最新交易日期 2026-04-29 - `stock_financial_data`：约 4215 条（损坏后），需要重新全量同步 - **注意**：当前数据已损坏，重新同步前不要依赖这些数据做分析 ## 代码修改记录 ### 已修复的文件 1. `tushare.py` 第 1639 行：report_period 强制从 income end_date 获取 2. `financial_data_service.py`：upsert filter 改为 `{symbol, data_source}`（不含 report_period） 3. `main.py`：AsyncIOExecutor 替换 ThreadPoolExecutor ## 今日调度记录 | 时间 | 任务 | 状态 | |------|------|------| | 00:21 | 财务数据同步（Tushare） | ❌ 失败（AsyncIOExecutor bug） | | 08:21 | 历史数据同步（手动） | ✅ 完成 | | 10:23 | 财务数据同步（手动） | ❌ 卡住被僵尸检测终止 | | ~13:",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-05-13T14:23:45.300Z",
+      "lastRecalledAt": "2026-05-13T14:23:45.300Z",
+      "queryHashes": [
+        "c120cd0aada4"
+      ],
+      "recallDays": [
+        "2026-05-13"
+      ],
+      "conceptTags": [
+        "raw-data.income",
+        "report-period",
+        "172.25.240.1",
+        "stock-daily-quotes",
+        "stock-financial-data",
+        "tushare.py",
+        "end-date",
+        "financial-data-service.py"
+      ]
+    },
+    "memory:memory/2026-04-16.md:33:44": {
+      "key": "memory:memory/2026-04-16.md:33:44",
+      "path": "memory/2026-04-16.md",
+      "startLine": 33,
+      "endLine": 44,
+      "source": "memory",
+      "snippet": "| 组件 | 状态 | 备注 | |------|------|------| | 飞书 | ⚠️ 断开 | 消息接收断开 | | Context | ✅ 已清零 | 重启后恢复正常 | | Cron Jobs | ❌ 失效 | nextRun=null | | daily_stock_analysis | ❌ SIGKILL | 问题未解决 | ## 明日待办 - [ ] 继续排查飞书 1:1 DM 接收问题 - [ ] 确认应用发布状态 - [ ] 每天 08:30 市场日报、18:00 个股分析（手动）",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-05-13T14:24:52.850Z",
+      "lastRecalledAt": "2026-05-13T14:24:52.850Z",
+      "queryHashes": [
+        "55501e3ac390"
+      ],
+      "recallDays": [
+        "2026-05-13"
+      ],
+      "conceptTags": [
+        "daily-stock-analysis",
+        "状态",
+        "备注",
+        "断开",
+        "消息",
+        "接收",
+        "context",
+        "恢复"
+      ]
+    },
+    "memory:memory/2026-04-09.md:395:410": {
+      "key": "memory:memory/2026-04-09.md:395:410",
+      "path": "memory/2026-04-09.md",
+      "startLine": 395,
+      "endLine": 410,
+      "source": "memory",
+      "snippet": "## 待确认配置（HEARTBEAT.md） - [x] ~~飞书 Webhook URL~~（已配置） - [x] ~~自选股完整列表~~（已配置） - [ ] Tavily API Key（新闻搜索） - [ ] TradingEconomics API Key（日历） ## SIGKILL 问题追踪 - 2026-04-09 07:30 的 scheduled run 被 SIGKILL，无法验证是否正常触发 - 2026-04-10 07:30 是下一个验证节点 - systemd service 运行中（PID 364），无重启记录 ## GitHub 自动推送脚本分析 - 路径: `/home/pascal/.openclaw/workspace/auto_push.sh` - **风险评估**: 无风险，只有 add/commit/push，无任何还原操作 - **已加入 crontab**: `30 3 * * *`",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-05-13T14:24:52.850Z",
+      "lastRecalledAt": "2026-05-13T14:24:52.850Z",
+      "queryHashes": [
+        "55501e3ac390"
+      ],
+      "recallDays": [
+        "2026-05-13"
+      ],
+      "conceptTags": [
+        "heartbeat.md",
+        "home/pascal",
+        "openclaw/workspace/auto-push.sh",
+        "add/commit/push",
+        "确认",
+        "配置",
+        "webhook",
+        "url"
+      ]
+    },
+    "memory:memory/2026-04-17.md:335:336": {
+      "key": "memory:memory/2026-04-17.md:335:336",
+      "path": "memory/2026-04-17.md",
+      "startLine": 335,
+      "endLine": 336,
+      "source": "memory",
+      "snippet": "- - [ ] 解决 litellm 代理问题（可能需要配置代理凭据或切换网络） - [ ] 补充 `analyzer_service` 模块 - [ ] 配置邮件推送（TOOLS.md 中已有 SMTP 配置） - [ ] 飞书 Webhook URL 待确认 - [ ] Tavily API Key（新闻搜索）待配置 # 2026-04-06 Daily Memory ## Session Summary ### Investment System Setup - Working on OpenClaw investment skills: `daily_stock_analysis` and `daily-market-analysis` - Configured `litellm_config.yaml` with MiniMax + Gemini models - Set up `.env` with API keys and LITELLM_CONFIG path ### Technical Issues 1. **Network proxy issue** - 系统环境有 `socks5h://127.0.0.1:20170` 代理，导致 litellm API 调用失败 (SSL handshake failed) 2. **Module import issue** - `daily-stock-analysis` 有 `analyzer_service` 缺失问题 3. **Template mode works** - 基础数据获取（akshare）和报",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-05-13T14:24:52.850Z",
+      "lastRecalledAt": "2026-05-13T14:24:52.850Z",
+      "queryHashes": [
+        "55501e3ac390"
+      ],
+      "recallDays": [
+        "2026-05-13"
+      ],
+      "conceptTags": [
+        "network",
+        "网络",
+        "analyzer-service",
+        "tools.md",
+        "daily-stock-analysis",
+        "daily-market-analysis",
+        "litellm-config.yaml",
+        "litellm-config"
+      ]
+    },
+    "memory:memory/2026-04-17.md:308:312": {
+      "key": "memory:memory/2026-04-17.md:308:312",
+      "path": "memory/2026-04-17.md",
+      "startLine": 308,
+      "endLine": 312,
+      "source": "memory",
+      "snippet": "- Candidate: - [ ] 解决 litellm 代理问题（可能需要配置代理凭据或切换网络） - [ ] 补充 `analyzer_service` 模块 - [ ] 配置邮件推送（TOOLS.md 中已有 SMTP 配置） - [ ] 飞书 Webhook URL 待确认 - [ ] Tavily API Key（新闻搜索）待配置 # 2026-04-06 Daily Memory ## Session Summary ### Investment System Setup - Working on OpenClaw investment skills: `daily_stock_analysis` and `daily-market-analysis` - Configured `litellm_config.yaml` with MiniMax + Gemini models - Set up `.env` with API keys and LITELLM_CONFIG path ### Technical Issues 1. **Network proxy issue** - 系统环境有 `socks5h://127.0.0.1:20170` 代理，导致 litellm API 调用失败 (SSL handshake failed) 2. **Module import issue** - `daily-stock-analysis` 有 `analyzer_service` 缺失问题 3. **Template mode works** - 基础数据获取（",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-05-13T14:24:52.850Z",
+      "lastRecalledAt": "2026-05-13T14:24:52.850Z",
+      "queryHashes": [
+        "55501e3ac390"
+      ],
+      "recallDays": [
+        "2026-05-13"
+      ],
+      "conceptTags": [
+        "network",
+        "网络",
+        "analyzer-service",
+        "tools.md",
+        "daily-stock-analysis",
+        "daily-market-analysis",
+        "litellm-config.yaml",
+        "litellm-config"
       ]
     }
   }

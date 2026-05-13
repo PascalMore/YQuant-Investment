@@ -54,71 +54,81 @@ def detect_format(df: pd.DataFrame) -> str:
     return "portfolio"
 
 
-def correct_year_if_ocr_error(records: list, date_str: str) -> list:
+def correct_year_if_ocr_error(records: list) -> list:
     """
-    Fix common OCR year errors:
-    1. FUTURE year (e.g., OCR reads 2027, user confirms 2026): auto-correct
-    2. PAST year (e.g., OCR reads 2024, user confirms 2026): warn only
+    Fix common OCR year errors based on OCR data itself.
+    Correction triggers when:
+    - OCR year > current_year (e.g., 2027+ when current is 2026) → auto-correct
+    - OCR year <= current_year - 2 (e.g., 2024 when current is 2026) → auto-correct
     
-    Only applies when date_str year == current year (user says it's current year).
+    Records format: list[dict] with keys 'df' (DataFrame) and 'source_path'.
+    Date fields are columns in the DataFrame, not dict keys.
+    
+    No dependence on --date parameter; correction is purely based on
+    whether the OCR year itself is clearly erroneous relative to current year.
     """
     import re
     current_year = datetime.now().year  # e.g. 2026
 
-    # Determine provided year from date_str
-    provided_year = None
-    if date_str:
-        m = re.match(r'^(\d{4})', str(date_str))
-        if m:
-            provided_year = int(m.group(1))
-
-    # Only apply correction when user says the data is from current year
-    if provided_year != current_year:
-        return records
-
     DATE_FIELDS = ['截止日期', 'date', 'nav_date', 'position_date', 'trade_date']
 
-    def fix_record(rec: dict) -> dict:
+    def fix_df(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+        """Fix year errors in DataFrame date columns. Returns (fixed_df, change_count)."""
+        changes = 0
+        df = df.copy()  # Don't modify original
+        
         for field in DATE_FIELDS:
-            if field in rec and rec[field]:
-                val = str(rec[field])
-                m = re.match(r'^(\d{4})-(\d{2})-(\d{2})$', val)
+            if field not in df.columns:
+                continue
+            
+            for idx in range(len(df)):
+                val = df.at[idx, field]
+                if pd.isna(val) or val is None:
+                    continue
+                
+                val_str = str(val)
+                m = re.match(r'^(\d{4})-(\d{2})-(\d{2})$', val_str)
                 if not m:
-                    m = re.match(r'^(\d{4})/(\d{2})/(\d{2})$', val)
-                if m:
-                    year = int(m.group(1))
-                    if year > current_year:
-                        # Case 1: future year — auto-correct (e.g., 2027 → 2026)
-                        fixed = f"{current_year}-{m.group(2)}-{m.group(3)}"
-                        rec[field] = fixed
-                    elif year < current_year:
-                        if year <= current_year - 2:
-                            # Case 2a: OCR date is 2+ years earlier than current year → auto-correct
-                            # (e.g., current=2026, OCR reads 2024 → 2 years early = auto-correct)
-                            fixed = f"{current_year}-{m.group(2)}-{m.group(3)}"
-                            rec[field] = fixed
-                            logger.warning(
-                                f"[Step1b] OCR year corrected: field={field} {year}→{current_year} "
-                                f"(original value: {val}, auto-corrected 2+ year gap)"
-                            )
-                        else:
-                            # Case 2b: OCR date is within 1 year of current year → only warning
-                            # (e.g., current=2026, OCR reads 2025 → 1 year early = likely real historical data)
-                            logger.warning(
-                                f"[Step1b] OCR year warning: field={field} value={val} "
-                                f"(expected ~{current_year}, got {year}, might be real historical data)"
-                            )
-        return rec
+                    m = re.match(r'^(\d{4})/(\d{2})/(\d{2})$', val_str)
+                if not m:
+                    continue
+                
+                year = int(m.group(1))
+                if year > current_year:
+                    # Case 1: future year — auto-correct
+                    fixed = f"{current_year}-{m.group(2)}-{m.group(3)}"
+                    df.at[idx, field] = fixed
+                    changes += 1
+                    logger.warning(
+                        f"[Step1b] OCR year corrected: row={idx} field={field} {year}→{current_year} "
+                        f"(original value: {val_str}, future year > current_year)"
+                    )
+                elif year <= current_year - 2:
+                    # Case 2: past year <= current_year - 2 — auto-correct
+                    fixed = f"{current_year}-{m.group(2)}-{m.group(3)}"
+                    df.at[idx, field] = fixed
+                    changes += 1
+                    logger.warning(
+                        f"[Step1b] OCR year corrected: row={idx} field={field} {year}→{current_year} "
+                        f"(original value: {val_str}, past year <= current_year-2)"
+                    )
+        
+        return df, changes
 
-    corrected = [fix_record(r) for r in records]
-    changes = sum(
-        1 for a, b in zip(records, corrected)
-        if any(str(a.get(f, '')) != str(b.get(f, ''))
-               for f in DATE_FIELDS)
-    )
-    if changes:
-        logger.warning(f"[Step1b] OCR year auto-corrected {changes} records (future year → {current_year})")
-    return corrected
+    # Process each record: records = [{'df': DataFrame, 'source_path': str}, ...]
+    total_changes = 0
+    for record in records:
+        if 'df' not in record:
+            continue
+        df = record['df']
+        df_fixed, changes = fix_df(df)
+        record['df'] = df_fixed  # Write back corrected DataFrame
+        total_changes += changes
+
+    if total_changes:
+        logger.warning(f"[Step1b] OCR year auto-corrected {total_changes} cells")
+    
+    return records
 
 
 def save_excel(df: pd.DataFrame, date_str: str, source_root: Path, base_name: str, subdir: str = "image") -> Path:
@@ -184,8 +194,8 @@ async def run_pipeline(
     df = records[0]["df"]
     logger.info(f"[Step1] Parsed: {len(df)} rows, columns: {list(df.columns)}")
 
-    # Step 1b: Fix OCR year errors (e.g., 2024 misread for 2026)
-    records = correct_year_if_ocr_error(records, date_str)
+    # Step 1b: Fix OCR year errors (e.g., 2099 or 2024 misread for 2026)
+    records = correct_year_if_ocr_error(records)
     df = records[0]["df"]
 
     # Step 1c: Detect format
