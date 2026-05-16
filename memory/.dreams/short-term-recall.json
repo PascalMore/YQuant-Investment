@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-13T14:24:52.850Z",
+  "updatedAt": "2026-05-16T03:39:06.766Z",
   "entries": {
     "memory:memory/2026-04-05.md:1:38": {
       "key": "memory:memory/2026-04-05.md:1:38",
@@ -5367,25 +5367,27 @@
       "endLine": 41,
       "source": "memory",
       "snippet": "# 2026-04-16 日记 ## 今日事件 ### 飞书问题排查（晚间） - **现象**：飞书发消息小Q无响应，提示 \"AI service is temporarily overloaded\" - **诊断过程**： 1. Context 满（99.9%）→ 重启 Gateway 后解决 2. 重启后飞书仍然无响应 3. dedup 文件显示 20:11 后就没有收到任何消息 4. 检查 `feishu-pairing.json` 发现是空的 `\"requests\": []` 5. Gateway status 显示 Feishu: OK，但实际消息接收断开 - **权限配置**（已确认正确）： - `contact:user.base:readonly` - `m:chat`, `m:message` - `im:message.group_at_msg:readonly` - `im:message.p2p_msg:readonly` - `im:message:send_as_bot` - `im:resource` - 事件订阅：`im.message.receive_v1` - 机器人能力：已开启 - **可能原因**： 1. 应用是「开发中」状态，只有管理员自己能找到 2. 需要发布应用才能让其他用户使用 3. 或者需要确认找的是正确的机器人（应用名而非\"小Q\"） - **待确认**：应用发布状态 + 是否找对了机器人 ## 系统状态 | 组件 | 状态 | 备注 | |-----",
-      "recallCount": 6,
+      "recallCount": 7,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 5.968810573126827,
+      "totalScore": 6.968810573126827,
       "maxScore": 1,
       "firstRecalledAt": "2026-05-04T15:27:25.167Z",
-      "lastRecalledAt": "2026-05-13T14:24:52.850Z",
+      "lastRecalledAt": "2026-05-16T03:39:06.766Z",
       "queryHashes": [
         "9c35c9cb8382",
         "ea73516fae01",
         "9644cd8a478a",
         "0b2c88928e9f",
         "60c99e53dd1a",
-        "55501e3ac390"
+        "55501e3ac390",
+        "fac569fa0fa8"
       ],
       "recallDays": [
         "2026-05-04",
         "2026-05-10",
-        "2026-05-13"
+        "2026-05-13",
+        "2026-05-16"
       ],
       "conceptTags": [
         "gateway",
