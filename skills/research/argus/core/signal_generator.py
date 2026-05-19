@@ -99,6 +99,9 @@ class SignalGenerator:
         # Calculate confidence
         confidence = credibility_score
         
+        generated_at = datetime.now()
+        wind_code = pos_change.get('asset_wind_code')
+
         return {
             'signal_id': str(uuid.uuid4()),
             'source': 'argus',
@@ -108,16 +111,19 @@ class SignalGenerator:
             'signal_type': signal_type,
             'confidence': round(confidence, 3),
             'direction': direction,
+            'pool_zone': pool_zone,
+            'trade_date': generated_at.strftime('%Y-%m-%d'),
             'target_stocks': [{
-                'wind_code': pos_change.get('asset_wind_code'),
+                'stock_code': wind_code.split('.')[0] if wind_code else None,
+                'wind_code': wind_code,
                 'stock_name': pos_change.get('asset_name'),
                 'action': signal_type,
                 'holding_ratio_change': pos_change.get('holding_ratio_change', 0),
                 'market_value_change': pos_change.get('market_value_change', 0),
             }],
             'reason': f"{product_name} {signal_type.lower()} signal for {pos_change.get('asset_name')}",
-            'generated_at': datetime.now().isoformat(),
-            'valid_until': datetime.now().strftime('%Y-%m-%d'),
+            'generated_at': generated_at.isoformat(),
+            'valid_until': generated_at.strftime('%Y-%m-%d'),
             'metadata': {
                 'credibility_score': credibility_score,
                 'crowding_level': 'MEDIUM',  # Would be calculated

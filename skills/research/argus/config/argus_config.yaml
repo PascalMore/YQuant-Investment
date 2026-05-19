@@ -26,6 +26,19 @@ pool_zones:
   scan:
     min_confidence: 0.30
 
+# Portfolio stock pool automatic zone transition thresholds
+zone_thresholds:
+  scan_to_watch:
+    bayesian_min: 0.30
+    product_count_min: 2
+  watch_to_candidate:
+    bayesian_min: 0.50
+    consensus_min: 0.40
+  candidate_to_conviction:
+    bayesian_min: 0.70
+    product_count_min: 3
+    crowding_max: "DANGER"
+
 # Rebalancing detection
 rebalancing:
   holding_ratio_change_threshold: 0.05  # 5% change threshold
@@ -49,6 +62,11 @@ crowding:
     L4: 0.20  # event-driven consensus
 
 # MongoDB output collections for Argus Phase 2
+output_collections:
+  credential_score: 08_research_argus_credential_score
+  signal: 08_research_argus_signal
+  stock_pool: 08_research_argus_stock_pool
+
 mongo:
   database: tradingagents
   collections:

@@ -5,8 +5,8 @@
 | 状态 | 已采纳（Accepted） |
 | 作者 | YQuant |
 | 创建日期 | 2026-05-18 |
-| 最后更新 | 2026-05-18 |
-| 版本号 | V0.2 |
+| 最后更新 | 2026-05-19 |
+| 版本号 | V0.3 |
 | 所属模块 | 08_research（投研分析） |
 | 依赖RFC | RFC-00-001-yqclaw-investment-global-architecture, RFC-08-001-argus-integration |
 | 替代RFC | 无 |
@@ -16,6 +16,7 @@
 ### 版本历史（Changelog）
 | 版本号 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
+| V0.3 | 2026-05-19 | 补充 ArgusPortfolioSubscriber、Portfolio ingestion endpoint、MongoDB-only 数据流与 zone 映射 | YQuant |
 | V0.2 | 2026-05-18 | 状态更新：Draft → Accepted；集合名称更新为 tradingagents.08_research_argus_signal | YQuant |
 | V0.1 | 2026-05-18 | 初始创建，定义 Argus 信号接口标准 | YQuant |
 
@@ -146,6 +147,38 @@ class ArgusSignalSubscriber:
         pass
 ```
 
+Phase 2 后 Portfolio 侧使用 `ArgusPortfolioSubscriber` 作为 Argus 项目内的对接层。该接口直接读取
+MongoDB `tradingagents.08_research_argus_signal`，并只输出 Portfolio ingestion 所需 payload，
+不直接写入 `portfolio_stock_pool`。
+
+```python
+class ArgusPortfolioSubscriber:
+    """Argus 信号到 Portfolio 股票池 ingestion payload 的订阅接口。"""
+
+    def get_latest_signals(
+        self,
+        trade_date: str,
+        min_confidence: float = 0.7,
+        pool_zone: str | None = None,
+    ) -> list[dict]:
+        """按交易日、最低置信度和可选股票池 zone 获取最新 Argus 信号。"""
+
+    def to_portfolio_ingest_payload(
+        self,
+        signals: list[dict],
+        mode: str = "upsert_scan_only",
+    ) -> list[dict]:
+        """将 Argus signal 转换为 StockPoolIngestionService.ingest_signals payload。"""
+
+    def get_stock_signals(
+        self,
+        wind_code: str,
+        days: int = 7,
+        min_confidence: float = 0.7,
+    ) -> list[dict]:
+        """获取某只股票最近 N 天内的 Argus 信号。"""
+```
+
 ### 4.2 置信度阈值规则
 
 | 置信度 | 处理规则 |
@@ -166,21 +199,76 @@ class ArgusSignalSubscriber:
 
 ## 5. 与 portfolio 模块的数据交换
 
-### 5.1 文件交换格式
-- **路径**：`logs/research/argus_signal_{YYYYMMDD}.json`
+### 5.1 MongoDB-only 交换格式
+- **数据库**：`tradingagents`
+- **Argus 信号集合**：`08_research_argus_signal`
+- **Portfolio 股票池集合**：`portfolio_stock_pool`
 - **频率**：日度 T+1（每日 08:00 前生成）
-- **格式**：JSON Lines（每行一个 signal）
+- **废弃项**：SQLite 与 JSONL 文件交换均不再作为标准接口；历史描述只保留为迁移参考。
 
-### 5.2 可选：直接写入 MongoDB
+### 5.2 Portfolio ingestion endpoint
+Portfolio 应暴露 `POST /ingest-signals`，应用层通过依赖注入获取
+`StockPoolIngestionService`：
+
 ```python
-# Argus 信号也可直接写入 MongoDB（由 Argus 自建集合）
-# 集合名：tradingagents.08_research_argus_signal
-# 写入时机：日度 signal 生成后
+class StockPoolIngestionService:
+    def ingest_signals(
+        self,
+        source: str,
+        signals: list[dict],
+        mode: str = "upsert_scan_only",
+        actor: str = "system:argus",
+    ) -> dict:
+        """消费 Argus payload，并通过 StockPoolService 间接写入股票池。"""
+
+    def map_argus_zone(self, argus_zone: str) -> str:
+        """映射 Argus zone 到 Portfolio zone。"""
+```
+
+推荐请求体：
+
+```json
+{
+  "source": "argus",
+  "mode": "upsert_scan_only",
+  "actor": "system:argus",
+  "signals": []
+}
+```
+
+`mode` 语义：
+
+| mode | 行为 |
+|---|---|
+| upsert_scan_only | 只写入 SCAN 区信号，默认模式，防止 Argus 直接污染高优先级股票池 |
+| upsert_all | 写入 SCAN/WATCH/CANDIDATE/CONVICTION，需人工确认后使用 |
+| dry_run | 只返回拟处理结果，不写入 MongoDB |
+
+### 5.3 Zone 映射表
+
+| Argus zone | Portfolio zone | 说明 |
+|---|---|---|
+| SCAN | SCAN | 初筛观察 |
+| WATCH | WATCH | 重点跟踪 |
+| CANDIDATE | CANDIDATE | 候选研究 |
+| CONVICTION | CONVICTION | 高确信度 |
+| focus | CONVICTION | 旧 RFC 残留命名，统一迁移为 CONVICTION |
+
+### 5.4 标准数据流
+
+```text
+Argus signal (MongoDB 08_research_argus_signal)
+  -> ArgusPortfolioSubscriber.get_latest_signals(trade_date, min_confidence)
+  -> ArgusPortfolioSubscriber.to_portfolio_ingest_payload(signals, mode)
+  -> StockPoolService.ingest_signals(source="argus", signals, mode)
+  -> StockPoolRepository.create()/update_fields()
+  -> portfolio_stock_pool
 ```
 
 ## 6. 验收标准
 - [ ] argus_signal JSON 格式符合 Schema
-- [ ] ArgusSignalSubscriber 接口可通过单元测试
+- [ ] ArgusPortfolioSubscriber 接口可通过单元测试
+- [ ] StockPoolIngestionService 接口可通过单元测试
 - [ ] 置信度阈值规则正确执行
 - [ ] 降级策略正确处理异常场景
 - [ ] 与 portfolio 模块联调通过
@@ -188,5 +276,5 @@ class ArgusSignalSubscriber:
 ## 7. 开放问题
 | 问题 | 状态 | 说明 |
 |---|---|---|
-| 是否需要实时信号推送（而非文件） | 待讨论 | 当前设计为日度 T+1 文件 |
+| 是否需要实时信号推送 | 待讨论 | 当前设计为日度 T+1 MongoDB ingestion |
 | 信号有效期精确到小时还是日 | 待定 | 当前设计为当日有效 |
