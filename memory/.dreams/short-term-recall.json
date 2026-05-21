@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-20T14:08:15.293Z",
+  "updatedAt": "2026-05-21T00:49:05.290Z",
   "entries": {
     "memory:memory/2026-04-05.md:1:38": {
       "key": "memory:memory/2026-04-05.md:1:38",
@@ -9,19 +9,21 @@
       "endLine": 38,
       "source": "memory",
       "snippet": "## daily-market-analysis 需求确认 ### 时间规划 - **每天 08:30** 推送全球市场简报 ### 报告结构 1. **多市场概览** - A股、H股、美股、数字货币、大宗商品 2. **热点新闻** - 24h内全球金融Top3 + 各市场Top5 3. **各市场复盘**（格式参考 daily-stock-analysis）： - 市场总结 - 指数表现/风格分析 - 资金动向 - 热点解读 - 后市展望 - 风险提示 - 策略计划 4. **金融日历** - 未来1个月重要事件 5. **仓位建议** - 基于风险敞口 ### 数据源 - **优先**: Tushare（Pascal 有 2000积分 API Key） - **备用**: AkShare ### 报告格式 - Markdown，可含图表 - 邮件推送 ### 复用水源 - daily-stock-analysis 的分析框架和格式 - 数据服务层（stock_service.py） - 通知服务（邮件等） ## Pascal 的目录约定 - \"workspace\" = `/home/pascal/.openclaw/workspace` - skills 目录在 workspace 下: `workspace/skills/` - investment 项目在 `workspace/skills/investment/`",
-      "recallCount": 2,
+      "recallCount": 3,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1.2088725313719104,
-      "maxScore": 0.6176178792373291,
+      "totalScore": 2.2088725313719104,
+      "maxScore": 1,
       "firstRecalledAt": "2026-04-08T23:33:52.408Z",
-      "lastRecalledAt": "2026-04-08T23:34:00.493Z",
+      "lastRecalledAt": "2026-05-21T00:38:36.112Z",
       "queryHashes": [
         "a6605d664647",
-        "7765cd747e69"
+        "7765cd747e69",
+        "8aa3d601e407"
       ],
       "recallDays": [
-        "2026-04-08"
+        "2026-04-08",
+        "2026-05-21"
       ],
       "conceptTags": [
         "daily-market-analysis",
@@ -5301,20 +5303,22 @@
       "endLine": 46,
       "source": "memory",
       "snippet": "清理了 `smart-money/2026-05-03/` 目录下的残留文件，最终结构： ``` 2026-05-03/ ├── image/ │ ├── portfolio_20260503_2130.jpg │ ├── portfolio_20260503_2136.jpg │ ├── portfolio_20260503_2139.jpg │ ├── portfolio_20260503_2142.jpg │ └── portfolio_20260503_2143.jpg └── message/ ├── portfolio_20260423_2340.txt/.xlsx (80PF11234 景顺灵活1号) ├── portfolio_20260423_2345.txt/.xlsx (80PF11242 易方达均衡配置) └── portfolio_20260423_2350.txt/.xlsx (80PF11238 常春藤优选3号) ``` ### 5. Message Pipeline 数据验证 - 80PF11234：48 行 ✅ - 80PF11242：46 行 ✅ - 80PF11238：47 行 ✅（注意原始数据中有 `GOOOG.US` 多了一个 O） ## 修改的文件 - `skills/data/data-pipeline/scripts/run_message_pipeline.py`： - COLUMN_ALIASES 添加半角括号映射 - `save_excel()` 函数改为使",
-      "recallCount": 2,
+      "recallCount": 3,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 2,
+      "totalScore": 3,
       "maxScore": 1,
       "firstRecalledAt": "2026-05-04T13:53:18.981Z",
-      "lastRecalledAt": "2026-05-08T13:06:09.122Z",
+      "lastRecalledAt": "2026-05-21T00:49:05.290Z",
       "queryHashes": [
         "3e91dd63304e",
-        "185e33bb39ec"
+        "185e33bb39ec",
+        "9111fb54c036"
       ],
       "recallDays": [
         "2026-05-04",
-        "2026-05-08"
+        "2026-05-08",
+        "2026-05-21"
       ],
       "conceptTags": [
         "smart-money/2026-05-03",
@@ -5676,18 +5680,20 @@
       "endLine": 308,
       "source": "memory",
       "snippet": "- Candidate: # 2026-04-06 Daily Memory ## Session Summary ### Investment System Setup - Working on OpenClaw investment skills: `daily_stock_analysis` and `daily-market-analysis` - Configured `litellm_config.yaml` with MiniMax + Gemini models - Set up `.env` with API keys and LITELLM_CONFIG path ### Technical Issues 1. **Network proxy issue** - 系统环境有 `socks5h://127.0.0.1:20170` 代理，导致 litellm API 调用失败 (SSL handshake failed) 2. **Module import issue** - `daily-stock-analysis` 有 `analyzer_service` 缺失问题 3. **Template mode works** - 基础数据获取（akshare）和报告生成正常 ### What's Working - ✅ akshare 数据获取正常 - ✅ 报告模板生成正常 - ✅ 股票数据复盘功能正常（上证/深证/创业板/科创50） - ❌ AI 分析未启用（litellm 网络问题） ### Daily Stock Analysis 测试结果 ``` 上",
-      "recallCount": 1,
+      "recallCount": 2,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 2,
       "maxScore": 1,
       "firstRecalledAt": "2026-05-11T00:32:05.167Z",
-      "lastRecalledAt": "2026-05-11T00:32:05.167Z",
+      "lastRecalledAt": "2026-05-21T00:38:36.112Z",
       "queryHashes": [
-        "9931a4e2a553"
+        "9931a4e2a553",
+        "8aa3d601e407"
       ],
       "recallDays": [
-        "2026-05-11"
+        "2026-05-11",
+        "2026-05-21"
       ],
       "conceptTags": [
         "network",
@@ -5769,18 +5775,20 @@
       "endLine": 70,
       "source": "memory",
       "snippet": "- `stock_financial_data`：财务报告数据（有上述 report_period 不一致问题） ## 今日调度记录 | 时间 | 任务 | 状态 | |------|------|------| | 00:21 | 财务数据同步（Tushare） | ❌ 失败（AsyncIOExecutor bug） | | 08:21 | 历史数据同步（手动） | ✅ 完成 | | 10:23 | 财务数据同步（手动） | ❌ 卡住被僵尸检测终止 | | 16:40 | 历史股票数据同步（Tushare） | ⏳ 待执行 | # 2026-04-30 记忆 ## APScheduler async job bug（已修复） **问题**：`ThreadPoolExecutor` 无法执行 `async def` 函数，导致财务数据同步等异步任务\"成功执行\"但实际什么都没做。 **根因**：APScheduler 的 `ThreadPoolExecutor` 收到 async 函数时，会创建一个 coroutine 对象但从不 await，任务静默失败。 **修复文件**：`skills/apps/TradingAgents-CN/app/main.py` - 改用 `AsyncIOExecutor()` 作为 default executor - `AsyncIOExecutor` 能正确处理 async def（通过事件循环）和普通 sync 函数（通过 `run_in_executor`） ## 财务数据同步 report_period 不一致 bug（已",
-      "recallCount": 1,
+      "recallCount": 2,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 2,
       "maxScore": 1,
       "firstRecalledAt": "2026-05-13T14:23:45.300Z",
-      "lastRecalledAt": "2026-05-13T14:23:45.300Z",
+      "lastRecalledAt": "2026-05-21T00:49:05.290Z",
       "queryHashes": [
-        "c120cd0aada4"
+        "c120cd0aada4",
+        "9111fb54c036"
       ],
       "recallDays": [
-        "2026-05-13"
+        "2026-05-13",
+        "2026-05-21"
       ],
       "conceptTags": [
         "stock-financial-data",
@@ -5800,18 +5808,20 @@
       "endLine": 156,
       "source": "memory",
       "snippet": "清理重复记录时，应该比较 `len(raw_data.income)` 而不是 `report_period`。**report_period 新 ≠ 数据完整**。 ## 数据库状态 - **MongoDB**：`172.25.240.1:27017`，database `tradingagents` - `stock_daily_quotes`：16,554,020 条，最新交易日期 2026-04-29 - `stock_financial_data`：约 4215 条（损坏后），需要重新全量同步 - **注意**：当前数据已损坏，重新同步前不要依赖这些数据做分析 ## 代码修改记录 ### 已修复的文件 1. `tushare.py` 第 1639 行：report_period 强制从 income end_date 获取 2. `financial_data_service.py`：upsert filter 改为 `{symbol, data_source}`（不含 report_period） 3. `main.py`：AsyncIOExecutor 替换 ThreadPoolExecutor ## 今日调度记录 | 时间 | 任务 | 状态 | |------|------|------| | 00:21 | 财务数据同步（Tushare） | ❌ 失败（AsyncIOExecutor bug） | | 08:21 | 历史数据同步（手动） | ✅ 完成 | | 10:23 | 财务数据同步（手动） | ❌ 卡住被僵尸检测终止 | | ~13:",
-      "recallCount": 1,
+      "recallCount": 2,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 2,
       "maxScore": 1,
       "firstRecalledAt": "2026-05-13T14:23:45.300Z",
-      "lastRecalledAt": "2026-05-13T14:23:45.300Z",
+      "lastRecalledAt": "2026-05-21T00:49:05.290Z",
       "queryHashes": [
-        "c120cd0aada4"
+        "c120cd0aada4",
+        "9111fb54c036"
       ],
       "recallDays": [
-        "2026-05-13"
+        "2026-05-13",
+        "2026-05-21"
       ],
       "conceptTags": [
         "raw-data.income",
@@ -6101,6 +6111,161 @@
         "portfolio-trade",
         "根本",
         "原因"
+      ]
+    },
+    "memory:memory/2026-04-17.md:303:307": {
+      "key": "memory:memory/2026-04-17.md:303:307",
+      "path": "memory/2026-04-17.md",
+      "startLine": 303,
+      "endLine": 307,
+      "source": "memory",
+      "snippet": "- Candidate: # 2026-04-06 Daily Memory ## Session Summary ### Investment System Setup - Working on OpenClaw investment skills: `daily_stock_analysis` and `daily-market-analysis` - Configured `litellm_config.yaml` with MiniMax + Gemini models - Set up `.env` with API keys and LITELLM_CONFIG path ### Technical Issues 1. **Network proxy issue** - 系统环境有 `socks5h://127.0.0.1:20170` 代理，导致 litellm API 调用失败 (SSL handshake failed) 2. **Module import issue** - `daily-stock-analysis` 有 `analyzer_service` 缺失问题 3. **Template mode works** - 基础数据获取（akshare）和报告生成正常 ### What's Working - ✅ akshare 数据获取正常 - ✅ 报告模板生成正常 - ✅ 股票数据复盘功能正常（上证/深证/创业板/科创50） - ❌ AI 分析未启用（litellm 网络问题） ### Daily Stock Analysis 测试结果 ``` 上",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-05-21T00:38:36.112Z",
+      "lastRecalledAt": "2026-05-21T00:38:36.112Z",
+      "queryHashes": [
+        "8aa3d601e407"
+      ],
+      "recallDays": [
+        "2026-05-21"
+      ],
+      "conceptTags": [
+        "network",
+        "网络",
+        "daily-stock-analysis",
+        "daily-market-analysis",
+        "litellm-config.yaml",
+        "litellm-config",
+        "127.0.0.1",
+        "analyzer-service"
+      ]
+    },
+    "memory:memory/2026-04-17.md:334:335": {
+      "key": "memory:memory/2026-04-17.md:334:335",
+      "path": "memory/2026-04-17.md",
+      "startLine": 334,
+      "endLine": 335,
+      "source": "memory",
+      "snippet": "- # 2026-04-06 Daily Memory ## Session Summary ### Investment System Setup - Working on OpenClaw investment skills: `daily_stock_analysis` and `daily-market-analysis` - Configured `litellm_config.yaml` with MiniMax + Gemini models - Set up `.env` with API keys and LITELLM_CONFIG path ### Technical Issues 1. **Network proxy issue** - 系统环境有 `socks5h://127.0.0.1:20170` 代理，导致 litellm API 调用失败 (SSL handshake failed) 2. **Module import issue** - `daily-stock-analysis` 有 `analyzer_service` 缺失问题 3. **Template mode works** - 基础数据获取（akshare）和报告生成正常 ### What's Working - ✅ akshare 数据获取正常 - ✅ 报告模板生成正常 - ✅ 股票数据复盘功能正常（上证/深证/创业板/科创50） - ❌ AI 分析未启用（litellm 网络问题） ### Daily Stock Analysis 测试结果 ``` 上证指数: 388 [c",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-05-21T00:38:36.112Z",
+      "lastRecalledAt": "2026-05-21T00:38:36.112Z",
+      "queryHashes": [
+        "8aa3d601e407"
+      ],
+      "recallDays": [
+        "2026-05-21"
+      ],
+      "conceptTags": [
+        "network",
+        "网络",
+        "daily-stock-analysis",
+        "daily-market-analysis",
+        "litellm-config.yaml",
+        "litellm-config",
+        "127.0.0.1",
+        "analyzer-service"
+      ]
+    },
+    "memory:memory/2026-04-29.md:156:191": {
+      "key": "memory:memory/2026-04-29.md:156:191",
+      "path": "memory/2026-04-29.md",
+      "startLine": 156,
+      "endLine": 191,
+      "source": "memory",
+      "snippet": "1. **串行处理**：5,484 只股票 × 4 API = 21,936 次串行调用 2. **无跳过逻辑**：本地已是最新报告期时仍调用 API 3. **本地报告期获取效率低**：聚合管道遍历嵌套数组 `raw_data.income_statement.end_date` ### 优化 1：避免重复写入 **位置**：`financial_data_service.py` 第 1317-1332 行 ```python # 新增检查：如果返回的报告期不比本地新，跳过保存 if local_latest_end_date and returned_period and returned_period <= local_latest_end_date: stats[\"skipped_count\"] += 1 logger.debug(f\"⚠️ {symbol}: 无新数据 (返回{returned_period} <= 本地{local_latest_end_date})\") else: success = await self._save_financial_data(symbol, financial_data) ``` ### 优化 2：简化本地报告期获取 **位置**：`financial_data_service.py` 第 1249-1281 行 ```python # 之前：聚合管道解析嵌套数组（慢） {\"$max\": \"$raw_data.income_statement.end_date\"} # 现在：直接查询外层字段（",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-05-21T00:49:05.290Z",
+      "lastRecalledAt": "2026-05-21T00:49:05.290Z",
+      "queryHashes": [
+        "9111fb54c036"
+      ],
+      "recallDays": [
+        "2026-05-21"
+      ],
+      "conceptTags": [
+        "financial-data-service.py",
+        "1317-1332",
+        "local-latest-end-date",
+        "returned-period",
+        "skipped-count",
+        "logger.debug",
+        "save-financial-data",
+        "financial-data"
+      ]
+    },
+    "memory:memory/2026-05-02.md:48:70": {
+      "key": "memory:memory/2026-05-02.md:48:70",
+      "path": "memory/2026-05-02.md",
+      "startLine": 48,
+      "endLine": 70,
+      "source": "memory",
+      "snippet": "- **核心脚本**：`scripts/table_ocr.py`（Pipeline + TablePreprocessor + TableDetector + parse_row） - **文档**：`SKILL.md` ### 9. 技术栈 - PaddlePaddle 3.0.0 + PaddleOCR 2.7.3 + Paddlex 3.5.1（全程 CPU 推理，离线运行） - opencv-contrib-python 4.6.0.66 - numpy<2（必须先安装以确保 ABI 兼容） - openpyxl 3.1.5 ### 10. 关键设计决策 - **跳过 deskew**：PaddleOCR 本身有角度容差，deskew 旋转会破坏图像方向导致 OCR 行数暴跌（439→2） - **正确流程**：原图 → 表格区域检测 → 裁剪 → 预处理 → OCR（而不是预处理→检测→裁剪） - **PPStructure 禁用**：PPStructure 的表格检测模型在 WSL2 上触发 SIGILL（非法指令），改用 `PaddleOCR.ocr()` 行识别 + OpenCV 网格检测 - **行聚类**：Y 坐标每 45px 一个 band，404 行 OCR 文本聚类为 ~56 行 bands ### 11. 解析策略（锚点法） - 产品代码 `80PF11234` 等为锚点，定位每行 - 列分配按 X 坐标：产品代码(1227-1390) → Wind(1780) → 资产(2000+) → 比例(3048) → 数量(3558) → 市值(4",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-05-21T00:49:05.290Z",
+      "lastRecalledAt": "2026-05-21T00:49:05.290Z",
+      "queryHashes": [
+        "9111fb54c036"
+      ],
+      "recallDays": [
+        "2026-05-21"
+      ],
+      "conceptTags": [
+        "scripts/table-ocr.py",
+        "parse-row",
+        "skill.md",
+        "3.0.0",
+        "2.7.3",
+        "3.5.1",
+        "opencv-contrib-python",
+        "4.6.0.66"
+      ]
+    },
+    "memory:memory/2026-04-30.md:1:28": {
+      "key": "memory:memory/2026-04-30.md:1:28",
+      "path": "memory/2026-04-30.md",
+      "startLine": 1,
+      "endLine": 28,
+      "source": "memory",
+      "snippet": "# 2026-04-30 记忆 ## APScheduler async job bug（已修复） **问题**：`ThreadPoolExecutor` 无法执行 `async def` 函数，导致财务数据同步等异步任务\"成功执行\"但实际什么都没做。 **根因**：APScheduler 的 `ThreadPoolExecutor` 收到 async 函数时，会创建一个 coroutine 对象但从不 await，任务静默失败。 **修复文件**：`skills/apps/TradingAgents-CN/app/main.py` - 改用 `AsyncIOExecutor()` 作为 default executor - `AsyncIOExecutor` 能正确处理 async def（通过事件循环）和普通 sync 函数（通过 `run_in_executor`） ## 财务数据同步 report_period 不一致 bug（待修复） **问题**：000002 (万科) 的一条记录： - `report_period: 20260331`（Q1 2026） - `raw_data.income[0].end_date: 20251231`（FY2025） - `report_type: annual`（错误，应为 quarterly） **根因**（`_standardize_tushare_financial_data` 第 1639 行）： ```python report_period = latest_income.get('end_date'",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-05-21T00:49:05.290Z",
+      "lastRecalledAt": "2026-05-21T00:49:05.290Z",
+      "queryHashes": [
+        "9111fb54c036"
+      ],
+      "recallDays": [
+        "2026-05-21"
+      ],
+      "conceptTags": [
+        "run-in-executor",
+        "report-period",
+        "raw-data.income",
+        "end-date",
+        "report-type",
+        "latest-income.get",
+        "记忆",
+        "apscheduler"
       ]
     }
   }
