@@ -10,10 +10,6 @@ cd "$REPO_DIR"
 
 echo "[$TIMESTAMP] Starting auto push" >> "$LOG_DIR/auto_push_$(date +%Y%m%d).log"
 
-# For submodules, we need to checkout the branch explicitly, not just use update
-# git submodule update --init only checks out the recorded commit
-# So we use a different approach - foreach with explicit checkout
-
 # Handle each submodule individually
 for submod in skills/apps/TradingAgents-CN skills/research/daily_stock_analysis; do
     if [ ! -d "$submod" ]; then
@@ -22,30 +18,33 @@ for submod in skills/apps/TradingAgents-CN skills/research/daily_stock_analysis;
     
     cd "$REPO_DIR/$submod"
     
-    # Check if there are changes
-    if git diff --cached --quiet && git diff --quiet; then
-        echo "[$TIMESTAMP] $submod: no changes" >> "$LOG_DIR/auto_push_$(date +%Y%m%d).log"
-        continue
-    fi
-    
-    # Stage all changes
-    git add -A
-    
-    # If we're in detached HEAD, checkout to the tracked branch
+    # Ensure we're on main branch, not detached HEAD
     if ! git symbolic-ref --quiet HEAD >/dev/null 2>&1; then
-        # Get the configured branch from .gitmodules or default
-        TRACKED_BRANCH=$(git for-each-ref --format='%(upstream:short)' HEAD 2>/dev/null | cut -d/ -f2 || echo "v1.0.0-preview")
-        git checkout "$TRACKED_BRANCH" 2>/dev/null || git checkout main 2>/dev/null || true
+        git checkout main
     fi
     
     BRANCH=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo "main")
-    git commit -m "Auto commit sub: $TIMESTAMP"
-    git push origin "$BRANCH"
-    echo "[$TIMESTAMP] $submod: pushed to $BRANCH" >> "$LOG_DIR/auto_push_$(date +%Y%m%d).log"
+    
+    # Fetch and pull latest first
+    git fetch origin
+    git pull --ff origin "$BRANCH" 2>/dev/null || true
+    
+    # Check if there are local changes to commit
+    if git diff origin/"$BRANCH" --quiet; then
+        echo "[$TIMESTAMP] $submod: up to date with remote" >> "$LOG_DIR/auto_push_$(date +%Y%m%d).log"
+    else
+        git add -A
+        git commit -m "Auto commit sub: $TIMESTAMP"
+        git push origin "$BRANCH"
+        echo "[$TIMESTAMP] $submod: pushed to $BRANCH" >> "$LOG_DIR/auto_push_$(date +%Y%m%d).log"
+    fi
 done
 
 # Back to main repo
 cd "$REPO_DIR"
+
+# Update submodule pointers if changed
+git submodule update --init --recursive
 
 # Commit main repo if it has changes
 git add -A
@@ -56,3 +55,5 @@ else
     git push origin main
     echo "[$TIMESTAMP] Pushed to GitHub" >> "$LOG_DIR/auto_push_$(date +%Y%m%d).log"
 fi
+
+echo "[$TIMESTAMP] Auto push completed" >> "$LOG_DIR/auto_push_$(date +%Y%m%d).log"
