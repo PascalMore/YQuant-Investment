@@ -10,21 +10,42 @@ cd "$REPO_DIR"
 
 echo "[$TIMESTAMP] Starting auto push" >> "$LOG_DIR/auto_push_$(date +%Y%m%d).log"
 
-# Initialize submodules
-git submodule update --init --recursive >> "$LOG_DIR/auto_push_$(date +%Y%m%d).log" 2>&1
+# For submodules, we need to checkout the branch explicitly, not just use update
+# git submodule update --init only checks out the recorded commit
+# So we use a different approach - foreach with explicit checkout
 
-# Commit submodules if they have changes
-git submodule foreach --quiet '
-    git add -A
-    git diff --cached --quiet && exit 0
-    # Check if HEAD is detached - if so, checkout to v1.0.0-preview first
-    if ! git rev-parse --verify --symbolic-full-name HEAD@{upstream} 2>/dev/null; then
-        git checkout v1.0.0-preview 2>/dev/null || git checkout main 2>/dev/null || true
+# Handle each submodule individually
+for submod in skills/apps/TradingAgents-CN skills/research/daily_stock_analysis; do
+    if [ ! -d "$submod" ]; then
+        continue
     fi
+    
+    cd "$REPO_DIR/$submod"
+    
+    # Check if there are changes
+    if git diff --cached --quiet && git diff --quiet; then
+        echo "[$TIMESTAMP] $submod: no changes" >> "$LOG_DIR/auto_push_$(date +%Y%m%d).log"
+        continue
+    fi
+    
+    # Stage all changes
+    git add -A
+    
+    # If we're in detached HEAD, checkout to the tracked branch
+    if ! git symbolic-ref --quiet HEAD >/dev/null 2>&1; then
+        # Get the configured branch from .gitmodules or default
+        TRACKED_BRANCH=$(git for-each-ref --format='%(upstream:short)' HEAD 2>/dev/null | cut -d/ -f2 || echo "v1.0.0-preview")
+        git checkout "$TRACKED_BRANCH" 2>/dev/null || git checkout main 2>/dev/null || true
+    fi
+    
     BRANCH=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo "main")
-    git commit -m "Auto commit sub: '"$TIMESTAMP"'"
+    git commit -m "Auto commit sub: $TIMESTAMP"
     git push origin "$BRANCH"
-' 2>>"$LOG_DIR/auto_push_$(date +%Y%m%d).log"
+    echo "[$TIMESTAMP] $submod: pushed to $BRANCH" >> "$LOG_DIR/auto_push_$(date +%Y%m%d).log"
+done
+
+# Back to main repo
+cd "$REPO_DIR"
 
 # Commit main repo if it has changes
 git add -A
