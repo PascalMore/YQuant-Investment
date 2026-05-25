@@ -1,0 +1,38 @@
+query:
+  days_ahead: 30
+  nights: 1
+  adults: 2
+  children: 0
+  rooms: 1
+  currency: JPY
+
+request_interval_seconds: 3
+concurrent: 2
+
+platforms:
+  jalan:
+    cookie: ""
+  booking:
+    cookie: ""
+  trip:
+    cookie_path: /home/pascal/.openclaw/workspace-yquant/skills/common/su-scraper/scripts/trip_cookies.json
+
+hotels:
+  - hotel_key: kyoto_kawaramachi_01
+    name: Kyoto Kawaramachi Hotel 01
+    platforms:
+      jalan: "336386"
+      booking: hua-zhu-jing-du-he-yuan-ting-hoteru
+      trip: "107897404"
+  - hotel_key: kyoto_kawaramachi_02
+    name: Kyoto Kawaramachi Hotel 02
+    platforms:
+      jalan: "342602"
+      booking: meldia-shijo-kawaramachi
+      trip: "49490579"
+  - hotel_key: kyoto_kawaramachi_03
+    name: Kyoto Kawaramachi Hotel 03
+    platforms:
+      jalan: "385462"
+      booking: jing-du-he-yuan-ting-wen-quan-kong-ting-hoterujing-du
+      trip: "2496417"

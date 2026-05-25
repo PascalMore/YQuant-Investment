@@ -12,7 +12,7 @@ from pymongo import MongoClient
 from .base_writer import IWriter
 
 # Load .env from workspace root
-load_dotenv('/home/pascal/.openclaw/workspace-yquant/.env')
+load_dotenv('/home/pascal/.openclaw/workspace-yquant/skills/.env')
 
 logger = logging.getLogger(__name__)
 

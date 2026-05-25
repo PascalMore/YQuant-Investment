@@ -428,10 +428,12 @@ class MarketDataAdapter:
     # ========================================
     
     def _get_project_env_path(self) -> str:
-        """获取本项目 .env 文件路径（skill 目录下自用的 .env）"""
+        """获取统一后的 .env 文件路径（skills 目录下的 .env）"""
         current = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(os.path.dirname(current))
-        return os.path.join(project_root, '.env')
+        # 向上两级：从 new_services/ → src/ → daily-market-analysis/，再向上到 skills/
+        project_root = os.path.dirname(os.path.dirname(current))  # daily-market-analysis/
+        skills_root = os.path.dirname(project_root)  # skills/
+        return os.path.join(skills_root, '.env')
 
     def _load_env(self):
         """加载本项目 .env（代理 + API Keys）"""
