@@ -3,14 +3,14 @@
 """Backfill all Argus output collections over a date range.
 
 Usage:
-    python -m skills.research.argus.cli.backfill_all
-    python -m skills.research.argus.cli.backfill_all --start 2025-12-31 --end 2026-05-21
+    python -m skills.research.argus.cli.backfill_all              # 默认从 2025-12-31 到今天
+    python -m skills.research.argus.cli.backfill_all --start 2026-01-01 --end 2026-05-25
     python -m skills.research.argus.cli.backfill_all --from 2026-05-15   # refresh from 5/15 through today
 """
 
 import argparse
 import sys
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -25,7 +25,7 @@ from skills.research.argus.config import ARGUS_CONFIG
 logger = get_logger('argus', 'research/argus')
 
 DEFAULT_START = '2025-12-31'
-DEFAULT_END = '2026-05-21'
+DEFAULT_END = format_date(datetime.now().date())  # 默认今天，与 daily_processor 保持一致
 
 
 def backfill_all(

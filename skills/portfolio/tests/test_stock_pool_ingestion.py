@@ -76,6 +76,39 @@ class StockPoolIngestionServiceTest(unittest.TestCase):
 
         self.assertEqual(summary["created"], 1)
 
+    def test_ingest_signals_incremental_writes_fine_grained_audit(self) -> None:
+        """Incremental sync should emit entry/promote/demote/exit/update audit actions."""
+        previous = [
+            {**self.scan_signal, "wind_code": "600001.SH", "stock_code": "600001", "pool_zone": "SCAN"},
+            {**self.scan_signal, "wind_code": "600002.SH", "stock_code": "600002", "pool_zone": "CANDIDATE"},
+            {**self.scan_signal, "wind_code": "600003.SH", "stock_code": "600003", "pool_zone": "WATCH"},
+            {**self.scan_signal, "wind_code": "600004.SH", "stock_code": "600004", "pool_zone": "WATCH"},
+        ]
+        current = [
+            {**previous[0], "pool_zone": "WATCH"},
+            {**previous[1], "pool_zone": "WATCH"},
+            {**previous[2], "memo": "same zone refreshed"},
+            {**self.scan_signal, "wind_code": "600005.SH", "stock_code": "600005", "pool_zone": "SCAN"},
+        ]
+        for signal in previous:
+            self.ingestion.ingest_signals("argus", [signal], mode="upsert_all", actor="seed")
+
+        summary = self.ingestion.ingest_signals_incremental(current, previous, actor="system:argus")
+        actions = [audit["action"] for audit in self.repository.audit_collection.docs.values()]
+
+        self.assertEqual(summary["entry"], 1)
+        self.assertEqual(summary["promote"], 1)
+        self.assertEqual(summary["demote"], 1)
+        self.assertEqual(summary["exit"], 1)
+        self.assertEqual(summary["update"], 1)
+        self.assertIn("entry", actions)
+        self.assertIn("promote", actions)
+        self.assertIn("demote", actions)
+        self.assertIn("exit", actions)
+        self.assertIn("update", actions)
+        exited = self.stock_pool_service.get_pool(wind_code="600004.SH", source="argus", status="inactive")["items"]
+        self.assertEqual(exited[0]["status"], "inactive")
+
 
 if __name__ == "__main__":
     unittest.main()

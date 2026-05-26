@@ -36,14 +36,22 @@ class StockPoolService:
             cursor=cursor,
         )
 
-    def create_entry(self, record: Dict[str, Any], actor: str) -> str:
+    def create_entry(self, record: Dict[str, Any], actor: str, event_date: Optional[str] = None) -> str:
         """Create a stock pool entry and write a matching audit event."""
         pool_id = self.repository.create(record, actor)
         after = self.repository.get_by_id(pool_id)
-        self.repository.write_audit(pool_id, "create", None, after, actor)
+        event_dt = event_date or record.get("entry_date") or format_date(datetime.now().date())
+        self.repository.write_audit(pool_id, "entry", None, after, actor, event_date=event_dt)
         return pool_id
 
-    def update_entry(self, record_id: str, patch: Dict[str, Any], actor: str) -> bool:
+    def update_entry(
+        self,
+        record_id: str,
+        patch: Dict[str, Any],
+        actor: str,
+        audit_action: str = "update",
+        event_date: Optional[str] = None,
+    ) -> bool:
         """Update a stock pool entry and audit the before/after state."""
         before = self.repository.get_by_id(record_id)
         if before is None:
@@ -51,10 +59,23 @@ class StockPoolService:
         changed = self.repository.update_fields(record_id, validate_patch(patch), actor)
         if changed:
             after = self.repository.get_by_id(record_id)
-            self.repository.write_audit(record_id, "update", before, after, actor)
+            event_dt = event_date or format_date(datetime.now().date())
+            self.repository.write_audit(record_id, audit_action, before, after, actor, event_date=event_dt)
         return changed
 
-    def move_entry(self, record_id: str, target_zone: str, reason: str, actor: str) -> bool:
+    def deactivate_entry(self, record_id: str, reason: str, actor: str, audit_action: str = "exit", event_date: Optional[str] = None) -> bool:
+        """Deactivate a stock pool entry and audit the before/after state."""
+        before = self.repository.get_by_id(record_id)
+        if before is None:
+            return False
+        changed = self.repository.deactivate(record_id, datetime.utcnow(), reason, actor)
+        if changed:
+            after = self.repository.get_by_id(record_id)
+            event_dt = event_date or format_date(datetime.now().date())
+            self.repository.write_audit(record_id, audit_action, before, after, actor, event_date=event_dt)
+        return changed
+
+    def move_entry(self, record_id: str, target_zone: str, reason: str, actor: str, event_date: Optional[str] = None) -> bool:
         """Move an entry to another zone immediately and write an audit event."""
         before = self.repository.get_by_id(record_id)
         if before is None:
@@ -62,7 +83,8 @@ class StockPoolService:
         changed = self.repository.transition_zone(record_id, PoolZone(target_zone).value, reason, actor)
         if changed:
             after = self.repository.get_by_id(record_id)
-            self.repository.write_audit(record_id, "auto_transition", before, after, actor)
+            event_dt = event_date or format_date(datetime.now().date())
+            self.repository.write_audit(record_id, "auto_transition", before, after, actor, event_date=event_dt)
         return changed
 
     def get_audit_history(self, record_id: str, limit: int = 100) -> Dict[str, Any]:
@@ -73,7 +95,7 @@ class StockPoolService:
         """Return active stock pool capacity by zone."""
         return self.repository.capacity_by_zone()
 
-    def request_zone_transition(self, record_id: str, target_zone: str, reason: str, actor: str) -> str:
+    def request_zone_transition(self, record_id: str, target_zone: str, reason: str, actor: str, event_date: Optional[str] = None) -> str:
         """Create a pending zone transition request without approving the change."""
         before = self.repository.get_by_id(record_id)
         if before is None:
@@ -95,7 +117,8 @@ class StockPoolService:
         if not changed:
             raise ValueError(f"Failed to create transition request for record: {record_id}")
         after = self.repository.get_by_id(record_id)
-        self.repository.write_audit(record_id, "request_transition", before, after, actor)
+        event_dt = event_date or format_date(datetime.now().date())
+        self.repository.write_audit(record_id, "request_transition", before, after, actor, event_date=event_dt)
         return request_id
 
     def ingest_signals(

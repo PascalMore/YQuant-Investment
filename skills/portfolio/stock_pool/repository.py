@@ -129,8 +129,18 @@ class StockPoolRepository:
         before: Optional[Dict[str, Any]],
         after: Optional[Dict[str, Any]],
         actor: str,
+        event_date: Optional[str] = None,
     ) -> str:
-        """Write one stock pool audit event and return its ID."""
+        """Write one stock pool audit event and return its ID.
+        
+        Args:
+            pool_id: Stock pool record ID
+            action: Action type (entry/update/promote/demote/exit)
+            before: State before change
+            after: State after change
+            actor: Who performed the action
+            event_date: Date when the event actually happened (for backfill: argus date, for manual: current date)
+        """
         result = self.audit_collection.insert_one(
             {
                 "pool_id": pool_id,
@@ -138,17 +148,18 @@ class StockPoolRepository:
                 "before": before,
                 "after": after,
                 "actor": actor,
+                "event_date": event_date or format_date(datetime.now().date()),
                 "created_at": datetime.utcnow(),
             }
         )
         return str(result.inserted_id)
 
     def list_audit(self, pool_id: str, limit: int = 100) -> Dict[str, Any]:
-        """Return recent audit events for one stock pool record."""
+        """Return recent audit events for one stock pool record, sorted by event_date."""
         page_size = max(1, min(limit, 200))
         docs = list(
             self.audit_collection.find({"pool_id": pool_id})
-            .sort("created_at", -1)
+            .sort("event_date", -1)
             .limit(page_size)
         )
         return {"items": [self._serialize(doc) for doc in docs], "limit": page_size}

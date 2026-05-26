@@ -12,7 +12,7 @@ import sys
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 # Add workspace to path for direct script execution.
 sys.path.insert(0, '/home/pascal/.openclaw/workspace-yquant')
@@ -42,12 +42,14 @@ def process_date(
     writer: Optional[MongoWriter] = None,
     output_dir: Optional[Path] = None,
     write_mongo: bool = True,
+    stock_pool_ingestion: Optional[Any] = None,
 ) -> dict:
     """Process Argus for a single date from Mongo input to Mongo/JSON output."""
     logger.info("[Argus] Starting daily processing for %s", target_date)
 
     date_to_process = get_latest_trading_day(target_date)
     previous_date = _previous_trading_day(date_to_process)
+    writer_injected = writer is not None
     reader = reader or MongoReader(database=ARGUS_CONFIG.get('mongo', {}).get('database', 'tradingagents'))
 
     transformer = PortfolioTransformer()
@@ -71,6 +73,8 @@ def process_date(
         'credential_scores_written': 0,
         'signals_written': 0,
         'signal_pool_written': 0,
+        'stock_pool_written': 0,
+        'portfolio_stock_pool_sync': None,
         'pool_summary': {},
         'output_file': None,
     }
@@ -191,12 +195,26 @@ def process_date(
         _enrich_stock_pool_with_darwin_prosperity(
             stock_pool_records, darwin_events, consensus_direction, wind_to_sw1
         )
-        results['signal_pool_written'] = writer.write_argus_signal_pool(stock_pool_records)
+        previous_signal_pool = reader.read(previous_date, collection_name='08_research_argus_signal_pool')
+        results['signal_pool_written'] = _write_argus_signal_pool(writer, stock_pool_records)
+        results['stock_pool_written'] = results['signal_pool_written']
+
+        # Phase 5: Portfolio stock-pool incremental sync and audit.
+        ingestion = stock_pool_ingestion
+        if ingestion is None and not writer_injected:
+            ingestion = _default_stock_pool_ingestion()
+        if ingestion is not None:
+            results['portfolio_stock_pool_sync'] = ingestion.ingest_signals_incremental(
+                current_signals=stock_pool_records,
+                previous_signals=previous_signal_pool,
+                actor='system:argus',
+            )
 
         logger.info(
-            '[Argus] Phase 4B: %d Darwin events, Phase 4C: prosperity=%s',
+            '[Argus] Phase 4B: %d Darwin events, Phase 4C: prosperity=%s, Phase 5 sync=%s',
             len(darwin_events),
             consensus_direction.get('prosperity_signal', 'NEUTRAL'),
+            results['portfolio_stock_pool_sync'],
         )
 
     output_file = _write_json_output(
@@ -218,6 +236,24 @@ def process_date(
 def _previous_trading_day(date_to_process: str) -> str:
     previous_calendar_day = parse_date(date_to_process) - timedelta(days=1)
     return get_latest_trading_day(format_date(previous_calendar_day))
+
+
+def _next_trading_day(date_to_process: str) -> str:
+    """Return the next trading day after the given date."""
+    next_calendar_day = parse_date(date_to_process) + timedelta(days=1)
+    return get_latest_trading_day(format_date(next_calendar_day))
+
+
+def _get_latest_argus_signal_pool_date(reader: MongoReader) -> Optional[str]:
+    """Get the latest date in argus_signal_pool collection."""
+    collection_name = ARGUS_CONFIG.get('mongo', {}).get('collections', {}).get('signal_pool', '08_research_argus_signal_pool')
+    try:
+        dates = reader.db[collection_name].distinct('date')
+        if dates:
+            return max(str(d) for d in dates)
+    except Exception as e:
+        logger.warning("[Argus CLI] Failed to get latest argus_signal_pool date: %s", e)
+    return None
 
 
 def _credential_record(
@@ -278,6 +314,21 @@ def _read_industry_weights(reader: MongoReader, date_to_read: Optional[str]) -> 
         return reader.read_industry_weights(date_to_read)
     logger.warning("[Argus] Reader does not support industry weights; baseline %s unavailable", date_to_read)
     return []
+
+
+def _write_argus_signal_pool(writer: MongoWriter, stock_pool_records: List[Dict]) -> int:
+    if hasattr(writer, 'write_argus_signal_pool'):
+        return writer.write_argus_signal_pool(stock_pool_records)
+    return writer.write_argus_stock_pool(stock_pool_records)
+
+
+def _default_stock_pool_ingestion() -> Any:
+    from skills.portfolio.stock_pool.ingestion import StockPoolIngestionService
+    from skills.portfolio.stock_pool.repository import StockPoolRepository
+    from skills.portfolio.stock_pool.service import StockPoolService
+
+    database = ARGUS_CONFIG.get('mongo', {}).get('database', 'tradingagents')
+    return StockPoolIngestionService(StockPoolService(StockPoolRepository(database=database)))
 
 
 
@@ -473,25 +524,74 @@ def _write_json_output(
 
 
 def main():
-    """CLI entry point."""
-    target_date = sys.argv[1] if len(sys.argv) > 1 else format_date(datetime.now().date())
-    logger.info("[Argus CLI] Processing date: %s", target_date)
-
-    try:
-        results = process_date(target_date, write_mongo=True)
-        print("\n=== Argus Processing Results ===")
-        print(f"Date: {results['date']}")
-        print(f"Products: {results['products_processed']}")
-        print(f"Signals: {results['signals_generated']}")
-        print(f"Credential Scores Written: {results['credential_scores_written']}")
-        print(f"Signals Written: {results['signals_written']}")
-        print(f"Signal Pool Written: {results['signal_pool_written']}")
-        print(f"Consensus Direction: {results.get('consensus_direction_signal', 'N/A')}")
-        print(f"Pool: {results['pool_summary']}")
-        print(f"Output: {results['output_file']}")
-    except Exception as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+    """CLI entry point.
+    
+    Usage:
+        python -m skills.research.argus.cli.daily_processor          # auto: 从 argus_signal_pool 最新日期跑到现在
+        python -m skills.research.argus.cli.daily_processor 2026-05-25  # 指定日期
+    """
+    target_date = sys.argv[1] if len(sys.argv) > 1 else None
+    
+    if target_date is None:
+        # 自动模式：从 argus_signal_pool 最新日期开始，跑到今天或遇到无数据日
+        logger.info("[Argus CLI] Auto mode: 从 argus_signal_pool 最新日期开始增量跑")
+        
+        database = ARGUS_CONFIG.get('mongo', {}).get('database', 'tradingagents')
+        reader = MongoReader(database=database)
+        
+        # 获取 argus_signal_pool 最新日期
+        latest_processed = _get_latest_argus_signal_pool_date(reader)
+        if latest_processed is None:
+            latest_processed = ARGUS_CONFIG.get('signal_pool', {}).get('bootstrap_date', '2025-12-31')
+            logger.info("[Argus CLI] No existing argus_signal_pool found, using bootstrap: %s", latest_processed)
+        
+        start_date = _next_trading_day(latest_processed)
+        end_date = format_date(datetime.now().date())
+        
+        logger.info("[Argus CLI] 开始增量处理: %s ~ %s", start_date, end_date)
+        
+        trading_days = get_trading_dates(start_date, end_date)
+        processed = 0
+        
+        for trade_date in trading_days:
+            positions = reader.read(trade_date, collection_name='portfolio_position')
+            if not positions:
+                logger.info("[Argus CLI] %s 无持仓数据，跳过", trade_date)
+                continue
+            
+            try:
+                results = process_date(trade_date, write_mongo=True)
+                processed += 1
+                logger.info("[Argus CLI] %s 完成: %d products, %d signals", 
+                           trade_date, results['products_processed'], results['signals_generated'])
+            except Exception as e:
+                logger.error("[Argus CLI] %s 处理失败: %s", trade_date, e)
+                break
+        
+        print(f"\n=== Argus 增量处理完成 ===")
+        print(f"处理日期范围: {start_date} ~ {end_date}")
+        print(f"处理天数: {processed}")
+        print(f"跳过天数: {len(trading_days) - processed}")
+        print(f"到达今天: {end_date}")
+        
+    else:
+        # 指定日期模式
+        logger.info("[Argus CLI] 指定日期模式: %s", target_date)
+        try:
+            results = process_date(target_date, write_mongo=True)
+            print("\n=== Argus Processing Results ===")
+            print(f"Date: {results['date']}")
+            print(f"Products: {results['products_processed']}")
+            print(f"Signals: {results['signals_generated']}")
+            print(f"Credential Scores Written: {results['credential_scores_written']}")
+            print(f"Signals Written: {results['signals_written']}")
+            print(f"Signal Pool Written: {results['signal_pool_written']}")
+            print(f"Consensus Direction: {results.get('consensus_direction_signal', 'N/A')}")
+            print(f"Pool: {results['pool_summary']}")
+            print(f"Output: {results['output_file']}")
+        except Exception as e:
+            print(f"Error: {e}")
+            sys.exit(1)
 
 
 if __name__ == '__main__':

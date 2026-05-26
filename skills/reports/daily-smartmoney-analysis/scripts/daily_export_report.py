@@ -34,7 +34,7 @@ TRADE_COLUMNS = [
 ]
 
 # 默认 .env 路径
-DEFAULT_ENV_PATH = str(Path(__file__).parents[4] / ".env")
+DEFAULT_ENV_PATH = str(Path(__file__).parents[4] / "skills" / ".env")
 
 
 def load_config(env_path: str = None) -> dict:

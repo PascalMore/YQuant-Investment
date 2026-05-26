@@ -32,7 +32,7 @@ class StockPoolServiceTest(unittest.TestCase):
 
         self.assertTrue(record_id)
         self.assertEqual(len(audits), 1)
-        self.assertEqual(audits[0]["action"], "create")
+        self.assertEqual(audits[0]["action"], "entry")
 
     def test_update_entry_writes_audit(self) -> None:
         """Updating an entry should persist changes and audit the before/after state."""
