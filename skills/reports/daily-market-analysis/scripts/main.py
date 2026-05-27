@@ -111,12 +111,11 @@ def send_email(report: str, config: dict, report_date: str, is_html=None):
             msg.attach(MIMEText(report, 'plain', 'utf-8'))
         
         # 发送邮件
-        server = smtplib.SMTP(email_config['smtp_server'], email_config['smtp_port'])
+        server = smtplib.SMTP(email_config['smtp_server'], email_config['smtp_port'], timeout=15)
         server.starttls()
         server.login(email_config['username'], email_config['password'])
         server.send_message(msg)
         server.quit()
-        
         print("✅ 邮件推送成功")
         # 标记今日已发送
         marker = Path(os.path.expanduser('~/.openclaw/workspace-yquant/skills/reports/daily-market-analysis/.last_sent'))
