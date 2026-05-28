@@ -12,6 +12,7 @@ from skills.research.argus.core import (
     RebalancingDetector,
     DarwinDetector,
     ConsensusEngine,
+    BayesianScorer,
 )
 
 
@@ -119,6 +120,37 @@ class TestConsensusEngine(unittest.TestCase):
         self.assertIn('600519.SH', consensus)
         self.assertEqual(consensus['600519.SH']['direction'], 'BUY')
         self.assertEqual(consensus['600519.SH']['count'], 3)
+
+
+class TestBayesianScorer(unittest.TestCase):
+    """Test Phase 1 Bayesian scoring."""
+
+    def test_calculates_weighted_score_from_four_factors(self):
+        scorer = BayesianScorer(product_profiles=[
+            {'product_code': 'SM001', 'alpha': 8, 'beta': 2},
+            {'product_code': 'SM002', 'alpha': 3, 'beta': 7},
+        ])
+        record = {
+            'wind_code': '600519.SH',
+            'contributing_products': ['SM001', 'SM002'],
+            'contributing_products_count': 2,
+            'confidence': 0.8,
+        }
+        signals = [
+            {'product_code': 'SM001', 'signal_type': 'BUY', 'direction_score': 0.8, 'rebalancing_event_type': 'NEW_ENTRY'},
+            {'product_code': 'SM002', 'signal_type': 'BUY', 'direction_score': 0.8, 'rebalancing_event_type': 'CONTINUOUS_ADD'},
+        ]
+
+        scored = scorer.score_signal_pool_record(record, signals)
+
+        self.assertGreaterEqual(scored['bayesian_score'], 0)
+        self.assertLessEqual(scored['bayesian_score'], 1)
+        self.assertAlmostEqual(scored['bayesian_factors']['product_credibility'], 0.55)
+        self.assertNotEqual(scored['bayesian_score'], scored['confidence'])
+
+    def test_defaults_missing_product_profile_to_neutral_credibility(self):
+        scorer = BayesianScorer()
+        self.assertEqual(scorer.product_credibility_for_products(['UNKNOWN']), 0.5)
 
 
 if __name__ == '__main__':

@@ -8,6 +8,7 @@ Usage:
 import argparse
 import asyncio
 import logging
+import re
 import shutil
 import sys
 from datetime import datetime
@@ -27,6 +28,7 @@ from transformers.trade_normalizer import normalize_all as normalize_trade
 from validators.trade_validator import validate_trade, ValidationResult
 from validators.portfolio_validator import validate_position, validate_nav, validate_basic_info
 from loaders.mongodb_loader import PortfolioMongoLoader
+from stock_name_corrections import STOCK_NAME_CORRECTIONS
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,6 +42,50 @@ logger = logging.getLogger(__name__)
 TRADE_UNIQUE = {"变化比例", "变化金额"}
 # Portfolio-unique columns (not present in trade format)
 PORTFOLIO_UNIQUE = {"持仓比例", "最新净值", "最新份额", "最新规模"}
+
+
+def standardize_asset_name(name: str) -> str:
+    """Standardize stock name: remove spaces, unify full-width/half-width characters."""
+    if not isinstance(name, str):
+        return name
+    # Remove all whitespace
+    name = re.sub(r'\s+', '', name)
+    # Unify full-width parentheses to half-width
+    name = name.replace('（', '(').replace('）', ')')
+    # Unify full-width dash to half-width dash (－ → -, — → -)
+    name = name.replace('－', '-').replace('—', '-')
+    # Unify full-width ASCII letters (Ｗ→W, Ｂ→B, etc.)
+    name = name.translate(str.maketrans('ＷＸＹＺＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶ', 
+                                       'WXYZABCDEFGHIJKLMNOPQRSTUV'))
+    return name
+
+
+def standardize_df_asset_names(df: pd.DataFrame) -> pd.DataFrame:
+    """Standardize asset_name column in DataFrame if present."""
+    df = df.copy()
+    if '资产名称' in df.columns:
+        df['资产名称'] = df['资产名称'].apply(standardize_asset_name)
+    return df
+
+
+def correct_stock_names(df: pd.DataFrame) -> pd.DataFrame:
+    """Correct stock names using a pre-defined mapping. If code not in mapping, skip."""
+    df = df.copy()
+    if '资产名称' not in df.columns or 'Wind代码' not in df.columns:
+        return df
+    
+    def correct_name(row):
+        code = row.get('Wind代码', '')
+        name = row.get('资产名称', '')
+        if not code or not name:
+            return name
+        correct_name = STOCK_NAME_CORRECTIONS.get(code)
+        if correct_name and name != correct_name:
+            return correct_name
+        return name
+    
+    df['资产名称'] = df.apply(correct_name, axis=1)
+    return df
 
 
 def detect_format(df: pd.DataFrame) -> str:
@@ -198,7 +244,15 @@ async def run_pipeline(
     records = correct_year_if_ocr_error(records)
     df = records[0]["df"]
 
-    # Step 1c: Detect format
+    # Step 1c: Standardize asset names (remove spaces, unify full/half-width chars)
+    df = standardize_df_asset_names(df)
+    records[0]["df"] = df
+
+    # Step 1d: Correct stock names via pre-defined mapping
+    df = correct_stock_names(df)
+    records[0]["df"] = df
+
+    # Step 1e: Detect format
     fmt = detect_format(df)
     logger.info(f"[Step1] Detected format: {fmt}")
     prefix = "trade" if fmt == "trade" else "portfolio"

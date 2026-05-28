@@ -13,6 +13,13 @@ signal:
   medium_confidence: 0.5
   low_confidence: 0.3
 
+bayesian_scoring:
+  weights:
+    rebalancing_score: 0.30
+    product_credibility: 0.25
+    consensus_score: 0.25
+    direction_score: 0.20
+
 # Pool zones
 pool_zones:
   conviction:

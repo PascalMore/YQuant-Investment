@@ -23,6 +23,7 @@ from skills.infra import format_date, get_latest_trading_day, get_logger, parse_
 from skills.research.argus.config import ARGUS_CONFIG
 from skills.research.argus.core import (
     ConsensusEngine,
+    BayesianScorer,
     CredibilityScorer,
     CrowdingAnalyzer,
     DarwinDetector,
@@ -85,6 +86,7 @@ def process_date(
         return results
 
     trades = reader.read(date_to_process, collection_name='portfolio_trade')
+    product_profiles = _read_product_profiles(reader, date_to_process)
     previous_positions = reader.read(previous_date, collection_name='portfolio_position')
     baseline_30d_date = _get_baseline_date(date_to_process, 30)
     results['baseline_30d_date'] = baseline_30d_date
@@ -111,6 +113,7 @@ def process_date(
     product_codes = sorted({p['product_code'] for p in positions if p.get('product_code')})
     positions_by_product = _group_by_product(positions)
     previous_by_product = _group_by_product(previous_positions)
+    trades_by_product_stock = _build_trade_lookup(trades)
     all_product_positions = [positions_by_product[code] for code in product_codes]
 
     all_signals: List[Dict] = []
@@ -121,6 +124,7 @@ def process_date(
         previous_pos = previous_by_product.get(product_code, [])
         product_name = transformer.get_product_alias(product_code)
         position_changes = transformer.calculate_holding_ratio_change(current_pos, previous_pos)
+        _attach_trade_directions(position_changes, trades_by_product_stock)
         rebalancing_events = rebalancing_detector.detect_rebalancing(position_changes, previous_pos)
         darwin_moment = darwin_detector.detect_darwin_moment(position_changes, all_product_positions)
         credibility_score = credibility_scorer.calculate_score(product_code, position_changes)
@@ -148,6 +152,10 @@ def process_date(
         consensus,
         crowding,
         pool_manager,
+    )
+    stock_pool_records = BayesianScorer(product_profiles=product_profiles).score_signal_pool_records(
+        stock_pool_records,
+        all_signals,
     )
     _annotate_signals(all_signals, stock_pool_records, consensus, crowding)
 
@@ -288,6 +296,53 @@ def _group_by_product(records: List[Dict]) -> Dict[str, List[Dict]]:
         if product_code:
             grouped[product_code].append(record)
     return grouped
+
+
+def _build_trade_lookup(trades: List[Dict]) -> Dict[tuple, str]:
+    lookup = {}
+    for trade in trades:
+        product_code = trade.get('product_code')
+        wind_code = trade.get('asset_wind_code') or trade.get('wind_code')
+        if not product_code or not wind_code:
+            continue
+        direction = _normalize_trade_direction(trade.get('trade_direction') or trade.get('direction'))
+        lookup[(product_code, wind_code)] = direction
+    return lookup
+
+
+def _attach_trade_directions(position_changes: List[Dict], trades_by_product_stock: Dict[tuple, str]) -> None:
+    for position_change in position_changes:
+        key = (
+            position_change.get('product_code'),
+            position_change.get('asset_wind_code') or position_change.get('wind_code'),
+        )
+        trade_direction = trades_by_product_stock.get(key)
+        if trade_direction:
+            position_change['trade_direction'] = trade_direction
+
+
+def _normalize_trade_direction(direction: Any) -> str:
+    direction_text = str(direction or '').upper()
+    if 'BUY' in direction_text or '买' in direction_text:
+        return 'BUY'
+    if 'SELL' in direction_text or '卖' in direction_text:
+        return 'SELL'
+    return 'HOLD'
+
+
+def _read_product_profiles(reader: MongoReader, date_to_process: str) -> List[Dict]:
+    collection_name = '08_research_argus_product_profile'
+    if hasattr(reader, 'read'):
+        profiles = reader.read(date_to_process, collection_name=collection_name)
+        if profiles:
+            return profiles
+    db = getattr(reader, 'db', None)
+    if db is None:
+        return []
+    collection = db[collection_name]
+    query = {'date': {'$lte': date_to_process}}
+    profiles = list(collection.find(query, {'_id': 0}).sort('date', -1))
+    return profiles or list(collection.find({}, {'_id': 0}))
 
 
 def _get_baseline_date(date_to_process: str, days: int) -> str:
