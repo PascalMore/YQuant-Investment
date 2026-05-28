@@ -28,6 +28,7 @@ INCREMENTAL_UPDATE_FIELDS = (
     "source_detail",
     "source_project",
     "source_signal_id",
+    "entry_reason",
 )
 
 
