@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-28T19:00:07.843Z",
+  "updatedAt": "2026-05-29T19:00:28.393Z",
   "entries": {
     "memory:memory/2026-04-05.md:1:38": {
       "key": "memory:memory/2026-04-05.md:1:38",
@@ -8307,12 +8307,12 @@
       "source": "memory",
       "snippet": "SW Index Daily Fallback 实施: **修改文件**: `sw_index_daily_service.py`; **新增逻辑**: `_fallback_realtime_sw()` 方法; **触发条件**: `index_hist_sw` 无数据 + 增量模式 + 非强制全量; **数据来源**: `index_realtime_sw(symbol=\"一级行业\")`",
       "recallCount": 0,
-      "dailyCount": 3,
+      "dailyCount": 4,
       "groundedCount": 0,
-      "totalScore": 1.8599999999999999,
+      "totalScore": 2.48,
       "maxScore": 0.62,
       "firstRecalledAt": "2026-05-26T19:00:15.670Z",
-      "lastRecalledAt": "2026-05-28T19:00:07.843Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
       "queryHashes": [
         "782f94af37b1"
       ],
@@ -8320,7 +8320,8 @@
         "2026-05-27",
         "2026-05-26",
         "2026-05-28",
-        "2026-05-29"
+        "2026-05-29",
+        "2026-05-30"
       ],
       "conceptTags": [
         "sw-index-daily-service.py",
@@ -8341,12 +8342,12 @@
       "source": "memory",
       "snippet": "SW Index Daily Fallback 实施: **trade_date**: 使用 `normalized_start`（数据库最新日期+1）; **单元测试**: 5 passed ✅",
       "recallCount": 0,
-      "dailyCount": 3,
+      "dailyCount": 4,
       "groundedCount": 0,
-      "totalScore": 1.8599999999999999,
+      "totalScore": 2.48,
       "maxScore": 0.62,
       "firstRecalledAt": "2026-05-26T19:00:15.670Z",
-      "lastRecalledAt": "2026-05-28T19:00:07.843Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
       "queryHashes": [
         "782f94af37b1"
       ],
@@ -8354,7 +8355,8 @@
         "2026-05-27",
         "2026-05-26",
         "2026-05-28",
-        "2026-05-29"
+        "2026-05-29",
+        "2026-05-30"
       ],
       "conceptTags": [
         "trade-date",
@@ -8375,12 +8377,12 @@
       "source": "memory",
       "snippet": "服务状态: **PID**: backend=356172, frontend=356186（重启前）; **重启脚本**: `restart.sh`; **端口**: backend=8000, frontend=5173; **API前缀**: `/api/index-data`",
       "recallCount": 0,
-      "dailyCount": 3,
+      "dailyCount": 4,
       "groundedCount": 0,
-      "totalScore": 1.8599999999999999,
+      "totalScore": 2.48,
       "maxScore": 0.62,
       "firstRecalledAt": "2026-05-26T19:00:15.670Z",
-      "lastRecalledAt": "2026-05-28T19:00:07.843Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
       "queryHashes": [
         "782f94af37b1"
       ],
@@ -8388,7 +8390,8 @@
         "2026-05-27",
         "2026-05-26",
         "2026-05-28",
-        "2026-05-29"
+        "2026-05-29",
+        "2026-05-30"
       ],
       "conceptTags": [
         "restart.sh",
@@ -8409,12 +8412,12 @@
       "source": "memory",
       "snippet": "关键文件: `sw_index_daily_service.py` - SW指数日线同步服务（含fallback）; `sw_index_daily.py` - API路由; `stock_sector_info.py` - 申万行业信息API; `main.py` - 定时任务注册（每天17:20）",
       "recallCount": 0,
-      "dailyCount": 3,
+      "dailyCount": 4,
       "groundedCount": 0,
-      "totalScore": 1.8599999999999999,
+      "totalScore": 2.48,
       "maxScore": 0.62,
       "firstRecalledAt": "2026-05-26T19:00:15.670Z",
-      "lastRecalledAt": "2026-05-28T19:00:07.843Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
       "queryHashes": [
         "782f94af37b1"
       ],
@@ -8422,7 +8425,8 @@
         "2026-05-27",
         "2026-05-26",
         "2026-05-28",
-        "2026-05-29"
+        "2026-05-29",
+        "2026-05-30"
       ],
       "conceptTags": [
         "sw-index-daily-service.py",
@@ -8443,12 +8447,12 @@
       "source": "memory",
       "snippet": "Fallback 测试结果: 2026-05-21 数据: 31条记录全部写入; close: 14721.64, pre_close: 14859.81, change: -138.17, pct_chg: -0.9298%; 验证: 数据库 `index_daily_quotes` 中 2026-05-21 记录 31 条",
       "recallCount": 0,
-      "dailyCount": 3,
+      "dailyCount": 4,
       "groundedCount": 0,
-      "totalScore": 1.8599999999999999,
+      "totalScore": 2.48,
       "maxScore": 0.62,
       "firstRecalledAt": "2026-05-26T19:00:15.670Z",
-      "lastRecalledAt": "2026-05-28T19:00:07.843Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
       "queryHashes": [
         "782f94af37b1"
       ],
@@ -8456,7 +8460,8 @@
         "2026-05-27",
         "2026-05-26",
         "2026-05-28",
-        "2026-05-29"
+        "2026-05-29",
+        "2026-05-30"
       ],
       "conceptTags": [
         "14721.64",
@@ -14886,6 +14891,2176 @@
         "价格",
         "组合",
         "结果"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:43:43": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:43:43",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 43,
+      "endLine": 43,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e68068f60acc2619fd24cb8c1b] 用户724532: 问题 2：Update 太多（78 条） 和问题3 审计时间戳的问题 代码都修复了吗",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "问题",
+        "update",
+        "太多",
+        "审计",
+        "时间",
+        "代码"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:44:44": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:44:44",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 44,
+      "endLine": 44,
+      "source": "memory",
+      "snippet": "Assistant: 已完成： ## ✅ 问题 2：Update 太多（已修复） **修改内容：** 1. `INCREMENTAL_UPDATE_FIELDS` - 移除 `entry_reason` 2. `_entry_reason_from_signal()` - 简化为只保留 `reason` 字段 **效果：** 从原来每次信号变化都触发 update，变为只有 `reason` 字段变化才触发。预计减少 90%+ 的 update 记录。 --- ## ⚠️ 问题 3：审计时间戳（部分修复） **已完成：** 1. `repository.",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "incremental-update-fields",
+        "entry-reason",
+        "entry-reason-from-signal",
+        "完成",
+        "问题",
+        "update",
+        "太多",
+        "修复"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:45:45": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:45:45",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 45,
+      "endLine": 45,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e68194de0a4c272779f9068766] 用户724532: 是的， 请检查下",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "检查"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:46:46": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:46:46",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 46,
+      "endLine": 46,
+      "source": "memory",
+      "snippet": "Assistant: 找到了！第 87 行用的是 `row.created_at`，需要改为 `row.event_date`。",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "row.created-at",
+        "row.event-date",
+        "找到",
+        "的是",
+        "需要"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:47:47": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:47:47",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 47,
+      "endLine": 47,
+      "source": "memory",
+      "snippet": "Assistant: 完成！总结一下修复情况： ## ✅ 问题 2：Update 太多（已修复） **修改文件：** `ingestion.py` - `INCREMENTAL_UPDATE_FIELDS` 移除 `entry_reason` - `_entry_reason_from_signal()` 简化为只保留 `reason` 字段 **效果：** 现在只有 `reason` 字段变化才触发 update，预计减少 90%+ 的 update 记录。 --- ## ✅ 问题 3：审计时间戳（已修复） **修改文件：** | 层级 | 文件 |",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "ingestion.py",
+        "incremental-update-fields",
+        "entry-reason",
+        "entry-reason-from-signal",
+        "完成",
+        "总结",
+        "一下",
+        "修复"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:48:48": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:48:48",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 48,
+      "endLine": 48,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e6821ca78a0c4de9871614dc11] 用户724532: 好的 portfolio_stock_pool_audit，我想都清空，然后重新调用backfill_audit来重新回填从2026-1-1到今天的数据 可行吗 ？ stock_pool 需要清空吗",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "message-id",
+        "portfolio-stock-pool-audit",
+        "stock-pool",
+        "用户",
+        "好的",
+        "我想",
+        "然后",
+        "重新"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:49:49": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:49:49",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 49,
+      "endLine": 49,
+      "source": "memory",
+      "snippet": "Assistant: **可行**。审计表可以清空后重建，stock_pool 不需要清空（它是当前状态，只保留最新状态）。 --- ## 建议方案 | 表 | 操作 | 说明 | |-----|------|------| | `portfolio_stock_pool_audit` | 清空 + 重新回填 | 审计历史用新逻辑重建 | | `05_portfolio_stock_pool` | **保留** | 当前状态不变 | --- ## 原因 - **audit**：是从 argus_signal_pool 派生的历史记录，可以随时重新生成 -",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "stock-pool",
+        "portfolio-stock-pool-audit",
+        "05-portfolio-stock-pool",
+        "argus-signal-pool",
+        "可行",
+        "审计",
+        "可以",
+        "重建"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:50:50": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:50:50",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 50,
+      "endLine": 50,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e683c2a14a0c42009a41fb6e14] 用户724532: 请执行",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "执行"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:51:51": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:51:51",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 51,
+      "endLine": 51,
+      "source": "memory",
+      "snippet": "Assistant: 审计表为空 - 因为 `backfill_all` 只处理 Phase 1-4 数据（argus_signal_pool），没有写入 stock_pool_audit。 需要单独运行 stock pool 的回填：",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "backfill-all",
+        "1-4",
+        "argus-signal-pool",
+        "stock-pool-audit",
+        "审计",
+        "因为",
+        "处理",
+        "phase"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:52:52": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:52:52",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 52,
+      "endLine": 52,
+      "source": "memory",
+      "snippet": "Assistant: 回填完成！看看审计记录情况： ## 审计回填结果 | 指标 | 数量 | |------|------| | **Total audit records** | **2031** | | entry | 738 | | exit | 738 | | promote | 30 | | demote | 85 | | update | 440 | --- ## 对比原来的 12910 条 | 问题 | 修改前 | 修改后 | |------|--------|--------| | Update 记录 | ~78/股票（帝尔激光） |",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "78/股票",
+        "回填",
+        "完成",
+        "看看",
+        "审计",
+        "记录",
+        "情况",
+        "结果"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:53:53": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:53:53",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 53,
+      "endLine": 53,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e68d42eeca0c33b88c17ca127f] 用户724532: 我想把portfolio_stock pool和portfolio_stock_pool_audit表都清空，然后调用backfill_audit，从2026/1/1 回填到2026/5/22日，然后再手工触发daily processor 传入日期是2026/5/25，从而跑出最新结果",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "message-id",
+        "我想把portfolio-stock",
+        "然后调用backfill-audit",
+        "从2026/1/1",
+        "回填到2026/5/22日",
+        "传入日期是2026/5/25",
+        "用户",
+        "我想"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:54:54": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:54:54",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 54,
+      "endLine": 54,
+      "source": "memory",
+      "snippet": "Assistant: 好的，按顺序执行： **Step 1**: 清空两个表 **Step 2**: 回填 2026-01-01 ~ 2026-05-22 **Step 3**: 手动触发 daily_processor 2026-05-25",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "daily-processor",
+        "好的",
+        "顺序",
+        "执行",
+        "step",
+        "回填",
+        "触发"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:45:45": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:45:45",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 45,
+      "endLine": 45,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/bba4f404-859c-43a7-ad0b-83d9e17ec297.jpg (image/jpeg) | media://inbound/bba4f404-859c-43a7-ad0b-83d9e17ec297.jpg] [message_id: om_x100b6e48eab174a4b4a729af0b9d4c0] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "bba4f404",
+        "859c",
+        "43a7"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:46:46": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:46:46",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 46,
+      "endLine": 46,
+      "source": "memory",
+      "snippet": "Assistant: **业绩前五交易**（2026-05-26）汇总： | 产品 | 代码 | 买入 | 卖出 | |------|------|------|------| | **JS-001** | SM001 | 中芯国际(+0.61%)、雅化集团(+0.30%)、海安集团(+0.14%)、通策医疗(+0.05%) | 帝尔激光(-0.72%)、奕瑞科技(-0.54%)、思特威(-0.02%)、网宿科技(-0.01%) | | **JS-002** | SM002 | 中芯国际(+1.92%)、大金重工(+3.00%)、立讯精密(+0.89%)",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "js-001",
+        "0.61",
+        "0.30",
+        "0.14",
+        "0.05",
+        "0.72",
+        "0.54",
+        "0.02"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:47:47": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:47:47",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 47,
+      "endLine": 47,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e48f00584a8b377aecfd194694] 用户724532: 请执行图片数据入库pipeline",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "执行",
+        "图片",
+        "数据",
+        "pipeline"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:48:48": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:48:48",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 48,
+      "endLine": 48,
+      "source": "memory",
+      "snippet": "Assistant: JS-001 ✅ 成功入库（34条持仓记录）。继续处理其他图片：",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "js-001",
+        "成功",
+        "记录",
+        "继续",
+        "处理",
+        "其他",
+        "图片"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:49:49": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:49:49",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 49,
+      "endLine": 49,
+      "source": "memory",
+      "snippet": "Assistant: **✅ 图片数据入库完成** | 图片 | 产品 | 格式 | 记录数 | 状态 | |------|------|------|--------|------| | dec49379 (JS-001) | SM001 | 持仓 | 34 | ✅ | | fc9f7b4a (JS-002) | SM002 | 持仓 | 40 | ✅ | | 0a5347cd (ZO-002) | SM004 | 持仓 | 36 | ✅ | | e8522a93 (CCT-001) | SM012 | 持仓 | 31 | ✅ | | bba4f404",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "js-001",
+        "js-002",
+        "zo-002",
+        "cct-001",
+        "图片",
+        "数据",
+        "完成",
+        "产品"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:50:50": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:50:50",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 50,
+      "endLine": 50,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/3ccffd73-ce81-467b-bb7a-3ab65c1ade14.jpg (image/jpeg) | media://inbound/3ccffd73-ce81-467b-bb7a-3ab65c1ade14.jpg] [message_id: om_x100b6e48970a90b8b14dd38e4b3db9e] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "3ccffd73",
+        "ce81",
+        "467b"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:51:51": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:51:51",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 51,
+      "endLine": 51,
+      "source": "memory",
+      "snippet": "Assistant: **✅ ZO-001 (SM003) 入库完成** | 项目 | 值 | |------|-----| | 产品代码 | SM003 | | 产品名称 | ZO-001 | | 最新净值 | 1.1511 | | 最新规模 | 1.79 亿 | | 持仓记录 | 30 条 | | 截止日期 | 2026-05-26 | **今日所有图片入库汇总：** | 产品 | 代码 | 记录数 | 状态 | |------|------|--------|------| | JS-001 | SM001 | 34 | ✅ | | JS-002",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "zo-001",
+        "1.1511",
+        "1.79",
+        "js-001",
+        "js-002",
+        "sm003",
+        "完成",
+        "项目"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:52:52": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:52:52",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 52,
+      "endLine": 52,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e48923558a4b2cdb42f875ce21] 用户724532: 请检查下 2026/5/26 数据是否完整了",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "message-id",
+        "2026/5/26",
+        "用户",
+        "检查",
+        "数据",
+        "是否",
+        "完整"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:53:53": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:53:53",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 53,
+      "endLine": 53,
+      "source": "memory",
+      "snippet": "Assistant: **✅ 2026-05-26 数据完整性检查通过** | 产品 | 净值 | 持仓 | 交易 | |------|------|------|------| | SM001 (JS-001) | ✅ 1条 | ✅ 34条 | ✅ 8条 | | SM002 (JS-002) | ✅ 1条 | ✅ 40条 | ✅ 3条 | | SM003 (ZO-001) | ✅ 1条 | ✅ 30条 | ✅ 6条 | | SM004 (ZO-002) | ✅ 1条 | ✅ 36条 | ✅ 4条 | | SM012 (CCT-001) | ✅ 1条 |",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "js-001",
+        "js-002",
+        "zo-001",
+        "zo-002",
+        "cct-001",
+        "数据",
+        "完整性",
+        "检查"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:54:54": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:54:54",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 54,
+      "endLine": 54,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e48a59b1488b281acef280e702] 用户724532: 请触发下smar……",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "触发",
+        "smar"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:55:55": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:55:55",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 55,
+      "endLine": 55,
+      "source": "memory",
+      "snippet": "Assistant: 消息好像被截断了，你想触发什么？是 **Smart Money 数据导出报告**吗？ 如果是的话，我已经看到了 crontab 里有： ``` 30 20 * * 1-5 cd .../daily-smartmoney-analysis/scripts && ... daily_export_report.py ``` 这个是每天 **20:30** 执行。要我现在手动触发一次吗？",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "1-5",
+        "daily-export-report.py",
+        "消息",
+        "好像",
+        "截断",
+        "你想",
+        "触发",
+        "什么"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:56:56": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:56:56",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 56,
+      "endLine": 56,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e48a209951cb3689eddcb44b79] 用户724532: 是的 手工触发下",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "手工",
+        "触发"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:1:1": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:1:1",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 1,
+      "endLine": 1,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6eb9c9a5a0a0b16a12b7a3cff97] 用户724532: 请检查下 为什么早上的7:30 两份个股和大盘复盘分析邮件 我都没有收到",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "检查",
+        "为什么",
+        "早上",
+        "分析",
+        "邮件",
+        "都没有"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:2:2": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:2:2",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 2,
+      "endLine": 2,
+      "source": "memory",
+      "snippet": "Assistant: 发现问题了： - **systemd 服务 `daily-stock-analysis.service`**：今天（5/29）根本没有生成报告，最后一次是昨天（5/28 07:33） - **crontab 全球市场报告**：✅ 8:02 成功运行并发送了邮件 两个任务互相独立，所以全球市场报告发了，个股复盘报告没发。",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "daily-stock-analysis.service",
+        "5/29",
+        "5/28",
+        "发现",
+        "问题",
+        "systemd",
+        "服务",
+        "stock"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:3:3": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:3:3",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 3,
+      "endLine": 3,
+      "source": "memory",
+      "snippet": "Assistant: 找到了原因。`daily_stock_analysis` 服务在今天 07:30:14 执行时报错崩溃： ``` ImportError: cannot import name 'get_chip_unavailable_reason' from 'src.report_language' ``` 这是一个代码兼容性问题，`notification.py` 尝试从 `report_language.py` 导入一个不存在的函数。让我快速修复这个问题：",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "daily-stock-analysis",
+        "get-chip-unavailable-reason",
+        "src.report-language",
+        "notification.py",
+        "report-language.py",
+        "找到",
+        "原因",
+        "服务"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:4:4": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:4:4",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 4,
+      "endLine": 4,
+      "source": "memory",
+      "snippet": "Assistant: 找到了！问题是 `report_language.py` 中的 `get_chip_unavailable_reason` 函数在 `notification.py` 导入时出现兼容性问题。service_error.log 显示大量 tushare 等数据获取进度条输出，但 service.log 中的关键错误是： ``` ImportError: cannot import name 'get_chip_unavailable_reason' from 'src.report_language' ``` 让我验证一下这个导入是否",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "report-language.py",
+        "get-chip-unavailable-reason",
+        "notification.py",
+        "service-error.log",
+        "service.log",
+        "src.report-language",
+        "找到",
+        "问题"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:5:5": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:5:5",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 5,
+      "endLine": 5,
+      "source": "memory",
+      "snippet": "Assistant: 服务已重启。问题基本定位了： **📋 诊断结果** ### 1. 个股复盘邮件（7:30，systemd service） - **原因**：ImportError - `src/scheduler.py` 导入 `NotificationService` 时，`report_language.py` 中找不到 `get_chip_unavailable_reason` 函数 - **实际情况**：该函数在 `report_language.py` 中**确实存在**（第679行），但在 07:30 定时任务触发时 import",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "src/scheduler.py",
+        "report-language.py",
+        "get-chip-unavailable-reason",
+        "服务",
+        "问题",
+        "基本",
+        "定位",
+        "诊断"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:6:6": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:6:6",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 6,
+      "endLine": 6,
+      "source": "memory",
+      "snippet": "Assistant: 诊断完成，发现两个问题： --- ## 问题分析 ### 1️⃣ A股个股复盘邮件（7:30）- 系统性ImportError **根因**：`notification.py` 第38行尝试从 `report_language.py` 导入 `get_chip_unavailable_reason`，但实际函数名不匹配，导致每次定时任务都崩溃： ``` ImportError: cannot import name 'get_chip_unavailable_reason' from 'src.report_language' ``",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "notification.py",
+        "report-language.py",
+        "get-chip-unavailable-reason",
+        "src.report-language",
+        "诊断",
+        "完成",
+        "发现",
+        "问题"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:7:7": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:7:7",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 7,
+      "endLine": 7,
+      "source": "memory",
+      "snippet": "Assistant: ## 排查结果 **问题确认：** 今早 7:30 的邮件只发了\"大盘\"那个，\"个股\"那个实际没发出去。 ### 根因 查看 systemd 日志，服务 07:30 跑定时任务时直接抛异常退出了： ``` 2026-05-29 07:30:14 | ERROR | 定时任务执行失败: cannot import name 'get_chip_unavailable_reason' from 'src.report_language' ``` 是个 ImportError，但这个函数在代码里是存在的。怀疑是 `.pyc` 缓存文件和新",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "get-chip-unavailable-reason",
+        "src.report-language",
+        "结果",
+        "问题",
+        "确认",
+        "今早",
+        "邮件",
+        "只发"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:8:8": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:8:8",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 8,
+      "endLine": 8,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6eb9f9e440a4b220068e7e0ec78] 用户724532: 7:30 daily stock analysis 服务需要发两份邮件 一个是个股的一个是市场的，这两份邮件我都没有收到 请排查下 如果是import error 请给出解决方案",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "stock",
+        "analysis",
+        "服务",
+        "需要",
+        "邮件",
+        "一个"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:9:9": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:9:9",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 9,
+      "endLine": 9,
+      "source": "memory",
+      "snippet": "Assistant: ## 排查结果 ### 根因确认 今早 07:30 的 `ImportError` 导致**个股和大盘两份邮件都没发出去**。 错误链： ``` main.py → src/core/market_review.py → from src.notification import ... → from src.report_language import get_chip_unavailable_reason → ImportError: cannot import name 'get_chip_unavailable_reason'",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "main.py",
+        "src/core/market-review.py",
+        "src.notification",
+        "src.report-language",
+        "get-chip-unavailable-reason",
+        "结果",
+        "根因",
+        "确认"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:10:10": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:10:10",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 10,
+      "endLine": 10,
+      "source": "memory",
+      "snippet": "Assistant: 如果正常收到邮件，说明修复成功。如果仍有问题，请告诉我。",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "如果",
+        "正常",
+        "收到",
+        "邮件",
+        "说明",
+        "修复",
+        "成功",
+        "仍有"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:11:11": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:11:11",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 11,
+      "endLine": 11,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6eba5089fc84b2cc7d753cbb202] 用户724532: 请手工触触发7:30的daily stock analysis的定时任务",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "手工",
+        "触发",
+        "stock",
+        "analysis",
+        "任务"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:12:12": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:12:12",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 12,
+      "endLine": 12,
+      "source": "memory",
+      "snippet": "Assistant: 📊 **每日大盘复盘任务完成** **生成时间：** 2026-05-29 09:05 --- ### ✅ 执行结果 | 市场 | 状态 | 说明 | |------|------|------| | **A股** | ✅ 成功 | 沪指+0.12%、创业板+1.96%，科技成长主线，缩量上涨 | | **港股** | ⚠️ 数据异常 | YFinance 接口故障，无法获取实时行情 | | **美股** | ⚠️ 数据异常 | YFinance 接口故障，无法获取实时行情 | --- ### 📝 A股复盘摘要 - **盘面信号",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "0.12",
+        "1.96",
+        "每日",
+        "任务",
+        "完成",
+        "生成",
+        "时间",
+        "执行"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:55:55": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:55:55",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 55,
+      "endLine": 55,
+      "source": "memory",
+      "snippet": "Assistant: 完成！让我验证最终结果：",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "完成",
+        "验证",
+        "最终",
+        "结果"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:56:56": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:56:56",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 56,
+      "endLine": 56,
+      "source": "memory",
+      "snippet": "Assistant: 完成！结果： ## 清空 + 回填结果 | 操作 | 结果 | |------|------| | 清空 `portfolio_stock_pool` | 1357 条记录 | | 清空 `portfolio_stock_pool_audit` | 2031 条记录 | | 回填 2026-01-01 ~ 2026-05-22 | ✅ 完成 | | 手动触发 2026-05-25 | ✅ 完成 | --- ## 当前数据状态 | 指标 | 值 | |------|-----| | **Stock Pool Active** | 14",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "portfolio-stock-pool",
+        "portfolio-stock-pool-audit",
+        "完成",
+        "结果",
+        "回填",
+        "操作",
+        "记录",
+        "触发"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:57:57": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:57:57",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 57,
+      "endLine": 57,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e68fe9020a0c496c73e8ade522] 用户724532: 请再排查下 update 比较多的原因 到底是哪个字段变化了，是不是唯一id 变化这种 还是啥的",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "update",
+        "比较",
+        "原因",
+        "到底是",
+        "哪个",
+        "变化"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:58:58": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:58:58",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 58,
+      "endLine": 58,
+      "source": "memory",
+      "snippet": "Assistant: **找到原因了！** ## Update 原因：股票名称全角/半角混用 ``` 美团-W (半角) 美团－W (全角) ``` `stock_name` 在全角\"－\"和半角\"-\"之间反复横跳，每次都触发 update。 --- ## 根本原因 数据源返回的股票名称格式不一致，导致每天判断为\"变化\"。 --- ## 解决方案 在 `_normalize_record` 中标准化 `stock_name`，统一全角/半角： ```python def _normalize_record(self, source: str, signal",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "股票名称全角/半角混用",
+        "美团-w",
+        "stock-name",
+        "normalize-record",
+        "统一全角/半角",
+        "找到",
+        "原因",
+        "update"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:59:59": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:59:59",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 59,
+      "endLine": 59,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e68f48a5930c3338e8f93df629] 用户724532: 我在想为什么股票名称 会是update检测的字段的，这个没有太多意义",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "我在",
+        "为什么",
+        "股票",
+        "名称",
+        "update",
+        "检测"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:60:60": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:60:60",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 60,
+      "endLine": 60,
+      "source": "memory",
+      "snippet": "Assistant: 你说得对！`stock_name` 作为监控字段没有意义： ## 问题 `stock_name` 变化 ≠ 股票状态变化 - 可能是全角/半角差异 - 可能是交易所数据格式不同 - 不代表任何投资逻辑变化 它不应该在 `INCREMENTAL_UPDATE_FIELDS` 里。 --- ## 建议 移除 `stock_name` 从 `INCREMENTAL_UPDATE_FIELDS`： ```python INCREMENTAL_UPDATE_FIELDS = ( # \"stock_name\", # 移除，没意义 \"tags\",",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "stock-name",
+        "可能是全角/半角差异",
+        "incremental-update-fields",
+        "说得",
+        "作为",
+        "没有",
+        "意义",
+        "问题"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:61:61": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:61:61",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 61,
+      "endLine": 61,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e688a7da4acc241475e5afb62e] 用户724532: 请移除，然后再重新执行backfill 以及daily processor的组合操作，参数和之前一样",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "移除",
+        "然后",
+        "重新",
+        "执行",
+        "backfill",
+        "以及"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:62:62": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:62:62",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 62,
+      "endLine": 62,
+      "source": "memory",
+      "snippet": "Assistant: **update=0！** 修复成功！ 现在运行 daily processor：",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "update",
+        "修复",
+        "成功",
+        "现在",
+        "运行",
+        "processor"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-27.txt:63:63": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-27.txt:63:63",
+      "path": "memory/.dreams/session-corpus/2026-05-27.txt",
+      "startLine": 63,
+      "endLine": 63,
+      "source": "memory",
+      "snippet": "Assistant: 完成！结果对比： ## 修复前后对比 | 指标 | 修复前 | 修复后 | 变化 | |------|--------|--------|------| | **Total audit** | 4192 | **1737** | -58% | | **Update** | 864 | **0** | -100% ✅ | | entry | 1622 | 884 | | | demote | 170 | 85 | | | exit | 1476 | 738 | | | promote | 60 | 30 | | --- ## ✅ 成功",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "99886bb257c4"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "完成",
+        "结果",
+        "对比",
+        "修复",
+        "前后",
+        "指标",
+        "变化",
+        "total"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:57:57": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:57:57",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 57,
+      "endLine": 57,
+      "source": "memory",
+      "snippet": "Assistant: **✅ Smart Money 每日导出报告已触发** | 步骤 | 状态 | |------|------| | 检查最新日期 | ✅ 2026-05-26 | | 连接 MongoDB | ✅ tradingagents | | 查询持仓 | ✅ 33 条 | | 查询交易 | ✅ 23 条 | | 生成 Excel | ✅ /tmp/数据_2026-05-26.xlsx | | 发送 Telegram | ✅ 已发送 | 报告已通过 Telegram 发送。",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "tmp/数据-2026-05-26.xlsx",
+        "smart",
+        "money",
+        "每日",
+        "导出",
+        "报告",
+        "触发",
+        "步骤"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:58:58": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:58:58",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 58,
+      "endLine": 58,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/74cf3348-077d-4229-a643-075516ea8462.jpg (image/jpeg) | media://inbound/74cf3348-077d-4229-a643-075516ea8462.jpg] [message_id: om_x100b6e4a722154a4b482b1e766c6998] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "74cf3348",
+        "077d",
+        "a643"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:59:59": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:59:59",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 59,
+      "endLine": 59,
+      "source": "memory",
+      "snippet": "Assistant: **✅ 2025-12-30 交易数据已入库** | 日期 | 格式 | 记录数 | 状态 | |------|------|--------|------| | 2025-12-30 | 交易 | 12 条 | ✅ | **主要内容：** - **JS-001**：买入 旗滨集团(+0.17%)、广钢气体(+1.01%) - **JS-002**：买入 锅圈(+0.99%) - **ZO-001**：卖出 中国平安(-2.18%)、江苏银行(-1.57%)、山西汾酒(-1.29%)；买入 三七互娱(+2.10%) - **ZO-0",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "js-001",
+        "0.17",
+        "1.01",
+        "js-002",
+        "0.99",
+        "zo-001",
+        "2.18",
+        "1.57"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:60:60": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:60:60",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 60,
+      "endLine": 60,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/c47e7516-4ed6-4ced-95ad-b2abc028a60a.jpg (image/jpeg) | media://inbound/c47e7516-4ed6-4ced-95ad-b2abc028a60a.jpg] [message_id: om_x100b6e4a72390c80b2c9d987c3a19ac] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "c47e7516",
+        "4ed6",
+        "4ced"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:61:61": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:61:61",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 61,
+      "endLine": 61,
+      "source": "memory",
+      "snippet": "Assistant: **✅ JS-001 (SM001) 2025-12-30 持仓数据已入库** | 项目 | 值 | |------|-----| | 产品代码 | SM001 | | 产品名称 | JS-001 | | 截止日期 | 2025-12-30 | | 最新净值 | 1.161 | | 最新规模 | 1.78 亿 | | 持仓记录 | 25 条 | **主要持仓：** 1. 三棵树 7.05% 2. 九号公司 5.08% 3. 欣旺达 4.95% 4. 爱旭股份 4.10% 5. 立讯精密 4.07% **注意：** 这是 2025-1",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "js-001",
+        "1.161",
+        "1.78",
+        "7.05",
+        "5.08",
+        "4.95",
+        "4.10",
+        "4.07"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:62:62": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:62:62",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 62,
+      "endLine": 62,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/c5debb15-587a-4171-b934-5d938fb2405a.jpg (image/jpeg) | media://inbound/c5debb15-587a-4171-b934-5d938fb2405a.jpg] [message_id: om_x100b6e4a723600a0b485baf528f9291] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "c5debb15",
+        "587a",
+        "b934"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:63:63": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:63:63",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 63,
+      "endLine": 63,
+      "source": "memory",
+      "snippet": "Assistant: **✅ JS-002 (SM002) 2025-12-30 持仓数据已入库** | 项目 | 值 | |------|-----| | 产品代码 | SM002 | | 产品名称 | JS-002 | | 截止日期 | 2025-12-30 | | 最新净值 | 1.3825 | | 最新规模 | 9160 万 | | 持仓记录 | 38 条 | **主要持仓：** 1. 紫金矿业 10.35% 2. 泡泡玛特 9.19% 3. 敏实集团 5.41% 4. 宁德时代 4.11% 5. 阿里巴巴-W 4.09%",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "js-002",
+        "1.3825",
+        "10.35",
+        "9.19",
+        "5.41",
+        "4.11",
+        "阿里巴巴-w",
+        "4.09"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:64:64": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:64:64",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 64,
+      "endLine": 64,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/a63892dd-6b7e-4337-b73a-37f6b18b5749.jpg (image/jpeg) | media://inbound/a63892dd-6b7e-4337-b73a-37f6b18b5749.jpg] [message_id: om_x100b6e4a73ce84a8b1243c776049690] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "a63892dd",
+        "6b7e",
+        "b73a"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:65:65": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:65:65",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 65,
+      "endLine": 65,
+      "source": "memory",
+      "snippet": "Assistant: **✅ ZO-001 (SM003) 2025-12-30 持仓数据已入库** | 项目 | 值 | |------|-----| | 产品代码 | SM003 | | 产品名称 | ZO-001 | | 截止日期 | 2025-12-30 | | 最新净值 | 1.0164 | | 最新规模 | 2.15 亿 | | 持仓记录 | 32 条 | **主要持仓：** 1. 新易盛 4.46% 2. 振华股份 4.45% 3. 国泰君安 3.74% 4. 齐鲁银行 3.60% 5. 贵州茅台 3.49%",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "zo-001",
+        "1.0164",
+        "2.15",
+        "4.46",
+        "4.45",
+        "3.74",
+        "3.60",
+        "3.49"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:66:66": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:66:66",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 66,
+      "endLine": 66,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/272d4c29-8dac-4e7b-a239-d47e5539ffe0.jpg (image/jpeg) | media://inbound/272d4c29-8dac-4e7b-a239-d47e5539ffe0.jpg] [message_id: om_x100b6e4a73c7d0a0b286110f09c6aca] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "272d4c29",
+        "8dac",
+        "4e7b"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:67:67": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:67:67",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 67,
+      "endLine": 67,
+      "source": "memory",
+      "snippet": "Assistant: **✅ ZO-002 (SM004) 2025-12-30 持仓数据已入库** | 项目 | 值 | |------|-----| | 产品代码 | SM004 | | 产品名称 | ZO-002 | | 截止日期 | 2025-12-30 | | 最新净值 | 0.6187 | | 最新规模 | 1.41 亿 | | 持仓记录 | 30 条 | **主要持仓：** 1. 兆易创新 10.39% 2. 立讯精密 9.12% 3. 农业银行 7.61% 4. 建设银行 7.42% 5. 中际旭创 7.25% --- **📊 今日历史",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "zo-002",
+        "0.6187",
+        "1.41",
+        "10.39",
+        "9.12",
+        "7.61",
+        "7.42",
+        "7.25"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-28.txt:68:68": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-28.txt:68:68",
+      "path": "memory/.dreams/session-corpus/2026-05-28.txt",
+      "startLine": 68,
+      "endLine": 68,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/8bd65555-c401-4f0f-a730-c652cd38f02e.jpg (image/jpeg) | media://inbound/8bd65555-c401-4f0f-a730-c652cd38f02e.jpg] [message_id: om_x100b6e4a73dc08a8b11e4c35b158544] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "f9fcbbc6bd1e"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "8bd65555",
+        "c401",
+        "4f0f"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:13:13": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:13:13",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 13,
+      "endLine": 13,
+      "source": "memory",
+      "snippet": "Assistant: 分析已完成。报告文件已生成： - `report_20260529.md` (9,761 bytes, 09:06) - `market_review_20260529.md` (12,270 bytes, 09:05) 邮件发送确认： - ✅ **大盘复盘邮件**（09:05:58）：发送成功 → 532484187@qq.com - ❌ **个股分析邮件**：因为我的测试脚本在输出结果后崩溃退出了，没走到邮件发送逻辑 ### 根因确认 今早 07:30 失败的真实原因： 1. `__pycache__` 缓存导致 `get_ch",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "report-20260529.md",
+        "market-review-20260529.md",
+        "qq.com",
+        "get-ch",
+        "分析",
+        "完成",
+        "报告",
+        "文件"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:14:14": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:14:14",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 14,
+      "endLine": 14,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6eba9e441890b30358ba408d753] 用户724532: 可以 个股和大盘的 都要发送哈",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "可以",
+        "都要",
+        "发送"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:15:15": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:15:15",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 15,
+      "endLine": 15,
+      "source": "memory",
+      "snippet": "Assistant: 情况比较复杂，让我给你一个清晰的总结： ## 当前状态 **邮件发送情况：** - 今早 07:30 的两份邮件（个股+大盘）因 ImportError 都没发出 ✅ 已定位根因 - 大盘报告（09:05）：成功发送到 532484187@qq.com ✅ - 个股报告：我的测试运行多次，但网络问题导致分析时间过长，还没走到邮件发送就超时了 **核心问题：** 1. **网络质量差**：大量 SSL errors (`UNEXPECTED_EOF_WHILE_READING`) 和 Proxy errors，导致数据源反复重试，拖慢",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "网络",
+        "qq.com",
+        "unexpected-eof-while-reading",
+        "情况",
+        "比较",
+        "复杂",
+        "一个",
+        "清晰"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:16:16": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:16:16",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 16,
+      "endLine": 16,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6ea035c39894c24666ebf8e87a8] 用户724532: 我现在准备图片数据入库",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "现在",
+        "准备",
+        "图片",
+        "数据"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:17:17": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:17:17",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 17,
+      "endLine": 17,
+      "source": "memory",
+      "snippet": "Assistant: 好的，请发送图片即可。 根据系统配置，图片会自动走 Image Pipeline： 1. **持仓格式**（含持仓比例/市值/最新净值）→ 入 `portfolio_position` 等表 2. **交易格式**（含变化比例/变化金额/方向）→ 入 `portfolio_trade` 表 **当前待处理目录：** ``` ~/.openclaw/workspace-yquant/skills/data/source/smart-money/ ``` 请直接发送图片，Pipeline 会自动识别格式、处理并入库。",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "含持仓比例/市值/最新净值",
+        "portfolio-position",
+        "含变化比例/变化金额/方向",
+        "portfolio-trade",
+        "好的",
+        "发送",
+        "图片",
+        "即可"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:18:18": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:18:18",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 18,
+      "endLine": 18,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/19712bba-7018-451b-b962-b654fef4c126.jpg (image/jpeg) | media://inbound/19712bba-7018-451b-b962-b654fef4c126.jpg] [message_id: om_x100b6ea1c8172084c3c7ba7323652bf] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "19712bba",
+        "451b",
+        "b962"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:19:19": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:19:19",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 19,
+      "endLine": 19,
+      "source": "memory",
+      "snippet": "Assistant: **✅ 入库成功！** | 项目 | 结果 | |------|------| | 图片 | `portfolio_20260529_1712.jpg` | | 解析行数 | **31 条** | | 格式 | **持仓格式** (portfolio) | | Excel 临时文件 | `image/portfolio_20260529_171445.xlsx` | **MongoDB 入库详情：** | Collection | 写入 | 说明 | |------------|------|------| | `portfolio",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "portfolio-20260529-1712.jpg",
+        "成功",
+        "项目",
+        "结果",
+        "图片",
+        "portfolio-20260529-1712",
+        "jpg",
+        "解析"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:20:20": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:20:20",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 20,
+      "endLine": 20,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/56dd25e7-a547-4f2e-9e2b-c75ea89a660e.jpg (image/jpeg) | media://inbound/56dd25e7-a547-4f2e-9e2b-c75ea89a660e.jpg] [message_id: om_x100b6ea1c82c38b8c2281bd2da1956a] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "56dd25e7",
+        "a547",
+        "4f2e"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:21:21": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:21:21",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 21,
+      "endLine": 21,
+      "source": "memory",
+      "snippet": "Assistant: **✅ 入库成功！** | 项目 | 结果 | |------|------| | 图片 | `portfolio_20260529_1713.jpg` | | 解析行数 | **37 条** | | 格式 | **持仓格式** (portfolio) | **MongoDB 入库：** | Collection | 写入 | |------------|------| | `portfolio_basic_info` | 更新 1 条 | | `portfolio_nav` | 新增 1 条 | | `portfolio_posi",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "portfolio-20260529-1713.jpg",
+        "portfolio-basic-info",
+        "portfolio-nav",
+        "portfolio-posi",
+        "成功",
+        "项目",
+        "结果",
+        "图片"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:22:22": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:22:22",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 22,
+      "endLine": 22,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/7bd00012-e4a4-43ff-8014-f12544a9c859.jpg (image/jpeg) | media://inbound/7bd00012-e4a4-43ff-8014-f12544a9c859.jpg] [message_id: om_x100b6ea1c82a50b8c4f68d2fa43560b] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "7bd00012",
+        "e4a4",
+        "43ff"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:23:23": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:23:23",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 23,
+      "endLine": 23,
+      "source": "memory",
+      "snippet": "Assistant: **✅ 入库成功！** | 项目 | 结果 | |------|------| | 图片 | `portfolio_20260529_1715.jpg` | | 解析行数 | **30 条** | | 格式 | **持仓格式** (portfolio) | **MongoDB 入库：** | Collection | 写入 | |------------|------| | `portfolio_basic_info` | 更新 1 条 | | `portfolio_nav` | 新增 1 条 | | `portfolio_posi",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "portfolio-20260529-1715.jpg",
+        "portfolio-basic-info",
+        "portfolio-nav",
+        "portfolio-posi",
+        "成功",
+        "项目",
+        "结果",
+        "图片"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:24:24": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:24:24",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 24,
+      "endLine": 24,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/e73d5e10-cb71-43c8-a3a6-aff01f96ecb1.jpg (image/jpeg) | media://inbound/e73d5e10-cb71-43c8-a3a6-aff01f96ecb1.jpg] [message_id: om_x100b6ea1c820d0a8c3790557d0c0bd8] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-29T19:00:20.860Z",
+      "lastRecalledAt": "2026-05-29T19:00:20.860Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-05-30",
+        "2026-05-29"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "e73d5e10",
+        "cb71",
+        "43c8"
       ]
     }
   }

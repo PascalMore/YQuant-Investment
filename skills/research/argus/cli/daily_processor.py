@@ -93,7 +93,8 @@ def process_date(
     baseline_30d_weights = _read_industry_weights(reader, baseline_30d_date)
     previous_weights = _read_industry_weights(reader, previous_date)
 
-    _attach_product_names(positions, transformer)
+    product_name_lookup = _build_product_name_lookup(reader)
+    _attach_product_names(positions, product_name_lookup)
     sector_info = _read_sector_info(reader)
     industry_weight_records = IndustryWeightCalculator.calculate(
         date_to_process,
@@ -122,7 +123,7 @@ def process_date(
     for product_code in product_codes:
         current_pos = positions_by_product[product_code]
         previous_pos = previous_by_product.get(product_code, [])
-        product_name = transformer.get_product_alias(product_code)
+        product_name = product_name_lookup.get(product_code, transformer.get_product_alias(product_code))
         position_changes = transformer.calculate_holding_ratio_change(current_pos, previous_pos)
         _attach_trade_directions(position_changes, trades_by_product_stock)
         rebalancing_events = rebalancing_detector.detect_rebalancing(position_changes, previous_pos)
@@ -414,11 +415,58 @@ def _read_index_quotes(reader: MongoReader, date_to_read: str) -> List[Dict]:
 
 
 
-def _attach_product_names(positions: List[Dict], transformer: PortfolioTransformer) -> None:
+def _build_product_name_lookup(reader: MongoReader) -> Dict[str, str]:
+    """Build product_code -> product_name lookup from portfolio_basic_info.
+
+    1. Read product_name from portfolio_basic_info (e.g., "JS-001")
+    2. Extract prefix (JS) and map to full name via PRODUCT_ALIAS (景顺)
+    3. Reconstruct: 景顺-001
+    """
+    from skills.research.argus.config import PRODUCT_ALIAS
+
+    db = getattr(reader, 'db', None)
+    if db is not None:
+        col = db['portfolio_basic_info']
+        docs = list(col.find({}, {'product_code': 1, 'product_name': 1, '_id': 0}))
+        lookup = {}
+        for doc in docs:
+            code = doc.get('product_code')
+            raw_name = doc.get('product_name') or doc.get('name') or ''
+            if not code or not raw_name:
+                continue
+
+            # Extract prefix (JS from "JS-001", SM from "SM001")
+            if '-' in raw_name:
+                prefix = raw_name.split('-')[0]
+            elif raw_name.startswith('SM'):
+                prefix = raw_name[:2]
+            else:
+                prefix = raw_name
+
+            # Map prefix to full name
+            full_prefix = PRODUCT_ALIAS.get(prefix, prefix)
+
+            # Reconstruct: 景顺-001
+            if '-' in raw_name:
+                suffix = raw_name.split('-', 1)[1]
+                lookup[code] = f"{full_prefix}-{suffix}"
+            else:
+                lookup[code] = full_prefix
+
+        logger.info(f"[product_name] Loaded {len(lookup)} products from portfolio_basic_info")
+        for code, name in lookup.items():
+            logger.info(f"[product_name]   {code} -> {name}")
+    else:
+        lookup = {}
+
+    return lookup
+
+
+def _attach_product_names(positions: List[Dict], product_name_lookup: Dict[str, str]) -> None:
     for position in positions:
         product_code = position.get('product_code')
         if product_code and not position.get('product_name'):
-            position['product_name'] = transformer.get_product_alias(product_code)
+            position['product_name'] = product_name_lookup.get(product_code, product_code)
 
 
 def _build_windcode_to_sw1_lookup(sector_info: List[Dict]) -> Dict[str, str]:
