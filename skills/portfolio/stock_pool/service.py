@@ -23,6 +23,7 @@ class StockPoolService:
         source: Optional[str] = None,
         status: Optional[str] = None,
         wind_code: Optional[str] = None,
+        sort_by: Optional[str] = "bayesian",
         limit: int = 50,
         cursor: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -32,6 +33,7 @@ class StockPoolService:
             source=source,
             status=status,
             wind_code=wind_code,
+            sort_by=sort_by,
             limit=limit,
             cursor=cursor,
         )

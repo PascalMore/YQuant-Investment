@@ -91,6 +91,9 @@ def process_date(
     baseline_30d_date = _get_baseline_date(date_to_process, 30)
     results['baseline_30d_date'] = baseline_30d_date
     baseline_30d_weights = _read_industry_weights(reader, baseline_30d_date)
+    baseline_60d_date = _get_baseline_date(date_to_process, 60)
+    results['baseline_60d_date'] = baseline_60d_date
+    baseline_60d_weights = _read_industry_weights(reader, baseline_60d_date)
     previous_weights = _read_industry_weights(reader, previous_date)
 
     product_name_lookup = _build_product_name_lookup(reader)
@@ -102,6 +105,7 @@ def process_date(
         sector_info,
         previous_weights=previous_weights,
         lookback_30d_weights=baseline_30d_weights,
+        lookback_60d_weights=baseline_60d_weights,
         previous_positions=previous_positions,
     )
     results['industry_weights_generated'] = len(industry_weight_records)
@@ -136,6 +140,7 @@ def process_date(
             product_code=product_code,
             product_name=product_name,
             position_changes=position_changes,
+            trade_date=date_to_process,
             pool_zone='SCAN',
             darwin_moment=darwin_moment,
             consensus_direction='NEUTRAL',
@@ -234,7 +239,7 @@ def process_date(
         stock_pool_records,
         results,
         output_dir,
-        consensus_direction,
+        consensus_direction=None,
     )
     results['output_file'] = str(output_file)
 

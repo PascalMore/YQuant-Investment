@@ -27,10 +27,12 @@ class IndustryWeightCalculator:
         sector_info: List[Dict],
         previous_weights: Optional[List[Dict]] = None,
         lookback_30d_weights: Optional[List[Dict]] = None,
+        lookback_60d_weights: Optional[List[Dict]] = None,
         previous_positions: Optional[List[Dict]] = None,
         baseline_30d_positions: Optional[List[Dict]] = None,
+        baseline_60d_positions: Optional[List[Dict]] = None,
     ) -> List[Dict]:
-        """Calculate industry weights and 1d/30d changes.
+        """Calculate industry weights and 1d/30d/60d changes.
 
         holding_ratio is stored as NAV ratio, so industry weight is the direct
         sum of position ratios multiplied by 100. Baselines are expected to be
@@ -52,8 +54,13 @@ class IndustryWeightCalculator:
             if lookback_30d_weights is not None
             else cls._aggregate(baseline_30d_positions or [], sector_lookup)[0]
         )
+        baseline_60d = (
+            cls._weights_lookup(lookback_60d_weights)
+            if lookback_60d_weights is not None
+            else cls._aggregate(baseline_60d_positions or [], sector_lookup)[0]
+        )
 
-        keys = set(current) | set(baseline_1d) | set(baseline_30d)
+        keys = set(current) | set(baseline_1d) | set(baseline_30d) | set(baseline_60d)
 
         records = []
         for product_code, sw1_code in sorted(keys):
@@ -62,12 +69,15 @@ class IndustryWeightCalculator:
             weight_pct = current_item.get('weight_pct', 0.0)
             baseline_1d_weight = baseline_1d.get(key, {}).get('weight_pct', 0.0)
             baseline_30d_weight = baseline_30d.get(key, {}).get('weight_pct', 0.0)
+            baseline_60d_weight = baseline_60d.get(key, {}).get('weight_pct', 0.0)
             has_1d_baseline = key in baseline_1d
             has_30d_baseline = key in baseline_30d and sw1_code != UNKNOWN_SW1_CODE
+            has_60d_baseline = key in baseline_60d and sw1_code != UNKNOWN_SW1_CODE
             product_name = (
                 current_item.get('product_name')
                 or baseline_1d.get(key, {}).get('product_name')
                 or baseline_30d.get(key, {}).get('product_name')
+                or baseline_60d.get(key, {}).get('product_name')
                 or ''
             )
 
@@ -80,14 +90,17 @@ class IndustryWeightCalculator:
                     current_item.get('sw1_name')
                     or baseline_1d.get(key, {}).get('sw1_name')
                     or baseline_30d.get(key, {}).get('sw1_name')
+                    or baseline_60d.get(key, {}).get('sw1_name')
                     or UNKNOWN_SW1_NAME
                 ),
                 'weight_pct': round(weight_pct, 4),
                 'weight_change_1d': round(weight_pct - baseline_1d_weight, 4) if has_1d_baseline else None,
                 'weight_change_30d': round(weight_pct - baseline_30d_weight, 4) if has_30d_baseline else None,
+                'weight_change_60d': round(weight_pct - baseline_60d_weight, 4) if has_60d_baseline else None,
                 'positions_count': current_item.get('positions_count', 0),
                 'has_1d_baseline': has_1d_baseline,
                 'has_30d_baseline': has_30d_baseline,
+                'has_60d_baseline': has_60d_baseline,
                 'source': 'portfolio_position',
                 'created_at': datetime.now().isoformat(),
             })

@@ -50,6 +50,7 @@ class StockPoolRepository:
         source: Optional[str] = None,
         status: Optional[str] = None,
         wind_code: Optional[str] = None,
+        sort_by: Optional[str] = "bayesian",
         limit: int = 50,
         cursor: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -67,7 +68,8 @@ class StockPoolRepository:
             query["_id"] = {"$lt": ObjectId(cursor)}
 
         page_size = max(1, min(limit, 200))
-        docs = list(self.collection.find(query).sort("_id", -1).limit(page_size + 1))
+        sort_field = "entry_reason.bayesian_score" if sort_by == "bayesian" else "entry_date"
+        docs = list(self.collection.find(query).sort(sort_field, -1).limit(page_size + 1))
         items = [self._serialize(doc) for doc in docs[:page_size]]
         next_cursor = str(docs[page_size]["_id"]) if len(docs) > page_size else None
         return {"items": items, "next_cursor": next_cursor, "limit": page_size}
