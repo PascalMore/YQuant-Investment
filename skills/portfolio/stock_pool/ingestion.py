@@ -208,7 +208,12 @@ class StockPoolIngestionService:
     def _apply_entry(self, record: Dict[str, Any], actor: str, summary: Dict[str, Any], event_date: Optional[str] = None) -> None:
         existing = self._active_record(record["wind_code"])
         if existing:
-            self._apply_record_update(existing["id"], record, "update", actor, summary, event_date=event_date)
+            # Stock was in stock_pool before; compute correct zone action
+            zone_action = self._zone_delta_action(
+                existing.get("pool_zone"),
+                record.get("pool_zone"),
+            ) or "update"
+            self._apply_record_update(existing["id"], record, zone_action, actor, summary, event_date=event_date)
             return
         record_id = self.stock_pool_service.create_entry(record, actor, event_date=event_date)
         summary["entry"] += 1
@@ -242,14 +247,11 @@ class StockPoolIngestionService:
 
         action = self._zone_delta_action(previous["pool_zone"], current["pool_zone"])
         if action is None:
-            patch = self._changed_field_patch(existing, current, include_zone=False)
-            if not patch:
-                summary["skipped"] += 1
-                summary["items"].append({"action": "no_change", "id": existing["id"], "wind_code": current["wind_code"]})
-                return
-            action = "update"
-        else:
-            patch = self._changed_field_patch(existing, current, include_zone=True)
+            # previous_zone was None (holiday gap) — resolve against stock_pool zone.
+            # Stock was already in stock_pool, so compare stock_pool zone with current zone.
+            stock_pool_zone = existing.get("pool_zone")
+            action = self._zone_delta_action(stock_pool_zone, current["pool_zone"]) or "update"
+        patch = self._changed_field_patch(existing, current, include_zone=True)
 
         self._apply_record_update(existing["id"], current, action, actor, summary, patch, event_date=event_date)
 
@@ -263,11 +265,21 @@ class StockPoolIngestionService:
         patch: Dict[str, Any] | None = None,
         event_date: Optional[str] = None,
     ) -> None:
-        patch = patch if patch is not None else self._changed_field_patch(
-            self.stock_pool_service.repository.get_by_id(record_id) or {},
+        # If caller passed a patch, use it. Otherwise compute from DB.
+        existing_record = self.stock_pool_service.repository.get_by_id(record_id) or {}
+        computed_patch = self._changed_field_patch(
+            existing_record,
             record,
             include_zone=True,
         )
+        patch = patch if patch is not None else computed_patch
+        # Force-include pool_zone when zone actually changed in the record vs DB.
+        # This handles: (a) promote/demote where zone changed, (b) update where zone changed
+        # but computed_patch was empty because other fields were the same.
+        rec_zone = record.get("pool_zone")
+        db_zone = existing_record.get("pool_zone")
+        if rec_zone and db_zone and rec_zone != db_zone and "pool_zone" not in patch:
+            patch["pool_zone"] = rec_zone
         if not patch:
             summary["skipped"] += 1
             summary["items"].append({"action": "no_change", "id": record_id, "wind_code": record["wind_code"]})
@@ -286,7 +298,25 @@ class StockPoolIngestionService:
         return items[0] if items else None
 
     @staticmethod
-    def _zone_delta_action(previous_zone: str, current_zone: str) -> str | None:
+    def _zone_delta_action(previous_zone: str | None, current_zone: str) -> str | None:
+        """Determine audit action from zone transition.
+
+        Args:
+            previous_zone: Previous zone (or None if stock had no prior signal_pool record,
+                          which can happen after holiday gaps - stock existed in stock_pool
+                          but not in previous_signal_pool for that date)
+            current_zone: Current zone
+
+        Returns:
+            'promote' if current_rank > previous_rank,
+            'demote' if current_rank < previous_rank,
+            None if previous_zone is None (unknown) or no change — caller must
+                resolve by querying stock_pool directly.
+        """
+        if previous_zone is None or previous_zone not in ZONE_RANK:
+            return None  # Unknown — caller should check stock_pool zone
+        if current_zone not in ZONE_RANK:
+            return "update"
         previous_rank = ZONE_RANK[previous_zone]
         current_rank = ZONE_RANK[current_zone]
         if current_rank > previous_rank:

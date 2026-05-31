@@ -214,6 +214,12 @@ def process_date(
         results['stock_pool_written'] = results['signal_pool_written']
 
         # Phase 5: Portfolio stock-pool incremental sync and audit.
+        # Use the full previous_date signal_pool (previous_signal_pool) instead of the
+        # per-stock filtered version. This is correct for BOTH scenarios:
+        # - Holiday gap: if a stock had no record on previous_date (calendar gap), its
+        #   record from earlier is still in previous_signal_pool → zone change detected
+        # - Exit detection: stocks that were in previous_date but not current_date have
+        #   their records in previous_signal_pool → _apply_exit correctly triggered
         ingestion = stock_pool_ingestion
         if ingestion is None and not writer_injected:
             ingestion = _default_stock_pool_ingestion()
@@ -256,6 +262,100 @@ def _next_trading_day(date_to_process: str) -> str:
     """Return the next trading day after the given date."""
     next_calendar_day = parse_date(date_to_process) + timedelta(days=1)
     return get_latest_trading_day(format_date(next_calendar_day))
+
+
+def _build_previous_signal_pool_map(
+    reader: MongoReader,
+    current_date: str,
+    fallback_previous_date: str,
+    current_signal_pool: List[Dict],
+) -> List[Dict]:
+    """Build previous_signal_pool list using each stock's last existing date in signal_pool.
+
+
+    Unlike _previous_trading_day which finds the previous calendar trading day,
+    this function finds, for EACH stock in current_signal_pool, the most recent
+    prior date where that stock actually had a record in 08_research_argus_signal_pool.
+    This correctly handles holiday gaps (e.g. May Day) where a stock has no record
+    on the calendar "previous trading day" but DOES have a record on an earlier date.
+
+    Args:
+        reader: MongoReader
+        current_date: The current processing date (e.g. '2026-05-06')
+        fallback_previous_date: Result of _previous_trading_day(current_date) as fallback
+        current_signal_pool: List of signal_pool records for current_date
+
+    Returns:
+        List of "previous" signal_pool records (one per stock, at their last existing date)
+    """
+    collection_name = ARGUS_CONFIG.get('mongo', {}).get('collections', {}).get('signal_pool', '08_research_argus_signal_pool')
+    if not current_signal_pool:
+        return []
+
+
+    # Build set of stocks we need previous data for
+    wind_codes_needed = {r.get('wind_code') for r in current_signal_pool if r.get('wind_code')}
+
+    if not wind_codes_needed:
+        return []
+
+    # Get all available dates before current_date for these stocks
+    query = {
+        'date': {'$lt': current_date},
+        'wind_code': {'$in': list(wind_codes_needed)},
+    }
+    try:
+        all_prior_records = list(reader.db[collection_name].find(
+            query,
+            {'_id': 0, 'date': 1, 'wind_code': 1},
+        ))
+    except Exception as e:
+        logger.warning("[Argus CLI] Failed to query prior signal_pool records: %s", e)
+        # Fallback to naive previous date approach
+        return reader.read(fallback_previous_date, collection_name=collection_name)
+
+    if not all_prior_records:
+        return []
+
+    # For each stock, find the max date (last date it had a record)
+    stock_last_date: Dict[str, str] = {}
+    for record in all_prior_records:
+        wind_code = record.get('wind_code')
+        date_val = str(record.get('date', ''))
+        if not wind_code or not date_val:
+            continue
+        existing = stock_last_date.get(wind_code)
+        if existing is None or date_val > existing:
+            stock_last_date[wind_code] = date_val
+
+    if not stock_last_date:
+        return []
+
+    # Group records by date for efficient batch query
+    date_to_wind_codes: Dict[str, List[str]] = {}
+    for wind_code, last_date in stock_last_date.items():
+        date_to_wind_codes.setdefault(last_date, []).append(wind_code)
+
+    # Fetch all needed records grouped by date
+    previous_records: List[Dict] = []
+    for date_key, wind_codes in date_to_wind_codes.items():
+        try:
+            day_records = reader.db[collection_name].find(
+                {'date': date_key, 'wind_code': {'$in': wind_codes}},
+                {'_id': 0},
+            )
+            previous_records.extend(list(day_records))
+        except Exception as e:
+            logger.warning("[Argus CLI] Failed to read signal_pool for %s: %s", date_key, e)
+
+    logger.info(
+        "[Argus CLI] Built previous_signal_pool: %d stocks across %d date(s) -> %d records",
+        len(wind_codes_needed),
+        len(date_to_wind_codes),
+        len(previous_records),
+    )
+    return previous_records
+
 
 
 def _get_latest_argus_signal_pool_date(reader: MongoReader) -> Optional[str]:

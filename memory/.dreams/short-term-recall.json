@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-30T19:00:07.098Z",
+  "updatedAt": "2026-05-31T19:00:10.187Z",
   "entries": {
     "memory:memory/2026-04-05.md:1:38": {
       "key": "memory:memory/2026-04-05.md:1:38",
@@ -19354,6 +19354,3201 @@
         "命名",
         "虽然",
         "容易"
+      ]
+    },
+    "memory:memory/2026-06-01.md:6:8": {
+      "key": "memory:memory/2026-06-01.md:6:8",
+      "path": "memory/2026-06-01.md",
+      "startLine": 6,
+      "endLine": 8,
+      "source": "memory",
+      "snippet": "Bug 1: Holiday Gap (WATCH→CANDIDATE showing as update): **Root cause**: `_previous_trading_day` finds calendar previous day, not last actual record day; **Fix**: `_build_previous_signal_pool_map()` finds each stock's last actual record date; **Status**: ✅ Fixed in `daily_processo",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.62,
+      "maxScore": 0.62,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "52228d277b79"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "previous-trading-day",
+        "build-previous-signal-pool-map",
+        "daily-processo",
+        "bug",
+        "holiday",
+        "gap",
+        "watch",
+        "candidate"
+      ]
+    },
+    "memory:memory/2026-06-01.md:11:13": {
+      "key": "memory:memory/2026-06-01.md:11:13",
+      "path": "memory/2026-06-01.md",
+      "startLine": 11,
+      "endLine": 13,
+      "source": "memory",
+      "snippet": "Bug 2: Exit Detection (exit count = 0): **Root cause**: `_build_previous_signal_pool_map()` only returns stocks also in current_signal_pool; **Fix**: Use full `previous_signal_pool` instead of filtered map in `ingest_signals_incremental`; **Status**: ✅ Fixed",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.62,
+      "maxScore": 0.62,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "52228d277b79"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "build-previous-signal-pool-map",
+        "current-signal-pool",
+        "previous-signal-pool",
+        "ingest-signals-incremental",
+        "bug",
+        "exit",
+        "detection",
+        "count"
+      ]
+    },
+    "memory:memory/2026-06-01.md:16:19": {
+      "key": "memory:memory/2026-06-01.md:16:19",
+      "path": "memory/2026-06-01.md",
+      "startLine": 16,
+      "endLine": 19,
+      "source": "memory",
+      "snippet": "Bug 3: Zone Not Persisted (pool_zone stays at WATCH despite zone changes): **Root cause**: `validate_patch` raises ValueError when `entry_reason` is empty string `''`; signal_pool has `entry_reason = ''` (string); stock_pool has `entry_reason = {'reason': ''}` (dict); `_changed_f",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.62,
+      "maxScore": 0.62,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "52228d277b79"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "pool-zone",
+        "validate-patch",
+        "entry-reason",
+        "signal-pool",
+        "stock-pool",
+        "changed-f",
+        "bug",
+        "zone"
+      ]
+    },
+    "memory:memory/2026-06-01.md:20:22": {
+      "key": "memory:memory/2026-06-01.md:20:22",
+      "path": "memory/2026-06-01.md",
+      "startLine": 20,
+      "endLine": 22,
+      "source": "memory",
+      "snippet": "Bug 3: Zone Not Persisted (pool_zone stays at WATCH despite zone changes): update fails silently → zone never persisted; **Fix**: In `models.py` `validate_patch`, coerce empty string to empty dict `{}`; **Status**: ✅ Fixed in models.py",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.62,
+      "maxScore": 0.62,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "52228d277b79"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "pool-zone",
+        "models.py",
+        "validate-patch",
+        "bug",
+        "zone",
+        "not",
+        "persisted",
+        "stays"
+      ]
+    },
+    "memory:memory/2026-06-01.md:25:27": {
+      "key": "memory:memory/2026-06-01.md:25:27",
+      "path": "memory/2026-06-01.md",
+      "startLine": 25,
+      "endLine": 27,
+      "source": "memory",
+      "snippet": "Bug 4: `_apply_record_update` redundant recomputation: **Root cause**: Even when caller passes correct `action` and `patch`, function re-reads DB and recomputes `action`; **Fix**: Remove redundant recomputation in `_apply_record_update` - use passed patch directly; **Status**: ⚠️",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.62,
+      "maxScore": 0.62,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "52228d277b79"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "apply-record-update",
+        "re-reads",
+        "bug",
+        "redundant",
+        "recomputation",
+        "root",
+        "cause",
+        "even"
+      ]
+    },
+    "memory:memory/2026-06-01.md:30:33": {
+      "key": "memory:memory/2026-06-01.md:30:33",
+      "path": "memory/2026-06-01.md",
+      "startLine": 30,
+      "endLine": 33,
+      "source": "memory",
+      "snippet": "Files Modified: `skills/research/argus/cli/daily_processor.py`; `skills/portfolio/stock_pool/ingestion.py`; `skills/portfolio/stock_pool/service.py`; `skills/portfolio/stock_pool/models.py`",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.62,
+      "maxScore": 0.62,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "52228d277b79"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "modified",
+        "skills",
+        "research",
+        "argus",
+        "cli",
+        "daily-processor.py",
+        "portfolio",
+        "stock-pool"
+      ]
+    },
+    "memory:memory/2026-06-01.md:34:34": {
+      "key": "memory:memory/2026-06-01.md:34:34",
+      "path": "memory/2026-06-01.md",
+      "startLine": 34,
+      "endLine": 34,
+      "source": "memory",
+      "snippet": "Files Modified: `skills/portfolio/tests/test_stock_pool_exit_detection.py` (new)",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.62,
+      "maxScore": 0.62,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "52228d277b79"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "modified",
+        "skills",
+        "portfolio",
+        "tests",
+        "new"
+      ]
+    },
+    "memory:memory/2026-06-01.md:37:38": {
+      "key": "memory:memory/2026-06-01.md:37:38",
+      "path": "memory/2026-06-01.md",
+      "startLine": 37,
+      "endLine": 38,
+      "source": "memory",
+      "snippet": "Test Files: `skills/portfolio/tests/test_stock_pool_ingestion_previous_signal.py` (old, 13 tests); `skills/portfolio/tests/test_stock_pool_exit_detection.py` (new, 7 tests)",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.62,
+      "maxScore": 0.62,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "52228d277b79"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "test",
+        "skills",
+        "portfolio",
+        "tests",
+        "old",
+        "new"
+      ]
+    },
+    "memory:memory/2026-06-01.md:41:43": {
+      "key": "memory:memory/2026-06-01.md:41:43",
+      "path": "memory/2026-06-01.md",
+      "startLine": 41,
+      "endLine": 43,
+      "source": "memory",
+      "snippet": "Backfill Status: Round 1 (2026-05-30 16:52): Initial, exit=0, promote/demote broken; Round 2 (2026-05-31 15:53): After exit fix, exit=2; Round 3 (2026-06-01): After zone persistence fix, in progress",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.62,
+      "maxScore": 0.62,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "52228d277b79"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "promote/demote",
+        "backfill",
+        "status",
+        "round",
+        "initial",
+        "exit",
+        "promote",
+        "demote"
+      ]
+    },
+    "memory:memory/2026-06-01.md:49:49": {
+      "key": "memory:memory/2026-06-01.md:49:49",
+      "path": "memory/2026-06-01.md",
+      "startLine": 49,
+      "endLine": 49,
+      "source": "memory",
+      "snippet": "核心根因: `_zone_delta_action` 收到的 `previous[\"pool_zone\"]` 是空字符串 `\"\"` 而非 `None`，导致 `previous_zone not in ZONE_RANK` 分支返回 `\"update\"` 而非 `None`，`if action is None` 的备用逻辑永远不触发。",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.62,
+      "maxScore": 0.62,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "52228d277b79"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "zone-delta-action",
+        "pool-zone",
+        "previous-zone",
+        "zone-rank",
+        "核心",
+        "根因",
+        "收到",
+        "previous"
+      ]
+    },
+    "memory:memory/2026-06-01.md:52:55": {
+      "key": "memory:memory/2026-06-01.md:52:55",
+      "path": "memory/2026-06-01.md",
+      "startLine": 52,
+      "endLine": 55,
+      "source": "memory",
+      "snippet": "修复内容（ingestion.py）: **`_zone_delta_action`**: 把空字符串当作 None 处理，返回 `None` 让调用方查 stock_pool; **`_apply_existing_delta`**: 当 `action is None` 时，查 stock_pool 的实际 zone 来计算 promote/demote（而非盲目返回 \"update\"）; **`_apply_entry`**: 同样用 stock_pool zone 做参考计算 zone action; **`_apply_record_updat",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.62,
+      "maxScore": 0.62,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "52228d277b79"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "ingestion.py",
+        "zone-delta-action",
+        "stock-pool",
+        "apply-existing-delta",
+        "promote/demote",
+        "apply-entry",
+        "apply-record-updat",
+        "修复"
+      ]
+    },
+    "memory:memory/2026-06-01.md:58:58": {
+      "key": "memory:memory/2026-06-01.md:58:58",
+      "path": "memory/2026-06-01.md",
+      "startLine": 58,
+      "endLine": 58,
+      "source": "memory",
+      "snippet": "关键代码变更: ```python",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.62,
+      "maxScore": 0.62,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "52228d277b79"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "关键",
+        "代码",
+        "变更",
+        "python"
+      ]
+    },
+    "memory:memory/2026-06-01.md:60:61": {
+      "key": "memory:memory/2026-06-01.md:60:61",
+      "path": "memory/2026-06-01.md",
+      "startLine": 60,
+      "endLine": 61,
+      "source": "memory",
+      "snippet": "_zone_delta_action: 空字符串 → None: if not previous_zone or previous_zone not in ZONE_RANK: return None # 而非 \"update\"",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.62,
+      "maxScore": 0.62,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "52228d277b79"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "zone-delta-action",
+        "previous-zone",
+        "zone-rank",
+        "字符",
+        "none",
+        "not",
+        "return",
+        "update"
+      ]
+    },
+    "memory:memory/2026-06-01.md:64:67": {
+      "key": "memory:memory/2026-06-01.md:64:67",
+      "path": "memory/2026-06-01.md",
+      "startLine": 64,
+      "endLine": 67,
+      "source": "memory",
+      "snippet": "_apply_existing_delta: fallback 到 stock_pool zone: prev_zone = previous.get(\"pool_zone\") or None # \"\" → None action = self._zone_delta_action(prev_zone, curr_zone) if action is None: stock_pool_zone = existing.get(\"pool_zone\") or None",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.62,
+      "maxScore": 0.62,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "52228d277b79"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "apply-existing-delta",
+        "stock-pool",
+        "prev-zone",
+        "previous.get",
+        "pool-zone",
+        "zone-delta-action",
+        "curr-zone",
+        "stock-pool-zone"
+      ]
+    },
+    "memory:memory/2026-06-01.md:68:68": {
+      "key": "memory:memory/2026-06-01.md:68:68",
+      "path": "memory/2026-06-01.md",
+      "startLine": 68,
+      "endLine": 68,
+      "source": "memory",
+      "snippet": "_apply_existing_delta: fallback 到 stock_pool zone: action = self._zone_delta_action(stock_pool_zone, curr_zone) or \"update\"",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.62,
+      "maxScore": 0.62,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "52228d277b79"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "apply-existing-delta",
+        "stock-pool",
+        "zone-delta-action",
+        "stock-pool-zone",
+        "curr-zone",
+        "fallback",
+        "zone",
+        "action"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:36:36": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:36:36",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 36,
+      "endLine": 36,
+      "source": "memory",
+      "snippet": "User: Continue the OpenClaw runtime event.",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "continue",
+        "openclaw",
+        "runtime",
+        "event"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:37:37": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:37:37",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 37,
+      "endLine": 37,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6eb236c38934c297cc798b075fa] 用户724532: 前端如果需要显示 是不是需要重新开始回填历史 才能计算出正确的贝叶斯分数",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "前端",
+        "如果",
+        "需要",
+        "显示",
+        "是不是",
+        "重新"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:38:38": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:38:38",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 38,
+      "endLine": 38,
+      "source": "memory",
+      "snippet": "Assistant: **是的，你说得对。** 当前 `signal_pool` 记录缺少计算 bayesian_score 所需的字段： --- ### 缺少的字段 | 因子 | 需要的字段 | 当前状态 | |------|-----------|----------| | rebalancing_score | `rebalancing_event_type` | ❌ 不存在 | | product_credibility | `alpha`, `beta` (产品画像) | ❌ 不存在 | | consensus_score | `contrib",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "signal-pool",
+        "bayesian-score",
+        "rebalancing-score",
+        "rebalancing-event-type",
+        "product-credibility",
+        "consensus-score",
+        "说得",
+        "当前"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:39:39": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:39:39",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 39,
+      "endLine": 39,
+      "source": "memory",
+      "snippet": "Assistant: 需要：contributing_products_count ≥ 2 时 bayesian != confidence --- 需要我启动回填流程吗？",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "contributing-products-count",
+        "需要",
+        "bayesian",
+        "confidence",
+        "启动",
+        "回填",
+        "流程"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:40:40": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:40:40",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 40,
+      "endLine": 40,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6eb2cef78d38c221d9f6b57b3bc] 用户724532: 现在计算贝叶斯分数的4个因子都已经代码实现了吗",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "现在",
+        "计算",
+        "分数",
+        "因子",
+        "已经",
+        "代码"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:41:41": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:41:41",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 41,
+      "endLine": 41,
+      "source": "memory",
+      "snippet": "Assistant: **是的，4个因子代码都已实现。** 让我核实一下： --- ### ✅ 实现状态 | 因子 | 代码位置 | 实现情况 | |------|----------|----------| | **rebalancing_score** | `signal_generator.py` `_infer_rebalancing_event_type()` | ✅ 已实现 | | **direction_score** | `signal_generator.py` 第110行 | ✅ 已实现 | | **consensus_score**",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "rebalancing-score",
+        "signal-generator.py",
+        "infer-rebalancing-event-type",
+        "direction-score",
+        "consensus-score",
+        "因子",
+        "代码",
+        "实现"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:42:42": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:42:42",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 42,
+      "endLine": 42,
+      "source": "memory",
+      "snippet": "Assistant: bayesian_score cd ~/.openclaw/workspace-yquant/skills/research/argus python3 -m argus.cli.backfill_bayesian_score --start-date 2025-01-01 ``` 需要我帮你执行回填吗？",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "bayesian-score",
+        "start-date",
+        "openclaw",
+        "yquant",
+        "skills",
+        "research",
+        "argus",
+        "python3"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:43:43": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:43:43",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 43,
+      "endLine": 43,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6eb2c65ae8a8c3c4d236f803f63] 用户724532: 既然贝叶斯分数都已经实现了，phase2和phase3 （可选）主要是用来干嘛的呢",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "既然",
+        "分数",
+        "已经",
+        "实现",
+        "phase2",
+        "phase3"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:44:44": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:44:44",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 44,
+      "endLine": 44,
+      "source": "memory",
+      "snippet": "Assistant: 好问题。让我解释 Phase 1/2/3 的区别： --- ### Phase 1：最小可用评分 ✅ 已实现 **目标**：让 bayesian_score 有值，与 confidence 区分开 **特点**： - 静态权重：W1=0.30, W2=0.25, W3=0.25, W4=0.20（固定） - 产品信誉默认 0.5（无历史数据时） - 无反馈闭环 --- ### Phase 2：产品信誉 Beta 闭环 🔧 可选 **目标**：让产品信誉有真实的\"学习能力\" **新增功能**： | 功能 | 当前状态 | Phase",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "1/2/3",
+        "bayesian-score",
+        "0.30",
+        "0.25",
+        "0.20",
+        "0.5",
+        "问题",
+        "解释"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:45:45": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:45:45",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 45,
+      "endLine": 45,
+      "source": "memory",
+      "snippet": "Assistant: --- ### 总结 | Phase | 复杂度 | 收益 | 推荐场景 | |-------|--------|------|----------| | Phase 1 | 低 | 让贝叶斯有值 | ✅ 立即可用 | | Phase 2 | 中 | 产品信誉闭环 | 推荐（需要信号验证数据） | | Phase 3 | 高 | 完整贝叶斯模型 | 长期优化项目 | --- **当前建议**：先用 Phase 1 跑一段时间，积累数据后再启动 Phase 2。 需要我详细解释哪个 Phase？",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "总结",
+        "phase",
+        "复杂",
+        "收益",
+        "推荐",
+        "场景",
+        "立即",
+        "可用"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:46:46": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:46:46",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 46,
+      "endLine": 46,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6eb2c02070a4c23b4c3a16f04fe] 用户724532: 调仓强度 是不是少了这几种事件 \"CONCENTRATED_ADD\": 0.9, \"HIDDEN_BUILD\": 0.85, \"CONSENSUS_ADD\": 0.7,",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "concentrated-add",
+        "0.9",
+        "hidden-build",
+        "0.85",
+        "consensus-add",
+        "0.7",
+        "用户"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:47:47": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:47:47",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 47,
+      "endLine": 47,
+      "source": "memory",
+      "snippet": "Assistant: **你说得对！** 当前实现确实缺少 3 种事件类型。 --- ### 对比 | RFC 定义 | 事件类型 | 分值 | 当前实现 | |----------|----------|------|----------| | ✅ | NEW_ENTRY | 1.0 | ✅ | | ✅ | CONTINUOUS_ADD | 0.8 | ✅ | | ❌ | CONCENTRATED_ADD | 0.9 | ❌ 缺失 | | ❌ | CONSENSUS_ADD | 0.7 | ❌ 缺失 | | ❌ | HIDDEN_BUILD | 0.8",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "new-entry",
+        "1.0",
+        "continuous-add",
+        "0.8",
+        "concentrated-add",
+        "0.9",
+        "consensus-add",
+        "0.7"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-30.txt:29:29": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-30.txt:29:29",
+      "path": "memory/.dreams/session-corpus/2026-05-30.txt",
+      "startLine": 29,
+      "endLine": 29,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6eaff4266930c3c5c02e34ae5e8] 用户724532: 08_argus_xxx 几张表中 有哪些张表有product_name字段，这个字段都是怎么生成获取的",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "3558e5ebbbb7"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "08-argus-xxx",
+        "有哪些张表有product-name字段",
+        "用户",
+        "哪些",
+        "product-name",
+        "这个",
+        "都是"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-30.txt:30:30": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-30.txt:30:30",
+      "path": "memory/.dreams/session-corpus/2026-05-30.txt",
+      "startLine": 30,
+      "endLine": 30,
+      "source": "memory",
+      "snippet": "Assistant: ## 答案汇总 ### 有 `product_name` 字段的表（3张） | 表 | 记录数 | 示例 | |---|--------|------| | `08_research_argus_credential_score` | 465 | SM001 → SM | | `08_research_argus_industry_weight` | 7130 | SM001 → SM | | `08_research_argus_signal` | 16282 | SM001 → SM | ### `product_name` 生",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "3558e5ebbbb7"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "product-name",
+        "08-research-argus-signal",
+        "答案",
+        "记录",
+        "示例",
+        "sm001"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-30.txt:31:31": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-30.txt:31:31",
+      "path": "memory/.dreams/session-corpus/2026-05-30.txt",
+      "startLine": 31,
+      "endLine": 31,
+      "source": "memory",
+      "snippet": "Assistant: SM（景顺） SM002 → SM（中欧） SM003 → SM（中欧） SM004 → SM（中欧） SM012 → SM（常春藤） 80PF11242 → 80PF11242（原名，易方达） ```",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "3558e5ebbbb7"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "sm002",
+        "中欧",
+        "sm003",
+        "sm004",
+        "sm012",
+        "常春藤",
+        "80pf11242",
+        "原名"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-30.txt:32:32": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-30.txt:32:32",
+      "path": "memory/.dreams/session-corpus/2026-05-30.txt",
+      "startLine": 32,
+      "endLine": 32,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6eaf9dfbd8a0c34fd48fdcfe0f8] 用户724532: 生成规则有点问题 需要关联portfolio_basic_info，根据product_code 查出product_name，再根据映射表把前缀缩写换成对应真实的名称",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "3558e5ebbbb7"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "需要关联portfolio-basic-info",
+        "根据product-code",
+        "查出product-name",
+        "用户",
+        "生成",
+        "规则",
+        "有点"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-30.txt:33:33": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-30.txt:33:33",
+      "path": "memory/.dreams/session-corpus/2026-05-30.txt",
+      "startLine": 33,
+      "endLine": 33,
+      "source": "memory",
+      "snippet": "Assistant: 明白，我来修复这个逻辑。需要做两件事： 1. **修改生成逻辑**：从 `portfolio_basic_info` 查真实 product_name，再按 PRODUCT_ALIAS 映射 2. **补数据**：回刷历史数据",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "3558e5ebbbb7"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "portfolio-basic-info",
+        "product-name",
+        "product-alias",
+        "明白",
+        "我来",
+        "修复",
+        "这个",
+        "逻辑"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-30.txt:34:34": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-30.txt:34:34",
+      "path": "memory/.dreams/session-corpus/2026-05-30.txt",
+      "startLine": 34,
+      "endLine": 34,
+      "source": "memory",
+      "snippet": "Assistant: 修改方案很清晰，我来改 `daily_processor.py`，分两步走： 1. 从 `portfolio_basic_info` 查真实 `product_name` 2. 前缀匹配不上的再用 `PRODUCT_ALIAS` 映射",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "3558e5ebbbb7"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "daily-processor.py",
+        "portfolio-basic-info",
+        "product-name",
+        "product-alias",
+        "修改",
+        "方案",
+        "清晰",
+        "我来"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-30.txt:35:35": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-30.txt:35:35",
+      "path": "memory/.dreams/session-corpus/2026-05-30.txt",
+      "startLine": 35,
+      "endLine": 35,
+      "source": "memory",
+      "snippet": "Assistant: ✅ 修改完成。 **改动说明**： 新增 `_build_product_name_lookup()` 函数，从 `portfolio_basic_info` 读取真实产品名称： ``` portfolio_basic_info: SM001 → \"JS-001\" SM002 → \"JS-002\" SM003 → \"ZO-001\" SM004 → \"ZO-002\" SM012 → \"CCT-001\" ``` 然后传给 `_attach_product_names()` 和 credential/signal 生成流程，替代原来硬编码",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "3558e5ebbbb7"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "build-product-name-lookup",
+        "portfolio-basic-info",
+        "js-001",
+        "js-002",
+        "zo-001",
+        "zo-002",
+        "cct-001",
+        "attach-product-names"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-30.txt:36:36": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-30.txt:36:36",
+      "path": "memory/.dreams/session-corpus/2026-05-30.txt",
+      "startLine": 36,
+      "endLine": 36,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6eaf93b548a0c3193d95eb8bb59] 用户724532: 需要再把前缀例如JS-001 根据PRODUCT_ALIAS 还原成 景顺-001",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "3558e5ebbbb7"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "需要再把前缀例如js-001",
+        "根据product-alias",
+        "景顺-001",
+        "用户",
+        "需要",
+        "再把",
+        "例如"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-30.txt:37:37": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-30.txt:37:37",
+      "path": "memory/.dreams/session-corpus/2026-05-30.txt",
+      "startLine": 37,
+      "endLine": 37,
+      "source": "memory",
+      "snippet": "Assistant: ✅ 修改完成。 **改动逻辑**： ```python # 1. portfolio_basic_info 读取原始名称 \"JS-001\" → 提取前缀 \"JS\" → PRODUCT_ALIAS[\"JS\"] = \"景顺\" → 拼接 suffix \"001\" → 结果: \"景顺-001\" # 2. 不带\"-\"的直接取 PRODUCT_ALIAS 映射 \"SM001\" → 前缀 \"SM\" → PRODUCT_ALIAS[\"SM\"] = \"SM\" → 结果: \"SM\" ``` **对比**： | product_code | 修改前 |",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "3558e5ebbbb7"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "portfolio-basic-info",
+        "js-001",
+        "product-alias",
+        "景顺-001",
+        "product-code",
+        "修改",
+        "完成",
+        "逻辑"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-30.txt:38:38": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-30.txt:38:38",
+      "path": "memory/.dreams/session-corpus/2026-05-30.txt",
+      "startLine": 38,
+      "endLine": 38,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6eafa77498a4c2c5119bd64f2f3] 用户724532: 请重跑一下今天的Argus 每日任务",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "3558e5ebbbb7"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "一下",
+        "今天",
+        "argus",
+        "每日",
+        "任务"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-30.txt:39:39": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-30.txt:39:39",
+      "path": "memory/.dreams/session-corpus/2026-05-30.txt",
+      "startLine": 39,
+      "endLine": 39,
+      "source": "memory",
+      "snippet": "Assistant: ✅ **Argus 任务重跑完成！** **数据已更新（2026-05-27）**： | product_code | product_name（现在） | |-------------|---------------------| | SM001 | **景顺-001** | | SM002 | **景顺-002** | | SM003 | **中欧-001** | | SM004 | **中欧-002** | | SM012 | **常春藤-001** | **处理结果**： - 产品数：5 - 信号数：172 - 信号池：SC",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "3558e5ebbbb7"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "product-code",
+        "product-name",
+        "景顺-001",
+        "景顺-002",
+        "中欧-001",
+        "中欧-002",
+        "常春藤-001",
+        "argus"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-30.txt:40:40": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-30.txt:40:40",
+      "path": "memory/.dreams/session-corpus/2026-05-30.txt",
+      "startLine": 40,
+      "endLine": 40,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6eafb42caca0c21b48d6a3c2aa1] 用户724532: 请检查下 为什么我在windows的vscode 通过remote wsl 插件打开workspace-yquant项目 一直显示正在打开远程..m",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "3558e5ebbbb7"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "插件打开workspace-yquant项目",
+        "用户",
+        "检查",
+        "为什么",
+        "我在",
+        "windows",
+        "vscode"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:10:10": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:10:10",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 10,
+      "endLine": 10,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e84e0b528a0c3fddd7790b807b] 用户724532: 好的 请修改",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "好的",
+        "修改"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:11:11": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:11:11",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 11,
+      "endLine": 11,
+      "source": "memory",
+      "snippet": "Assistant: 修改完成，两处文件都已更新： ## signal_generator.py | 位置 | 改动 | |---|---| | `generate_signals()` 参数 | + `trade_date: str` | | `_create_signal()` 参数 | + `trade_date: str` | | `trade_date` 字段 | `generated_at.strftime()` → `trade_date` | | `valid_until` 字段 | `generated_at.strftime()` →",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "signal-generator.py",
+        "generate-signals",
+        "trade-date",
+        "create-signal",
+        "generated-at.strftime",
+        "valid-until",
+        "修改",
+        "完成"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:12:12": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:12:12",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 12,
+      "endLine": 12,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e84f6f6b0a0c2c3191b7fdb65b] 用户724532: 请再设计单元测试案例 并测试",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "设计",
+        "单元",
+        "测试",
+        "案例"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:13:13": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:13:13",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 13,
+      "endLine": 13,
+      "source": "memory",
+      "snippet": "Assistant: 12 个测试全部通过 ✅ ## 测试覆盖 | 测试 | 验证内容 | |---|---| | `test_trade_date_equals_passed_trade_date` | trade_date = 传入的日期 | | `test_trade_date_not_datetime_now` | trade_date ≠ 当前时间 | | `test_valid_until_equals_trade_date` | valid_until = trade_date | | `test_multiple_signals_all_",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "trade-date",
+        "test-trade-date-not-datetime-now",
+        "valid-until",
+        "test-multiple-signals-all",
+        "测试",
+        "全部",
+        "通过",
+        "覆盖"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:14:14": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:14:14",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 14,
+      "endLine": 14,
+      "source": "memory",
+      "snippet": "Assistant: | `test_date_field_matches_trade_date` | trade_date 字段一致性 | 文件路径：`skills/research/argus/tests/test_signal_generator.py`",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "trade-date",
+        "一致性",
+        "文件",
+        "路径",
+        "skills",
+        "research",
+        "argus",
+        "tests"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:15:15": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:15:15",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 15,
+      "endLine": 15,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e849b2b10a8c2192a886cec815] 用户724532: 请再检查下08_argus_consensus_direction中sector_conviction中每个指数的delta_60d和acceleration都是null",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "检查",
+        "08-argus-consensus-direction",
+        "sector-conviction",
+        "指数",
+        "delta-60d",
+        "acceleration"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:16:16": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:16:16",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 16,
+      "endLine": 16,
+      "source": "memory",
+      "snippet": "Assistant: 找到了。根因是 `weight_change_60d` **从未被计算过**。 ## 问题追溯 ### 1. `industry_weight_calculator.py` 第 79-87 行 只计算了两个 delta： ```python 'weight_change_1d': round(weight_pct - baseline_1d_weight, 4) if has_1d_baseline else None, 'weight_change_30d': round(weight_pct - baseline_30d_wei",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "weight-change-60d",
+        "industry-weight-calculator.py",
+        "79-87",
+        "weight-change-1d",
+        "weight-pct",
+        "baseline-1d-weight",
+        "has-1d-baseline",
+        "weight-change-30d"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:17:17": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:17:17",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 17,
+      "endLine": 17,
+      "source": "memory",
+      "snippet": "Assistant: `acceleration` 全为 null 是**系统级缺失**——行业权重模块从未计算过 60 日变化量，也从未存储过对应的 baseline 数据。 要修复需要： 1. 在 `IndustryWeightCalculator.calculate()` 中增加 `weight_change_60d` 的计算逻辑（加载 T-65d baseline） 2. 在 `daily_processor.py` 中增加 `baseline_60d_weights` 的读取 需要我帮你修复这个问题吗？",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "weight-change-60d",
+        "t-65d",
+        "daily-processor.py",
+        "baseline-60d-weights",
+        "acceleration",
+        "null",
+        "系统",
+        "缺失"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:18:18": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:18:18",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 18,
+      "endLine": 18,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e8499fe20a4c38c17c79ada591] 用户724532: 部分指数的delta_30d也是null",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "部分指数的delta-30d也是null",
+        "用户",
+        "部分",
+        "指数",
+        "delta-30d",
+        "也是",
+        "null"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:19:19": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:19:19",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 19,
+      "endLine": 19,
+      "source": "memory",
+      "snippet": "Assistant: 找到根因了。 ## delta_30d 为 null 的真正原因 `has_30d_baseline = False` 意味着该产品在 35 天前**没有任何持仓**在该行业。 以 `SM001 / 801030.SI（基础化工）`为例： - **2026-04-22（baseline 日期）**：SM001 持仓中没有基础化工 - **2026-05-27（当前）**：SM001 持仓里有了基础化工 这是 **正常的新增敞口**——该产品在 30 天前根本不持有这个行业，所以无法计算 30 天变化量，结果为 `null` 是正确的",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "delta-30d",
+        "has-30d-baseline",
+        "801030.si",
+        "找到",
+        "根因",
+        "null",
+        "真正",
+        "原因"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:20:20": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:20:20",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 20,
+      "endLine": 20,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e84ae607ca0c4d5275a66b4242] 用户724532: 好的 帮我修复这个问题并进行单元测试",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "好的",
+        "修复",
+        "这个",
+        "问题",
+        "进行",
+        "单元"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:21:21": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:21:21",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 21,
+      "endLine": 21,
+      "source": "memory",
+      "snippet": "Assistant: 全部 20 个测试通过 ✅ ## 修改总结 ### 1. `industry_weight_calculator.py` | 改动 | 说明 | |---|---| | `calculate()` 新增 `lookback_60d_weights` 参数 | 接收 T-65d 的行业权重 baseline | | 新增 `baseline_60d` 内部变量 | 加载 60 日基准权重 | | `keys` 合并 `baseline_60d` | 确保 60 日基准的行业也参与计算 | | `weight_change_60d` 字",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "industry-weight-calculator.py",
+        "lookback-60d-weights",
+        "t-65d",
+        "baseline-60d",
+        "weight-change-60d",
+        "全部",
+        "测试",
+        "通过"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:22:22": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:22:22",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 22,
+      "endLine": 22,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6ef176b404a4c318103a2ffb4e8] 用户724532: 08_research_argus_consensus_direction 为什么有些行业的delta_30d、delta_60d都是null,有些行业delta_30d是null delta_60d有值，这是什么原因？ 正常吗",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "为什么有些行业的delta-30d",
+        "delta-60d都是null",
+        "有些行业delta-30d是null",
+        "delta-60d有值",
+        "用户",
+        "为什么",
+        "有些"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:23:23": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:23:23",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 23,
+      "endLine": 23,
+      "source": "memory",
+      "snippet": "Assistant: 根据代码逻辑，这是**正常现象**。让我解释原因： ## 根因分析 `delta_30d`（`weight_change_30d`）和 `delta_60d`（`weight_change_60d`）是否为 `null`，取决于 `IndustryWeightCalculator` 是否能找到对应的 **baseline 快照**： ```python has_30d_baseline = key in baseline_30d and sw1_code != UNKNOWN_SW1_CODE has_60d_baseline =",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "delta-30d",
+        "weight-change-30d",
+        "delta-60d",
+        "weight-change-60d",
+        "has-30d-baseline",
+        "baseline-30d",
+        "sw1-code",
+        "unknown-sw1-code"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:24:24": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:24:24",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 24,
+      "endLine": 24,
+      "source": "memory",
+      "snippet": "Assistant: 天前的持仓快照缺失，但 60 天前的存在 4. **行业轮动**：产品从某行业退出后重新进入 ## 核心逻辑 只有当 `key = (product_code, sw1_code)` 同时存在于 **当前仓位** 和 **历史快照** 中时，对应的 delta 才会被计算。UNKNOW 行业永远不会有 delta 值。 **结论**：这种情况完全正常，反映的是产品的建仓时间点不同。不是数据错误，而是时间差导致的正常状态。",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "product-code",
+        "sw1-code",
+        "快照",
+        "缺失",
+        "存在",
+        "行业",
+        "产品",
+        "退出"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:25:25": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:25:25",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 25,
+      "endLine": 25,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6ef11fbf4ca8c23bd4c7a69e013] 用户724532: 08_research_argus_signal中rebalancing_event_type和signal_type 分别表示什么意思，在整个流程中都有哪些地方用到了这两个数据",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "08-research-argus-signal",
+        "rebalancing-event-type",
+        "signal-type",
+        "分别",
+        "表示",
+        "什么"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:26:26": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:26:26",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 26,
+      "endLine": 26,
+      "source": "memory",
+      "snippet": "Assistant: ## 字段定义与使用场景 ### signal_type（信号类型） **含义**：基于持仓比例变化的交易方向判断（信号生成时直接计算） ```python if change > 0.01: → 'BUY' (加仓) elif change < -0.01: → 'SELL' (减仓) else: → 'HOLD' (不动) ``` **在全流程中的使用**： | 模块 | 用途 | |------|------| | `SignalGenerator._create_signal()` | 直接决定 signal_type 和",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "signal-type",
+        "0.01",
+        "create-signal",
+        "定义",
+        "使用",
+        "场景",
+        "信号",
+        "类型"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:27:27": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:27:27",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 27,
+      "endLine": 27,
+      "source": "memory",
+      "snippet": "Assistant: current_ratio > 0: → 'NEW_ENTRY' # 首次建仓 if current_ratio <= 0 and previous_ratio > 0: → 'FULL_EXIT' # 清仓 if signal_type == 'BUY' and ratio_change > 5pp: → 'CONCENTRATED_ADD' # 大幅加仓>5% if signal_type == 'BUY': → 'CONTINUOUS_ADD' # 常规加仓 if signal_type == 'SELL': → 'PARTI",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "current-ratio",
+        "new-entry",
+        "previous-ratio",
+        "full-exit",
+        "signal-type",
+        "ratio-change",
+        "concentrated-add",
+        "continuous-add"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:28:28": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:28:28",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 28,
+      "endLine": 28,
+      "source": "memory",
+      "snippet": "Assistant: | crowding.py、portfolio subscriber、BayesianScoring | | `rebalancing_event_type` | SignalGenerator | **仅写入 MongoDB，实际消费模块尚未使用** | `rebalancing_event_type` 设计用于更细粒度的行为模式识别（HIDDEN_BUILD、CONSENSUS_ADD 等），但当前实现中 **crowding 和 consensus_direction 都还未消费这个字段**，只是生成后存入了 MongoDB。",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "crowding.py",
+        "rebalancing-event-type",
+        "hidden-build",
+        "consensus-add",
+        "consensus-direction",
+        "portfolio",
+        "subscriber",
+        "bayesianscoring"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:29:29": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:29:29",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 29,
+      "endLine": 29,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6ef1375abca0c4f33ab24bf66a7] 用户724532: 1、关于05_portfolio_stock_pool_audit中，每一种action的判断逻辑是什么？尤其是比如从WATCH -> CANDIDATE为什么action也是update?",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "关于05-portfolio-stock-pool-audit中",
+        "用户",
+        "关于",
+        "05-portfolio-stock-pool-audit",
+        "一种",
+        "action",
+        "判断"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:30:30": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:30:30",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 30,
+      "endLine": 30,
+      "source": "memory",
+      "snippet": "Assistant: ## 05_portfolio_stock_pool_audit 中每种 action 的判断逻辑 ### Zone 等级定义 ``` SCAN(0) < WATCH(1) < CANDIDATE(2) < CONVICTION(3) ``` ### action 判断逻辑 | action | 触发条件 | 典型场景 | |--------|----------|----------| | **entry** | 新股票（无现有 active 记录）写入任意 zone | Argus 信号发现新标的 | | **promote**",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "05-portfolio-stock-pool-audit",
+        "action",
+        "判断",
+        "逻辑",
+        "zone",
+        "等级",
+        "定义",
+        "scan"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:31:31": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:31:31",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 31,
+      "endLine": 31,
+      "source": "memory",
+      "snippet": "Assistant: self._apply_record_update() → update_entry() 时传入的 audit_action = action # 而 update_entry() 默认 audit_action=\"update\" ``` **关键在 `ingestion.py` 第 243-254 行**： ```python action = self._zone_delta_action(previous[\"pool_zone\"], current[\"pool_zone\"]) if action is None: action",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "apply-record-update",
+        "update-entry",
+        "audit-action",
+        "ingestion.py",
+        "243-254",
+        "zone-delta-action",
+        "pool-zone",
+        "self"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:32:32": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:32:32",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 32,
+      "endLine": 32,
+      "source": "memory",
+      "snippet": "Assistant: `entry_reason` 等元字段更新了 ### 完整流程图 ``` ingest_signals() ├─ 新建 entry (upsert_scan_only) │ └─ audit_action = \"entry\" │ ├─ upsert_all + 已有 active │ ├─ zone 变化 → promote / demote │ │ └─ update_entry(audit_action=\"promote\"/\"demote\") │ └─ zone 不变 → update (只有字段变化) │ └─ update_",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "entry-reason",
+        "ingest-signals",
+        "upsert-scan-only",
+        "audit-action",
+        "upsert-all",
+        "update-entry",
+        "更新",
+        "完整"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:33:33": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:33:33",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 33,
+      "endLine": 33,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6ef1c9efecb4c24f9f18f57c9a5] 用户724532: 你就拿event_date是2026-05-27这一天中 股票代码是0883.HK的股票的audit, 2026/5/30 16:52:31 update system:argus WATCH -> CANDIDATE ，这个股票目前还是Wath区",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "你就拿event-date是2026-05-27这一天中",
+        "股票代码是0883.hk的股票的audit",
+        "2026/5/30",
+        "用户",
+        "就拿",
+        "event-date",
+        "一天"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:48:48": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:48:48",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 48,
+      "endLine": 48,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6eb2dcb528a4c29fed72045ab9e] 用户724532: 另外如果需要回调历史 是否可以重新从2026-1-1 运行daily_porcessor",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "是否可以重新从2026-1-1",
+        "运行daily-porcessor",
+        "用户",
+        "另外",
+        "如果",
+        "需要",
+        "历史"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:49:49": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:49:49",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 49,
+      "endLine": 49,
+      "source": "memory",
+      "snippet": "Assistant: **是的，两个问题都确认：** --- ### 1. 缺失的3种事件类型需要补全 需要修复： - `bayesian_scoring.py`：补全 REBALANCING_SCORES - `signal_generator.py`：补全 `_infer_rebalancing_event_type` 判断逻辑 --- ### 2. 回填历史数据 - 可以用 daily_processor 让我检查一下 daily_processor 是否支持日期范围回填：",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "bayesian-scoring.py",
+        "rebalancing-scores",
+        "signal-generator.py",
+        "infer-rebalancing-event-type",
+        "daily-processor",
+        "问题",
+        "确认",
+        "缺失"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:50:50": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:50:50",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 50,
+      "endLine": 50,
+      "source": "memory",
+      "snippet": "Assistant: **是的，但需要先清理现有数据（或添加日期范围支持）。** --- ### 当前 daily_processor 支持的模式 | 模式 | 命令 | 说明 | |------|------|------| | 指定单日 | `python daily_processor.py 2026-01-03` | 处理指定一天 | | 自动增量 | `python daily_processor.py` | 从最新日期跑到今天 | --- ### 回填历史的方法 **方法1：删除旧数据后重新跑** ```bash # 1. 删除现有 sign",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "daily-processor",
+        "daily-processor.py",
+        "需要",
+        "清理",
+        "现有",
+        "数据",
+        "添加",
+        "日期"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:51:51": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:51:51",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 51,
+      "endLine": 51,
+      "source": "memory",
+      "snippet": "Assistant: 2026-05-27 约 100 个交易日 2. **产品持仓数据**：需要确认 `portfolio_position` 在该时间段有数据 3. **重新计算**：所有 bayesian_score、crowding 等都会重新计算 --- 需要我帮你实现日期范围回填功能吗？这样就可以： ```bash python3 -m argus.cli.daily_processor --start 2026-01-01 --end 2026-05-27 ```",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "portfolio-position",
+        "bayesian-score",
+        "argus.cli.daily-processor",
+        "交易",
+        "产品",
+        "数据",
+        "需要",
+        "确认"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:52:52": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:52:52",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 52,
+      "endLine": 52,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6eb2d4b154a4c37f36be7aa7d04] 用户724532: 让Codex 检查下REBALANCING_SCORES， 是不是少了几个时间比如\"CONCENTRATED_ADD\": 0.9, \"HIDDEN_BUILD\": 0.85, \"CONSENSUS_ADD\": 0.7, 如果少了请修复问题",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "检查下rebalancing-scores",
+        "concentrated-add",
+        "0.9",
+        "hidden-build",
+        "0.85",
+        "consensus-add",
+        "0.7"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:53:53": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:53:53",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 53,
+      "endLine": 53,
+      "source": "memory",
+      "snippet": "Assistant: **✅ 已委派 Codex 修复** 正在检查并修复： 1. `bayesian_scoring.py` - REBALANCING_SCORES 补全 3 种缺失事件 2. `signal_generator.py` - _infer_rebalancing_event_type() 补全识别逻辑 完成后自动汇报结果。",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "bayesian-scoring.py",
+        "rebalancing-scores",
+        "signal-generator.py",
+        "infer-rebalancing-event-type",
+        "委派",
+        "codex",
+        "修复",
+        "正在"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:54:54": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:54:54",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 54,
+      "endLine": 54,
+      "source": "memory",
+      "snippet": "Assistant: Codex 会话失败了，我直接来修复这个问题。",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "codex",
+        "会话",
+        "失败",
+        "直接",
+        "修复",
+        "这个",
+        "问题"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:55:55": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:55:55",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 55,
+      "endLine": 55,
+      "source": "memory",
+      "snippet": "Assistant: **✅ 已修复**（Codex 子智能体因 OAuth 问题失败，我直接修复了） --- ### 修改内容 **1. `bayesian_scoring.py` - REBALANCING_SCORES 补全** ```python REBALANCING_SCORES = { 'NEW_ENTRY': 1.0, 'CONCENTRATED_ADD': 0.9, # ✅ 新增 'HIDDEN_BUILD': 0.85, # ✅ 新增 'CONTINUOUS_ADD': 0.8, 'CONSENSUS_ADD': 0.7, # ✅ 新",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "bayesian-scoring.py",
+        "rebalancing-scores",
+        "new-entry",
+        "1.0",
+        "concentrated-add",
+        "0.9",
+        "hidden-build",
+        "0.85"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:56:56": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:56:56",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 56,
+      "endLine": 56,
+      "source": "memory",
+      "snippet": "Assistant: CONCENTRATED_ADD | 0.9 | ✅ | | HIDDEN_BUILD | 0.85 | ⚠️ 标记 TODO（需额外数据） | | CONTINUOUS_ADD | 0.8 | ✅ | | CONSENSUS_ADD | 0.7 | ⚠️ 标记 TODO（需多产品数据） | | HOLD | 0.5 | ✅ | | PARTIAL_EXIT | 0.3 | ✅ | | FULL_EXIT | 0.1 | ✅ |",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "concentrated-add",
+        "0.9",
+        "hidden-build",
+        "0.85",
+        "continuous-add",
+        "0.8",
+        "consensus-add",
+        "0.7"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:57:57": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:57:57",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 57,
+      "endLine": 57,
+      "source": "memory",
+      "snippet": "User: Continue the OpenClaw runtime event.",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "continue",
+        "openclaw",
+        "runtime",
+        "event"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:58:58": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:58:58",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 58,
+      "endLine": 58,
+      "source": "memory",
+      "snippet": "Assistant: **✅ 修复完成** --- ### 当前状态 | 项目 | 状态 | |------|------| | 4 个因子代码实现 | ✅ 完成 | | REBALANCING_SCORES 补全 | ✅ 完成 | | 信号识别逻辑增强 | ✅ 完成 | | 历史数据回填 | ⏳ 待确认 | --- ### 下一步选项 | 序号 | 操作 | 说明 | |------|------|------| | **A** | 回填历史 bayesian_score | 从 2026-01-01 重新计算 | | **B** | 验证前端显示效果",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "rebalancing-scores",
+        "bayesian-score",
+        "修复",
+        "完成",
+        "当前",
+        "状态",
+        "项目",
+        "因子"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-29.txt:59:59": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-29.txt:59:59",
+      "path": "memory/.dreams/session-corpus/2026-05-29.txt",
+      "startLine": 59,
+      "endLine": 59,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6eb2e7fbe0a4c4d554496fe3631] 用户724532: 请Codex 再检查下代码 product_credibility、consensus_score、direction_score 代码是否完全实现，如果完全实现请把关键的逻辑和算法结合代码给我解释下",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "0e934d1f0d1c"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "product-credibility",
+        "consensus-score",
+        "direction-score",
+        "用户",
+        "codex",
+        "检查",
+        "代码"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-30.txt:41:41": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-30.txt:41:41",
+      "path": "memory/.dreams/session-corpus/2026-05-30.txt",
+      "startLine": 41,
+      "endLine": 41,
+      "source": "memory",
+      "snippet": "Assistant: ## 排查结果 WSL2 环境下**未安装 VS Code Remote Server**（`.vscode-server/bin` 存在但 `code` 命令不在 PATH），这是正常的——VS Code Remote 连接流程依赖 Windows 端 Extension 推送服务。 **常见原因及解决方案**： ### 1. 最可能：WSL2 网络不通 / 连接超时 VS Code Remote 需要从 Windows 能连通 WSL2 实例。请在 **Windows CMD/PowerShell** 执行： ```powers",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "3558e5ebbbb7"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "网络",
+        "vscode-server/bin",
+        "cmd/powershell",
+        "结果",
+        "wsl2",
+        "环境",
+        "安装",
+        "code"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-30.txt:42:42": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-30.txt:42:42",
+      "path": "memory/.dreams/session-corpus/2026-05-30.txt",
+      "startLine": 42,
+      "endLine": 42,
+      "source": "memory",
+      "snippet": "Assistant: ``` ### 5. 快速验证 WSL2 是否正常工作 ```powershell wsl.exe -d Ubuntu-20.04 -- bash -c \"echo hello\" ``` 如果报错 → WSL2 本身有问题，需要重装 --- **你是在连接哪个 WSL 发行版？**（Ubuntu-20.04 / Ubuntu / Debian？）以及 VS Code 的具体报错信息是什么？",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "3558e5ebbbb7"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "wsl.exe",
+        "ubuntu-20.04",
+        "快速",
+        "验证",
+        "wsl2",
+        "是否",
+        "正常",
+        "工作"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:34:34": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:34:34",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 34,
+      "endLine": 34,
+      "source": "memory",
+      "snippet": "Assistant: |---|---| | `test_weight_change_60d_calculated_when_baseline_exists` | 60d delta 正常计算 | | `test_weight_change_60d_none_when_baseline_missing` | 无 baseline → null | | `test_weight_change_60d_none_for_unknown_sector` | UNKNOWN 行业始终 null | | `test_weight_change_60d_none_f",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "test-weight-change-60d-none-f",
+        "60d",
+        "delta",
+        "正常",
+        "计算",
+        "baseline",
+        "null",
+        "unknown"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:35:35": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:35:35",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 35,
+      "endLine": 35,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e84bf7120a0c3f695c49f835c7] 用户724532: 因为现在argus的计算代码有更新，我现在想重新刷新一下数据，把05_portfolio_stock_pool、05_portfolio_stock_pool_audit清空、08_research_argus_XX等6张表清空，然后就从2026-01-01开始跑daily_processor脚本，请评估一下这么操作是否可以",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "把05-portfolio-stock-pool",
+        "05-portfolio-stock-pool-audit清空",
+        "08-research-argus-xx等6张表清空",
+        "用户",
+        "因为",
+        "现在",
+        "argus"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:36:36": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:36:36",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 36,
+      "endLine": 36,
+      "source": "memory",
+      "snippet": "Assistant: ## 影响评估 ### 涉及的表 | Collection | 当前记录数 | 你的计划 | 风险 | |---|---|---|---| | `05_portfolio_stock_pool` | 609 | 清空 + 重刷 | ⚠️ 股票池同步数据丢失 | | `05_portfolio_stock_pool_audit` | 1526 | 清空 + 重刷 | ⚠️ 审计日志丢失 | | `08_research_argus_signal` | 16,454 | 清空 + 重刷 | ✅ 历史信号重算 | | `08_resear",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "05-portfolio-stock-pool",
+        "05-portfolio-stock-pool-audit",
+        "08-research-argus-signal",
+        "08-resear",
+        "影响",
+        "评估",
+        "涉及",
+        "collection"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:37:37": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:37:37",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 37,
+      "endLine": 37,
+      "source": "memory",
+      "snippet": "Assistant: `backfill_all.py` 会从 2026-01-01 开始重新填满所有 argus 表** **3. `05_portfolio_stock_pool` 重新刷会有额外开销** 这个表通过 `StockPoolIngestionService.ingest_signals_incremental()` 消费 `08_research_argus_signal_pool` 写入，每次回填都会重复调用，建议确认这个增量同步逻辑是否能幂等重跑。 **4. `portfolio_position` 时间范围** 需要确认 2026",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "backfill-all.py",
+        "05-portfolio-stock-pool",
+        "08-research-argus-signal-pool",
+        "portfolio-position",
+        "开始",
+        "重新",
+        "填满",
+        "所有"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:38:38": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:38:38",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 38,
+      "endLine": 38,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e854c8d78a0c3dedd1e45dd419] 用户724532: 1、请一定记住portfolio_postion/nav/trade/basic_info这几个表式原始数据 千万不能清空。2、portfolio_postion最早数据在2025-12-31之前，可以满足。 3、不使用backfill而是daily_processor 从20260101开始往后一天一天跑，把05_portfolio_stock_pool_audit也更新掉，不可以吗？",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "不使用backfill而是daily-processor",
+        "用户",
+        "一定",
+        "记住",
+        "portfolio-postion",
+        "nav",
+        "trade"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:39:39": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:39:39",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 39,
+      "endLine": 39,
+      "source": "memory",
+      "snippet": "Assistant: 这个思路完全正确，比 `backfill_all.py` 更适合。 ## daily_processor vs backfill_all 两者内部都调用同一个 `process_date()`，**计算逻辑完全相同**。区别只是调用方式： | | `daily_processor` 逐日跑 | `backfill_all.py` 自动批量 | |---|---|---| | 写入 `05_portfolio_stock_pool_audit` | ✅ 每跑一天写一条审计记录 | ❌ 不会更新审计表 | | 增量重跑（幂等） | ✅",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "backfill-all.py",
+        "daily-processor",
+        "backfill-all",
+        "process-date",
+        "05-portfolio-stock-pool-audit",
+        "这个",
+        "思路",
+        "完全"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:40:40": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:40:40",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 40,
+      "endLine": 40,
+      "source": "memory",
+      "snippet": "Assistant: 完全可以，而且这比用 `backfill_all.py` 更正确。 ## 为什么 daily_processor 逐天跑就够了 ``` process_date('2026-01-02') → 计算 argus 各表 → ingest_signals_incremental(current, previous) ← 自动更新 05_portfolio_stock_pool_audit → previous = 2026-01-01 的 signal_pool process_date('2026-01-05') → 计算 argus",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "backfill-all.py",
+        "daily-processor",
+        "process-date",
+        "ingest-signals-incremental",
+        "05-portfolio-stock-pool-audit",
+        "signal-pool",
+        "完全",
+        "可以"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:41:41": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:41:41",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 41,
+      "endLine": 41,
+      "source": "memory",
+      "snippet": "Assistant: db['08_research_argus_darwin_event'].deleteMany({}) db['05_portfolio_stock_pool'].deleteMany({}) db['05_portfolio_stock_pool_audit'].deleteMany({}) # 2. 确认 portfolio_position 有 2025-12-31 的数据（作为 2026-01-04 的 previous） # 3. 逐天跑 daily_processor（从 2026-01-05 开始，因为需要 T-1 的",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "08-research-argus-darwin-event",
+        "05-portfolio-stock-pool",
+        "05-portfolio-stock-pool-audit",
+        "portfolio-position",
+        "daily-processor",
+        "t-1",
+        "deletemany",
+        "确认"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:42:42": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:42:42",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 42,
+      "endLine": 42,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e85466994a0c2342fb525c08ad] 用户724532: portfolio_position 2025-12-31 有数据的",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "portfolio-position",
+        "用户",
+        "数据"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:43:43": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:43:43",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 43,
+      "endLine": 43,
+      "source": "memory",
+      "snippet": "Assistant: 好的，那就可以从 **2026-01-02** 开始逐天跑 `daily_processor` 了。 `2025-12-31` 有持仓快照 → 作为 2026-01-02 的 previous baseline，对比计算 1 日变化量。 ## 需要确认的事项 在执行清空和回填之前，帮我确认几个信息： **1. portfolio_position 从 2025-12-31 往后，有多少个交易日？** （决定要跑多少天） **2. 08_research_argus_industry_weight 的数据从哪天开始？** 回填 60d",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "daily-processor",
+        "portfolio-position",
+        "好的",
+        "那就",
+        "可以",
+        "开始",
+        "快照",
+        "作为"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:44:44": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:44:44",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 44,
+      "endLine": 44,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6e855d61e4a4c34954cd38c5f02] 用户724532: 应该从2026-01-05开始跑吧，因为2025-12-31往后的第一个交易日是2026-01-05",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "应该从2026-01-05开始跑吧",
+        "因为2025-12-31往后的第一个交易日是2026-01-05",
+        "用户",
+        "应该",
+        "开始",
+        "因为",
+        "往后"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:45:45": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:45:45",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 45,
+      "endLine": 45,
+      "source": "memory",
+      "snippet": "Assistant: 对，你说得对。 ``` 2025-12-31 (Wed) ← 有持仓快照 2026-01-01 (Thu) 元旦假期 2026-01-02 (Fri) 2026-01-03 (Sat) 2026-01-04 (Sun) 2026-01-05 (Mon) ← 第一个交易日，从这天开始跑 ``` 所以回填范围是 **2026-01-05 起**，一直跑到最近一个交易日。 需要我帮你写清空脚本 + 回填脚本（逐天跑 daily_processor）吗？",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "daily-processor",
+        "说得",
+        "wed",
+        "快照",
+        "thu",
+        "元旦",
+        "假期",
+        "fri"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:46:46": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:46:46",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 46,
+      "endLine": 46,
+      "source": "memory",
+      "snippet": "Assistant: 找到问题了！直接看数据历史： ``` 2026-04-20: promote (WATCH → CANDIDATE) ✅ 2026-04-21: update (CANDIDATE → CANDIDATE) ← zone不变，只更新了字段 2026-04-22: demote (CANDIDATE → WATCH) ✅ ... 2026-05-06: update (WATCH → CANDIDATE) ← BUG! 应该是 promote 2026-05-07: demote (CANDIDATE → WATCH) ✅ ``` #",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "找到",
+        "问题",
+        "直接",
+        "数据",
+        "历史",
+        "promote",
+        "watch",
+        "candidate"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:47:47": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:47:47",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 47,
+      "endLine": 47,
+      "source": "memory",
+      "snippet": "Assistant: 但实际上代码行为是**静默回退到 `action = \"update\"`**——因为如果 `_zone_delta_action` 抛出异常，`action` 变量根本没被赋值，然后 `action is None` 成立，执行 `action = \"update\"`。 ## 为什么当前 stock_pool 里还是 WATCH 因为 **backfill 写入 audit 记录，但 `pool_zone` 字段可能没更新成功**： 1. `update_entry` 被调用时 `audit_action=\"update\"`，aud",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "zone-delta-action",
+        "stock-pool",
+        "pool-zone",
+        "update-entry",
+        "audit-action",
+        "实际",
+        "代码",
+        "行为"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:48:48": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:48:48",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 48,
+      "endLine": 48,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6ef1de9480acc37393781281157] 用户724532: 请深入排查",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "深入"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:49:49": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:49:49",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 49,
+      "endLine": 49,
+      "source": "memory",
+      "snippet": "Assistant: 发现了一个重要线索！让我重新核实最新状态：",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "发现",
+        "一个",
+        "重要",
+        "线索",
+        "重新",
+        "核实",
+        "最新",
+        "状态"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-05-31.txt:50:50": {
+      "key": "memory:memory/.dreams/session-corpus/2026-05-31.txt:50:50",
+      "path": "memory/.dreams/session-corpus/2026-05-31.txt",
+      "startLine": 50,
+      "endLine": 50,
+      "source": "memory",
+      "snippet": "Assistant: 找到了！**两次 backfill run 的证据**： - `update` audit 创建于 `2026-05-30 16:52:31`（第一次 backfill） - `promote` audit 创建于 `2026-05-31 15:53:58`（第二次 backfill 重新处理） 让我看看 `_apply_record_update` 为什么在第一次时写入了 `update` 而不是 `promote`：",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "cffe9e514f4f"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "apply-record-update",
+        "找到",
+        "两次",
+        "backfill",
+        "run",
+        "证据",
+        "update",
+        "audit"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-01.txt:1:1": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-01.txt:1:1",
+      "path": "memory/.dreams/session-corpus/2026-06-01.txt",
+      "startLine": 1,
+      "endLine": 1,
+      "source": "memory",
+      "snippet": "Assistant: 现在我对完整数据有了清晰认知，让我做一个最终确认：",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "2939732c7523"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "现在",
+        "完整",
+        "数据",
+        "有了",
+        "清晰",
+        "认知",
+        "一个",
+        "最终"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-01.txt:2:2": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-01.txt:2:2",
+      "path": "memory/.dreams/session-corpus/2026-06-01.txt",
+      "startLine": 2,
+      "endLine": 2,
+      "source": "memory",
+      "snippet": "Assistant: 好的，深入排查完毕。以下是完整的根因分析： --- ## 排查结论 ### 发现的问题 **问题 1：两次 Backfill 导致重复的 `promote` 记录** ``` 2026-05-30 16:52:31.021000: action=update, event_date=2026-05-06, 0883.HK: WATCH→CANDIDATE ← 第一次 backfill 2026-05-31 15:53:58.964000: action=promote, event_date=2026-05-06, 0883.HK:",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "2939732c7523"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "31.021000",
+        "event-date",
+        "0883.hk",
+        "58.964000",
+        "好的",
+        "深入",
+        "完毕",
+        "以下"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-01.txt:3:3": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-01.txt:3:3",
+      "path": "memory/.dreams/session-corpus/2026-06-01.txt",
+      "startLine": 3,
+      "endLine": 3,
+      "source": "memory",
+      "snippet": "Assistant: backfill 修正 | **问题 3：同一 event_date 出现两次 `promote`** ``` 0883.HK 在 2026-05-06: promote (created=2026-05-31 15:53:58) 0883.HK 在 2026-05-06: promote (created=2026-05-31 15:58:10) ``` 同一天，同一只股票，写了两次 `promote`。 --- ### 根因定位 第一次 backfill（2026-05-30 16:52）处理 `event_date=2026-",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "2939732c7523"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "event-date",
+        "0883.hk",
+        "backfill",
+        "修正",
+        "问题",
+        "同一",
+        "出现",
+        "两次"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-01.txt:4:4": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-01.txt:4:4",
+      "path": "memory/.dreams/session-corpus/2026-06-01.txt",
+      "startLine": 4,
+      "endLine": 4,
+      "source": "memory",
+      "snippet": "Assistant: patch = self._changed_field_patch(existing, current, include_zone=False) # ← pool_zone 被排除 if not patch: ... action = \"update\" else: patch = self._changed_field_patch(existing, current, include_zone=True) ``` 当 `_zone_delta_action` 返回 `None` 时，`include_zone=False`，导致 `",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "2939732c7523"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "changed-field-patch",
+        "include-zone",
+        "pool-zone",
+        "zone-delta-action",
+        "patch",
+        "self",
+        "existing",
+        "current"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-01.txt:5:5": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-01.txt:5:5",
+      "path": "memory/.dreams/session-corpus/2026-06-01.txt",
+      "startLine": 5,
+      "endLine": 5,
+      "source": "memory",
+      "snippet": "Assistant: is None: patch = self._changed_field_patch(existing, current, include_zone=True) # ← 改为 True if not patch: ... action = \"update\" ``` 2. **禁止重复 backfill**：在 `backfill_audit.py` 开头加检查，如果审计记录已存在则跳过已处理的日期对，或使用 upsert 逻辑。 3. **数据清理**：删除 0883.HK 在 2026-05-06 的那条重复 `promote`",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "2939732c7523"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "changed-field-patch",
+        "include-zone",
+        "backfill-audit.py",
+        "0883.hk",
+        "none",
+        "patch",
+        "self",
+        "existing"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-01.txt:6:6": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-01.txt:6:6",
+      "path": "memory/.dreams/session-corpus/2026-06-01.txt",
+      "startLine": 6,
+      "endLine": 6,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6ef18f700ca4c4ee68dd55e147e] 用户724532: 我记得之前的refreshall 脚本更新的历史数据，这个脚本中对于stock_pool_audit的数据 直接按顺序调用argus的daily processor不就行了，为什么会调用backfilll_audit，或者说refreshall 是怎么回填或者更新stock_pool_audit的？",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "2939732c7523"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "message-id",
+        "这个脚本中对于stock-pool-audit的数据",
+        "为什么会调用backfilll-audit",
+        "是怎么回填或者更新stock-pool-audit的",
+        "用户",
+        "记得",
+        "之前",
+        "refreshall"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-01.txt:7:7": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-01.txt:7:7",
+      "path": "memory/.dreams/session-corpus/2026-06-01.txt",
+      "startLine": 7,
+      "endLine": 7,
+      "source": "memory",
+      "snippet": "Assistant: 找到了！让我梳理一下 `refresh_all` 和 `backfill_audit` 的本质区别： ## refresh_all 的逻辑（调用 daily_processor） ```python # daily_processor 对每一天独立调用 ingest_signals_incremental for trade_date in trading_days: previous_date = _previous_trading_day(trade_date) # 找前一个交易日 previous_signal_pool =",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-05-31T19:00:05.690Z",
+      "lastRecalledAt": "2026-05-31T19:00:05.690Z",
+      "queryHashes": [
+        "2939732c7523"
+      ],
+      "recallDays": [
+        "2026-06-01",
+        "2026-05-31"
+      ],
+      "conceptTags": [
+        "refresh-all",
+        "backfill-audit",
+        "daily-processor",
+        "ingest-signals-incremental",
+        "trade-date",
+        "trading-days",
+        "previous-date",
+        "previous-trading-day"
       ]
     }
   }

@@ -10,6 +10,10 @@ from .models import PoolZone, StockPoolStatus, validate_patch
 from .repository import StockPoolRepository
 
 
+def _format_date(d: datetime.date) -> str:  # noqa: N802
+    return d.strftime("%Y-%m-%d")
+
+
 class StockPoolService:
     """Business service for stock pool queries, mutations, and transition requests."""
 
@@ -42,7 +46,7 @@ class StockPoolService:
         """Create a stock pool entry and write a matching audit event."""
         pool_id = self.repository.create(record, actor)
         after = self.repository.get_by_id(pool_id)
-        event_dt = event_date or record.get("entry_date") or format_date(datetime.now().date())
+        event_dt = event_date or record.get("entry_date") or _format_date(datetime.now().date())
         self.repository.write_audit(pool_id, "entry", None, after, actor, event_date=event_dt)
         return pool_id
 
@@ -61,7 +65,7 @@ class StockPoolService:
         changed = self.repository.update_fields(record_id, validate_patch(patch), actor)
         if changed:
             after = self.repository.get_by_id(record_id)
-            event_dt = event_date or format_date(datetime.now().date())
+            event_dt = event_date or _format_date(datetime.now().date())
             self.repository.write_audit(record_id, audit_action, before, after, actor, event_date=event_dt)
         return changed
 
@@ -73,7 +77,7 @@ class StockPoolService:
         changed = self.repository.deactivate(record_id, datetime.utcnow(), reason, actor)
         if changed:
             after = self.repository.get_by_id(record_id)
-            event_dt = event_date or format_date(datetime.now().date())
+            event_dt = event_date or _format_date(datetime.now().date())
             self.repository.write_audit(record_id, audit_action, before, after, actor, event_date=event_dt)
         return changed
 
@@ -85,7 +89,7 @@ class StockPoolService:
         changed = self.repository.transition_zone(record_id, PoolZone(target_zone).value, reason, actor)
         if changed:
             after = self.repository.get_by_id(record_id)
-            event_dt = event_date or format_date(datetime.now().date())
+            event_dt = event_date or _format_date(datetime.now().date())
             self.repository.write_audit(record_id, "auto_transition", before, after, actor, event_date=event_dt)
         return changed
 
@@ -119,7 +123,7 @@ class StockPoolService:
         if not changed:
             raise ValueError(f"Failed to create transition request for record: {record_id}")
         after = self.repository.get_by_id(record_id)
-        event_dt = event_date or format_date(datetime.now().date())
+        event_dt = event_date or _format_date(datetime.now().date())
         self.repository.write_audit(record_id, "request_transition", before, after, actor, event_date=event_dt)
         return request_id
 

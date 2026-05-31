@@ -162,8 +162,13 @@ def validate_patch(patch: Dict[str, Any]) -> Dict[str, Any]:
             normalized[field_name] = str(normalized[field_name])
     if "status" in normalized:
         normalized["status"] = StockPoolStatus(normalized["status"]).value
-    if "entry_reason" in normalized and not isinstance(normalized["entry_reason"], dict):
-        raise ValueError("entry_reason must be a dict")
+    if "entry_reason" in normalized:
+        if isinstance(normalized["entry_reason"], dict):
+            pass  # OK
+        elif normalized["entry_reason"] is None or normalized["entry_reason"] == "":
+            normalized["entry_reason"] = {}  # Coerce empty/None to empty dict
+        else:
+            raise ValueError("entry_reason must be a dict")
     if "tags" in normalized and (
         not isinstance(normalized["tags"], list)
         or any(not isinstance(tag, str) for tag in normalized["tags"])
