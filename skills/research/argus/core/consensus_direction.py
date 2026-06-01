@@ -120,7 +120,7 @@ class ConvictionRadar:
             
             sector_conviction[sw1_code] = {
                 'sw1_name': sw1_name,
-                'delta_30d': round(delta_30d, 4) if delta_30d else None,
+                'delta_30d': round(delta_30d, 4) if delta_30d is not None else None,
                 'delta_60d': round(delta_60d, 4) if delta_60d else None,
                 'acceleration': round(acceleration, 4) if acceleration is not None else None,
             }

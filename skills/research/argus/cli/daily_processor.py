@@ -19,7 +19,7 @@ sys.path.insert(0, '/home/pascal/.openclaw/workspace-yquant')
 
 from skills.data.data_interface import MongoReader, MongoWriter
 from skills.data.portfolio import PortfolioTransformer
-from skills.infra import format_date, get_latest_trading_day, get_logger, parse_date
+from skills.infra import format_date, get_trading_dates, get_latest_trading_day, get_logger, parse_date
 from skills.research.argus.config import ARGUS_CONFIG
 from skills.research.argus.core import (
     ConsensusEngine,
@@ -175,6 +175,7 @@ def process_date(
         'pool_summary': pool_manager.get_pool_summary(current_pool),
     })
 
+    consensus_direction = None
     if write_mongo:
         writer = writer or MongoWriter(database=ARGUS_CONFIG.get('mongo', {}).get('database', 'tradingagents'))
         writer.ensure_argus_indexes()
@@ -209,17 +210,24 @@ def process_date(
         _enrich_stock_pool_with_darwin_prosperity(
             stock_pool_records, darwin_events, consensus_direction, wind_to_sw1
         )
-        previous_signal_pool = reader.read(previous_date, collection_name='08_research_argus_signal_pool')
+        previous_signal_pool_for_exit = reader.read(previous_date, collection_name='08_research_argus_signal_pool')
+        previous_signal_pool_by_stock = _build_previous_signal_pool_map(
+            reader,
+            current_date=date_to_process,
+            fallback_previous_date=previous_date,
+            current_signal_pool=stock_pool_records,
+        )
+        previous_signal_pool = _merge_previous_signal_pool_records(
+            previous_signal_pool_for_exit,
+            previous_signal_pool_by_stock,
+        )
         results['signal_pool_written'] = _write_argus_signal_pool(writer, stock_pool_records)
         results['stock_pool_written'] = results['signal_pool_written']
 
         # Phase 5: Portfolio stock-pool incremental sync and audit.
-        # Use the full previous_date signal_pool (previous_signal_pool) instead of the
-        # per-stock filtered version. This is correct for BOTH scenarios:
-        # - Holiday gap: if a stock had no record on previous_date (calendar gap), its
-        #   record from earlier is still in previous_signal_pool → zone change detected
-        # - Exit detection: stocks that were in previous_date but not current_date have
-        #   their records in previous_signal_pool → _apply_exit correctly triggered
+        # Combine full previous_date records for exits with per-stock latest records
+        # for current stocks. Per-stock records win on duplicate wind_code so holiday
+        # gaps compare against the actual latest stock-level signal.
         ingestion = stock_pool_ingestion
         if ingestion is None and not writer_injected:
             ingestion = _default_stock_pool_ingestion()
@@ -245,7 +253,7 @@ def process_date(
         stock_pool_records,
         results,
         output_dir,
-        consensus_direction=None,
+        consensus_direction=consensus_direction,
     )
     results['output_file'] = str(output_file)
 
@@ -259,9 +267,12 @@ def _previous_trading_day(date_to_process: str) -> str:
 
 
 def _next_trading_day(date_to_process: str) -> str:
-    """Return the next trading day after the given date."""
+    """Return the NEXT trading day that is strictly AFTER the given date."""
     next_calendar_day = parse_date(date_to_process) + timedelta(days=1)
-    return get_latest_trading_day(format_date(next_calendar_day))
+    trading_days = get_trading_dates(format_date(next_calendar_day), "2030-12-31")
+    if trading_days:
+        return trading_days[0]
+    return date_to_process
 
 
 def _build_previous_signal_pool_map(
@@ -355,6 +366,38 @@ def _build_previous_signal_pool_map(
         len(previous_records),
     )
     return previous_records
+
+
+def _merge_previous_signal_pool_records(
+    previous_signal_pool_for_exit: List[Dict],
+    previous_signal_pool_by_stock: List[Dict],
+) -> List[Dict]:
+    """Merge previous signal-pool records by wind_code for incremental sync.
+
+    previous_signal_pool_for_exit contains the full previous trading date and is
+    required to detect stocks that disappeared today. previous_signal_pool_by_stock
+    contains each current stock's latest prior record and is required for holiday
+    gaps where that stock had no previous_date record. Duplicate wind_code entries
+    prefer the per-stock latest record.
+    """
+    records_by_wind_code: Dict[str, Dict] = {}
+    passthrough_records: List[Dict] = []
+
+    for record in previous_signal_pool_for_exit or []:
+        wind_code = record.get('wind_code')
+        if wind_code:
+            records_by_wind_code[wind_code] = record
+        else:
+            passthrough_records.append(record)
+
+    for record in previous_signal_pool_by_stock or []:
+        wind_code = record.get('wind_code')
+        if wind_code:
+            records_by_wind_code[wind_code] = record
+        else:
+            passthrough_records.append(record)
+
+    return passthrough_records + list(records_by_wind_code.values())
 
 
 
@@ -494,10 +537,11 @@ def _default_stock_pool_ingestion() -> Any:
 
 
 def _read_index_quotes(reader: MongoReader, date_to_read: str) -> List[Dict]:
-    # Read CSI300 + all SW Level1 codes for 20d lookback window
+    """Read index quotes far enough back for Darwin's 20 trading-day drawdown."""
     end_dt = parse_date(date_to_read)
-    start_dt = end_dt - timedelta(days=25)
-    start_date = format_date(start_dt)
+    fallback_start_date = format_date(end_dt - timedelta(days=60))
+    trading_dates = get_trading_dates(fallback_start_date, date_to_read)
+    start_date = trading_dates[-45] if len(trading_dates) >= 45 else fallback_start_date
     end_date = date_to_read
     
     codes_to_read = ['000300.SH'] + [

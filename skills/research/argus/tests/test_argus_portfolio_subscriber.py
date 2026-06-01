@@ -37,7 +37,7 @@ class ArgusPortfolioSubscriberTest(unittest.TestCase):
                 }
             ],
             "reason": "institutional flow increased",
-            "generated_at": "2026-05-19T08:00:00",
+            "generated_at": (datetime.utcnow() - timedelta(days=1)).isoformat(),
             "valid_until": "2026-05-19",
             "metadata": {"pool_zone": "SCAN", "credibility_score": 0.82},
         }

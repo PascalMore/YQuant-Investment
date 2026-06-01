@@ -43,8 +43,8 @@ class DarwinDetector:
     
     Darwin moments occur when:
     - SW sector 20-day drawdown >= 10%
-    - Weak products (credibility < 0.5) net sell
-    - Strong products (credibility > 0.7) net hold/add
+    - Weak products (credibility below daily 20th percentile) net sell
+    - Strong products (credibility above daily 80th percentile) net hold/add
     - At least 2 strong products show hold/add
     
     Systemic filter: CSI300 20-day drawdown > 8% → confidence *= 0.70
@@ -54,8 +54,6 @@ class DarwinDetector:
         self.config = ARGUS_CONFIG.get('darwin', {})
         self.drawdown_threshold = self.config.get('drawdown_threshold', 0.10)  # 10%
         self.systemic_threshold = self.config.get('systemic_threshold', 0.08)   # 8%
-        self.weak_threshold = self.config.get('weak_threshold', 0.50)
-        self.strong_threshold = self.config.get('strong_threshold', 0.70)
         self.min_strong_add = self.config.get('min_strong_add', 2)
     
     def detect_for_date(
@@ -84,21 +82,35 @@ class DarwinDetector:
         # Get CSI300 20d drawdown for systemic filter
         csi300_drawdown = self._calc_index_drawdown(index_lookup, CSI300_CODE, date, window=20)
         
-        # Build product credibility map
-        credibility_map = {c.get('product_code'): c.get('credibility_score', 0.5) 
-                          for c in credential_scores}
+        # Build product credibility map and derive daily dynamic thresholds.
+        credibility_map = {}
+        for score_record in credential_scores:
+            product_code = score_record.get('product_code')
+            credibility_score = score_record.get('credibility_score')
+            if not product_code or credibility_score is None:
+                continue
+            try:
+                credibility_map[product_code] = float(credibility_score)
+            except (TypeError, ValueError):
+                continue
+        if len(credibility_map) < 3:
+            logger.info(
+                "[DarwinDetector] Skip %s: only %d valid product credibility scores",
+                date,
+                len(credibility_map),
+            )
+            return []
+        weak_threshold = self._percentile(list(credibility_map.values()), 0.20)
+        strong_threshold = self._percentile(list(credibility_map.values()), 0.80)
         
         # Separate products into weak/strong groups
-        weak_products = [p for p, c in credibility_map.items() if c < self.weak_threshold]
-        strong_products = [p for p, c in credibility_map.items() if c > self.strong_threshold]
+        weak_products = [p for p, c in credibility_map.items() if c < weak_threshold]
+        strong_products = [p for p, c in credibility_map.items() if c > strong_threshold]
         
         logger.info(
-            f"[DarwinDetector] Products: {len(weak_products)} weak (cred<{self.weak_threshold}), "
-            f"{len(strong_products)} strong (cred>{self.strong_threshold})"
+            f"[DarwinDetector] Products: {len(weak_products)} weak (cred<20th={weak_threshold:.4f}), "
+            f"{len(strong_products)} strong (cred>80th={strong_threshold:.4f})"
         )
-        
-        # Build industry weight lookup for net action calculation
-        weight_lookup = self._build_weight_lookup(industry_weights)
         
         darwin_events = []
         
@@ -113,9 +125,9 @@ class DarwinDetector:
             is_systemic = csi300_drawdown < -self.systemic_threshold if csi300_drawdown is not None else False
             
             # Step 3: Calculate net actions
-            weak_action = self._get_sector_net_action(weak_products, sw1_code, weight_lookup, date, window=20)
-            strong_action = self._get_sector_net_action(strong_products, sw1_code, weight_lookup, date, window=20)
-            strong_add_count = self._count_sector_adds(strong_products, sw1_code, weight_lookup, date, window=20)
+            weak_action = self._get_sector_net_action(weak_products, sw1_code, industry_weights, date, window=20)
+            strong_action = self._get_sector_net_action(strong_products, sw1_code, industry_weights, date, window=20)
+            strong_add_count = self._count_sector_adds(strong_products, sw1_code, industry_weights, date, window=20)
             
             # Step 4: Divergence detection
             if weak_action < 0 and strong_action >= 0 and strong_add_count >= self.min_strong_add:
@@ -166,6 +178,18 @@ class DarwinDetector:
                     lookup[code] = {}
                 lookup[code][date] = close
         return lookup
+
+    def _percentile(self, values: List[float], quantile: float) -> float:
+        """Return a linearly interpolated percentile for non-empty values."""
+        sorted_values = sorted(values)
+        if len(sorted_values) == 1:
+            return sorted_values[0]
+
+        position = (len(sorted_values) - 1) * quantile
+        lower = int(position)
+        upper = min(lower + 1, len(sorted_values) - 1)
+        fraction = position - lower
+        return sorted_values[lower] + (sorted_values[upper] - sorted_values[lower]) * fraction
     
     def _build_weight_lookup(self, industry_weights: List[Dict]) -> Dict[str, Dict[str, float]]:
         """Build industry weight lookup by product, sector, and date.
@@ -217,70 +241,78 @@ class DarwinDetector:
         self,
         products: List[str],
         sw1_code: str,
-        weight_lookup: Dict[tuple, float],
+        industry_weight_records: List[Dict],
         date: str,
         window: int = 20
     ) -> float:
-        """Calculate net action for products in a sector over window days.
+        """Calculate net action from precomputed 30-day industry weight changes.
+
+        IndustryWeightCalculator already emits weight_change_30d using the
+        correct trading baseline. Missing product-sector changes are skipped
+        instead of treated as zero, because zero would falsely convert an
+        unknown baseline into a hold/add signal.
         
         Returns:
             Net weight change (sum of individual product changes)
         """
         if not products or not sw1_code:
             return 0.0
-        
-        from datetime import datetime, timedelta
-        target_date_dt = datetime.strptime(date, '%Y-%m-%d')
-        start_date_dt = target_date_dt - timedelta(days=window)
-        start_date = start_date_dt.strftime('%Y-%m-%d')
-        
+
+        weight_change_lookup = self._build_weight_change_30d_lookup(industry_weight_records, date)
         net_action = 0.0
         for product in products:
-            # Get current weight
-            current_key = (product, sw1_code, date)
-            current_weight = weight_lookup.get(current_key, 0.0)
-            
-            # Get start weight
-            start_key = (product, sw1_code, start_date)
-            start_weight = weight_lookup.get(start_key, 0.0)
-            
-            net_action += (current_weight - start_weight)
-        
+            weight_change = weight_change_lookup.get((product, sw1_code))
+            if weight_change is None:
+                continue
+            net_action += weight_change
+
         return net_action
     
     def _count_sector_adds(
         self,
         products: List[str],
         sw1_code: str,
-        weight_lookup: Dict[tuple, float],
+        industry_weight_records: List[Dict],
         date: str,
         window: int = 20
     ) -> int:
-        """Count how many products are adding positions in a sector.
+        """Count products with positive precomputed 30-day sector changes.
+
+        Products without weight_change_30d are skipped so missing baseline data
+        cannot be interpreted as a new position or add.
         
         Returns:
             Count of products with positive weight change
         """
         if not products or not sw1_code:
             return 0
-        
-        from datetime import datetime, timedelta
-        target_date_dt = datetime.strptime(date, '%Y-%m-%d')
-        start_date_dt = target_date_dt - timedelta(days=window)
-        start_date = start_date_dt.strftime('%Y-%m-%d')
-        
+
+        weight_change_lookup = self._build_weight_change_30d_lookup(industry_weight_records, date)
         add_count = 0
         for product in products:
-            current_key = (product, sw1_code, date)
-            current_weight = weight_lookup.get(current_key, 0.0)
-            
-            start_key = (product, sw1_code, start_date)
-            start_weight = weight_lookup.get(start_key, 0.0)
-            
-            if current_weight > start_weight:
+            weight_change = weight_change_lookup.get((product, sw1_code))
+            if weight_change is not None and weight_change > 0:
                 add_count += 1
-        
+
         return add_count
+
+    def _build_weight_change_30d_lookup(
+        self,
+        industry_weight_records: List[Dict],
+        date: str,
+    ) -> Dict[tuple, float]:
+        """Build (product_code, sw1_code) -> weight_change_30d for one date."""
+        lookup = {}
+        for record in industry_weight_records or []:
+            if record.get('date') != date:
+                continue
+            product_code = record.get('product_code')
+            sw1_code = record.get('sw1_code')
+            weight_change = record.get('weight_change_30d')
+            if not product_code or not sw1_code or weight_change is None:
+                continue
+            lookup[(product_code, sw1_code)] = float(weight_change)
+        return lookup
     
     def detect_darwin_moment(self, positions: List[Dict], all_products_positions: List[List[Dict]]) -> bool:
         """Backward-compatible stub for old Darwin detection API.

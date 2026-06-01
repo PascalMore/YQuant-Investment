@@ -222,6 +222,23 @@ class TestIndustryWeightCalculator60d(unittest.TestCase):
         self.assertIsNone(sector['delta_60d'])
         self.assertIsNone(sector['acceleration'])
 
+    def test_conviction_radar_preserves_zero_delta_30d(self):
+        """A valid 0.0 30d delta should not be converted to None."""
+        from skills.research.argus.core.consensus_direction import ConsensusDirectionEngine
+
+        industry_weights = [
+            {
+                'sw1_code': '801050.SI',
+                'sw1_name': '食品饮料',
+                'weight_change_30d': 0.0,
+                'weight_change_60d': 1.0,
+            },
+        ]
+
+        result = ConsensusDirectionEngine().calculate_for_date('2026-05-01', industry_weights)
+        sector = result['sector_conviction']['801050.SI']
+        self.assertEqual(sector['delta_30d'], 0.0)
+
 
 if __name__ == '__main__':
     unittest.main()

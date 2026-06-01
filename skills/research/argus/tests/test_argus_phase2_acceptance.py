@@ -9,7 +9,12 @@ from pathlib import Path
 
 sys.path.insert(0, '/home/pascal/.openclaw/workspace-yquant')
 
-from skills.research.argus.cli.daily_processor import process_date
+from skills.research.argus.cli.daily_processor import (
+    _build_previous_signal_pool_map,
+    _merge_previous_signal_pool_records,
+    _write_json_output,
+    process_date,
+)
 
 
 class FakeReader:
@@ -83,6 +88,47 @@ class FakeStockPoolIngestion:
             }
         )
         return {'entry': len(current_signals), 'previous': len(previous_signals)}
+
+
+class FakeCollection:
+    """Small in-memory collection with the find subset used by daily_processor."""
+
+    def __init__(self, records):
+        self.records = records
+
+    def find(self, query, projection=None):
+        """Return records matching date and wind_code predicates."""
+        date_query = query.get('date', {})
+        date_lt = date_query.get('$lt') if isinstance(date_query, dict) else None
+        exact_date = date_query if isinstance(date_query, str) else None
+        wind_codes = set(query.get('wind_code', {}).get('$in', []))
+        matched = [
+            record
+            for record in self.records
+            if (date_lt is None or record.get('date') < date_lt)
+            and (exact_date is None or record.get('date') == exact_date)
+            and (not wind_codes or record.get('wind_code') in wind_codes)
+        ]
+        if projection is None:
+            return matched
+        return [
+            {
+                key: value
+                for key, value in record.items()
+                if key != '_id' and projection.get(key, 1)
+            }
+            for record in matched
+        ]
+
+
+class FakeDB:
+    """Map collection names to FakeCollection instances."""
+
+    def __init__(self, records):
+        self.collection = FakeCollection(records)
+
+    def __getitem__(self, name):
+        return self.collection
 
 
 class TestArgusPhase2Acceptance(unittest.TestCase):
@@ -163,6 +209,65 @@ class TestArgusPhase2Acceptance(unittest.TestCase):
         self.assertEqual(results['credential_scores_written'], 1000)
         self.assertEqual(results['signals_written'], 1000)
         self.assertEqual(results['stock_pool_written'], 50)
+
+    def test_previous_signal_pool_merge_keeps_exits_and_latest_stock_records(self):
+        """Previous-date exits should survive while current stocks use latest per-stock records."""
+        previous_date_records = [
+            {'date': '2026-05-01', 'wind_code': '000001.SZ', 'pool_zone': 'WATCH'},
+            {'date': '2026-05-01', 'wind_code': '600519.SH', 'pool_zone': 'SCAN'},
+        ]
+        per_stock_latest = [
+            {'date': '2026-04-29', 'wind_code': '600519.SH', 'pool_zone': 'CANDIDATE'},
+        ]
+
+        merged = _merge_previous_signal_pool_records(previous_date_records, per_stock_latest)
+        by_code = {record['wind_code']: record for record in merged}
+
+        self.assertEqual(set(by_code), {'000001.SZ', '600519.SH'})
+        self.assertEqual(by_code['000001.SZ']['pool_zone'], 'WATCH')
+        self.assertEqual(by_code['600519.SH']['date'], '2026-04-29')
+        self.assertEqual(by_code['600519.SH']['pool_zone'], 'CANDIDATE')
+
+    def test_build_previous_signal_pool_map_handles_holiday_gap(self):
+        """A stock missing on previous_date should use its older latest record."""
+        reader = FakeReader([], [])
+        reader.db = FakeDB([
+            {'date': '2026-04-28', 'wind_code': '600519.SH', 'pool_zone': 'SCAN'},
+            {'date': '2026-04-30', 'wind_code': '600519.SH', 'pool_zone': 'WATCH'},
+            {'date': '2026-05-05', 'wind_code': '000001.SZ', 'pool_zone': 'WATCH'},
+        ])
+
+        previous = _build_previous_signal_pool_map(
+            reader,
+            current_date='2026-05-06',
+            fallback_previous_date='2026-05-05',
+            current_signal_pool=[
+                {'date': '2026-05-06', 'wind_code': '600519.SH', 'pool_zone': 'CANDIDATE'},
+            ],
+        )
+
+        self.assertEqual(len(previous), 1)
+        self.assertEqual(previous[0]['wind_code'], '600519.SH')
+        self.assertEqual(previous[0]['date'], '2026-04-30')
+        self.assertEqual(previous[0]['pool_zone'], 'WATCH')
+
+    def test_json_output_includes_top_level_consensus_direction(self):
+        consensus_direction = {'date': '2026-05-29', 'prosperity_signal': 'BULLISH'}
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            output_file = _write_json_output(
+                '2026-05-29',
+                signals=[],
+                consensus={},
+                crowding={},
+                stock_pool_records=[],
+                results={},
+                output_dir=Path(output_dir),
+                consensus_direction=consensus_direction,
+            )
+            payload = json.loads(output_file.read_text(encoding='utf-8'))
+
+        self.assertEqual(payload['consensus_direction'], consensus_direction)
 
 
 if __name__ == '__main__':

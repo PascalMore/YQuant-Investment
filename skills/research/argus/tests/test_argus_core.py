@@ -100,6 +100,78 @@ class TestRebalancingDetector(unittest.TestCase):
         self.assertEqual(events[0]['direction'], 'BUY')
 
 
+class TestDarwinDetector(unittest.TestCase):
+    """Test Darwin sector action calculations."""
+
+    def setUp(self):
+        self.detector = DarwinDetector()
+
+    def test_sector_action_skips_missing_30d_change(self):
+        """Missing weight_change_30d should not be treated as a new add."""
+        records = [
+            {
+                'date': '2026-05-29',
+                'product_code': 'SM001',
+                'sw1_code': '801050.SI',
+                'weight_change_30d': None,
+            },
+            {
+                'date': '2026-05-29',
+                'product_code': 'SM002',
+                'sw1_code': '801050.SI',
+                'weight_change_30d': -1.5,
+            },
+        ]
+
+        net_action = self.detector._get_sector_net_action(
+            ['SM001', 'SM002'],
+            '801050.SI',
+            records,
+            '2026-05-29',
+        )
+        add_count = self.detector._count_sector_adds(
+            ['SM001'],
+            '801050.SI',
+            records,
+            '2026-05-29',
+        )
+
+        self.assertEqual(net_action, -1.5)
+        self.assertEqual(add_count, 0)
+
+    def test_sector_action_uses_weight_change_30d(self):
+        """Normal 30-day changes should sum and count positive adds."""
+        records = [
+            {
+                'date': '2026-05-29',
+                'product_code': 'SM001',
+                'sw1_code': '801050.SI',
+                'weight_change_30d': 2.0,
+            },
+            {
+                'date': '2026-05-29',
+                'product_code': 'SM002',
+                'sw1_code': '801050.SI',
+                'weight_change_30d': -0.5,
+            },
+            {
+                'date': '2026-05-29',
+                'product_code': 'SM003',
+                'sw1_code': '801050.SI',
+                'weight_change_30d': 1.25,
+            },
+        ]
+
+        self.assertEqual(
+            self.detector._get_sector_net_action(['SM001', 'SM002', 'SM003'], '801050.SI', records, '2026-05-29'),
+            2.75,
+        )
+        self.assertEqual(
+            self.detector._count_sector_adds(['SM001', 'SM002', 'SM003'], '801050.SI', records, '2026-05-29'),
+            2,
+        )
+
+
 class TestConsensusEngine(unittest.TestCase):
     """Test consensus calculation."""
     
