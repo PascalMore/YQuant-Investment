@@ -1,0 +1,5558 @@
+{
+  "generated_at": "2026-06-03T03:57:06.381976+00:00",
+  "mode": "dry_run",
+  "eligible_code_count": 286,
+  "mismatch_code_count": 60,
+  "missing_master_code_count": 6,
+  "none_code_count": 33,
+  "planned_records_to_update": 13787,
+  "update_result": {
+    "matched": 0,
+    "modified": 0
+  },
+  "sample_validation": [
+    {
+      "asset_wind_code": "000039.SZ",
+      "standard_name": "中集集团",
+      "variants_after": [
+        {
+          "asset_name": "中集集团",
+          "count": 108
+        }
+      ]
+    },
+    {
+      "asset_wind_code": "000070.SZ",
+      "standard_name": "特发信息",
+      "variants_after": [
+        {
+          "asset_name": "特发信息",
+          "count": 6
+        }
+      ]
+    },
+    {
+      "asset_wind_code": "000333.SZ",
+      "standard_name": "美的集团",
+      "variants_after": [
+        {
+          "asset_name": "美的集团",
+          "count": 155
+        }
+      ]
+    }
+  ],
+  "none_code": {
+    "count": 33,
+    "by_name": [
+      {
+        "asset_name": "中国国航",
+        "count": 2
+      },
+      {
+        "asset_name": "中国银行",
+        "count": 2
+      },
+      {
+        "asset_name": "农业银行",
+        "count": 2
+      },
+      {
+        "asset_name": "工商银行",
+        "count": 2
+      },
+      {
+        "asset_name": "建设银行",
+        "count": 2
+      },
+      {
+        "asset_name": "中国东方航空股份",
+        "count": 1
+      },
+      {
+        "asset_name": "中国东航",
+        "count": 1
+      },
+      {
+        "asset_name": "中国南方航空股份",
+        "count": 1
+      },
+      {
+        "asset_name": "中芯国际",
+        "count": 1
+      },
+      {
+        "asset_name": "中远海能",
+        "count": 1
+      },
+      {
+        "asset_name": "中际旭创",
+        "count": 1
+      },
+      {
+        "asset_name": "中集安瑞科",
+        "count": 1
+      },
+      {
+        "asset_name": "兆易创新",
+        "count": 1
+      },
+      {
+        "asset_name": "北方华创",
+        "count": 1
+      },
+      {
+        "asset_name": "南方航空",
+        "count": 1
+      },
+      {
+        "asset_name": "哔哩哔哩-W",
+        "count": 1
+      },
+      {
+        "asset_name": "宁德时代",
+        "count": 1
+      },
+      {
+        "asset_name": "招商轮船",
+        "count": 1
+      },
+      {
+        "asset_name": "新易盛",
+        "count": 1
+      },
+      {
+        "asset_name": "泡泡玛特",
+        "count": 1
+      },
+      {
+        "asset_name": "泸州老窖",
+        "count": 1
+      },
+      {
+        "asset_name": "浦发银行",
+        "count": 1
+      },
+      {
+        "asset_name": "立讯精密",
+        "count": 1
+      },
+      {
+        "asset_name": "美团-W",
+        "count": 1
+      },
+      {
+        "asset_name": "腾讯控股",
+        "count": 1
+      },
+      {
+        "asset_name": "贵州茅台",
+        "count": 1
+      },
+      {
+        "asset_name": "阳光电源",
+        "count": 1
+      },
+      {
+        "asset_name": "阿里巴巴-W",
+        "count": 1
+      }
+    ]
+  },
+  "eligible": [
+    {
+      "raw_code": "000039.SZ",
+      "standard_code": "000039.SZ",
+      "primary_name": "中集集团",
+      "primary_count": 108,
+      "total": 108,
+      "name_variants": [
+        {
+          "name": "中集集团",
+          "count": 108
+        }
+      ],
+      "standard_name": "中集集团"
+    },
+    {
+      "raw_code": "000070.SZ",
+      "standard_code": "000070.SZ",
+      "primary_name": "特发信息",
+      "primary_count": 6,
+      "total": 6,
+      "name_variants": [
+        {
+          "name": "特发信息",
+          "count": 6
+        }
+      ],
+      "standard_name": "特发信息"
+    },
+    {
+      "raw_code": "000333.SZ",
+      "standard_code": "000333.SZ",
+      "primary_name": "美的集团",
+      "primary_count": 155,
+      "total": 155,
+      "name_variants": [
+        {
+          "name": "美的集团",
+          "count": 155
+        }
+      ],
+      "standard_name": "美的集团"
+    },
+    {
+      "raw_code": "000338.SZ",
+      "standard_code": "000338.SZ",
+      "primary_name": "潍柴动力",
+      "primary_count": 177,
+      "total": 177,
+      "name_variants": [
+        {
+          "name": "潍柴动力",
+          "count": 177
+        }
+      ],
+      "standard_name": "潍柴动力"
+    },
+    {
+      "raw_code": "000415.SZ",
+      "standard_code": "000415.SZ",
+      "primary_name": "渤海租赁",
+      "primary_count": 71,
+      "total": 72,
+      "name_variants": [
+        {
+          "name": "渤海租赁",
+          "count": 71
+        },
+        {
+          "name": "长飞光纤光缆",
+          "count": 1
+        }
+      ],
+      "standard_name": "渤海租赁"
+    },
+    {
+      "raw_code": "000425.SZ",
+      "standard_code": "000425.SZ",
+      "primary_name": "徐工机械",
+      "primary_count": 72,
+      "total": 72,
+      "name_variants": [
+        {
+          "name": "徐工机械",
+          "count": 72
+        }
+      ],
+      "standard_name": "徐工机械"
+    },
+    {
+      "raw_code": "000426.SZ",
+      "standard_code": "000426.SZ",
+      "primary_name": "兴业银锡",
+      "primary_count": 37,
+      "total": 38,
+      "name_variants": [
+        {
+          "name": "兴业银锡",
+          "count": 37
+        },
+        {
+          "name": "ST华通",
+          "count": 1
+        }
+      ],
+      "standard_name": "兴业银锡"
+    },
+    {
+      "raw_code": "000538.SZ",
+      "standard_code": "000538.SZ",
+      "primary_name": "云南白药",
+      "primary_count": 4,
+      "total": 4,
+      "name_variants": [
+        {
+          "name": "云南白药",
+          "count": 4
+        }
+      ],
+      "standard_name": "云南白药"
+    },
+    {
+      "raw_code": "000568.SZ",
+      "standard_code": "000568.SZ",
+      "primary_name": "泸州老窖",
+      "primary_count": 88,
+      "total": 88,
+      "name_variants": [
+        {
+          "name": "泸州老窖",
+          "count": 88
+        }
+      ],
+      "standard_name": "泸州老窖"
+    },
+    {
+      "raw_code": "000657.SZ",
+      "standard_code": "000657.SZ",
+      "primary_name": "中钨高新",
+      "primary_count": 23,
+      "total": 23,
+      "name_variants": [
+        {
+          "name": "中钨高新",
+          "count": 23
+        }
+      ],
+      "standard_name": "中钨高新"
+    },
+    {
+      "raw_code": "000683.SZ",
+      "standard_code": "000683.SZ",
+      "primary_name": "博源化工",
+      "primary_count": 34,
+      "total": 48,
+      "name_variants": [
+        {
+          "name": "博源化工",
+          "count": 34
+        },
+        {
+          "name": "远兴能源",
+          "count": 10
+        },
+        {
+          "name": "博汇化工",
+          "count": 1
+        },
+        {
+          "name": "博源股份",
+          "count": 1
+        },
+        {
+          "name": "博腾股份",
+          "count": 1
+        },
+        {
+          "name": "博通股份",
+          "count": 1
+        }
+      ],
+      "standard_name": "博源化工"
+    },
+    {
+      "raw_code": "000688.SZ",
+      "standard_code": "000688.SZ",
+      "primary_name": "国城矿业",
+      "primary_count": 16,
+      "total": 16,
+      "name_variants": [
+        {
+          "name": "国城矿业",
+          "count": 16
+        }
+      ],
+      "standard_name": "国城矿业"
+    },
+    {
+      "raw_code": "000703.SZ",
+      "standard_code": "000703.SZ",
+      "primary_name": "恒逸石化",
+      "primary_count": 8,
+      "total": 8,
+      "name_variants": [
+        {
+          "name": "恒逸石化",
+          "count": 8
+        }
+      ],
+      "standard_name": "恒逸石化"
+    },
+    {
+      "raw_code": "000792.SZ",
+      "standard_code": "000792.SZ",
+      "primary_name": "盐湖股份",
+      "primary_count": 52,
+      "total": 53,
+      "name_variants": [
+        {
+          "name": "盐湖股份",
+          "count": 52
+        },
+        {
+          "name": "中稀有色",
+          "count": 1
+        }
+      ],
+      "standard_name": "盐湖股份"
+    },
+    {
+      "raw_code": "000807.SZ",
+      "standard_code": "000807.SZ",
+      "primary_name": "云铝股份",
+      "primary_count": 68,
+      "total": 68,
+      "name_variants": [
+        {
+          "name": "云铝股份",
+          "count": 68
+        }
+      ],
+      "standard_name": "云铝股份"
+    },
+    {
+      "raw_code": "000830.SZ",
+      "standard_code": "000830.SZ",
+      "primary_name": "鲁西化工",
+      "primary_count": 22,
+      "total": 22,
+      "name_variants": [
+        {
+          "name": "鲁西化工",
+          "count": 22
+        }
+      ],
+      "standard_name": "鲁西化工"
+    },
+    {
+      "raw_code": "000893.SZ",
+      "standard_code": "000893.SZ",
+      "primary_name": "亚钾国际",
+      "primary_count": 8,
+      "total": 8,
+      "name_variants": [
+        {
+          "name": "亚钾国际",
+          "count": 8
+        }
+      ],
+      "standard_name": "亚钾国际"
+    },
+    {
+      "raw_code": "000932.SZ",
+      "standard_code": "000932.SZ",
+      "primary_name": "华菱钢铁",
+      "primary_count": 27,
+      "total": 27,
+      "name_variants": [
+        {
+          "name": "华菱钢铁",
+          "count": 27
+        }
+      ],
+      "standard_name": "华菱钢铁"
+    },
+    {
+      "raw_code": "000933.SZ",
+      "standard_code": "000933.SZ",
+      "primary_name": "神火股份",
+      "primary_count": 104,
+      "total": 104,
+      "name_variants": [
+        {
+          "name": "神火股份",
+          "count": 104
+        }
+      ],
+      "standard_name": "神火股份"
+    },
+    {
+      "raw_code": "000960.SZ",
+      "standard_code": "000960.SZ",
+      "primary_name": "锡业股份",
+      "primary_count": 101,
+      "total": 101,
+      "name_variants": [
+        {
+          "name": "锡业股份",
+          "count": 101
+        }
+      ],
+      "standard_name": "锡业股份"
+    },
+    {
+      "raw_code": "000962.SZ",
+      "standard_code": "000962.SZ",
+      "primary_name": "东方钽业",
+      "primary_count": 66,
+      "total": 89,
+      "name_variants": [
+        {
+          "name": "东方钽业",
+          "count": 66
+        },
+        {
+          "name": "东方铝业",
+          "count": 15
+        },
+        {
+          "name": "东方银星",
+          "count": 5
+        },
+        {
+          "name": "东方铁塔",
+          "count": 1
+        },
+        {
+          "name": "东方银业",
+          "count": 1
+        },
+        {
+          "name": "银轮股份",
+          "count": 1
+        }
+      ],
+      "standard_name": "东方钽业"
+    },
+    {
+      "raw_code": "000973.SZ",
+      "standard_code": "000973.SZ",
+      "primary_name": "佛塑科技",
+      "primary_count": 6,
+      "total": 6,
+      "name_variants": [
+        {
+          "name": "佛塑科技",
+          "count": 6
+        }
+      ],
+      "standard_name": "佛塑科技"
+    },
+    {
+      "raw_code": "000988.SZ",
+      "standard_code": "000988.SZ",
+      "primary_name": "华工科技",
+      "primary_count": 34,
+      "total": 34,
+      "name_variants": [
+        {
+          "name": "华工科技",
+          "count": 34
+        }
+      ],
+      "standard_name": "华工科技"
+    },
+    {
+      "raw_code": "000999.SZ",
+      "standard_code": "000999.SZ",
+      "primary_name": "华润三九",
+      "primary_count": 4,
+      "total": 4,
+      "name_variants": [
+        {
+          "name": "华润三九",
+          "count": 4
+        }
+      ],
+      "standard_name": "华润三九"
+    },
+    {
+      "raw_code": "001203.SZ",
+      "standard_code": "001203.SZ",
+      "primary_name": "大中矿业",
+      "primary_count": 2,
+      "total": 2,
+      "name_variants": [
+        {
+          "name": "大中矿业",
+          "count": 2
+        }
+      ],
+      "standard_name": "大中矿业"
+    },
+    {
+      "raw_code": "001233.SZ",
+      "standard_code": "001233.SZ",
+      "primary_name": "海安集团",
+      "primary_count": 11,
+      "total": 11,
+      "name_variants": [
+        {
+          "name": "海安集团",
+          "count": 11
+        }
+      ],
+      "standard_name": "海安集团"
+    },
+    {
+      "raw_code": "001309.SZ",
+      "standard_code": "001309.SZ",
+      "primary_name": "德明利",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "德明利",
+          "count": 1
+        }
+      ],
+      "standard_name": "德明利"
+    },
+    {
+      "raw_code": "001330.SZ",
+      "standard_code": "001330.SZ",
+      "primary_name": "博纳影业",
+      "primary_count": 10,
+      "total": 10,
+      "name_variants": [
+        {
+          "name": "博纳影业",
+          "count": 10
+        }
+      ],
+      "standard_name": "博纳影业"
+    },
+    {
+      "raw_code": "001337.SZ",
+      "standard_code": "001337.SZ",
+      "primary_name": "四川黄金",
+      "primary_count": 9,
+      "total": 9,
+      "name_variants": [
+        {
+          "name": "四川黄金",
+          "count": 9
+        }
+      ],
+      "standard_name": "四川黄金"
+    },
+    {
+      "raw_code": "001389.SZ",
+      "standard_code": "001389.SZ",
+      "primary_name": "广合科技",
+      "primary_count": 30,
+      "total": 30,
+      "name_variants": [
+        {
+          "name": "广合科技",
+          "count": 30
+        }
+      ],
+      "standard_name": "广合科技"
+    },
+    {
+      "raw_code": "001979.SZ",
+      "standard_code": "001979.SZ",
+      "primary_name": "招商蛇口",
+      "primary_count": 65,
+      "total": 65,
+      "name_variants": [
+        {
+          "name": "招商蛇口",
+          "count": 65
+        }
+      ],
+      "standard_name": "招商蛇口"
+    },
+    {
+      "raw_code": "002001.SZ",
+      "standard_code": "002001.SZ",
+      "primary_name": "新和成",
+      "primary_count": 90,
+      "total": 90,
+      "name_variants": [
+        {
+          "name": "新和成",
+          "count": 90
+        }
+      ],
+      "standard_name": "新和成"
+    },
+    {
+      "raw_code": "002008.SZ",
+      "standard_code": "002008.SZ",
+      "primary_name": "大族激光",
+      "primary_count": 102,
+      "total": 102,
+      "name_variants": [
+        {
+          "name": "大族激光",
+          "count": 102
+        }
+      ],
+      "standard_name": "大族激光"
+    },
+    {
+      "raw_code": "002043.SZ",
+      "standard_code": "002043.SZ",
+      "primary_name": "兔宝宝",
+      "primary_count": 21,
+      "total": 21,
+      "name_variants": [
+        {
+          "name": "兔宝宝",
+          "count": 21
+        }
+      ],
+      "standard_name": "兔宝宝"
+    },
+    {
+      "raw_code": "002044.SZ",
+      "standard_code": "002044.SZ",
+      "primary_name": "美年健康",
+      "primary_count": 50,
+      "total": 50,
+      "name_variants": [
+        {
+          "name": "美年健康",
+          "count": 50
+        }
+      ],
+      "standard_name": "美年健康"
+    },
+    {
+      "raw_code": "002049.SZ",
+      "standard_code": "002049.SZ",
+      "primary_name": "紫光国微",
+      "primary_count": 13,
+      "total": 13,
+      "name_variants": [
+        {
+          "name": "紫光国微",
+          "count": 13
+        }
+      ],
+      "standard_name": "紫光国微"
+    },
+    {
+      "raw_code": "002050.SZ",
+      "standard_code": "002050.SZ",
+      "primary_name": "三花智控",
+      "primary_count": 6,
+      "total": 6,
+      "name_variants": [
+        {
+          "name": "三花智控",
+          "count": 6
+        }
+      ],
+      "standard_name": "三花智控"
+    },
+    {
+      "raw_code": "002126.SZ",
+      "standard_code": "002126.SZ",
+      "primary_name": "银轮股份",
+      "primary_count": 65,
+      "total": 65,
+      "name_variants": [
+        {
+          "name": "银轮股份",
+          "count": 65
+        }
+      ],
+      "standard_name": "银轮股份"
+    },
+    {
+      "raw_code": "002129.SZ",
+      "standard_code": "002129.SZ",
+      "primary_name": "TCL中环",
+      "primary_count": 34,
+      "total": 34,
+      "name_variants": [
+        {
+          "name": "TCL中环",
+          "count": 34
+        }
+      ],
+      "standard_name": "TCL中环"
+    },
+    {
+      "raw_code": "002142.SZ",
+      "standard_code": "002142.SZ",
+      "primary_name": "宁波银行",
+      "primary_count": 36,
+      "total": 36,
+      "name_variants": [
+        {
+          "name": "宁波银行",
+          "count": 36
+        }
+      ],
+      "standard_name": "宁波银行"
+    },
+    {
+      "raw_code": "002149.SZ",
+      "standard_code": "002149.SZ",
+      "primary_name": "西部材料",
+      "primary_count": 3,
+      "total": 3,
+      "name_variants": [
+        {
+          "name": "西部材料",
+          "count": 3
+        }
+      ],
+      "standard_name": "西部材料"
+    },
+    {
+      "raw_code": "002155.SZ",
+      "standard_code": "002155.SZ",
+      "primary_name": "湖南黄金",
+      "primary_count": 115,
+      "total": 116,
+      "name_variants": [
+        {
+          "name": "湖南黄金",
+          "count": 115
+        },
+        {
+          "name": "中国动力",
+          "count": 1
+        }
+      ],
+      "standard_name": "湖南黄金"
+    },
+    {
+      "raw_code": "002182.SZ",
+      "standard_code": "002182.SZ",
+      "primary_name": "宝武镁业",
+      "primary_count": 10,
+      "total": 10,
+      "name_variants": [
+        {
+          "name": "宝武镁业",
+          "count": 10
+        }
+      ],
+      "standard_name": "宝武镁业"
+    },
+    {
+      "raw_code": "002215.SZ",
+      "standard_code": "002215.SZ",
+      "primary_name": "诺普信",
+      "primary_count": 50,
+      "total": 50,
+      "name_variants": [
+        {
+          "name": "诺普信",
+          "count": 50
+        }
+      ],
+      "standard_name": "诺普信"
+    },
+    {
+      "raw_code": "002222.SZ",
+      "standard_code": "002222.SZ",
+      "primary_name": "福晶科技",
+      "primary_count": 6,
+      "total": 6,
+      "name_variants": [
+        {
+          "name": "福晶科技",
+          "count": 6
+        }
+      ],
+      "standard_name": "福晶科技"
+    },
+    {
+      "raw_code": "002240.SZ",
+      "standard_code": "002240.SZ",
+      "primary_name": "盛新锂能",
+      "primary_count": 8,
+      "total": 8,
+      "name_variants": [
+        {
+          "name": "盛新锂能",
+          "count": 8
+        }
+      ],
+      "standard_name": "盛新锂能"
+    },
+    {
+      "raw_code": "002241.SZ",
+      "standard_code": "002241.SZ",
+      "primary_name": "歌尔股份",
+      "primary_count": 13,
+      "total": 13,
+      "name_variants": [
+        {
+          "name": "歌尔股份",
+          "count": 13
+        }
+      ],
+      "standard_name": "歌尔股份"
+    },
+    {
+      "raw_code": "002271.SZ",
+      "standard_code": "002271.SZ",
+      "primary_name": "东方雨虹",
+      "primary_count": 34,
+      "total": 34,
+      "name_variants": [
+        {
+          "name": "东方雨虹",
+          "count": 34
+        }
+      ],
+      "standard_name": "东方雨虹"
+    },
+    {
+      "raw_code": "002311.SZ",
+      "standard_code": "002311.SZ",
+      "primary_name": "海大集团",
+      "primary_count": 113,
+      "total": 113,
+      "name_variants": [
+        {
+          "name": "海大集团",
+          "count": 113
+        }
+      ],
+      "standard_name": "海大集团"
+    },
+    {
+      "raw_code": "002318.SZ",
+      "standard_code": "002318.SZ",
+      "primary_name": "久立特材",
+      "primary_count": 77,
+      "total": 77,
+      "name_variants": [
+        {
+          "name": "久立特材",
+          "count": 77
+        }
+      ],
+      "standard_name": "久立特材"
+    },
+    {
+      "raw_code": "002345.SZ",
+      "standard_code": "002345.SZ",
+      "primary_name": "潮宏基",
+      "primary_count": 7,
+      "total": 7,
+      "name_variants": [
+        {
+          "name": "潮宏基",
+          "count": 7
+        }
+      ],
+      "standard_name": "潮宏基"
+    },
+    {
+      "raw_code": "002353.SZ",
+      "standard_code": "002353.SZ",
+      "primary_name": "杰瑞股份",
+      "primary_count": 128,
+      "total": 129,
+      "name_variants": [
+        {
+          "name": "杰瑞股份",
+          "count": 128
+        },
+        {
+          "name": "金肃股份",
+          "count": 1
+        }
+      ],
+      "standard_name": "杰瑞股份"
+    },
+    {
+      "raw_code": "002371.SZ",
+      "standard_code": "002371.SZ",
+      "primary_name": "北方华创",
+      "primary_count": 129,
+      "total": 129,
+      "name_variants": [
+        {
+          "name": "北方华创",
+          "count": 129
+        }
+      ],
+      "standard_name": "北方华创"
+    },
+    {
+      "raw_code": "002384.SZ",
+      "standard_code": "002384.SZ",
+      "primary_name": "东山精密",
+      "primary_count": 75,
+      "total": 75,
+      "name_variants": [
+        {
+          "name": "东山精密",
+          "count": 75
+        }
+      ],
+      "standard_name": "东山精密"
+    },
+    {
+      "raw_code": "002409.SZ",
+      "standard_code": "002409.SZ",
+      "primary_name": "雅克科技",
+      "primary_count": 78,
+      "total": 79,
+      "name_variants": [
+        {
+          "name": "雅克科技",
+          "count": 78
+        },
+        {
+          "name": "国瓷材料",
+          "count": 1
+        }
+      ],
+      "standard_name": "雅克科技"
+    },
+    {
+      "raw_code": "002436.SZ",
+      "standard_code": "002436.SZ",
+      "primary_name": "兴森科技",
+      "primary_count": 19,
+      "total": 19,
+      "name_variants": [
+        {
+          "name": "兴森科技",
+          "count": 19
+        }
+      ],
+      "standard_name": "兴森科技"
+    },
+    {
+      "raw_code": "002444.SZ",
+      "standard_code": "002444.SZ",
+      "primary_name": "巨星科技",
+      "primary_count": 61,
+      "total": 61,
+      "name_variants": [
+        {
+          "name": "巨星科技",
+          "count": 61
+        }
+      ],
+      "standard_name": "巨星科技"
+    },
+    {
+      "raw_code": "002448.SZ",
+      "standard_code": "002448.SZ",
+      "primary_name": "中原内配",
+      "primary_count": 58,
+      "total": 58,
+      "name_variants": [
+        {
+          "name": "中原内配",
+          "count": 58
+        }
+      ],
+      "standard_name": "中原内配"
+    },
+    {
+      "raw_code": "002460.SZ",
+      "standard_code": "002460.SZ",
+      "primary_name": "赣锋锂业",
+      "primary_count": 6,
+      "total": 6,
+      "name_variants": [
+        {
+          "name": "赣锋锂业",
+          "count": 6
+        }
+      ],
+      "standard_name": "赣锋锂业"
+    },
+    {
+      "raw_code": "002463.SZ",
+      "standard_code": "002463.SZ",
+      "primary_name": "沪电股份",
+      "primary_count": 14,
+      "total": 14,
+      "name_variants": [
+        {
+          "name": "沪电股份",
+          "count": 14
+        }
+      ],
+      "standard_name": "沪电股份"
+    },
+    {
+      "raw_code": "002466.SZ",
+      "standard_code": "002466.SZ",
+      "primary_name": "天齐锂业",
+      "primary_count": 19,
+      "total": 19,
+      "name_variants": [
+        {
+          "name": "天齐锂业",
+          "count": 19
+        }
+      ],
+      "standard_name": "天齐锂业"
+    },
+    {
+      "raw_code": "002468.SZ",
+      "standard_code": "002468.SZ",
+      "primary_name": "申通快递",
+      "primary_count": 6,
+      "total": 6,
+      "name_variants": [
+        {
+          "name": "申通快递",
+          "count": 6
+        }
+      ],
+      "standard_name": "申通快递"
+    },
+    {
+      "raw_code": "002475.SZ",
+      "standard_code": "002475.SZ",
+      "primary_name": "立讯精密",
+      "primary_count": 296,
+      "total": 296,
+      "name_variants": [
+        {
+          "name": "立讯精密",
+          "count": 296
+        }
+      ],
+      "standard_name": "立讯精密"
+    },
+    {
+      "raw_code": "002484.SZ",
+      "standard_code": "002484.SZ",
+      "primary_name": "江海股份",
+      "primary_count": 19,
+      "total": 19,
+      "name_variants": [
+        {
+          "name": "江海股份",
+          "count": 19
+        }
+      ],
+      "standard_name": "江海股份"
+    },
+    {
+      "raw_code": "002487.SZ",
+      "standard_code": "002487.SZ",
+      "primary_name": "大金重工",
+      "primary_count": 6,
+      "total": 6,
+      "name_variants": [
+        {
+          "name": "大金重工",
+          "count": 6
+        }
+      ],
+      "standard_name": "大金重工"
+    },
+    {
+      "raw_code": "002493.SZ",
+      "standard_code": "002493.SZ",
+      "primary_name": "荣盛石化",
+      "primary_count": 16,
+      "total": 16,
+      "name_variants": [
+        {
+          "name": "荣盛石化",
+          "count": 16
+        }
+      ],
+      "standard_name": "荣盛石化"
+    },
+    {
+      "raw_code": "002497.SZ",
+      "standard_code": "002497.SZ",
+      "primary_name": "雅化集团",
+      "primary_count": 6,
+      "total": 6,
+      "name_variants": [
+        {
+          "name": "雅化集团",
+          "count": 6
+        }
+      ],
+      "standard_name": "雅化集团"
+    },
+    {
+      "raw_code": "002555.SZ",
+      "standard_code": "002555.SZ",
+      "primary_name": "三七互娱",
+      "primary_count": 17,
+      "total": 17,
+      "name_variants": [
+        {
+          "name": "三七互娱",
+          "count": 17
+        }
+      ],
+      "standard_name": "三七互娱"
+    },
+    {
+      "raw_code": "002606.SZ",
+      "standard_code": "002606.SZ",
+      "primary_name": "大连电瓷",
+      "primary_count": 13,
+      "total": 14,
+      "name_variants": [
+        {
+          "name": "大连电瓷",
+          "count": 13
+        },
+        {
+          "name": "大连重工",
+          "count": 1
+        }
+      ],
+      "standard_name": "大连电瓷"
+    },
+    {
+      "raw_code": "002714.SZ",
+      "standard_code": "002714.SZ",
+      "primary_name": "牧原股份",
+      "primary_count": 8,
+      "total": 8,
+      "name_variants": [
+        {
+          "name": "牧原股份",
+          "count": 8
+        }
+      ],
+      "standard_name": "牧原股份"
+    },
+    {
+      "raw_code": "002738.SZ",
+      "standard_code": "002738.SZ",
+      "primary_name": "中矿资源",
+      "primary_count": 29,
+      "total": 29,
+      "name_variants": [
+        {
+          "name": "中矿资源",
+          "count": 29
+        }
+      ],
+      "standard_name": "中矿资源"
+    },
+    {
+      "raw_code": "002810.SZ",
+      "standard_code": "002810.SZ",
+      "primary_name": "山东赫达",
+      "primary_count": 44,
+      "total": 44,
+      "name_variants": [
+        {
+          "name": "山东赫达",
+          "count": 44
+        }
+      ],
+      "standard_name": "山东赫达"
+    },
+    {
+      "raw_code": "002812.SZ",
+      "standard_code": "002812.SZ",
+      "primary_name": "恩捷股份",
+      "primary_count": 20,
+      "total": 20,
+      "name_variants": [
+        {
+          "name": "恩捷股份",
+          "count": 20
+        }
+      ],
+      "standard_name": "恩捷股份"
+    },
+    {
+      "raw_code": "002850.SZ",
+      "standard_code": "002850.SZ",
+      "primary_name": "科达利",
+      "primary_count": 36,
+      "total": 36,
+      "name_variants": [
+        {
+          "name": "科达利",
+          "count": 36
+        }
+      ],
+      "standard_name": "科达利"
+    },
+    {
+      "raw_code": "002916.SZ",
+      "standard_code": "002916.SZ",
+      "primary_name": "深南电路",
+      "primary_count": 94,
+      "total": 94,
+      "name_variants": [
+        {
+          "name": "深南电路",
+          "count": 94
+        }
+      ],
+      "standard_name": "深南电路"
+    },
+    {
+      "raw_code": "002920.SZ",
+      "standard_code": "002920.SZ",
+      "primary_name": "德赛西威",
+      "primary_count": 19,
+      "total": 19,
+      "name_variants": [
+        {
+          "name": "德赛西威",
+          "count": 19
+        }
+      ],
+      "standard_name": "德赛西威"
+    },
+    {
+      "raw_code": "002922.SZ",
+      "standard_code": "002922.SZ",
+      "primary_name": "伊戈尔",
+      "primary_count": 77,
+      "total": 78,
+      "name_variants": [
+        {
+          "name": "伊戈尔",
+          "count": 77
+        },
+        {
+          "name": "特变电工",
+          "count": 1
+        }
+      ],
+      "standard_name": "伊戈尔"
+    },
+    {
+      "raw_code": "002938.SZ",
+      "standard_code": "002938.SZ",
+      "primary_name": "鹏鼎控股",
+      "primary_count": 31,
+      "total": 31,
+      "name_variants": [
+        {
+          "name": "鹏鼎控股",
+          "count": 31
+        }
+      ],
+      "standard_name": "鹏鼎控股"
+    },
+    {
+      "raw_code": "002940.SZ",
+      "standard_code": "002940.SZ",
+      "primary_name": "昂利康",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "昂利康",
+          "count": 1
+        }
+      ],
+      "standard_name": "昂利康"
+    },
+    {
+      "raw_code": "002950.SZ",
+      "standard_code": "002950.SZ",
+      "primary_name": "奥美医疗",
+      "primary_count": 3,
+      "total": 3,
+      "name_variants": [
+        {
+          "name": "奥美医疗",
+          "count": 3
+        }
+      ],
+      "standard_name": "奥美医疗"
+    },
+    {
+      "raw_code": "300001.SZ",
+      "standard_code": "300001.SZ",
+      "primary_name": "特锐德",
+      "primary_count": 25,
+      "total": 25,
+      "name_variants": [
+        {
+          "name": "特锐德",
+          "count": 25
+        }
+      ],
+      "standard_name": "特锐德"
+    },
+    {
+      "raw_code": "300014.SZ",
+      "standard_code": "300014.SZ",
+      "primary_name": "亿纬锂能",
+      "primary_count": 35,
+      "total": 35,
+      "name_variants": [
+        {
+          "name": "亿纬锂能",
+          "count": 35
+        }
+      ],
+      "standard_name": "亿纬锂能"
+    },
+    {
+      "raw_code": "300017.SZ",
+      "standard_code": "300017.SZ",
+      "primary_name": "网宿科技",
+      "primary_count": 65,
+      "total": 65,
+      "name_variants": [
+        {
+          "name": "网宿科技",
+          "count": 65
+        }
+      ],
+      "standard_name": "网宿科技"
+    },
+    {
+      "raw_code": "300037.SZ",
+      "standard_code": "300037.SZ",
+      "primary_name": "新宙邦",
+      "primary_count": 17,
+      "total": 17,
+      "name_variants": [
+        {
+          "name": "新宙邦",
+          "count": 17
+        }
+      ],
+      "standard_name": "新宙邦"
+    },
+    {
+      "raw_code": "300054.SZ",
+      "standard_code": "300054.SZ",
+      "primary_name": "鼎龙股份",
+      "primary_count": 111,
+      "total": 113,
+      "name_variants": [
+        {
+          "name": "鼎龙股份",
+          "count": 111
+        },
+        {
+          "name": "ST华通",
+          "count": 2
+        }
+      ],
+      "standard_name": "鼎龙股份"
+    },
+    {
+      "raw_code": "300083.SZ",
+      "standard_code": "300083.SZ",
+      "primary_name": "创世纪",
+      "primary_count": 9,
+      "total": 9,
+      "name_variants": [
+        {
+          "name": "创世纪",
+          "count": 9
+        }
+      ],
+      "standard_name": "创世纪"
+    },
+    {
+      "raw_code": "300124.SZ",
+      "standard_code": "300124.SZ",
+      "primary_name": "汇川技术",
+      "primary_count": 39,
+      "total": 39,
+      "name_variants": [
+        {
+          "name": "汇川技术",
+          "count": 39
+        }
+      ],
+      "standard_name": "汇川技术"
+    },
+    {
+      "raw_code": "300207.SZ",
+      "standard_code": "300207.SZ",
+      "primary_name": "欣旺达",
+      "primary_count": 107,
+      "total": 107,
+      "name_variants": [
+        {
+          "name": "欣旺达",
+          "count": 107
+        }
+      ],
+      "standard_name": "欣旺达"
+    },
+    {
+      "raw_code": "300246.SZ",
+      "standard_code": "300246.SZ",
+      "primary_name": "宝莱特",
+      "primary_count": 4,
+      "total": 4,
+      "name_variants": [
+        {
+          "name": "宝莱特",
+          "count": 4
+        }
+      ],
+      "standard_name": "宝莱特"
+    },
+    {
+      "raw_code": "300274.SZ",
+      "standard_code": "300274.SZ",
+      "primary_name": "阳光电源",
+      "primary_count": 208,
+      "total": 208,
+      "name_variants": [
+        {
+          "name": "阳光电源",
+          "count": 208
+        }
+      ],
+      "standard_name": "阳光电源"
+    },
+    {
+      "raw_code": "300285.SZ",
+      "standard_code": "300285.SZ",
+      "primary_name": "国瓷材料",
+      "primary_count": 105,
+      "total": 106,
+      "name_variants": [
+        {
+          "name": "国瓷材料",
+          "count": 105
+        },
+        {
+          "name": "雅克科技",
+          "count": 1
+        }
+      ],
+      "standard_name": "国瓷材料"
+    },
+    {
+      "raw_code": "300308.SZ",
+      "standard_code": "300308.SZ",
+      "primary_name": "中际旭创",
+      "primary_count": 193,
+      "total": 193,
+      "name_variants": [
+        {
+          "name": "中际旭创",
+          "count": 193
+        }
+      ],
+      "standard_name": "中际旭创"
+    },
+    {
+      "raw_code": "300316.SZ",
+      "standard_code": "300316.SZ",
+      "primary_name": "晶盛机电",
+      "primary_count": 183,
+      "total": 183,
+      "name_variants": [
+        {
+          "name": "晶盛机电",
+          "count": 183
+        }
+      ],
+      "standard_name": "晶盛机电"
+    },
+    {
+      "raw_code": "300394.SZ",
+      "standard_code": "300394.SZ",
+      "primary_name": "天孚通信",
+      "primary_count": 56,
+      "total": 56,
+      "name_variants": [
+        {
+          "name": "天孚通信",
+          "count": 56
+        }
+      ],
+      "standard_name": "天孚通信"
+    },
+    {
+      "raw_code": "300395.SZ",
+      "standard_code": "300395.SZ",
+      "primary_name": "菲利华",
+      "primary_count": 5,
+      "total": 5,
+      "name_variants": [
+        {
+          "name": "菲利华",
+          "count": 5
+        }
+      ],
+      "standard_name": "菲利华"
+    },
+    {
+      "raw_code": "300398.SZ",
+      "standard_code": "300398.SZ",
+      "primary_name": "飞凯材料",
+      "primary_count": 6,
+      "total": 6,
+      "name_variants": [
+        {
+          "name": "飞凯材料",
+          "count": 6
+        }
+      ],
+      "standard_name": "飞凯材料"
+    },
+    {
+      "raw_code": "300432.SZ",
+      "standard_code": "300432.SZ",
+      "primary_name": "富临精工",
+      "primary_count": 51,
+      "total": 51,
+      "name_variants": [
+        {
+          "name": "富临精工",
+          "count": 51
+        }
+      ],
+      "standard_name": "富临精工"
+    },
+    {
+      "raw_code": "300436.SZ",
+      "standard_code": "300436.SZ",
+      "primary_name": "广生堂",
+      "primary_count": 9,
+      "total": 9,
+      "name_variants": [
+        {
+          "name": "广生堂",
+          "count": 9
+        }
+      ],
+      "standard_name": "广生堂"
+    },
+    {
+      "raw_code": "300438.SZ",
+      "standard_code": "300438.SZ",
+      "primary_name": "鹏辉能源",
+      "primary_count": 5,
+      "total": 5,
+      "name_variants": [
+        {
+          "name": "鹏辉能源",
+          "count": 5
+        }
+      ],
+      "standard_name": "鹏辉能源"
+    },
+    {
+      "raw_code": "300442.SZ",
+      "standard_code": "300442.SZ",
+      "primary_name": "润泽科技",
+      "primary_count": 8,
+      "total": 8,
+      "name_variants": [
+        {
+          "name": "润泽科技",
+          "count": 8
+        }
+      ],
+      "standard_name": "润泽科技"
+    },
+    {
+      "raw_code": "300443.SZ",
+      "standard_code": "300443.SZ",
+      "primary_name": "金雷股份",
+      "primary_count": 97,
+      "total": 97,
+      "name_variants": [
+        {
+          "name": "金雷股份",
+          "count": 97
+        }
+      ],
+      "standard_name": "金雷股份"
+    },
+    {
+      "raw_code": "300476.SZ",
+      "standard_code": "300476.SZ",
+      "primary_name": "胜宏科技",
+      "primary_count": 36,
+      "total": 36,
+      "name_variants": [
+        {
+          "name": "胜宏科技",
+          "count": 36
+        }
+      ],
+      "standard_name": "胜宏科技"
+    },
+    {
+      "raw_code": "300487.SZ",
+      "standard_code": "300487.SZ",
+      "primary_name": "蓝晓科技",
+      "primary_count": 50,
+      "total": 50,
+      "name_variants": [
+        {
+          "name": "蓝晓科技",
+          "count": 50
+        }
+      ],
+      "standard_name": "蓝晓科技"
+    },
+    {
+      "raw_code": "300502.SZ",
+      "standard_code": "300502.SZ",
+      "primary_name": "新易盛",
+      "primary_count": 185,
+      "total": 185,
+      "name_variants": [
+        {
+          "name": "新易盛",
+          "count": 185
+        }
+      ],
+      "standard_name": "新易盛"
+    },
+    {
+      "raw_code": "300567.SZ",
+      "standard_code": "300567.SZ",
+      "primary_name": "精测电子",
+      "primary_count": 121,
+      "total": 121,
+      "name_variants": [
+        {
+          "name": "精测电子",
+          "count": 121
+        }
+      ],
+      "standard_name": "精测电子"
+    },
+    {
+      "raw_code": "300568.SZ",
+      "standard_code": "300568.SZ",
+      "primary_name": "星源材质",
+      "primary_count": 13,
+      "total": 13,
+      "name_variants": [
+        {
+          "name": "星源材质",
+          "count": 13
+        }
+      ],
+      "standard_name": "星源材质"
+    },
+    {
+      "raw_code": "300570.SZ",
+      "standard_code": "300570.SZ",
+      "primary_name": "太辰光",
+      "primary_count": 6,
+      "total": 6,
+      "name_variants": [
+        {
+          "name": "太辰光",
+          "count": 6
+        }
+      ],
+      "standard_name": "太辰光"
+    },
+    {
+      "raw_code": "300602.SZ",
+      "standard_code": "300602.SZ",
+      "primary_name": "飞荣达",
+      "primary_count": 5,
+      "total": 5,
+      "name_variants": [
+        {
+          "name": "飞荣达",
+          "count": 5
+        }
+      ],
+      "standard_name": "飞荣达"
+    },
+    {
+      "raw_code": "300666.SZ",
+      "standard_code": "300666.SZ",
+      "primary_name": "江丰电子",
+      "primary_count": 43,
+      "total": 43,
+      "name_variants": [
+        {
+          "name": "江丰电子",
+          "count": 43
+        }
+      ],
+      "standard_name": "江丰电子"
+    },
+    {
+      "raw_code": "300672.SZ",
+      "standard_code": "300672.SZ",
+      "primary_name": "国科微",
+      "primary_count": 27,
+      "total": 27,
+      "name_variants": [
+        {
+          "name": "国科微",
+          "count": 27
+        }
+      ],
+      "standard_name": "国科微"
+    },
+    {
+      "raw_code": "300677.SZ",
+      "standard_code": "300677.SZ",
+      "primary_name": "英科医疗",
+      "primary_count": 24,
+      "total": 25,
+      "name_variants": [
+        {
+          "name": "英科医疗",
+          "count": 24
+        },
+        {
+          "name": "盈科医疗",
+          "count": 1
+        }
+      ],
+      "standard_name": "英科医疗"
+    },
+    {
+      "raw_code": "300723.SZ",
+      "standard_code": "300723.SZ",
+      "primary_name": "一品红",
+      "primary_count": 20,
+      "total": 20,
+      "name_variants": [
+        {
+          "name": "一品红",
+          "count": 20
+        }
+      ],
+      "standard_name": "一品红"
+    },
+    {
+      "raw_code": "300724.SZ",
+      "standard_code": "300724.SZ",
+      "primary_name": "捷佳伟创",
+      "primary_count": 2,
+      "total": 2,
+      "name_variants": [
+        {
+          "name": "捷佳伟创",
+          "count": 2
+        }
+      ],
+      "standard_name": "捷佳伟创"
+    },
+    {
+      "raw_code": "300747.SZ",
+      "standard_code": "300747.SZ",
+      "primary_name": "锐科激光",
+      "primary_count": 6,
+      "total": 6,
+      "name_variants": [
+        {
+          "name": "锐科激光",
+          "count": 6
+        }
+      ],
+      "standard_name": "锐科激光"
+    },
+    {
+      "raw_code": "300750.SZ",
+      "standard_code": "300750.SZ",
+      "primary_name": "宁德时代",
+      "primary_count": 486,
+      "total": 486,
+      "name_variants": [
+        {
+          "name": "宁德时代",
+          "count": 486
+        }
+      ],
+      "standard_name": "宁德时代"
+    },
+    {
+      "raw_code": "300751.SZ",
+      "standard_code": "300751.SZ",
+      "primary_name": "迈为股份",
+      "primary_count": 3,
+      "total": 3,
+      "name_variants": [
+        {
+          "name": "迈为股份",
+          "count": 3
+        }
+      ],
+      "standard_name": "迈为股份"
+    },
+    {
+      "raw_code": "300757.SZ",
+      "standard_code": "300757.SZ",
+      "primary_name": "罗博特科",
+      "primary_count": 6,
+      "total": 6,
+      "name_variants": [
+        {
+          "name": "罗博特科",
+          "count": 6
+        }
+      ],
+      "standard_name": "罗博特科"
+    },
+    {
+      "raw_code": "300763.SZ",
+      "standard_code": "300763.SZ",
+      "primary_name": "锦浪科技",
+      "primary_count": 57,
+      "total": 59,
+      "name_variants": [
+        {
+          "name": "锦浪科技",
+          "count": 57
+        },
+        {
+          "name": "东方通",
+          "count": 1
+        },
+        {
+          "name": "银浪科技",
+          "count": 1
+        }
+      ],
+      "standard_name": "锦浪科技"
+    },
+    {
+      "raw_code": "300776.SZ",
+      "standard_code": "300776.SZ",
+      "primary_name": "帝尔激光",
+      "primary_count": 203,
+      "total": 203,
+      "name_variants": [
+        {
+          "name": "帝尔激光",
+          "count": 203
+        }
+      ],
+      "standard_name": "帝尔激光"
+    },
+    {
+      "raw_code": "300782.SZ",
+      "standard_code": "300782.SZ",
+      "primary_name": "卓胜微",
+      "primary_count": 3,
+      "total": 3,
+      "name_variants": [
+        {
+          "name": "卓胜微",
+          "count": 3
+        }
+      ],
+      "standard_name": "卓胜微"
+    },
+    {
+      "raw_code": "300820.SZ",
+      "standard_code": "300820.SZ",
+      "primary_name": "英杰电气",
+      "primary_count": 24,
+      "total": 24,
+      "name_variants": [
+        {
+          "name": "英杰电气",
+          "count": 24
+        }
+      ],
+      "standard_name": "英杰电气"
+    },
+    {
+      "raw_code": "300850.SZ",
+      "standard_code": "300850.SZ",
+      "primary_name": "新强联",
+      "primary_count": 17,
+      "total": 17,
+      "name_variants": [
+        {
+          "name": "新强联",
+          "count": 17
+        }
+      ],
+      "standard_name": "新强联"
+    },
+    {
+      "raw_code": "300900.SZ",
+      "standard_code": "300900.SZ",
+      "primary_name": "广联航空",
+      "primary_count": 6,
+      "total": 6,
+      "name_variants": [
+        {
+          "name": "广联航空",
+          "count": 6
+        }
+      ],
+      "standard_name": "广联航空"
+    },
+    {
+      "raw_code": "301150.SZ",
+      "standard_code": "301150.SZ",
+      "primary_name": "中一科技",
+      "primary_count": 56,
+      "total": 58,
+      "name_variants": [
+        {
+          "name": "中一科技",
+          "count": 56
+        },
+        {
+          "name": "兖煤澳大利亚",
+          "count": 1
+        },
+        {
+          "name": "第一科技",
+          "count": 1
+        }
+      ],
+      "standard_name": "中一科技"
+    },
+    {
+      "raw_code": "301188.SZ",
+      "standard_code": "301188.SZ",
+      "primary_name": "力诺药包",
+      "primary_count": 11,
+      "total": 26,
+      "name_variants": [
+        {
+          "name": "力诺药包",
+          "count": 11
+        },
+        {
+          "name": "力诺特玻",
+          "count": 6
+        },
+        {
+          "name": "力诺特包",
+          "count": 3
+        },
+        {
+          "name": "力诺特新",
+          "count": 2
+        },
+        {
+          "name": "力诺特药",
+          "count": 2
+        },
+        {
+          "name": "力诺特瑞",
+          "count": 1
+        },
+        {
+          "name": "力诺特股",
+          "count": 1
+        }
+      ],
+      "standard_name": "力诺药包"
+    },
+    {
+      "raw_code": "301217.SZ",
+      "standard_code": "301217.SZ",
+      "primary_name": "铜冠铜箔",
+      "primary_count": 6,
+      "total": 6,
+      "name_variants": [
+        {
+          "name": "铜冠铜箔",
+          "count": 6
+        }
+      ],
+      "standard_name": "铜冠铜箔"
+    },
+    {
+      "raw_code": "301232.SZ",
+      "standard_code": "301232.SZ",
+      "primary_name": "飞沃科技",
+      "primary_count": 3,
+      "total": 3,
+      "name_variants": [
+        {
+          "name": "飞沃科技",
+          "count": 3
+        }
+      ],
+      "standard_name": "飞沃科技"
+    },
+    {
+      "raw_code": "301338.SZ",
+      "standard_code": "301338.SZ",
+      "primary_name": "凯格精机",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "凯格精机",
+          "count": 1
+        }
+      ],
+      "standard_name": "凯格精机"
+    },
+    {
+      "raw_code": "301358.SZ",
+      "standard_code": "301358.SZ",
+      "primary_name": "湖南裕能",
+      "primary_count": 7,
+      "total": 7,
+      "name_variants": [
+        {
+          "name": "湖南裕能",
+          "count": 7
+        }
+      ],
+      "standard_name": "湖南裕能"
+    },
+    {
+      "raw_code": "301363.SZ",
+      "standard_code": "301363.SZ",
+      "primary_name": "美好医疗",
+      "primary_count": 3,
+      "total": 3,
+      "name_variants": [
+        {
+          "name": "美好医疗",
+          "count": 3
+        }
+      ],
+      "standard_name": "美好医疗"
+    },
+    {
+      "raw_code": "301486.SZ",
+      "standard_code": "301486.SZ",
+      "primary_name": "致尚科技",
+      "primary_count": 14,
+      "total": 14,
+      "name_variants": [
+        {
+          "name": "致尚科技",
+          "count": 14
+        }
+      ],
+      "standard_name": "致尚科技"
+    },
+    {
+      "raw_code": "301513.SZ",
+      "standard_code": "301513.SZ",
+      "primary_name": "尚水智能",
+      "primary_count": 5,
+      "total": 5,
+      "name_variants": [
+        {
+          "name": "尚水智能",
+          "count": 5
+        }
+      ],
+      "standard_name": "尚水智能"
+    },
+    {
+      "raw_code": "301683.SZ",
+      "standard_code": "301683.SZ",
+      "primary_name": "慧谷新材",
+      "primary_count": 6,
+      "total": 6,
+      "name_variants": [
+        {
+          "name": "慧谷新材",
+          "count": 6
+        }
+      ],
+      "standard_name": "慧谷新材"
+    },
+    {
+      "raw_code": "301696.SZ",
+      "standard_code": "301696.SZ",
+      "primary_name": "三瑞智能",
+      "primary_count": 7,
+      "total": 7,
+      "name_variants": [
+        {
+          "name": "三瑞智能",
+          "count": 7
+        }
+      ],
+      "standard_name": "三瑞智能"
+    },
+    {
+      "raw_code": "600000.SH",
+      "standard_code": "600000.SH",
+      "primary_name": "浦发银行",
+      "primary_count": 40,
+      "total": 40,
+      "name_variants": [
+        {
+          "name": "浦发银行",
+          "count": 40
+        }
+      ],
+      "standard_name": "浦发银行"
+    },
+    {
+      "raw_code": "600010.SH",
+      "standard_code": "600010.SH",
+      "primary_name": "包钢股份",
+      "primary_count": 12,
+      "total": 12,
+      "name_variants": [
+        {
+          "name": "包钢股份",
+          "count": 12
+        }
+      ],
+      "standard_name": "包钢股份"
+    },
+    {
+      "raw_code": "600026.SH",
+      "standard_code": "600026.SH",
+      "primary_name": "中远海能",
+      "primary_count": 28,
+      "total": 29,
+      "name_variants": [
+        {
+          "name": "中远海能",
+          "count": 28
+        },
+        {
+          "name": "恒力石化",
+          "count": 1
+        }
+      ],
+      "standard_name": "中远海能"
+    },
+    {
+      "raw_code": "600029.SH",
+      "standard_code": "600029.SH",
+      "primary_name": "南方航空",
+      "primary_count": 41,
+      "total": 41,
+      "name_variants": [
+        {
+          "name": "南方航空",
+          "count": 41
+        }
+      ],
+      "standard_name": "南方航空"
+    },
+    {
+      "raw_code": "600030.SH",
+      "standard_code": "600030.SH",
+      "primary_name": "中信证券",
+      "primary_count": 27,
+      "total": 27,
+      "name_variants": [
+        {
+          "name": "中信证券",
+          "count": 27
+        }
+      ],
+      "standard_name": "中信证券"
+    },
+    {
+      "raw_code": "600031.SH",
+      "standard_code": "600031.SH",
+      "primary_name": "三一重工",
+      "primary_count": 180,
+      "total": 180,
+      "name_variants": [
+        {
+          "name": "三一重工",
+          "count": 180
+        }
+      ],
+      "standard_name": "三一重工"
+    },
+    {
+      "raw_code": "600066.SH",
+      "standard_code": "600066.SH",
+      "primary_name": "宇通客车",
+      "primary_count": 76,
+      "total": 77,
+      "name_variants": [
+        {
+          "name": "宇通客车",
+          "count": 76
+        },
+        {
+          "name": "福耀玻璃",
+          "count": 1
+        }
+      ],
+      "standard_name": "宇通客车"
+    },
+    {
+      "raw_code": "600078.SH",
+      "standard_code": "600078.SH",
+      "primary_name": "澄星股份",
+      "primary_count": 19,
+      "total": 19,
+      "name_variants": [
+        {
+          "name": "澄星股份",
+          "count": 19
+        }
+      ],
+      "standard_name": "澄星股份"
+    },
+    {
+      "raw_code": "600089.SH",
+      "standard_code": "600089.SH",
+      "primary_name": "特变电工",
+      "primary_count": 100,
+      "total": 102,
+      "name_variants": [
+        {
+          "name": "特变电工",
+          "count": 100
+        },
+        {
+          "name": "伊戈尔",
+          "count": 1
+        },
+        {
+          "name": "隆鑫通用",
+          "count": 1
+        }
+      ],
+      "standard_name": "特变电工"
+    },
+    {
+      "raw_code": "600111.SH",
+      "standard_code": "600111.SH",
+      "primary_name": "北方稀土",
+      "primary_count": 49,
+      "total": 49,
+      "name_variants": [
+        {
+          "name": "北方稀土",
+          "count": 49
+        }
+      ],
+      "standard_name": "北方稀土"
+    },
+    {
+      "raw_code": "600115.SH",
+      "standard_code": "600115.SH",
+      "primary_name": "中国东航",
+      "primary_count": 49,
+      "total": 49,
+      "name_variants": [
+        {
+          "name": "中国东航",
+          "count": 49
+        }
+      ],
+      "standard_name": "中国东航"
+    },
+    {
+      "raw_code": "600141.SH",
+      "standard_code": "600141.SH",
+      "primary_name": "兴发集团",
+      "primary_count": 71,
+      "total": 72,
+      "name_variants": [
+        {
+          "name": "兴发集团",
+          "count": 71
+        },
+        {
+          "name": "兴业集团",
+          "count": 1
+        }
+      ],
+      "standard_name": "兴发集团"
+    },
+    {
+      "raw_code": "600150.SH",
+      "standard_code": "600150.SH",
+      "primary_name": "中国船舶",
+      "primary_count": 45,
+      "total": 45,
+      "name_variants": [
+        {
+          "name": "中国船舶",
+          "count": 45
+        }
+      ],
+      "standard_name": "中国船舶"
+    },
+    {
+      "raw_code": "600176.SH",
+      "standard_code": "600176.SH",
+      "primary_name": "中国巨石",
+      "primary_count": 49,
+      "total": 49,
+      "name_variants": [
+        {
+          "name": "中国巨石",
+          "count": 49
+        }
+      ],
+      "standard_name": "中国巨石"
+    },
+    {
+      "raw_code": "600185.SH",
+      "standard_code": "600185.SH",
+      "primary_name": "珠免集团",
+      "primary_count": 16,
+      "total": 31,
+      "name_variants": [
+        {
+          "name": "珠免集团",
+          "count": 16
+        },
+        {
+          "name": "珠海集团",
+          "count": 14
+        },
+        {
+          "name": "格力地产",
+          "count": 1
+        }
+      ],
+      "standard_name": "珠免集团"
+    },
+    {
+      "raw_code": "600259.SH",
+      "standard_code": "600259.SH",
+      "primary_name": "中稀有色",
+      "primary_count": 9,
+      "total": 11,
+      "name_variants": [
+        {
+          "name": "中稀有色",
+          "count": 9
+        },
+        {
+          "name": "XD中稀有",
+          "count": 1
+        },
+        {
+          "name": "广晟有色",
+          "count": 1
+        }
+      ],
+      "standard_name": "中稀有色"
+    },
+    {
+      "raw_code": "600301.SH",
+      "standard_code": "600301.SH",
+      "primary_name": "华锡有色",
+      "primary_count": 114,
+      "total": 118,
+      "name_variants": [
+        {
+          "name": "华锡有色",
+          "count": 114
+        },
+        {
+          "name": "华通线缆",
+          "count": 2
+        },
+        {
+          "name": "亨通光电",
+          "count": 1
+        },
+        {
+          "name": "华泰证券",
+          "count": 1
+        }
+      ],
+      "standard_name": "华锡有色"
+    },
+    {
+      "raw_code": "600309.SH",
+      "standard_code": "600309.SH",
+      "primary_name": "万华化学",
+      "primary_count": 108,
+      "total": 110,
+      "name_variants": [
+        {
+          "name": "万华化学",
+          "count": 108
+        },
+        {
+          "name": "XD万华化学",
+          "count": 1
+        },
+        {
+          "name": "神火股份",
+          "count": 1
+        }
+      ],
+      "standard_name": "万华化学"
+    },
+    {
+      "raw_code": "600328.SH",
+      "standard_code": "600328.SH",
+      "primary_name": "中盐化工",
+      "primary_count": 8,
+      "total": 8,
+      "name_variants": [
+        {
+          "name": "中盐化工",
+          "count": 8
+        }
+      ],
+      "standard_name": "中盐化工"
+    },
+    {
+      "raw_code": "600389.SH",
+      "standard_code": "600389.SH",
+      "primary_name": "江山股份",
+      "primary_count": 4,
+      "total": 4,
+      "name_variants": [
+        {
+          "name": "江山股份",
+          "count": 4
+        }
+      ],
+      "standard_name": "江山股份"
+    },
+    {
+      "raw_code": "600415.SH",
+      "standard_code": "600415.SH",
+      "primary_name": "小商品城",
+      "primary_count": 119,
+      "total": 119,
+      "name_variants": [
+        {
+          "name": "小商品城",
+          "count": 119
+        }
+      ],
+      "standard_name": "小商品城"
+    },
+    {
+      "raw_code": "600426.SH",
+      "standard_code": "600426.SH",
+      "primary_name": "华鲁恒升",
+      "primary_count": 47,
+      "total": 47,
+      "name_variants": [
+        {
+          "name": "华鲁恒升",
+          "count": 47
+        }
+      ],
+      "standard_name": "华鲁恒升"
+    },
+    {
+      "raw_code": "600482.SH",
+      "standard_code": "600482.SH",
+      "primary_name": "中国动力",
+      "primary_count": 82,
+      "total": 85,
+      "name_variants": [
+        {
+          "name": "中国动力",
+          "count": 82
+        },
+        {
+          "name": "湖南黄金",
+          "count": 2
+        },
+        {
+          "name": "中广核矿业",
+          "count": 1
+        }
+      ],
+      "standard_name": "中国动力"
+    },
+    {
+      "raw_code": "600486.SH",
+      "standard_code": "600486.SH",
+      "primary_name": "扬农化工",
+      "primary_count": 35,
+      "total": 35,
+      "name_variants": [
+        {
+          "name": "扬农化工",
+          "count": 35
+        }
+      ],
+      "standard_name": "扬农化工"
+    },
+    {
+      "raw_code": "600487.SH",
+      "standard_code": "600487.SH",
+      "primary_name": "亨通光电",
+      "primary_count": 181,
+      "total": 183,
+      "name_variants": [
+        {
+          "name": "亨通光电",
+          "count": 181
+        },
+        {
+          "name": "中广核矿业",
+          "count": 1
+        },
+        {
+          "name": "华锡有色",
+          "count": 1
+        }
+      ],
+      "standard_name": "亨通光电"
+    },
+    {
+      "raw_code": "600489.SH",
+      "standard_code": "600489.SH",
+      "primary_name": "中金黄金",
+      "primary_count": 9,
+      "total": 9,
+      "name_variants": [
+        {
+          "name": "中金黄金",
+          "count": 9
+        }
+      ],
+      "standard_name": "中金黄金"
+    },
+    {
+      "raw_code": "600498.SH",
+      "standard_code": "600498.SH",
+      "primary_name": "烽火通信",
+      "primary_count": 5,
+      "total": 5,
+      "name_variants": [
+        {
+          "name": "烽火通信",
+          "count": 5
+        }
+      ],
+      "standard_name": "烽火通信"
+    },
+    {
+      "raw_code": "600513.SH",
+      "standard_code": "600513.SH",
+      "primary_name": "联环药业",
+      "primary_count": 5,
+      "total": 5,
+      "name_variants": [
+        {
+          "name": "联环药业",
+          "count": 5
+        }
+      ],
+      "standard_name": "联环药业"
+    },
+    {
+      "raw_code": "600519.SH",
+      "standard_code": "600519.SH",
+      "primary_name": "贵州茅台",
+      "primary_count": 157,
+      "total": 158,
+      "name_variants": [
+        {
+          "name": "贵州茅台",
+          "count": 157
+        },
+        {
+          "name": "XD贵州茅台",
+          "count": 1
+        }
+      ],
+      "standard_name": "贵州茅台"
+    },
+    {
+      "raw_code": "600547.SH",
+      "standard_code": "600547.SH",
+      "primary_name": "山东黄金",
+      "primary_count": 39,
+      "total": 39,
+      "name_variants": [
+        {
+          "name": "山东黄金",
+          "count": 39
+        }
+      ],
+      "standard_name": "山东黄金"
+    },
+    {
+      "raw_code": "600585.SH",
+      "standard_code": "600585.SH",
+      "primary_name": "海螺水泥",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "海螺水泥",
+          "count": 1
+        }
+      ],
+      "standard_name": "海螺水泥"
+    },
+    {
+      "raw_code": "600590.SH",
+      "standard_code": "600590.SH",
+      "primary_name": "泰豪科技",
+      "primary_count": 27,
+      "total": 27,
+      "name_variants": [
+        {
+          "name": "泰豪科技",
+          "count": 27
+        }
+      ],
+      "standard_name": "泰豪科技"
+    },
+    {
+      "raw_code": "600660.SH",
+      "standard_code": "600660.SH",
+      "primary_name": "福耀玻璃",
+      "primary_count": 113,
+      "total": 113,
+      "name_variants": [
+        {
+          "name": "福耀玻璃",
+          "count": 113
+        }
+      ],
+      "standard_name": "福耀玻璃"
+    },
+    {
+      "raw_code": "600674.SH",
+      "standard_code": "600674.SH",
+      "primary_name": "川投能源",
+      "primary_count": 5,
+      "total": 5,
+      "name_variants": [
+        {
+          "name": "川投能源",
+          "count": 5
+        }
+      ],
+      "standard_name": "川投能源"
+    },
+    {
+      "raw_code": "600690.SH",
+      "standard_code": "600690.SH",
+      "primary_name": "海尔智家",
+      "primary_count": 4,
+      "total": 4,
+      "name_variants": [
+        {
+          "name": "海尔智家",
+          "count": 4
+        }
+      ],
+      "standard_name": "海尔智家"
+    },
+    {
+      "raw_code": "600732.SH",
+      "standard_code": "600732.SH",
+      "primary_name": "爱旭股份",
+      "primary_count": 116,
+      "total": 116,
+      "name_variants": [
+        {
+          "name": "爱旭股份",
+          "count": 116
+        }
+      ],
+      "standard_name": "爱旭股份"
+    },
+    {
+      "raw_code": "600763.SH",
+      "standard_code": "600763.SH",
+      "primary_name": "通策医疗",
+      "primary_count": 57,
+      "total": 57,
+      "name_variants": [
+        {
+          "name": "通策医疗",
+          "count": 57
+        }
+      ],
+      "standard_name": "通策医疗"
+    },
+    {
+      "raw_code": "600773.SH",
+      "standard_code": "600773.SH",
+      "primary_name": "西藏城投",
+      "primary_count": 56,
+      "total": 56,
+      "name_variants": [
+        {
+          "name": "西藏城投",
+          "count": 56
+        }
+      ],
+      "standard_name": "西藏城投"
+    },
+    {
+      "raw_code": "600809.SH",
+      "standard_code": "600809.SH",
+      "primary_name": "山西汾酒",
+      "primary_count": 24,
+      "total": 24,
+      "name_variants": [
+        {
+          "name": "山西汾酒",
+          "count": 24
+        }
+      ],
+      "standard_name": "山西汾酒"
+    },
+    {
+      "raw_code": "600869.SH",
+      "standard_code": "600869.SH",
+      "primary_name": "远东股份",
+      "primary_count": 12,
+      "total": 12,
+      "name_variants": [
+        {
+          "name": "远东股份",
+          "count": 12
+        }
+      ],
+      "standard_name": "远东股份"
+    },
+    {
+      "raw_code": "600879.SH",
+      "standard_code": "600879.SH",
+      "primary_name": "航天电子",
+      "primary_count": 14,
+      "total": 14,
+      "name_variants": [
+        {
+          "name": "航天电子",
+          "count": 14
+        }
+      ],
+      "standard_name": "航天电子"
+    },
+    {
+      "raw_code": "600887.SH",
+      "standard_code": "600887.SH",
+      "primary_name": "伊利股份",
+      "primary_count": 5,
+      "total": 5,
+      "name_variants": [
+        {
+          "name": "伊利股份",
+          "count": 5
+        }
+      ],
+      "standard_name": "伊利股份"
+    },
+    {
+      "raw_code": "600919.SH",
+      "standard_code": "600919.SH",
+      "primary_name": "江苏银行",
+      "primary_count": 45,
+      "total": 45,
+      "name_variants": [
+        {
+          "name": "江苏银行",
+          "count": 45
+        }
+      ],
+      "standard_name": "江苏银行"
+    },
+    {
+      "raw_code": "600926.SH",
+      "standard_code": "600926.SH",
+      "primary_name": "杭州银行",
+      "primary_count": 10,
+      "total": 10,
+      "name_variants": [
+        {
+          "name": "杭州银行",
+          "count": 10
+        }
+      ],
+      "standard_name": "杭州银行"
+    },
+    {
+      "raw_code": "600938.SH",
+      "standard_code": "600938.SH",
+      "primary_name": "中国海油",
+      "primary_count": 5,
+      "total": 5,
+      "name_variants": [
+        {
+          "name": "中国海油",
+          "count": 5
+        }
+      ],
+      "standard_name": "中国海油"
+    },
+    {
+      "raw_code": "600961.SH",
+      "standard_code": "600961.SH",
+      "primary_name": "株冶集团",
+      "primary_count": 119,
+      "total": 119,
+      "name_variants": [
+        {
+          "name": "株冶集团",
+          "count": 119
+        }
+      ],
+      "standard_name": "株冶集团"
+    },
+    {
+      "raw_code": "600984.SH",
+      "standard_code": "600984.SH",
+      "primary_name": "建设机械",
+      "primary_count": 31,
+      "total": 31,
+      "name_variants": [
+        {
+          "name": "建设机械",
+          "count": 31
+        }
+      ],
+      "standard_name": "建设机械"
+    },
+    {
+      "raw_code": "600988.SH",
+      "standard_code": "600988.SH",
+      "primary_name": "赤峰黄金",
+      "primary_count": 45,
+      "total": 45,
+      "name_variants": [
+        {
+          "name": "赤峰黄金",
+          "count": 45
+        }
+      ],
+      "standard_name": "赤峰黄金"
+    },
+    {
+      "raw_code": "600989.SH",
+      "standard_code": "600989.SH",
+      "primary_name": "宝丰能源",
+      "primary_count": 28,
+      "total": 29,
+      "name_variants": [
+        {
+          "name": "宝丰能源",
+          "count": 28
+        },
+        {
+          "name": "XD宝丰能",
+          "count": 1
+        }
+      ],
+      "standard_name": "宝丰能源"
+    },
+    {
+      "raw_code": "601012.SH",
+      "standard_code": "601012.SH",
+      "primary_name": "隆基绿能",
+      "primary_count": 86,
+      "total": 86,
+      "name_variants": [
+        {
+          "name": "隆基绿能",
+          "count": 86
+        }
+      ],
+      "standard_name": "隆基绿能"
+    },
+    {
+      "raw_code": "601021.SH",
+      "standard_code": "601021.SH",
+      "primary_name": "春秋航空",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "春秋航空",
+          "count": 1
+        }
+      ],
+      "standard_name": "春秋航空"
+    },
+    {
+      "raw_code": "601058.SH",
+      "standard_code": "601058.SH",
+      "primary_name": "赛轮轮胎",
+      "primary_count": 118,
+      "total": 119,
+      "name_variants": [
+        {
+          "name": "赛轮轮胎",
+          "count": 118
+        },
+        {
+          "name": "鼎龙股份",
+          "count": 1
+        }
+      ],
+      "standard_name": "赛轮轮胎"
+    },
+    {
+      "raw_code": "601100.SH",
+      "standard_code": "601100.SH",
+      "primary_name": "恒立液压",
+      "primary_count": 12,
+      "total": 12,
+      "name_variants": [
+        {
+          "name": "恒立液压",
+          "count": 12
+        }
+      ],
+      "standard_name": "恒立液压"
+    },
+    {
+      "raw_code": "601111.SH",
+      "standard_code": "601111.SH",
+      "primary_name": "中国国航",
+      "primary_count": 34,
+      "total": 37,
+      "name_variants": [
+        {
+          "name": "中国国航",
+          "count": 34
+        },
+        {
+          "name": "中国东方航空股份",
+          "count": 2
+        },
+        {
+          "name": "工商银行",
+          "count": 1
+        }
+      ],
+      "standard_name": "中国国航"
+    },
+    {
+      "raw_code": "601126.SH",
+      "standard_code": "601126.SH",
+      "primary_name": "四方股份",
+      "primary_count": 118,
+      "total": 119,
+      "name_variants": [
+        {
+          "name": "四方股份",
+          "count": 118
+        },
+        {
+          "name": "XD四方股份",
+          "count": 1
+        }
+      ],
+      "standard_name": "四方股份"
+    },
+    {
+      "raw_code": "601138.SH",
+      "standard_code": "601138.SH",
+      "primary_name": "工业富联",
+      "primary_count": 104,
+      "total": 106,
+      "name_variants": [
+        {
+          "name": "工业富联",
+          "count": 104
+        },
+        {
+          "name": "XD工业富",
+          "count": 1
+        },
+        {
+          "name": "XD工业富联",
+          "count": 1
+        }
+      ],
+      "standard_name": "工业富联"
+    },
+    {
+      "raw_code": "601155.SH",
+      "standard_code": "601155.SH",
+      "primary_name": "新城控股",
+      "primary_count": 13,
+      "total": 13,
+      "name_variants": [
+        {
+          "name": "新城控股",
+          "count": 13
+        }
+      ],
+      "standard_name": "新城控股"
+    },
+    {
+      "raw_code": "601166.SH",
+      "standard_code": "601166.SH",
+      "primary_name": "兴业银行",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "兴业银行",
+          "count": 1
+        }
+      ],
+      "standard_name": "兴业银行"
+    },
+    {
+      "raw_code": "601168.SH",
+      "standard_code": "601168.SH",
+      "primary_name": "西部矿业",
+      "primary_count": 80,
+      "total": 81,
+      "name_variants": [
+        {
+          "name": "西部矿业",
+          "count": 80
+        },
+        {
+          "name": "XD西部矿",
+          "count": 1
+        }
+      ],
+      "standard_name": "西部矿业"
+    },
+    {
+      "raw_code": "601231.SH",
+      "standard_code": "601231.SH",
+      "primary_name": "环旭电子",
+      "primary_count": 117,
+      "total": 117,
+      "name_variants": [
+        {
+          "name": "环旭电子",
+          "count": 117
+        }
+      ],
+      "standard_name": "环旭电子"
+    },
+    {
+      "raw_code": "601233.SH",
+      "standard_code": "601233.SH",
+      "primary_name": "桐昆股份",
+      "primary_count": 17,
+      "total": 17,
+      "name_variants": [
+        {
+          "name": "桐昆股份",
+          "count": 17
+        }
+      ],
+      "standard_name": "桐昆股份"
+    },
+    {
+      "raw_code": "601288.SH",
+      "standard_code": "601288.SH",
+      "primary_name": "农业银行",
+      "primary_count": 115,
+      "total": 118,
+      "name_variants": [
+        {
+          "name": "农业银行",
+          "count": 115
+        },
+        {
+          "name": "XD农业银行",
+          "count": 2
+        },
+        {
+          "name": "亿纬锂能",
+          "count": 1
+        }
+      ],
+      "standard_name": "农业银行"
+    },
+    {
+      "raw_code": "601318.SH",
+      "standard_code": "601318.SH",
+      "primary_name": "中国平安",
+      "primary_count": 136,
+      "total": 136,
+      "name_variants": [
+        {
+          "name": "中国平安",
+          "count": 136
+        }
+      ],
+      "standard_name": "中国平安"
+    },
+    {
+      "raw_code": "601398.SH",
+      "standard_code": "601398.SH",
+      "primary_name": "工商银行",
+      "primary_count": 103,
+      "total": 104,
+      "name_variants": [
+        {
+          "name": "工商银行",
+          "count": 103
+        },
+        {
+          "name": "XD工商银行",
+          "count": 1
+        }
+      ],
+      "standard_name": "工商银行"
+    },
+    {
+      "raw_code": "601636.SH",
+      "standard_code": "601636.SH",
+      "primary_name": "旗滨集团",
+      "primary_count": 133,
+      "total": 133,
+      "name_variants": [
+        {
+          "name": "旗滨集团",
+          "count": 133
+        }
+      ],
+      "standard_name": "旗滨集团"
+    },
+    {
+      "raw_code": "601665.SH",
+      "standard_code": "601665.SH",
+      "primary_name": "齐鲁银行",
+      "primary_count": 32,
+      "total": 32,
+      "name_variants": [
+        {
+          "name": "齐鲁银行",
+          "count": 32
+        }
+      ],
+      "standard_name": "齐鲁银行"
+    },
+    {
+      "raw_code": "601688.SH",
+      "standard_code": "601688.SH",
+      "primary_name": "华泰证券",
+      "primary_count": 51,
+      "total": 52,
+      "name_variants": [
+        {
+          "name": "华泰证券",
+          "count": 51
+        },
+        {
+          "name": "XD华泰证",
+          "count": 1
+        }
+      ],
+      "standard_name": "华泰证券"
+    },
+    {
+      "raw_code": "601799.SH",
+      "standard_code": "601799.SH",
+      "primary_name": "星宇股份",
+      "primary_count": 12,
+      "total": 12,
+      "name_variants": [
+        {
+          "name": "星宇股份",
+          "count": 12
+        }
+      ],
+      "standard_name": "星宇股份"
+    },
+    {
+      "raw_code": "601872.SH",
+      "standard_code": "601872.SH",
+      "primary_name": "招商轮船",
+      "primary_count": 65,
+      "total": 66,
+      "name_variants": [
+        {
+          "name": "招商轮船",
+          "count": 65
+        },
+        {
+          "name": "中国动力",
+          "count": 1
+        }
+      ],
+      "standard_name": "招商轮船"
+    },
+    {
+      "raw_code": "601888.SH",
+      "standard_code": "601888.SH",
+      "primary_name": "中国中免",
+      "primary_count": 6,
+      "total": 6,
+      "name_variants": [
+        {
+          "name": "中国中免",
+          "count": 6
+        }
+      ],
+      "standard_name": "中国中免"
+    },
+    {
+      "raw_code": "601899.SH",
+      "standard_code": "601899.SH",
+      "primary_name": "紫金矿业",
+      "primary_count": 256,
+      "total": 256,
+      "name_variants": [
+        {
+          "name": "紫金矿业",
+          "count": 256
+        }
+      ],
+      "standard_name": "紫金矿业"
+    },
+    {
+      "raw_code": "601918.SH",
+      "standard_code": "601918.SH",
+      "primary_name": "新集能源",
+      "primary_count": 23,
+      "total": 23,
+      "name_variants": [
+        {
+          "name": "新集能源",
+          "count": 23
+        }
+      ],
+      "standard_name": "新集能源"
+    },
+    {
+      "raw_code": "601939.SH",
+      "standard_code": "601939.SH",
+      "primary_name": "建设银行",
+      "primary_count": 117,
+      "total": 118,
+      "name_variants": [
+        {
+          "name": "建设银行",
+          "count": 117
+        },
+        {
+          "name": "XD建设银行",
+          "count": 1
+        }
+      ],
+      "standard_name": "建设银行"
+    },
+    {
+      "raw_code": "601958.SH",
+      "standard_code": "601958.SH",
+      "primary_name": "金钼股份",
+      "primary_count": 4,
+      "total": 4,
+      "name_variants": [
+        {
+          "name": "金钼股份",
+          "count": 4
+        }
+      ],
+      "standard_name": "金钼股份"
+    },
+    {
+      "raw_code": "601988.SH",
+      "standard_code": "601988.SH",
+      "primary_name": "中国银行",
+      "primary_count": 110,
+      "total": 111,
+      "name_variants": [
+        {
+          "name": "中国银行",
+          "count": 110
+        },
+        {
+          "name": "XD中国银行",
+          "count": 1
+        }
+      ],
+      "standard_name": "中国银行"
+    },
+    {
+      "raw_code": "603067.SH",
+      "standard_code": "603067.SH",
+      "primary_name": "振华股份",
+      "primary_count": 76,
+      "total": 76,
+      "name_variants": [
+        {
+          "name": "振华股份",
+          "count": 76
+        }
+      ],
+      "standard_name": "振华股份"
+    },
+    {
+      "raw_code": "603179.SH",
+      "standard_code": "603179.SH",
+      "primary_name": "新泉股份",
+      "primary_count": 4,
+      "total": 4,
+      "name_variants": [
+        {
+          "name": "新泉股份",
+          "count": 4
+        }
+      ],
+      "standard_name": "新泉股份"
+    },
+    {
+      "raw_code": "603185.SH",
+      "standard_code": "603185.SH",
+      "primary_name": "弘元绿能",
+      "primary_count": 9,
+      "total": 9,
+      "name_variants": [
+        {
+          "name": "弘元绿能",
+          "count": 9
+        }
+      ],
+      "standard_name": "弘元绿能"
+    },
+    {
+      "raw_code": "603225.SH",
+      "standard_code": "603225.SH",
+      "primary_name": "新凤鸣",
+      "primary_count": 85,
+      "total": 85,
+      "name_variants": [
+        {
+          "name": "新凤鸣",
+          "count": 85
+        }
+      ],
+      "standard_name": "新凤鸣"
+    },
+    {
+      "raw_code": "603259.SH",
+      "standard_code": "603259.SH",
+      "primary_name": "药明康德",
+      "primary_count": 28,
+      "total": 28,
+      "name_variants": [
+        {
+          "name": "药明康德",
+          "count": 28
+        }
+      ],
+      "standard_name": "药明康德"
+    },
+    {
+      "raw_code": "603268.SH",
+      "standard_code": "603268.SH",
+      "primary_name": "松发股份",
+      "primary_count": 16,
+      "total": 16,
+      "name_variants": [
+        {
+          "name": "松发股份",
+          "count": 16
+        }
+      ],
+      "standard_name": "松发股份"
+    },
+    {
+      "raw_code": "603296.SH",
+      "standard_code": "603296.SH",
+      "primary_name": "华勤技术",
+      "primary_count": 26,
+      "total": 26,
+      "name_variants": [
+        {
+          "name": "华勤技术",
+          "count": 26
+        }
+      ],
+      "standard_name": "华勤技术"
+    },
+    {
+      "raw_code": "603297.SH",
+      "standard_code": "603297.SH",
+      "primary_name": "永新光学",
+      "primary_count": 62,
+      "total": 62,
+      "name_variants": [
+        {
+          "name": "永新光学",
+          "count": 62
+        }
+      ],
+      "standard_name": "永新光学"
+    },
+    {
+      "raw_code": "603298.SH",
+      "standard_code": "603298.SH",
+      "primary_name": "杭叉集团",
+      "primary_count": 115,
+      "total": 117,
+      "name_variants": [
+        {
+          "name": "杭叉集团",
+          "count": 115
+        },
+        {
+          "name": "XD杭叉集",
+          "count": 2
+        }
+      ],
+      "standard_name": "杭叉集团"
+    },
+    {
+      "raw_code": "603308.SH",
+      "standard_code": "603308.SH",
+      "primary_name": "应流股份",
+      "primary_count": 21,
+      "total": 21,
+      "name_variants": [
+        {
+          "name": "应流股份",
+          "count": 21
+        }
+      ],
+      "standard_name": "应流股份"
+    },
+    {
+      "raw_code": "603341.SH",
+      "standard_code": "603341.SH",
+      "primary_name": "龙旗科技",
+      "primary_count": 2,
+      "total": 2,
+      "name_variants": [
+        {
+          "name": "龙旗科技",
+          "count": 2
+        }
+      ],
+      "standard_name": "龙旗科技"
+    },
+    {
+      "raw_code": "603345.SH",
+      "standard_code": "603345.SH",
+      "primary_name": "安井食品",
+      "primary_count": 33,
+      "total": 34,
+      "name_variants": [
+        {
+          "name": "安井食品",
+          "count": 33
+        },
+        {
+          "name": "华鲁恒升",
+          "count": 1
+        }
+      ],
+      "standard_name": "安井食品"
+    },
+    {
+      "raw_code": "603606.SH",
+      "standard_code": "603606.SH",
+      "primary_name": "东方电缆",
+      "primary_count": 12,
+      "total": 12,
+      "name_variants": [
+        {
+          "name": "东方电缆",
+          "count": 12
+        }
+      ],
+      "standard_name": "东方电缆"
+    },
+    {
+      "raw_code": "603699.SH",
+      "standard_code": "603699.SH",
+      "primary_name": "纽威股份",
+      "primary_count": 28,
+      "total": 28,
+      "name_variants": [
+        {
+          "name": "纽威股份",
+          "count": 28
+        }
+      ],
+      "standard_name": "纽威股份"
+    },
+    {
+      "raw_code": "603766.SH",
+      "standard_code": "603766.SH",
+      "primary_name": "隆鑫通用",
+      "primary_count": 13,
+      "total": 14,
+      "name_variants": [
+        {
+          "name": "隆鑫通用",
+          "count": 13
+        },
+        {
+          "name": "特变电工",
+          "count": 1
+        }
+      ],
+      "standard_name": "隆鑫通用"
+    },
+    {
+      "raw_code": "603799.SH",
+      "standard_code": "603799.SH",
+      "primary_name": "华友钴业",
+      "primary_count": 33,
+      "total": 33,
+      "name_variants": [
+        {
+          "name": "华友钴业",
+          "count": 33
+        }
+      ],
+      "standard_name": "华友钴业"
+    },
+    {
+      "raw_code": "603806.SH",
+      "standard_code": "603806.SH",
+      "primary_name": "福斯特",
+      "primary_count": 120,
+      "total": 121,
+      "name_variants": [
+        {
+          "name": "福斯特",
+          "count": 120
+        },
+        {
+          "name": "XD福斯特",
+          "count": 1
+        }
+      ],
+      "standard_name": "福斯特"
+    },
+    {
+      "raw_code": "603855.SH",
+      "standard_code": "603855.SH",
+      "primary_name": "华荣股份",
+      "primary_count": 67,
+      "total": 68,
+      "name_variants": [
+        {
+          "name": "华荣股份",
+          "count": 67
+        },
+        {
+          "name": "华策股份",
+          "count": 1
+        }
+      ],
+      "standard_name": "华荣股份"
+    },
+    {
+      "raw_code": "603893.SH",
+      "standard_code": "603893.SH",
+      "primary_name": "瑞芯微",
+      "primary_count": 39,
+      "total": 40,
+      "name_variants": [
+        {
+          "name": "瑞芯微",
+          "count": 39
+        },
+        {
+          "name": "奕瑞科技",
+          "count": 1
+        }
+      ],
+      "standard_name": "瑞芯微"
+    },
+    {
+      "raw_code": "603950.SH",
+      "standard_code": "603950.SH",
+      "primary_name": "长源东谷",
+      "primary_count": 25,
+      "total": 25,
+      "name_variants": [
+        {
+          "name": "长源东谷",
+          "count": 25
+        }
+      ],
+      "standard_name": "长源东谷"
+    },
+    {
+      "raw_code": "603986.SH",
+      "standard_code": "603986.SH",
+      "primary_name": "兆易创新",
+      "primary_count": 131,
+      "total": 132,
+      "name_variants": [
+        {
+          "name": "兆易创新",
+          "count": 131
+        },
+        {
+          "name": "XD兆易创",
+          "count": 1
+        }
+      ],
+      "standard_name": "兆易创新"
+    },
+    {
+      "raw_code": "603993.SH",
+      "standard_code": "603993.SH",
+      "primary_name": "洛阳钼业",
+      "primary_count": 13,
+      "total": 15,
+      "name_variants": [
+        {
+          "name": "洛阳钼业",
+          "count": 13
+        },
+        {
+          "name": "XD洛阳钼",
+          "count": 1
+        },
+        {
+          "name": "洛阳铝业",
+          "count": 1
+        }
+      ],
+      "standard_name": "洛阳钼业"
+    },
+    {
+      "raw_code": "605088.SH",
+      "standard_code": "605088.SH",
+      "primary_name": "冠盛股份",
+      "primary_count": 111,
+      "total": 111,
+      "name_variants": [
+        {
+          "name": "冠盛股份",
+          "count": 111
+        }
+      ],
+      "standard_name": "冠盛股份"
+    },
+    {
+      "raw_code": "605111.SH",
+      "standard_code": "605111.SH",
+      "primary_name": "新洁能",
+      "primary_count": 60,
+      "total": 60,
+      "name_variants": [
+        {
+          "name": "新洁能",
+          "count": 60
+        }
+      ],
+      "standard_name": "新洁能"
+    },
+    {
+      "raw_code": "605117.SH",
+      "standard_code": "605117.SH",
+      "primary_name": "德业股份",
+      "primary_count": 32,
+      "total": 33,
+      "name_variants": [
+        {
+          "name": "德业股份",
+          "count": 32
+        },
+        {
+          "name": "DR德业股",
+          "count": 1
+        }
+      ],
+      "standard_name": "德业股份"
+    },
+    {
+      "raw_code": "605196.SH",
+      "standard_code": "605196.SH",
+      "primary_name": "华通线缆",
+      "primary_count": 46,
+      "total": 48,
+      "name_variants": [
+        {
+          "name": "华通线缆",
+          "count": 46
+        },
+        {
+          "name": "中一科技",
+          "count": 1
+        },
+        {
+          "name": "华锐精密",
+          "count": 1
+        }
+      ],
+      "standard_name": "华通线缆"
+    },
+    {
+      "raw_code": "605499.SH",
+      "standard_code": "605499.SH",
+      "primary_name": "东鹏饮料",
+      "primary_count": 40,
+      "total": 41,
+      "name_variants": [
+        {
+          "name": "东鹏饮料",
+          "count": 40
+        },
+        {
+          "name": "泡泡玛特",
+          "count": 1
+        }
+      ],
+      "standard_name": "东鹏饮料"
+    },
+    {
+      "raw_code": "605589.SH",
+      "standard_code": "605589.SH",
+      "primary_name": "圣泉集团",
+      "primary_count": 12,
+      "total": 12,
+      "name_variants": [
+        {
+          "name": "圣泉集团",
+          "count": 12
+        }
+      ],
+      "standard_name": "圣泉集团"
+    },
+    {
+      "raw_code": "688002.SH",
+      "standard_code": "688002.SH",
+      "primary_name": "睿创微纳",
+      "primary_count": 27,
+      "total": 27,
+      "name_variants": [
+        {
+          "name": "睿创微纳",
+          "count": 27
+        }
+      ],
+      "standard_name": "睿创微纳"
+    },
+    {
+      "raw_code": "688008.SH",
+      "standard_code": "688008.SH",
+      "primary_name": "澜起科技",
+      "primary_count": 45,
+      "total": 46,
+      "name_variants": [
+        {
+          "name": "澜起科技",
+          "count": 45
+        },
+        {
+          "name": "佰维存储",
+          "count": 1
+        }
+      ],
+      "standard_name": "澜起科技"
+    },
+    {
+      "raw_code": "688012.SH",
+      "standard_code": "688012.SH",
+      "primary_name": "中微公司",
+      "primary_count": 4,
+      "total": 4,
+      "name_variants": [
+        {
+          "name": "中微公司",
+          "count": 4
+        }
+      ],
+      "standard_name": "中微公司"
+    },
+    {
+      "raw_code": "688018.SH",
+      "standard_code": "688018.SH",
+      "primary_name": "乐鑫科技",
+      "primary_count": 46,
+      "total": 46,
+      "name_variants": [
+        {
+          "name": "乐鑫科技",
+          "count": 46
+        }
+      ],
+      "standard_name": "乐鑫科技"
+    },
+    {
+      "raw_code": "688019.SH",
+      "standard_code": "688019.SH",
+      "primary_name": "安集科技",
+      "primary_count": 118,
+      "total": 118,
+      "name_variants": [
+        {
+          "name": "安集科技",
+          "count": 118
+        }
+      ],
+      "standard_name": "安集科技"
+    },
+    {
+      "raw_code": "688041.SH",
+      "standard_code": "688041.SH",
+      "primary_name": "海光信息",
+      "primary_count": 52,
+      "total": 52,
+      "name_variants": [
+        {
+          "name": "海光信息",
+          "count": 52
+        }
+      ],
+      "standard_name": "海光信息"
+    },
+    {
+      "raw_code": "688072.SH",
+      "standard_code": "688072.SH",
+      "primary_name": "拓荆科技",
+      "primary_count": 12,
+      "total": 12,
+      "name_variants": [
+        {
+          "name": "拓荆科技",
+          "count": 12
+        }
+      ],
+      "standard_name": "拓荆科技"
+    },
+    {
+      "raw_code": "688122.SH",
+      "standard_code": "688122.SH",
+      "primary_name": "西部超导",
+      "primary_count": 25,
+      "total": 25,
+      "name_variants": [
+        {
+          "name": "西部超导",
+          "count": 25
+        }
+      ],
+      "standard_name": "西部超导"
+    },
+    {
+      "raw_code": "688141.SH",
+      "standard_code": "688141.SH",
+      "primary_name": "杰华特",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "杰华特",
+          "count": 1
+        }
+      ],
+      "standard_name": "杰华特"
+    },
+    {
+      "raw_code": "688146.SH",
+      "standard_code": "688146.SH",
+      "primary_name": "中船特气",
+      "primary_count": 74,
+      "total": 75,
+      "name_variants": [
+        {
+          "name": "中船特气",
+          "count": 74
+        },
+        {
+          "name": "石头科技",
+          "count": 1
+        }
+      ],
+      "standard_name": "中船特气"
+    },
+    {
+      "raw_code": "688169.SH",
+      "standard_code": "688169.SH",
+      "primary_name": "石头科技",
+      "primary_count": 61,
+      "total": 63,
+      "name_variants": [
+        {
+          "name": "石头科技",
+          "count": 61
+        },
+        {
+          "name": "中船特气",
+          "count": 1
+        },
+        {
+          "name": "厦钨新能",
+          "count": 1
+        }
+      ],
+      "standard_name": "石头科技"
+    },
+    {
+      "raw_code": "688200.SH",
+      "standard_code": "688200.SH",
+      "primary_name": "华峰测控",
+      "primary_count": 2,
+      "total": 3,
+      "name_variants": [
+        {
+          "name": "华峰测控",
+          "count": 2
+        },
+        {
+          "name": "固德威",
+          "count": 1
+        }
+      ],
+      "standard_name": "华峰测控"
+    },
+    {
+      "raw_code": "688205.SH",
+      "standard_code": "688205.SH",
+      "primary_name": "德科立",
+      "primary_count": 59,
+      "total": 59,
+      "name_variants": [
+        {
+          "name": "德科立",
+          "count": 59
+        }
+      ],
+      "standard_name": "德科立"
+    },
+    {
+      "raw_code": "688249.SH",
+      "standard_code": "688249.SH",
+      "primary_name": "晶合集成",
+      "primary_count": 19,
+      "total": 19,
+      "name_variants": [
+        {
+          "name": "晶合集成",
+          "count": 19
+        }
+      ],
+      "standard_name": "晶合集成"
+    },
+    {
+      "raw_code": "688256.SH",
+      "standard_code": "688256.SH",
+      "primary_name": "寒武纪",
+      "primary_count": 43,
+      "total": 44,
+      "name_variants": [
+        {
+          "name": "寒武纪",
+          "count": 43
+        },
+        {
+          "name": "DR寒武纪",
+          "count": 1
+        }
+      ],
+      "standard_name": "寒武纪"
+    },
+    {
+      "raw_code": "688261.SH",
+      "standard_code": "688261.SH",
+      "primary_name": "东微半导",
+      "primary_count": 16,
+      "total": 16,
+      "name_variants": [
+        {
+          "name": "东微半导",
+          "count": 16
+        }
+      ],
+      "standard_name": "东微半导"
+    },
+    {
+      "raw_code": "688290.SH",
+      "standard_code": "688290.SH",
+      "primary_name": "景业智能",
+      "primary_count": 15,
+      "total": 16,
+      "name_variants": [
+        {
+          "name": "景业智能",
+          "count": 15
+        },
+        {
+          "name": "晶昱智能",
+          "count": 1
+        }
+      ],
+      "standard_name": "景业智能"
+    },
+    {
+      "raw_code": "688301.SH",
+      "standard_code": "688301.SH",
+      "primary_name": "奕瑞科技",
+      "primary_count": 118,
+      "total": 118,
+      "name_variants": [
+        {
+          "name": "奕瑞科技",
+          "count": 118
+        }
+      ],
+      "standard_name": "奕瑞科技"
+    },
+    {
+      "raw_code": "688308.SH",
+      "standard_code": "688308.SH",
+      "primary_name": "欧科亿",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "欧科亿",
+          "count": 1
+        }
+      ],
+      "standard_name": "欧科亿"
+    },
+    {
+      "raw_code": "688313.SH",
+      "standard_code": "688313.SH",
+      "primary_name": "仕佳光子",
+      "primary_count": 9,
+      "total": 9,
+      "name_variants": [
+        {
+          "name": "仕佳光子",
+          "count": 9
+        }
+      ],
+      "standard_name": "仕佳光子"
+    },
+    {
+      "raw_code": "688347.SH",
+      "standard_code": "688347.SH",
+      "primary_name": "华虹公司",
+      "primary_count": 4,
+      "total": 4,
+      "name_variants": [
+        {
+          "name": "华虹公司",
+          "count": 4
+        }
+      ],
+      "standard_name": "华虹公司"
+    },
+    {
+      "raw_code": "688368.SH",
+      "standard_code": "688368.SH",
+      "primary_name": "晶丰明源",
+      "primary_count": 11,
+      "total": 11,
+      "name_variants": [
+        {
+          "name": "晶丰明源",
+          "count": 11
+        }
+      ],
+      "standard_name": "晶丰明源"
+    },
+    {
+      "raw_code": "688388.SH",
+      "standard_code": "688388.SH",
+      "primary_name": "嘉元科技",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "嘉元科技",
+          "count": 1
+        }
+      ],
+      "standard_name": "嘉元科技"
+    },
+    {
+      "raw_code": "688390.SH",
+      "standard_code": "688390.SH",
+      "primary_name": "固德威",
+      "primary_count": 43,
+      "total": 46,
+      "name_variants": [
+        {
+          "name": "固德威",
+          "count": 43
+        },
+        {
+          "name": "海泰新光",
+          "count": 1
+        },
+        {
+          "name": "澜起科技",
+          "count": 1
+        },
+        {
+          "name": "长飞光纤光缆",
+          "count": 1
+        }
+      ],
+      "standard_name": "固德威"
+    },
+    {
+      "raw_code": "688403.SH",
+      "standard_code": "688403.SH",
+      "primary_name": "汇成股份",
+      "primary_count": 18,
+      "total": 19,
+      "name_variants": [
+        {
+          "name": "汇成股份",
+          "count": 18
+        },
+        {
+          "name": "XD汇成股",
+          "count": 1
+        }
+      ],
+      "standard_name": "汇成股份"
+    },
+    {
+      "raw_code": "688411.SH",
+      "standard_code": "688411.SH",
+      "primary_name": "海博思创",
+      "primary_count": 4,
+      "total": 4,
+      "name_variants": [
+        {
+          "name": "海博思创",
+          "count": 4
+        }
+      ],
+      "standard_name": "海博思创"
+    },
+    {
+      "raw_code": "688498.SH",
+      "standard_code": "688498.SH",
+      "primary_name": "源杰科技",
+      "primary_count": 11,
+      "total": 11,
+      "name_variants": [
+        {
+          "name": "源杰科技",
+          "count": 11
+        }
+      ],
+      "standard_name": "源杰科技"
+    },
+    {
+      "raw_code": "688502.SH",
+      "standard_code": "688502.SH",
+      "primary_name": "茂莱光学",
+      "primary_count": 3,
+      "total": 3,
+      "name_variants": [
+        {
+          "name": "茂莱光学",
+          "count": 3
+        }
+      ],
+      "standard_name": "茂莱光学"
+    },
+    {
+      "raw_code": "688506.SH",
+      "standard_code": "688506.SH",
+      "primary_name": "百利天恒",
+      "primary_count": 33,
+      "total": 33,
+      "name_variants": [
+        {
+          "name": "百利天恒",
+          "count": 33
+        }
+      ],
+      "standard_name": "百利天恒"
+    },
+    {
+      "raw_code": "688508.SH",
+      "standard_code": "688508.SH",
+      "primary_name": "芯朋微",
+      "primary_count": 22,
+      "total": 23,
+      "name_variants": [
+        {
+          "name": "芯朋微",
+          "count": 22
+        },
+        {
+          "name": "中芯国际",
+          "count": 1
+        }
+      ],
+      "standard_name": "芯朋微"
+    },
+    {
+      "raw_code": "688510.SH",
+      "standard_code": "688510.SH",
+      "primary_name": "航亚科技",
+      "primary_count": 51,
+      "total": 52,
+      "name_variants": [
+        {
+          "name": "航亚科技",
+          "count": 51
+        },
+        {
+          "name": "亚盛医药-B",
+          "count": 1
+        }
+      ],
+      "standard_name": "航亚科技"
+    },
+    {
+      "raw_code": "688518.SH",
+      "standard_code": "688518.SH",
+      "primary_name": "联赢激光",
+      "primary_count": 72,
+      "total": 72,
+      "name_variants": [
+        {
+          "name": "联赢激光",
+          "count": 72
+        }
+      ],
+      "standard_name": "联赢激光"
+    },
+    {
+      "raw_code": "688525.SH",
+      "standard_code": "688525.SH",
+      "primary_name": "佰维存储",
+      "primary_count": 15,
+      "total": 16,
+      "name_variants": [
+        {
+          "name": "佰维存储",
+          "count": 15
+        },
+        {
+          "name": "澜起科技",
+          "count": 1
+        }
+      ],
+      "standard_name": "佰维存储"
+    },
+    {
+      "raw_code": "688536.SH",
+      "standard_code": "688536.SH",
+      "primary_name": "思瑞浦",
+      "primary_count": 2,
+      "total": 2,
+      "name_variants": [
+        {
+          "name": "思瑞浦",
+          "count": 2
+        }
+      ],
+      "standard_name": "思瑞浦"
+    },
+    {
+      "raw_code": "688548.SH",
+      "standard_code": "688548.SH",
+      "primary_name": "广钢气体",
+      "primary_count": 95,
+      "total": 95,
+      "name_variants": [
+        {
+          "name": "广钢气体",
+          "count": 95
+        }
+      ],
+      "standard_name": "广钢气体"
+    },
+    {
+      "raw_code": "688552.SH",
+      "standard_code": "688552.SH",
+      "primary_name": "航天南湖",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "航天南湖",
+          "count": 1
+        }
+      ],
+      "standard_name": "航天南湖"
+    },
+    {
+      "raw_code": "688608.SH",
+      "standard_code": "688608.SH",
+      "primary_name": "恒玄科技",
+      "primary_count": 27,
+      "total": 27,
+      "name_variants": [
+        {
+          "name": "恒玄科技",
+          "count": 27
+        }
+      ],
+      "standard_name": "恒玄科技"
+    },
+    {
+      "raw_code": "688630.SH",
+      "standard_code": "688630.SH",
+      "primary_name": "芯碁微装",
+      "primary_count": 14,
+      "total": 14,
+      "name_variants": [
+        {
+          "name": "芯碁微装",
+          "count": 14
+        }
+      ],
+      "standard_name": "芯碁微装"
+    },
+    {
+      "raw_code": "688677.SH",
+      "standard_code": "688677.SH",
+      "primary_name": "海泰新光",
+      "primary_count": 38,
+      "total": 38,
+      "name_variants": [
+        {
+          "name": "海泰新光",
+          "count": 38
+        }
+      ],
+      "standard_name": "海泰新光"
+    },
+    {
+      "raw_code": "688700.SH",
+      "standard_code": "688700.SH",
+      "primary_name": "东威科技",
+      "primary_count": 4,
+      "total": 4,
+      "name_variants": [
+        {
+          "name": "东威科技",
+          "count": 4
+        }
+      ],
+      "standard_name": "东威科技"
+    },
+    {
+      "raw_code": "688777.SH",
+      "standard_code": "688777.SH",
+      "primary_name": "中控技术",
+      "primary_count": 21,
+      "total": 22,
+      "name_variants": [
+        {
+          "name": "中控技术",
+          "count": 21
+        },
+        {
+          "name": "中芯技术",
+          "count": 1
+        }
+      ],
+      "standard_name": "中控技术"
+    },
+    {
+      "raw_code": "688778.SH",
+      "standard_code": "688778.SH",
+      "primary_name": "厦钨新能",
+      "primary_count": 123,
+      "total": 126,
+      "name_variants": [
+        {
+          "name": "厦钨新能",
+          "count": 123
+        },
+        {
+          "name": "厦钨新能源",
+          "count": 1
+        },
+        {
+          "name": "夏钨新能",
+          "count": 1
+        },
+        {
+          "name": "海泰新光",
+          "count": 1
+        }
+      ],
+      "standard_name": "厦钨新能"
+    },
+    {
+      "raw_code": "688789.SH",
+      "standard_code": "688789.SH",
+      "primary_name": "宏华数科",
+      "primary_count": 116,
+      "total": 117,
+      "name_variants": [
+        {
+          "name": "宏华数科",
+          "count": 116
+        },
+        {
+          "name": "安华数科",
+          "count": 1
+        }
+      ],
+      "standard_name": "宏华数科"
+    },
+    {
+      "raw_code": "688808.SH",
+      "standard_code": "688808.SH",
+      "primary_name": "联讯仪器",
+      "primary_count": 8,
+      "total": 23,
+      "name_variants": [
+        {
+          "name": "联讯仪器",
+          "count": 8
+        },
+        {
+          "name": "C联讯",
+          "count": 4
+        },
+        {
+          "name": "联泇仪器",
+          "count": 3
+        },
+        {
+          "name": "联识仪器",
+          "count": 3
+        },
+        {
+          "name": "联影医疗",
+          "count": 2
+        },
+        {
+          "name": "联汯仪器",
+          "count": 1
+        },
+        {
+          "name": "联泓仪器",
+          "count": 1
+        },
+        {
+          "name": "联浤仪器",
+          "count": 1
+        }
+      ],
+      "standard_name": "联讯仪器"
+    },
+    {
+      "raw_code": "688813.SH",
+      "standard_code": "688813.SH",
+      "primary_name": "泰金新能",
+      "primary_count": 12,
+      "total": 12,
+      "name_variants": [
+        {
+          "name": "泰金新能",
+          "count": 12
+        }
+      ],
+      "standard_name": "泰金新能"
+    },
+    {
+      "raw_code": "688816.SH",
+      "standard_code": "688816.SH",
+      "primary_name": "易思维",
+      "primary_count": 5,
+      "total": 5,
+      "name_variants": [
+        {
+          "name": "易思维",
+          "count": 5
+        }
+      ],
+      "standard_name": "易思维"
+    },
+    {
+      "raw_code": "688818.SH",
+      "standard_code": "688818.SH",
+      "primary_name": "电科蓝天",
+      "primary_count": 69,
+      "total": 74,
+      "name_variants": [
+        {
+          "name": "电科蓝天",
+          "count": 69
+        },
+        {
+          "name": "C电科",
+          "count": 4
+        },
+        {
+          "name": "N电科",
+          "count": 1
+        }
+      ],
+      "standard_name": "电科蓝天"
+    },
+    {
+      "raw_code": "688820.SH",
+      "standard_code": "688820.SH",
+      "primary_name": "盛合晶微",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "盛合晶微",
+          "count": 1
+        }
+      ],
+      "standard_name": "盛合晶微"
+    },
+    {
+      "raw_code": "688981.SH",
+      "standard_code": "688981.SH",
+      "primary_name": "中芯国际",
+      "primary_count": 79,
+      "total": 80,
+      "name_variants": [
+        {
+          "name": "中芯国际",
+          "count": 79
+        },
+        {
+          "name": "芯朋微",
+          "count": 1
+        }
+      ],
+      "standard_name": "中芯国际"
+    }
+  ],
+  "mismatches": [
+    {
+      "raw_code": "000089.SZ",
+      "standard_code": "000089.SZ",
+      "primary_name": "特变电工",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "特变电工",
+          "count": 1
+        }
+      ],
+      "standard_name": "深圳机场"
+    },
+    {
+      "raw_code": "000519.SZ",
+      "standard_code": "000519.SZ",
+      "primary_name": "贵州茅台",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "贵州茅台",
+          "count": 1
+        }
+      ],
+      "standard_name": "中兵红箭"
+    },
+    {
+      "raw_code": "000672.SZ",
+      "standard_code": "000672.SZ",
+      "primary_name": "国科微",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "国科微",
+          "count": 1
+        }
+      ],
+      "standard_name": "上峰水泥"
+    },
+    {
+      "raw_code": "002082.SZ",
+      "standard_code": "002082.SZ",
+      "primary_name": "万邦德",
+      "primary_count": 6,
+      "total": 6,
+      "name_variants": [
+        {
+          "name": "万邦德",
+          "count": 6
+        }
+      ],
+      "standard_name": "ST万邦"
+    },
+    {
+      "raw_code": "002250.SZ",
+      "standard_code": "002250.SZ",
+      "primary_name": "科达利",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "科达利",
+          "count": 1
+        }
+      ],
+      "standard_name": "联化科技"
+    },
+    {
+      "raw_code": "002385.SZ",
+      "standard_code": "002385.SZ",
+      "primary_name": "杭叉集团",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "杭叉集团",
+          "count": 1
+        }
+      ],
+      "standard_name": "大北农"
+    },
+    {
+      "raw_code": "002396.SZ",
+      "standard_code": "002396.SZ",
+      "primary_name": "兆易创新",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "兆易创新",
+          "count": 1
+        }
+      ],
+      "standard_name": "星网锐捷"
+    },
+    {
+      "raw_code": "002602.SZ",
+      "standard_code": "002602.SZ",
+      "primary_name": "ST华通",
+      "primary_count": 86,
+      "total": 97,
+      "name_variants": [
+        {
+          "name": "ST华通",
+          "count": 86
+        },
+        {
+          "name": "世纪华通",
+          "count": 7
+        },
+        {
+          "name": "鼎龙股份",
+          "count": 2
+        },
+        {
+          "name": "亚盛医药-B",
+          "count": 1
+        },
+        {
+          "name": "兴业银锡",
+          "count": 1
+        }
+      ],
+      "standard_name": "世纪华通"
+    },
+    {
+      "raw_code": "002852.SZ",
+      "standard_code": "002852.SZ",
+      "primary_name": "伊戈尔",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "伊戈尔",
+          "count": 1
+        }
+      ],
+      "standard_name": "道道全"
+    },
+    {
+      "raw_code": "002910.SZ",
+      "standard_code": "002910.SZ",
+      "primary_name": "雅克科技",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "雅克科技",
+          "count": 1
+        }
+      ],
+      "standard_name": "庄园牧场"
+    },
+    {
+      "raw_code": "003008.SZ",
+      "standard_code": "003008.SZ",
+      "primary_name": "中际旭创",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "中际旭创",
+          "count": 1
+        }
+      ],
+      "standard_name": "开普检测"
+    },
+    {
+      "raw_code": "300115.SZ",
+      "standard_code": "300115.SZ",
+      "primary_name": "环旭电子",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "环旭电子",
+          "count": 1
+        }
+      ],
+      "standard_name": "长盈精密"
+    },
+    {
+      "raw_code": "300166.SZ",
+      "standard_code": "300166.SZ",
+      "primary_name": "N大普微",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "N大普微",
+          "count": 1
+        }
+      ],
+      "standard_name": "东方国信"
+    },
+    {
+      "raw_code": "300359.SZ",
+      "standard_code": "300359.SZ",
+      "primary_name": "药明康德",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "药明康德",
+          "count": 1
+        }
+      ],
+      "standard_name": "全通教育"
+    },
+    {
+      "raw_code": "300558.SZ",
+      "standard_code": "300558.SZ",
+      "primary_name": "圣泉集团",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "圣泉集团",
+          "count": 1
+        }
+      ],
+      "standard_name": "贝达药业"
+    },
+    {
+      "raw_code": "300732.SZ",
+      "standard_code": "300732.SZ",
+      "primary_name": "爱旭股份",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "爱旭股份",
+          "count": 1
+        }
+      ],
+      "standard_name": "设研院"
+    },
+    {
+      "raw_code": "301666.SZ",
+      "standard_code": "301666.SZ",
+      "primary_name": "大普微",
+      "primary_count": 31,
+      "total": 35,
+      "name_variants": [
+        {
+          "name": "大普微",
+          "count": 31
+        },
+        {
+          "name": "C大普微",
+          "count": 3
+        },
+        {
+          "name": "C大微普",
+          "count": 1
+        }
+      ],
+      "standard_name": "大普微-UW"
+    },
+    {
+      "raw_code": "600050.SH",
+      "standard_code": "600050.SH",
+      "primary_name": "天孚通信",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "天孚通信",
+          "count": 1
+        }
+      ],
+      "standard_name": "中国联通"
+    },
+    {
+      "raw_code": "600073.SH",
+      "standard_code": "600073.SH",
+      "primary_name": "西藏城投",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "西藏城投",
+          "count": 1
+        }
+      ],
+      "standard_name": "光明肉业"
+    },
+    {
+      "raw_code": "600201.SH",
+      "standard_code": "600201.SH",
+      "primary_name": "新和成",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "新和成",
+          "count": 1
+        }
+      ],
+      "standard_name": "生物股份"
+    },
+    {
+      "raw_code": "600248.SH",
+      "standard_code": "600248.SH",
+      "primary_name": "亨通光电",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "亨通光电",
+          "count": 1
+        }
+      ],
+      "standard_name": "陕建股份"
+    },
+    {
+      "raw_code": "600273.SH",
+      "standard_code": "600273.SH",
+      "primary_name": "西藏城投",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "西藏城投",
+          "count": 1
+        }
+      ],
+      "standard_name": "嘉化能源"
+    },
+    {
+      "raw_code": "600338.SH",
+      "standard_code": "600338.SH",
+      "primary_name": "潍柴动力",
+      "primary_count": 2,
+      "total": 2,
+      "name_variants": [
+        {
+          "name": "潍柴动力",
+          "count": 2
+        }
+      ],
+      "standard_name": "西藏珠峰"
+    },
+    {
+      "raw_code": "600346.SH",
+      "standard_code": "600346.SH",
+      "primary_name": "恒力石化",
+      "primary_count": 18,
+      "total": 18,
+      "name_variants": [
+        {
+          "name": "恒力石化",
+          "count": 18
+        }
+      ],
+      "standard_name": "XD恒力石"
+    },
+    {
+      "raw_code": "600369.SH",
+      "standard_code": "600369.SH",
+      "primary_name": "纽威股份",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "纽威股份",
+          "count": 1
+        }
+      ],
+      "standard_name": "西南证券"
+    },
+    {
+      "raw_code": "600399.SH",
+      "standard_code": "600399.SH",
+      "primary_name": "纽威股份",
+      "primary_count": 2,
+      "total": 2,
+      "name_variants": [
+        {
+          "name": "纽威股份",
+          "count": 2
+        }
+      ],
+      "standard_name": "抚顺特钢"
+    },
+    {
+      "raw_code": "600516.SH",
+      "standard_code": "600516.SH",
+      "primary_name": "华通线缆",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "华通线缆",
+          "count": 1
+        }
+      ],
+      "standard_name": "方大炭素"
+    },
+    {
+      "raw_code": "600737.SH",
+      "standard_code": "600737.SH",
+      "primary_name": "锡业股份",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "锡业股份",
+          "count": 1
+        }
+      ],
+      "standard_name": "中粮糖业"
+    },
+    {
+      "raw_code": "600741.SH",
+      "standard_code": "600741.SH",
+      "primary_name": "兴发集团",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "兴发集团",
+          "count": 1
+        }
+      ],
+      "standard_name": "华域汽车"
+    },
+    {
+      "raw_code": "600807.SH",
+      "standard_code": "600807.SH",
+      "primary_name": "济川药业",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "济川药业",
+          "count": 1
+        }
+      ],
+      "standard_name": "济高发展"
+    },
+    {
+      "raw_code": "600848.SH",
+      "standard_code": "600848.SH",
+      "primary_name": "广钢气体",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "广钢气体",
+          "count": 1
+        }
+      ],
+      "standard_name": "上海临港"
+    },
+    {
+      "raw_code": "600885.SH",
+      "standard_code": "600885.SH",
+      "primary_name": "华发股份",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "华发股份",
+          "count": 1
+        }
+      ],
+      "standard_name": "宏发股份"
+    },
+    {
+      "raw_code": "600889.SH",
+      "standard_code": "600889.SH",
+      "primary_name": "建滔积层板",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "建滔积层板",
+          "count": 1
+        }
+      ],
+      "standard_name": "*ST京化"
+    },
+    {
+      "raw_code": "600909.SH",
+      "standard_code": "600909.SH",
+      "primary_name": "九号公司",
+      "primary_count": 2,
+      "total": 2,
+      "name_variants": [
+        {
+          "name": "九号公司",
+          "count": 2
+        }
+      ],
+      "standard_name": "华安证券"
+    },
+    {
+      "raw_code": "601211.SH",
+      "standard_code": "601211.SH",
+      "primary_name": "国泰君安",
+      "primary_count": 24,
+      "total": 24,
+      "name_variants": [
+        {
+          "name": "国泰君安",
+          "count": 24
+        }
+      ],
+      "standard_name": "国泰海通"
+    },
+    {
+      "raw_code": "601330.SH",
+      "standard_code": "601330.SH",
+      "primary_name": "博纳影业",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "博纳影业",
+          "count": 1
+        }
+      ],
+      "standard_name": "绿色动力"
+    },
+    {
+      "raw_code": "601390.SH",
+      "standard_code": "601390.SH",
+      "primary_name": "湖南黄金",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "湖南黄金",
+          "count": 1
+        }
+      ],
+      "standard_name": "中国中铁"
+    },
+    {
+      "raw_code": "603233.SH",
+      "standard_code": "603233.SH",
+      "primary_name": "安井食品",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "安井食品",
+          "count": 1
+        }
+      ],
+      "standard_name": "大参林"
+    },
+    {
+      "raw_code": "603316.SH",
+      "standard_code": "603316.SH",
+      "primary_name": "晶盛机电",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "晶盛机电",
+          "count": 1
+        }
+      ],
+      "standard_name": "诚邦股份"
+    },
+    {
+      "raw_code": "603325.SH",
+      "standard_code": "603325.SH",
+      "primary_name": "澜起科技",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "澜起科技",
+          "count": 1
+        }
+      ],
+      "standard_name": "博隆技术"
+    },
+    {
+      "raw_code": "603435.SH",
+      "standard_code": "603435.SH",
+      "primary_name": "C嘉德",
+      "primary_count": 4,
+      "total": 7,
+      "name_variants": [
+        {
+          "name": "C嘉德",
+          "count": 4
+        },
+        {
+          "name": "嘉德利",
+          "count": 2
+        },
+        {
+          "name": "N嘉德",
+          "count": 1
+        }
+      ],
+      "standard_name": "嘉德利"
+    },
+    {
+      "raw_code": "603737.SH",
+      "standard_code": "603737.SH",
+      "primary_name": "三棵树",
+      "primary_count": 146,
+      "total": 146,
+      "name_variants": [
+        {
+          "name": "三棵树",
+          "count": 146
+        }
+      ],
+      "standard_name": "DR三棵树"
+    },
+    {
+      "raw_code": "603988.SH",
+      "standard_code": "603988.SH",
+      "primary_name": "中国银行",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "中国银行",
+          "count": 1
+        }
+      ],
+      "standard_name": "中电电机"
+    },
+    {
+      "raw_code": "688009.SH",
+      "standard_code": "688009.SH",
+      "primary_name": "九号公司",
+      "primary_count": 3,
+      "total": 3,
+      "name_variants": [
+        {
+          "name": "九号公司",
+          "count": 3
+        }
+      ],
+      "standard_name": "中国通号"
+    },
+    {
+      "raw_code": "688055.SH",
+      "standard_code": "688055.SH",
+      "primary_name": "亚盛医药-B",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "亚盛医药-B",
+          "count": 1
+        }
+      ],
+      "standard_name": "龙腾光电"
+    },
+    {
+      "raw_code": "688077.SH",
+      "standard_code": "688077.SH",
+      "primary_name": "海泰新光",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "海泰新光",
+          "count": 1
+        }
+      ],
+      "standard_name": "大地熊"
+    },
+    {
+      "raw_code": "688138.SH",
+      "standard_code": "688138.SH",
+      "primary_name": "安集科技",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "安集科技",
+          "count": 1
+        }
+      ],
+      "standard_name": "清溢光电"
+    },
+    {
+      "raw_code": "688188.SH",
+      "standard_code": "688188.SH",
+      "primary_name": "电科蓝天",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "电科蓝天",
+          "count": 1
+        }
+      ],
+      "standard_name": "柏楚电子"
+    },
+    {
+      "raw_code": "688213.SH",
+      "standard_code": "688213.SH",
+      "primary_name": "思特威",
+      "primary_count": 116,
+      "total": 119,
+      "name_variants": [
+        {
+          "name": "思特威",
+          "count": 116
+        },
+        {
+          "name": "XD思特威",
+          "count": 2
+        },
+        {
+          "name": "思瑞浦",
+          "count": 1
+        }
+      ],
+      "standard_name": "思特威-W"
+    },
+    {
+      "raw_code": "688270.SH",
+      "standard_code": "688270.SH",
+      "primary_name": "臻镭科技",
+      "primary_count": 2,
+      "total": 2,
+      "name_variants": [
+        {
+          "name": "臻镭科技",
+          "count": 2
+        }
+      ],
+      "standard_name": "ST臻镭"
+    },
+    {
+      "raw_code": "688272.SH",
+      "standard_code": "688272.SH",
+      "primary_name": "拓荆科技",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "拓荆科技",
+          "count": 1
+        }
+      ],
+      "standard_name": "富吉瑞"
+    },
+    {
+      "raw_code": "688339.SH",
+      "standard_code": "688339.SH",
+      "primary_name": "固德威",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "固德威",
+          "count": 1
+        }
+      ],
+      "standard_name": "亿华通-U"
+    },
+    {
+      "raw_code": "688370.SH",
+      "standard_code": "688370.SH",
+      "primary_name": "信科移动",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "信科移动",
+          "count": 1
+        }
+      ],
+      "standard_name": "丛麟科技"
+    },
+    {
+      "raw_code": "688387.SH",
+      "standard_code": "688387.SH",
+      "primary_name": "信科移动",
+      "primary_count": 2,
+      "total": 2,
+      "name_variants": [
+        {
+          "name": "信科移动",
+          "count": 2
+        }
+      ],
+      "standard_name": "信科移动-U"
+    },
+    {
+      "raw_code": "688589.SH",
+      "standard_code": "688589.SH",
+      "primary_name": "宏华数科",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "宏华数科",
+          "count": 1
+        }
+      ],
+      "standard_name": "力合微"
+    },
+    {
+      "raw_code": "688702.SH",
+      "standard_code": "688702.SH",
+      "primary_name": "盛科通信",
+      "primary_count": 3,
+      "total": 3,
+      "name_variants": [
+        {
+          "name": "盛科通信",
+          "count": 3
+        }
+      ],
+      "standard_name": "盛科通信-U"
+    },
+    {
+      "raw_code": "688720.SH",
+      "standard_code": "688720.SH",
+      "primary_name": "臻镭科技",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "臻镭科技",
+          "count": 1
+        }
+      ],
+      "standard_name": "艾森股份"
+    },
+    {
+      "raw_code": "688795.SH",
+      "standard_code": "688795.SH",
+      "primary_name": "亚盛医药-B",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "亚盛医药-B",
+          "count": 1
+        }
+      ],
+      "standard_name": "摩尔线程-U"
+    },
+    {
+      "raw_code": "688802.SH",
+      "standard_code": "688802.SH",
+      "primary_name": "睿创微纳",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "睿创微纳",
+          "count": 1
+        }
+      ],
+      "standard_name": "沐曦股份-U"
+    },
+    {
+      "raw_code": "689009.SH",
+      "standard_code": "689009.SH",
+      "primary_name": "九号公司",
+      "primary_count": 115,
+      "total": 115,
+      "name_variants": [
+        {
+          "name": "九号公司",
+          "count": 115
+        }
+      ],
+      "standard_name": "九号公司-WD"
+    }
+  ],
+  "missing_master": [
+    {
+      "raw_code": "300309.SZ",
+      "standard_code": "300309.SZ",
+      "primary_name": "新易盛",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "新易盛",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "raw_code": "600432.SH",
+      "standard_code": "600432.SH",
+      "primary_name": "富临精工",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "富临精工",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "raw_code": "601299.SH",
+      "standard_code": "601299.SH",
+      "primary_name": "环旭电子",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "环旭电子",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "raw_code": "601979.SH",
+      "standard_code": "601979.SH",
+      "primary_name": "招商蛇口",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "招商蛇口",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "raw_code": "602155.SH",
+      "standard_code": "602155.SH",
+      "primary_name": "湖南黄金",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "湖南黄金",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "raw_code": "688848.SH",
+      "standard_code": "688848.SH",
+      "primary_name": "广钢气体",
+      "primary_count": 1,
+      "total": 1,
+      "name_variants": [
+        {
+          "name": "广钢气体",
+          "count": 1
+        }
+      ]
+    }
+  ]
+}

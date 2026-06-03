@@ -23,6 +23,7 @@ import pandas as pd
 from extractors.minimax_image_extractor import MiniMaxImageExtractor
 from transformers.portfolio_excel_transformer import PortfolioExcelTransformer
 from transformers.trade_excel_transformer import TradeExcelTransformer
+from transformers.a_share_name_corrector import correct_dataframe_asset_names
 from transformers.image_portfolio_normalizer import normalize_all as normalize_portfolio
 from transformers.trade_normalizer import normalize_all as normalize_trade
 from validators.trade_validator import validate_trade, ValidationResult
@@ -252,7 +253,11 @@ async def run_pipeline(
     df = correct_stock_names(df)
     records[0]["df"] = df
 
-    # Step 1e: Detect format
+    # Step 1e: Correct A-share names via stock_basic_info master data before DB load
+    df = correct_dataframe_asset_names(df)
+    records[0]["df"] = df
+
+    # Step 1f: Detect format
     fmt = detect_format(df)
     logger.info(f"[Step1] Detected format: {fmt}")
     prefix = "trade" if fmt == "trade" else "portfolio"
