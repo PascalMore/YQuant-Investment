@@ -3,10 +3,10 @@
 ## 元数据（Metadata）
 | 项 | 值 |
 |---|---|
-| 状态 | 草稿（Draft） |
+| 状态 | 已发布（Published） |
 | 作者 | YQuant |
 | 创建日期 | 2026-05-21 |
-| 最后更新 | 2026-05-21 |
+| 最后更新 | 2026-06-04 |
 | 所属模块 | 01_app（应用层） |
 | 依赖RFC | RFC-00-001-yqclaw-investment-global-architecture |
 | 替代RFC | 无 |
@@ -17,6 +17,7 @@
 | 版本号 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
 | V0.1 | 2026-05-21 | 初始创建，定义 stock_sector_info 表结构 | YQuant |
+| V1.0 | 2026-06-04 | 新增港股通申万行业数据导入（L5.x），覆盖 A 股 + 港股双市场 | YQuant |
 
 ## 1. 执行摘要
 
@@ -114,7 +115,7 @@ db.stock_sector_info.createIndex(
 
 ## 5. 数据来源
 
-### 5.1 Tushare Pro 接口
+### 5.1 Tushare Pro 接口（A 股）
 
 ```python
 import tushare as ts
@@ -132,7 +133,7 @@ df = pro.index_member_all(l1_code='801050.SI')
 df = pro.index_member_all(l2_code='801051.SI')
 ```
 
-### 5.2 字段映射
+### 5.2 字段映射（Tushare → stock_sector_info）
 
 | Tushare 返回字段 | stock_sector_info 字段 |
 |---|---|
@@ -149,13 +150,91 @@ df = pro.index_member_all(l2_code='801051.SI')
 | - | `classify_system`（固定 `SW`） |
 | - | `datasource`（固定 `tushare`） |
 
-### 5.3 同步策略
+### 5.3 同步策略（A 股）
 
 | 场景 | 策略 |
 |------|------|
 | 全量同步 | 每日首次启动时全量拉取 `index_member_all(is_new='Y')`，upsert |
 | 增量更新 | 监控 `is_new='N'` 的记录变化（行业变更） |
 | 单股查询 | 支持按 `ts_code` 查询单只股票的行业归属 |
+
+### 5.4 港股通申万行业数据导入（Wind）
+
+#### 5.4.1 概述
+
+港股通标的的申万行业分类数据来源于 Wind 下载的 Excel 文件（`港股通申万行业数据.xlsx`），
+通过 `TradingAgents-CN/scripts/maintenance/import_hksse_sw_industry.py` 脚本导入 `stock_sector_info` 表。
+该脚本由 YQuant Codex Principal Engineer 设计实现。
+
+#### 5.4.2 数据格式
+
+| Excel 列 | 字段名 | 说明 |
+|---|---|---|
+| `证券代码` | `full_symbol` | Wind 代码，如 `00700.HK` |
+| `证券简称` | `name` | 股票名称 |
+| `所属申万行业名称(港股)(2021)` | L1/L2/L3 名称树 | 三级以 `--` 分隔，如 `交通运输--物流--快递` |
+| `所属申万行业代码(港股)(2021)` | L1/L2/L3 代码树 | 三级以 `--` 分隔（Wind 内部代码体系，不可直接复用） |
+
+#### 5.4.3 行业代码映射规则
+
+| 级别 | 映射策略 | 说明 |
+|---|---|---|
+| **L1（一级）** | 通过 `SW_L1_CODE_BY_NAME` 查找 A 股申万代码 | 100% 可匹配；代码格式 `801xxx` |
+| **L2（二级）** | 匹配 A 股 `stock_sector_info.l2_name` → 取其 `l2_code` | 匹配率 ~97%（107/110）；无法匹配时留空 |
+| **L3（三级）** | 匹配 A 股 `stock_sector_info.l3_name` → 取其 `l3_code` | 匹配率 ~97%（178/184）；无法匹配时留空 |
+
+**无法匹配的 L2（3 个）：**
+- `其他银行Ⅱ`、`本地生活服务Ⅱ`、`社交Ⅱ`（A 股无对应分类）
+
+**无法匹配的 L3（6 个）：**
+- `互联网药店`、`其他银行Ⅲ`、`博彩`、`本地生活服务Ⅲ`、`社交Ⅲ`、`音频媒体`
+
+#### 5.4.4 导入脚本
+
+```bash
+cd skills/apps/TradingAgents-CN
+
+# 1. Dry-run 验证解析结果（不写入数据库）
+.venv/bin/python3 scripts/maintenance/import_hksse_sw_industry.py --dry-run
+
+# 2. 正式导入（增量 upsert）
+.venv/bin/python3 scripts/maintenance/import_hksse_sw_industry.py --source Wind --data-date 2026-06-04
+
+# 3. 全量替换同 source 的旧数据后导入
+.venv/bin/python3 scripts/maintenance/import_hksse_sw_industry.py --source Wind --replace-source
+```
+
+**参数说明：**
+
+| 参数 | 说明 |
+|---|---|
+| `--source Wind` | 数据来源标记（默认 Wind） |
+| `--data-date YYYY-MM-DD` | 数据日期，缺省则用文件 mtime |
+| `--replace-source` | 导入前删除同 source 的旧记录（全量覆盖） |
+| `--dry-run` | 仅解析验证，不写入 |
+
+#### 5.4.5 存储字段对照
+
+| stock_sector_info 字段 | 写入值 |
+|---|---|
+| `full_symbol` | 港股代码，如 `00700.HK` |
+| `name` | 港股名称 |
+| `classify_system` | `SW` |
+| `l1_code` | A 股申万一级代码，如 `801170.SI` |
+| `l1_name` | 港股原始一级名称，如 `交通运输` |
+| `l2_code` | 匹配到的 A 股 L2 代码，或 `None` |
+| `l2_name` | 港股原始二级名称，如 `物流Ⅱ` |
+| `l3_code` | 匹配到的 A 股 L3 代码，或 `None` |
+| `l3_name` | 港股原始三级名称，如 `快递` |
+| `datasource` | `Wind` |
+| `update_at` | 导入时间 |
+
+#### 5.4.6 部署与更新流程
+
+1. Wind 更新港股通行业数据后，下载新的 `港股通申万行业数据.xlsx`
+2. 替换 `data/imports/港股通申万行业数据.xlsx`
+3. 触发导入脚本（建议先 dry-run 确认格式无误）
+4. 验证 MongoDB 中 `stock_sector_info` 的记录数和 `l1_code` 非空率
 
 ## 6. Python 实现
 
