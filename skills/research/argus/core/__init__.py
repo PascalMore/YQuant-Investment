@@ -11,6 +11,7 @@ from .crowding import CrowdingAnalyzer
 from .bayesian_scoring import BayesianScorer
 from .industry_weight_calculator import IndustryWeightCalculator
 from .consensus_direction import ConsensusDirectionEngine, ProsperityGauge, ConvictionRadar
+from .zone_rule_engine import DEFAULT_ZONE_RULE_ENGINE, ZoneDecision, ZoneMetrics, ZoneRuleEngine
 
 __all__ = [
     'CredibilityScorer',
@@ -25,4 +26,8 @@ __all__ = [
     'ConsensusDirectionEngine',
     'ProsperityGauge',
     'ConvictionRadar',
+    'ZoneMetrics',
+    'ZoneDecision',
+    'ZoneRuleEngine',
+    'DEFAULT_ZONE_RULE_ENGINE',
 ]

@@ -7,11 +7,14 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from .models import PoolZone
 from .service import StockPoolService
+from skills.research.argus.core.zone_rule_engine import DEFAULT_ZONE_RULE_ENGINE, ZoneRuleEngine
 
 
 class StockPoolAutoPromoter:
     """Evaluate stock pool entries and move them between lifecycle zones."""
 
+    # TODO: Runtime thresholds now come from Argus config/zone_rules_template.yaml
+    # through ZoneRuleEngine. This legacy constant is retained for caller/test compatibility.
     ZONE_THRESHOLDS = {
         "scan_to_watch": {"bayesian_min": 0.30, "product_count_min": 2},
         "watch_to_candidate": {"bayesian_min": 0.50, "consensus_min": 0.40},
@@ -39,25 +42,25 @@ class StockPoolAutoPromoter:
         stock_pool_service: StockPoolService,
         thresholds: Optional[Dict[str, Dict[str, Any]]] = None,
         actor: str = "system:auto_promoter",
+        zone_rule_engine: Optional[ZoneRuleEngine] = None,
     ) -> None:
         """Initialize with a stock pool service and optional threshold override."""
         self.stock_pool_service = stock_pool_service
         self.thresholds = thresholds or self.ZONE_THRESHOLDS
         self.actor = actor
+        self.zone_engine = zone_rule_engine or DEFAULT_ZONE_RULE_ENGINE
 
     def evaluate_and_promote(self, trade_date: str, dry_run: bool = False) -> Dict[str, Any]:
         """Evaluate active entries and promote one zone when rules are satisfied."""
         summary = self._empty_summary(trade_date, dry_run, "promote")
         for record in self._active_records():
             current_zone = record.get("pool_zone")
-            if current_zone not in self.PROMOTION_PATH:
+            decision = self._eval_promote(record, current_zone)
+            if decision is None:
+                if current_zone in self.PROMOTION_PATH:
+                    summary["skipped"] += 1
                 continue
-            target_zone, rule_name = self.PROMOTION_PATH[current_zone]
-            thresholds = self.thresholds[rule_name]
-            if not self.should_promote(record, target_zone, thresholds):
-                summary["skipped"] += 1
-                continue
-            self._append_or_apply(summary, record, target_zone, rule_name, thresholds, dry_run)
+            self._append_or_apply(summary, record, decision.target_zone, decision.rule_name, decision.thresholds, dry_run)
         return summary
 
     def evaluate_and_demote(self, trade_date: str, dry_run: bool = False) -> Dict[str, Any]:
@@ -65,25 +68,42 @@ class StockPoolAutoPromoter:
         summary = self._empty_summary(trade_date, dry_run, "demote")
         for record in self._active_records():
             current_zone = record.get("pool_zone")
-            if current_zone not in self.DEMOTION_PATH:
+            decision = self._eval_demote(record, current_zone)
+            if decision is None:
+                if current_zone in self.DEMOTION_PATH:
+                    summary["skipped"] += 1
                 continue
-            target_zone, rule_name = self.DEMOTION_PATH[current_zone]
-            thresholds = self.thresholds[rule_name]
-            if not self.should_demote(record, thresholds):
-                summary["skipped"] += 1
-                continue
-            self._append_or_apply(summary, record, target_zone, rule_name, thresholds, dry_run)
+            self._append_or_apply(summary, record, decision.target_zone, decision.rule_name, decision.thresholds, dry_run)
         return summary
+
+    def _eval_promote(self, record: Dict[str, Any], current_zone: Optional[str]):
+        """Evaluate YAML-backed one-step promotion."""
+        if not current_zone:
+            return None
+        decision = self.zone_engine.eval_promote(self._record_for_engine(record, current_zone), current_zone)
+        return decision
+
+    def _eval_demote(self, record: Dict[str, Any], current_zone: Optional[str]):
+        """Evaluate YAML-backed one-step demotion with hysteresis retention thresholds."""
+        if not current_zone:
+            return None
+        return self.zone_engine.eval_demote(self._record_for_engine(record, current_zone), current_zone)
+
+    def _eval_exit(self, record: Dict[str, Any], current_zone: Optional[str]):
+        """Evaluate YAML-backed lifecycle exit."""
+        if not current_zone:
+            return None
+        return self.zone_engine.eval_exit(self._record_for_engine(record, current_zone), current_zone)
 
     def should_promote(self, record: Dict[str, Any], target_zone: str, thresholds: Dict[str, Any]) -> bool:
         """Return True when a record satisfies the target zone threshold set."""
-        metrics = self._metrics(record)
-        return self._passes_thresholds(metrics, thresholds)
+        current_zone = record.get("pool_zone")
+        decision = self._eval_promote(record, current_zone)
+        return decision is not None and decision.target_zone == target_zone
 
     def should_demote(self, record: Dict[str, Any], thresholds: Dict[str, Any]) -> bool:
         """Return True when a record fails the threshold set for its current zone."""
-        metrics = self._metrics(record)
-        return not self._passes_thresholds(metrics, thresholds)
+        return self._eval_demote(record, record.get("pool_zone")) is not None
 
     def _active_records(self) -> Iterable[Dict[str, Any]]:
         cursor: Optional[str] = None
@@ -154,6 +174,26 @@ class StockPoolAutoPromoter:
             ),
             "crowding_level": str(self._first(sources, ["crowding_level", "crowding"], "LOW")).upper(),
         }
+
+    def _record_for_engine(self, record: Dict[str, Any], current_zone: str) -> Dict[str, Any]:
+        engine_record = dict(record)
+        metrics = self._metrics(record)
+        engine_record.setdefault("bayesian_score", metrics["bayesian"])
+        engine_record.setdefault("consensus_confidence", metrics["consensus"])
+        engine_record.setdefault("crowding_level", metrics["crowding_level"])
+        if engine_record.get("contributing_products_count") is None:
+            # Legacy stock-pool rows may not carry product_count. Preserve old API
+            # behavior by falling back to the rule's minimum instead of treating the
+            # field as an explicit zero.
+            path = self.zone_engine.config["portfolio_transitions"]["promotion_path"].get(str(current_zone).upper())
+            if path:
+                rule = self.zone_engine.config["portfolio_transitions"]["promote_rules"].get(path["rule"], {})
+                engine_record["contributing_products_count"] = rule.get("product_count_min", metrics["product_count"])
+            else:
+                engine_record["contributing_products_count"] = metrics["product_count"]
+        if engine_record.get("crowding_level") is None:
+            engine_record["crowding_level"] = metrics["crowding_level"]
+        return engine_record
 
     @staticmethod
     def _first(sources: Iterable[Dict[str, Any]], keys: List[str], default: Any) -> Any:

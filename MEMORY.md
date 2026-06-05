@@ -73,3 +73,12 @@ _Last updated: 2026-04-24_
 
 <!-- openclaw-memory-promotion:memory:memory/2026-04-06.md:60:105 -->
 - 上证指数: 3880.10 (↓1.00%) 深证成指: 13352.90 (↓0.99%) 创业板指: 3149.60 (↓0.73%) 科创50: 1256.21 (↓0.47%) 上涨 716 / 下跌 4746 涨停 38 / 跌停 46 成交额 16689亿 ``` ### 待完成 - [ ] 解决 litellm 代理问题（可能需要配置代理凭据或切换网络） - [ ] 补充 `analyzer_service` 模块 - [ ] 配置邮件推送（TOOLS.md 中已有 SMTP 配置） - [ ] 飞书 Webhook URL 待确认 - [ ] Tavily API Key（新闻搜索）待配置 --- ## 夜间调试记录 (2026-04-06 01:20-02:08) ### litellm/MiniMax 兼容性问题 ✅ 根因确认 **问题描述：** litellm 调用 MiniMax API 失败，报 `invalid api key (2049)` **根本原因：** - litellm MiniMax provider 使用 OpenAI 兼容端点 `/v1/chat/completions` - MiniMax 实际使用 Anthropic 兼容端点 `/v1/messages` - 即使配置了正确的 `base_url: "https://api.minimaxi.com/anthropic"`，litellm 内部仍然拼接错误路径 **测试验证：** - ✅ 直接用 `requests.post` 调用 MiniMax `/v1/messages` 成功 - ❌ litellm.completion() 始终调用错误端点 ### API Key 状态 | API | Key 格式 | 状态 | |-----|----------|------| | MiniMax | `sk-cp-6zYqByU7...` | ❌ 无效 (2049) - 可能已过期/被撤销 | | Gemini | - | ⚠️ Quota exceeded | | DeepSeek | 未知 | ❓ 未配置 | ### litellm Config 位置 ``` /home/pascal/.openclaw/workspace/skills/investment/research/daily_stock_analysis/litellm_config.yaml ``` [score=0.801 recalls=3 avg=0.692 source=memory/2026-04-06.md:60-105]
+
+## Promoted From Short-Term Memory (2026-06-06)
+
+<!-- openclaw-memory-promotion:memory:memory/2026-06-01.md:60:61 -->
+- if not previous_zone or previous_zone not in ZONE_RANK: return None # 而非 "update" [score=0.898 recalls=0 avg=0.620 source=memory/2026-06-01.md:60-61]
+<!-- openclaw-memory-promotion:memory:memory/2026-06-01.md:64:67 -->
+- prev_zone = previous.get("pool_zone") or None # "" → None action = self._zone_delta_action(prev_zone, curr_zone) if action is None: stock_pool_zone = existing.get("pool_zone") or None [score=0.898 recalls=0 avg=0.620 source=memory/2026-06-01.md:64-67]
+<!-- openclaw-memory-promotion:memory:memory/2026-06-01.md:68:68 -->
+- action = self._zone_delta_action(stock_pool_zone, curr_zone) or "update" [score=0.898 recalls=0 avg=0.620 source=memory/2026-06-01.md:68-68]

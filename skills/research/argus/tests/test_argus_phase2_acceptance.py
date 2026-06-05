@@ -11,10 +11,12 @@ sys.path.insert(0, '/home/pascal/.openclaw/workspace-yquant')
 
 from skills.research.argus.cli.daily_processor import (
     _build_previous_signal_pool_map,
+    _build_stock_pool_records,
     _merge_previous_signal_pool_records,
     _write_json_output,
     process_date,
 )
+from skills.research.argus.core import PoolManager
 
 
 class FakeReader:
@@ -269,6 +271,35 @@ class TestArgusPhase2Acceptance(unittest.TestCase):
             payload = json.loads(output_file.read_text(encoding='utf-8'))
 
         self.assertEqual(payload['consensus_direction'], consensus_direction)
+
+    def test_stock_pool_classification_uses_same_day_sector_darwin_event(self):
+        """A sector-level Darwin event should affect today's zone classification."""
+        records = _build_stock_pool_records(
+            date_to_process='2026-05-29',
+            signals=[
+                {
+                    'product_code': 'SM001',
+                    'confidence': 0.2,
+                    'target_stocks': [{'wind_code': '600519.SH', 'stock_name': '贵州茅台'}],
+                    'metadata': {'darwin_moment': False},
+                }
+            ],
+            consensus={},
+            crowding={},
+            pool_manager=PoolManager(),
+            wind_to_sw1={'600519.SH': '801120.SI'},
+            darwin_events=[
+                {
+                    'date': '2026-05-29',
+                    'sw1_code': '801120.SI',
+                    'confidence': 0.8,
+                }
+            ],
+        )
+
+        self.assertEqual(records[0]['pool_zone'], 'CANDIDATE')
+        self.assertTrue(records[0]['darwin_moment'])
+        self.assertEqual(records[0]['darwin_event_id'], '2026-05-29_801120.SI')
 
 
 if __name__ == '__main__':

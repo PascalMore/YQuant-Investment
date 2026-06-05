@@ -20,31 +20,33 @@ bayesian_scoring:
     consensus_score: 0.25
     direction_score: 0.20
 
-# Pool zones
-pool_zones:
-  conviction:
-    min_confidence: 0.75
-    min_contributing_products: 3
-  candidate:
-    min_confidence: 0.60
-    min_contributing_products: 2
-  watch:
-    min_confidence: 0.45
-  scan:
-    min_confidence: 0.30
+# DEPRECATED: pool_zones has been migrated to config/zone_rules_template.yaml
+# Legacy config kept for rollback. Will be removed in a future release.
+# pool_zones:
+#   conviction:
+#     min_confidence: 0.75
+#     min_contributing_products: 3
+#   candidate:
+#     min_confidence: 0.60
+#     min_contributing_products: 2
+#   watch:
+#     min_confidence: 0.45
+#   scan:
+#     min_confidence: 0.30
 
-# Portfolio stock pool automatic zone transition thresholds
-zone_thresholds:
-  scan_to_watch:
-    bayesian_min: 0.30
-    product_count_min: 2
-  watch_to_candidate:
-    bayesian_min: 0.50
-    consensus_min: 0.40
-  candidate_to_conviction:
-    bayesian_min: 0.70
-    product_count_min: 3
-    crowding_max: "DANGER"
+# DEPRECATED: zone_thresholds has been migrated to config/zone_rules_template.yaml
+# Legacy config kept for rollback. Will be removed in a future release.
+# zone_thresholds:
+#   scan_to_watch:
+#     bayesian_min: 0.30
+#     product_count_min: 2
+#   watch_to_candidate:
+#     bayesian_min: 0.50
+#     consensus_min: 0.40
+#   candidate_to_conviction:
+#     bayesian_min: 0.70
+#     product_count_min: 3
+#     crowding_max: "DANGER"
 
 # Rebalancing detection
 rebalancing:

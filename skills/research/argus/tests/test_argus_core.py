@@ -63,6 +63,13 @@ class TestPoolManager(unittest.TestCase):
             '600519.SH', '贵州茅台', 0.2, ['SM001'], False
         )
         self.assertEqual(zone, 'SCAN')
+
+    def test_darwin_zone_is_candidate_minimum(self):
+        """Darwin moment stocks should be promoted to CANDIDATE at minimum."""
+        zone = self.manager.classify_stock(
+            '600519.SH', '贵州茅台', 0.2, ['SM001'], True
+        )
+        self.assertEqual(zone, 'CANDIDATE')
     
     def test_pool_update(self):
         """Test pool update with signals."""

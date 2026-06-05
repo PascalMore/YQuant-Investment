@@ -20,7 +20,7 @@ sys.path.insert(0, '/home/pascal/.openclaw/workspace-yquant')
 from skills.data.data_interface import MongoReader, MongoWriter
 from skills.data.portfolio import PortfolioTransformer
 from skills.infra import format_date, get_trading_dates, get_latest_trading_day, get_logger, parse_date
-from skills.research.argus.config import ARGUS_CONFIG
+from skills.research.argus.config import ARGUS_CONFIG, ZONE_RULES_CONFIG
 from skills.research.argus.core import (
     ConsensusEngine,
     BayesianScorer,
@@ -32,6 +32,7 @@ from skills.research.argus.core import (
     RebalancingDetector,
     SignalGenerator,
     ConsensusDirectionEngine,
+    ZoneRuleEngine,
 )
 
 logger = get_logger('argus', 'research/argus')
@@ -57,6 +58,7 @@ def process_date(
     credibility_scorer = CredibilityScorer()
     signal_generator = SignalGenerator(credibility_scorer)
     pool_manager = PoolManager()
+    zone_rule_engine = ZoneRuleEngine.from_config(ZONE_RULES_CONFIG)
     rebalancing_detector = RebalancingDetector()
     darwin_detector = DarwinDetector()
     consensus_engine = ConsensusEngine(pool_manager)
@@ -87,6 +89,7 @@ def process_date(
 
     trades = reader.read(date_to_process, collection_name='portfolio_trade')
     product_profiles = _read_product_profiles(reader, date_to_process)
+    bayesian_scorer = BayesianScorer(product_profiles=product_profiles)
     previous_positions = reader.read(previous_date, collection_name='portfolio_position')
     baseline_30d_date = _get_baseline_date(date_to_process, 30)
     results['baseline_30d_date'] = baseline_30d_date
@@ -151,6 +154,16 @@ def process_date(
             signal['metadata']['rebalancing_events_count'] = len(rebalancing_events)
         all_signals.extend(signals)
 
+    # Phase 4B must run before stock-pool classification so sector-level Darwin
+    # events can affect today's zone assignment.
+    index_quotes = _read_index_quotes(reader, date_to_process)
+    darwin_events = darwin_detector.detect_for_date(
+        date_to_process,
+        index_quotes=index_quotes,
+        credential_scores=credential_records,
+        industry_weights=industry_weight_records,
+    )
+
     consensus = consensus_engine.calculate_consensus(all_signals)
     crowding = crowding_analyzer.analyze(positions, trades, all_signals)
     stock_pool_records = _build_stock_pool_records(
@@ -161,10 +174,9 @@ def process_date(
         pool_manager,
         industry_weight_records,
         wind_to_sw1,
-    )
-    stock_pool_records = BayesianScorer(product_profiles=product_profiles).score_signal_pool_records(
-        stock_pool_records,
-        all_signals,
+        darwin_events,
+        zone_rule_engine,
+        bayesian_scorer,
     )
     _annotate_signals(all_signals, stock_pool_records, consensus, crowding)
 
@@ -185,15 +197,6 @@ def process_date(
         results['credential_scores_written'] = writer.write_argus_credential_scores(credential_records)
         results['signals_written'] = writer.write_argus_signals(all_signals)
 
-
-        # Phase 4B: Darwin Moment Detection
-        index_quotes = _read_index_quotes(reader, date_to_process)
-        darwin_events = darwin_detector.detect_for_date(
-            date_to_process,
-            index_quotes=index_quotes,
-            credential_scores=credential_records,
-            industry_weights=industry_weight_records,
-        )
         results['darwin_events_written'] = writer.write_argus_darwin_events(darwin_events) if darwin_events else 0
 
         # Phase 4C: Consensus Direction Engine
@@ -676,7 +679,13 @@ def _build_stock_pool_records(
     pool_manager: PoolManager,
     industry_weight_records: Optional[List[Dict]] = None,
     wind_to_sw1: Optional[Dict[str, str]] = None,
+    darwin_events: Optional[List[Dict]] = None,
+    zone_rule_engine: Optional[ZoneRuleEngine] = None,
+    bayesian_scorer: Optional[BayesianScorer] = None,
 ) -> List[Dict]:
+    zone_rule_engine = zone_rule_engine or ZoneRuleEngine.from_config(ZONE_RULES_CONFIG)
+    bayesian_scorer = bayesian_scorer or BayesianScorer()
+    darwin_by_sector: Dict[str, Dict] = {event.get('sw1_code'): event for event in darwin_events or []}
     stock_signals = defaultdict(list)
     stock_names = {}
     for signal in signals:
@@ -691,13 +700,11 @@ def _build_stock_pool_records(
     for wind_code, related_signals in stock_signals.items():
         products = sorted({signal.get('product_code') for signal in related_signals if signal.get('product_code')})
         confidence = max(signal.get('confidence', 0) for signal in related_signals)
-        darwin_moment = any(signal.get('metadata', {}).get('darwin_moment') for signal in related_signals)
-        pool_zone = pool_manager.classify_stock(
-            wind_code,
-            stock_names.get(wind_code, ''),
-            confidence,
-            products,
-            darwin_moment,
+        sw1_code = wind_to_sw1.get(wind_code) if wind_to_sw1 else None
+        sector_darwin_event = darwin_by_sector.get(sw1_code)
+        darwin_moment = (
+            any(signal.get('metadata', {}).get('darwin_moment') for signal in related_signals)
+            or sector_darwin_event is not None
         )
         crowding_data = crowding.get(wind_code, {})
         consensus_data = consensus.get(wind_code, {})
@@ -705,7 +712,7 @@ def _build_stock_pool_records(
             'date': date_to_process,
             'wind_code': wind_code,
             'stock_name': stock_names.get(wind_code, ''),
-            'pool_zone': pool_zone,
+            'pool_zone': 'SCAN',
             'confidence': round(confidence, 4),
             'contributing_products': products,
             'contributing_products_count': len(products),
@@ -715,7 +722,22 @@ def _build_stock_pool_records(
             'crowding_level': crowding_data.get('crowding_level', 'LOW'),
             'crowding_layers': crowding_data.get('layer_scores', {}),
             'darwin_moment': darwin_moment,
+            'darwin_confidence': sector_darwin_event.get('confidence') if sector_darwin_event else None,
+            'darwin_event_id': (
+                f"{sector_darwin_event.get('date')}_{sector_darwin_event.get('sw1_code')}"
+                if sector_darwin_event else None
+            ),
         })
+    records = bayesian_scorer.score_signal_pool_records(records, signals)
+    for record in records:
+        decision = zone_rule_engine.classify_initial_zone(record)
+        record['pool_zone'] = decision.target_zone
+        record['zone_decision'] = {
+            'rule_name': decision.rule_name,
+            'reason': decision.reason,
+            'metrics': decision.metrics,
+            'thresholds': decision.thresholds,
+        }
     return records
 
 

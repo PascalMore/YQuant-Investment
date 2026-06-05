@@ -5,8 +5,8 @@
 | 状态 | 已采纳（Accepted） |
 | 作者 | YQuant |
 | 创建日期 | 2026-05-18 |
-| 最后更新 | 2026-05-19 |
-| 版本号 | V0.3 |
+| 最后更新 | 2026-06-06 |
+| 版本号 | V0.4 |
 | 所属模块 | 08_research（投研分析） |
 | 依赖RFC | RFC-00-001-yqclaw-investment-global-architecture, RFC-08-001-argus-integration |
 | 替代RFC | 无 |
@@ -16,6 +16,7 @@
 ### 版本历史（Changelog）
 | 版本号 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
+| V0.4 | 2026-06-06 | Phase 3：补充 stock_pool_record 派生字段、ZoneRuleEngine 分类结果、Darwin override 语义和 bayesian_score 前置约束 | YQuant |
 | V0.3 | 2026-05-19 | 补充 ArgusPortfolioSubscriber、Portfolio ingestion endpoint、MongoDB-only 数据流与 zone 映射 | YQuant |
 | V0.2 | 2026-05-18 | 状态更新：Draft → Accepted；集合名称更新为 tradingagents.08_research_argus_signal | YQuant |
 | V0.1 | 2026-05-18 | 初始创建，定义 Argus 信号接口标准 | YQuant |
@@ -98,8 +99,34 @@
 | time_horizon | Enum | 时间视野：FAST/MEDIUM/SLOW |
 | pool_zone | Enum | 所属股票池区域 |
 | contributing_products_count | Integer | 贡献信号的产品数量 |
-| darwin_moment | Boolean | 是否为达尔文时刻 |
+| darwin_moment | Boolean | 是否命中产品级或行业级 Darwin 事件；仅作为 zone floor 正向证据，不直接强制 CONVICTION |
+| darwin_confidence | Float | Darwin 事件置信度，缺失时为 null |
 | consensus_direction | Enum | 共识方向 |
+
+### 3.4 stock_pool_record 派生字段
+
+Argus 写入 `08_research_argus_signal_pool` 前，会把 `argus_signal` 聚合为单股单日记录。Phase 3 后该记录是 zone 分类的标准输入：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| date | Date | 处理日期 |
+| wind_code | String | 股票 Wind 代码 |
+| stock_name | String | 股票名称 |
+| confidence | Float | 原始信号置信度聚合值，保留用于兼容和审计 |
+| bayesian_score | Float | BayesianScorer 输出的主评分；必须在 zone 分类前存在 |
+| contributing_products | Array[String] | 贡献信号产品列表 |
+| contributing_products_count | Integer | 贡献产品数 |
+| consensus_direction | Enum | BUY/SELL/HOLD 或 BULLISH/BEARISH/NEUTRAL 的归一化方向 |
+| consensus_confidence | Float | 单股共识置信度 |
+| crowding_score | Float | 拥挤度分数 |
+| crowding_level | Enum | LOW/MEDIUM/HIGH/DANGER |
+| darwin_moment | Boolean | 产品级或行业级 Darwin 标记 |
+| darwin_confidence | Float/null | 行业级 Darwin 事件置信度 |
+| darwin_event_id | String/null | Darwin 事件引用 |
+| pool_zone | Enum | ZoneRuleEngine 输出的最终 zone |
+| zone_decision | Object | `rule_name/reason/metrics/thresholds`，用于审计分类来源 |
+
+接口约束：`pool_zone` 不再由 `confidence` 硬编码阈值直接决定，而由 `ZoneRuleEngine.classify_initial_zone()` 基于 `bayesian_score`、产品数、共识、拥挤度和 Darwin override 统一生成。
 
 ## 4. Portfolio 模块消费接口
 
@@ -253,6 +280,15 @@ class StockPoolIngestionService:
 | CANDIDATE | CANDIDATE | 候选研究 |
 | CONVICTION | CONVICTION | 高确信度 |
 | focus | CONVICTION | 旧 RFC 残留命名，统一迁移为 CONVICTION |
+
+### 5.3.1 Darwin override 语义
+
+Darwin override 是 floor-only 规则：
+
+- 命中 `darwin_moment=true` 且满足 YAML 中 `darwin_override.score_guard` 时，最低提升到 `CANDIDATE`。
+- Darwin 不直接强制 `CONVICTION`；进入 `CONVICTION` 仍需常规规则满足 `bayesian_score`、产品数、共识和拥挤度条件。
+- 若 `crowding_level` 超过目标 zone 允许上限，ZoneRuleEngine 会按 YAML 规则限制目标 zone。
+- 旧 `PoolManager.classify_stock(..., confidence, darwin_moment=True)` 是兼容 API；新 pipeline 应传入完整 `stock_pool_record`。
 
 ### 5.4 标准数据流
 

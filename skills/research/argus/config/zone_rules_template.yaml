@@ -1,0 +1,355 @@
+# Argus / Portfolio unified zone rules.
+# Single source of truth for:
+# - Argus signal-pool initial classification after bayesian_score is available
+# - Portfolio stock-pool one-step promotion / demotion
+# - Incremental entry / exit audit semantics
+
+version: 3
+
+zones:
+  order:
+    - SCAN
+    - WATCH
+    - CANDIDATE
+    - CONVICTION
+  default_zone: SCAN
+  legacy_aliases:
+    FOCUS: CONVICTION
+
+score_policy:
+  argus_initial:
+    primary: bayesian_score
+    fallback:
+      - bayesian
+      - score
+      - confidence
+    missing_default: 0.0
+  portfolio_transition:
+    primary: bayesian_score
+    fallback:
+      - bayesian
+      - score
+      - confidence
+    missing_default: 0.0
+
+metric_aliases:
+  bayesian_score:
+    - bayesian_score
+    - bayesian
+    - score
+    - confidence
+  confidence:
+    - confidence
+  contributing_products_count:
+    - contributing_products_count
+    - product_count
+    - products_count
+  consensus_confidence:
+    - consensus_confidence
+    - consensus_score
+    - consensus
+  crowding_level:
+    - crowding_level
+    - crowding
+  darwin_moment:
+    - darwin_moment
+    - metadata.darwin_moment
+  darwin_confidence:
+    - darwin_confidence
+    - metadata.darwin_confidence
+
+argus_signal_pool:
+  score_policy: argus_initial
+  classification_mode: direct_target
+  entry_rules:
+    # SCAN is an unconditional residual entry rule, not a low-score bucket.
+    scan:
+      target_zone: SCAN
+      condition: otherwise
+      bayesian_min: null
+      bayesian_max: null
+      product_count_min: null
+      product_count_max: null
+      consensus_min: null
+      crowding_max: null
+      terminal: true
+    watch:
+      target_zone: WATCH
+      bayesian_min: 0.35
+      product_count_min: 1
+      product_count_max: null
+      consensus_min: 0.20
+      crowding_max: null
+    candidate:
+      target_zone: CANDIDATE
+      bayesian_min: 0.55
+      product_count_min: 2
+      product_count_max: null
+      consensus_min: 0.40
+      crowding_max: DANGER
+    conviction:
+      target_zone: CONVICTION
+      bayesian_min: 0.75
+      product_count_min: 3
+      product_count_max: null
+      consensus_min: 0.60
+      crowding_max: HIGH
+  evaluation_order:
+    - conviction
+    - candidate
+    - watch
+    - scan
+  darwin_override:
+    enabled: true
+    mode: floor_only
+    trigger_metric: darwin_moment
+    score_guard:
+      bayesian_min: 0.45
+      darwin_confidence_min: 0.70
+      operator: any
+    min_zone: CANDIDATE
+    max_forced_zone: CANDIDATE
+    conviction_requires_regular_rule: true
+
+portfolio_transitions:
+  score_policy: portfolio_transition
+  transition_mode: one_step
+  max_steps_per_run: 1
+
+  entry_rules:
+    scan:
+      target_zone: SCAN
+      condition: current_signal_exists_and_initial_rule_target
+      source: argus_signal_pool.entry_rules.scan
+    watch:
+      target_zone: WATCH
+      condition: current_signal_exists_and_initial_rule_target
+      source: argus_signal_pool.entry_rules.watch
+    candidate:
+      target_zone: CANDIDATE
+      condition: current_signal_exists_and_initial_rule_target
+      source: argus_signal_pool.entry_rules.candidate
+    conviction:
+      target_zone: CONVICTION
+      condition: current_signal_exists_and_initial_rule_target
+      source: argus_signal_pool.entry_rules.conviction
+
+  promotion_path:
+    SCAN:
+      target_zone: WATCH
+      rule: scan_to_watch
+    WATCH:
+      target_zone: CANDIDATE
+      rule: watch_to_candidate
+    CANDIDATE:
+      target_zone: CONVICTION
+      rule: candidate_to_conviction
+    CONVICTION:
+      target_zone: CONVICTION
+      rule: terminal_top_zone
+
+  demotion_path:
+    SCAN:
+      target_zone: SCAN
+      rule: terminal_bottom_zone
+    WATCH:
+      target_zone: SCAN
+      rule: watch_retention
+    CANDIDATE:
+      target_zone: WATCH
+      rule: candidate_retention
+    CONVICTION:
+      target_zone: CANDIDATE
+      rule: conviction_retention
+
+  promote_rules:
+    scan_to_watch:
+      target_zone: WATCH
+      bayesian_min: 0.35
+      product_count_min: 1
+      consensus_min: 0.20
+      crowding_max: null
+    watch_to_candidate:
+      target_zone: CANDIDATE
+      bayesian_min: 0.55
+      product_count_min: 2
+      consensus_min: 0.40
+      crowding_max: DANGER
+    candidate_to_conviction:
+      target_zone: CONVICTION
+      bayesian_min: 0.75
+      product_count_min: 3
+      consensus_min: 0.60
+      crowding_max: HIGH
+
+  demote_rules:
+    # Demotion uses retention thresholds below promotion thresholds.
+    terminal_bottom_zone:
+      target_zone: SCAN
+      demote_when: never
+    watch_retention:
+      current_zone: WATCH
+      target_zone: SCAN
+      demote_when: fail_retention
+      bayesian_min: 0.25
+      product_count_min: 1
+      consensus_min: 0.10
+      crowding_max: null
+    candidate_retention:
+      current_zone: CANDIDATE
+      target_zone: WATCH
+      demote_when: fail_retention
+      bayesian_min: 0.48
+      product_count_min: 1
+      consensus_min: 0.30
+      crowding_max: DANGER
+    conviction_retention:
+      current_zone: CONVICTION
+      target_zone: CANDIDATE
+      demote_when: fail_retention
+      bayesian_min: 0.68
+      product_count_min: 2
+      consensus_min: 0.50
+      crowding_max: HIGH
+
+  exit_rules:
+    # Exit is lifecycle inactive, not a demotion to SCAN.
+    scan:
+      current_zone: SCAN
+      target_status: inactive
+      action: exit
+      condition: missing_from_current_signal_pool
+    watch:
+      current_zone: WATCH
+      target_status: inactive
+      action: exit
+      condition: missing_from_current_signal_pool
+    candidate:
+      current_zone: CANDIDATE
+      target_status: inactive
+      action: exit
+      condition: missing_from_current_signal_pool
+    conviction:
+      current_zone: CONVICTION
+      target_status: inactive
+      action: exit
+      condition: missing_from_current_signal_pool
+
+  hysteresis:
+    enabled: true
+    policy: independent_retention_thresholds
+    deltas:
+      WATCH:
+        promote_rule: scan_to_watch
+        retention_rule: watch_retention
+        bayesian_delta: 0.10
+        consensus_delta: 0.10
+      CANDIDATE:
+        promote_rule: watch_to_candidate
+        retention_rule: candidate_retention
+        bayesian_delta: 0.07
+        consensus_delta: 0.10
+      CONVICTION:
+        promote_rule: candidate_to_conviction
+        retention_rule: conviction_retention
+        bayesian_delta: 0.07
+        consensus_delta: 0.10
+    retention_rules:
+      WATCH: watch_retention
+      CANDIDATE: candidate_retention
+      CONVICTION: conviction_retention
+
+darwin:
+  drawdown_threshold: 0.10
+  systemic_threshold: 0.08
+  weak_threshold_policy: daily_percentile
+  weak_percentile: 0.20
+  strong_threshold_policy: daily_percentile
+  strong_percentile: 0.80
+  min_strong_add: 2
+  systemic_confidence_multiplier: 0.70
+  signal_pool_floor_zone: CANDIDATE
+  override_policy:
+    trigger_metric: darwin_moment
+    score_guard:
+      bayesian_min: 0.45
+      darwin_confidence_min: 0.70
+      operator: any
+    max_forced_zone: CANDIDATE
+    conviction_requires_regular_rule: true
+
+crowding:
+  rank:
+    LOW: 0
+    MEDIUM: 1
+    HIGH: 2
+    DANGER: 3
+  default_macro_score: 0.5
+  level_thresholds:
+    low: 0.35
+    high: 0.70
+  layer_weights:
+    L1: 0.20
+    L2: 0.25
+    L3: 0.35
+    L4: 0.20
+  zone_limits:
+    SCAN: null
+    WATCH: null
+    CANDIDATE: DANGER
+    CONVICTION: HIGH
+
+prosperity:
+  bullish_threshold: 2.0
+  defensive_threshold: -2.0
+  signals:
+    bullish: BULLISH
+    defensive: DEFENSIVE
+    neutral: NEUTRAL
+
+bayesian_scoring:
+  weights:
+    rebalancing_score: 0.30
+    product_credibility: 0.25
+    consensus_score: 0.25
+    direction_score: 0.20
+  consensus_score_by_product_count:
+    "5+": 1.00
+    "3-4": 0.70
+    "2": 0.40
+    "0-1": 0.20
+  rebalancing_scores:
+    NEW_ENTRY: 1.00
+    CONCENTRATED_ADD: 0.90
+    HIDDEN_BUILD: 0.85
+    CONTINUOUS_ADD: 0.80
+    CONSENSUS_ADD: 0.70
+    HOLD: 0.50
+    PARTIAL_EXIT: 0.30
+    FULL_EXIT: 0.10
+  direction_scores:
+    BUY: 0.80
+    SELL: -0.80
+    HOLD: 0.00
+
+signal:
+  high_confidence: 0.70
+  medium_confidence: 0.50
+  low_confidence: 0.30
+
+credibility:
+  high_threshold: 0.80
+  medium_threshold: 0.60
+  low_threshold: 0.40
+
+audit:
+  actor:
+    argus_daily_processor: system:argus
+    auto_promoter: system:auto_promoter
+  actions:
+    entry: entry
+    promote: promote
+    demote: demote
+    exit: exit
+    update: update
+    auto_transition: auto_transition

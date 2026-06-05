@@ -5,8 +5,8 @@
 | 状态 | Accepted |
 | 作者 | PascalMao |
 | 创建日期 | 2026-05-17 |
-| 最后更新 | 2026-05-18 |
-| 版本号 | V0.3 |
+| 最后更新 | 2026-06-06 |
+| 版本号 | V0.4 |
 | 所属模块 | 08_research（投研分析） |
 | 依赖RFC | RFC-00-001-yqclaw-investment-global-architecture |
 | 替代RFC | 无 |
@@ -16,6 +16,7 @@
 ### 版本历史（Changelog）
 | 版本号 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
+| V0.4 | 2026-06-06 | Phase 3：补充 ZoneRuleEngine 共享组件、YAML 统一阈值配置、Darwin/Bayesian/zone 分类计算顺序 | YQuant |
 | V0.3 | 2026-05-18 | 数据存储方案：删除独立SQLite，改用MongoDB新建集合（08_research_argus_*）；目录结构更新为skills/data + skills/infra + skills/research/argus；删除db/目录相关描述 | YQuant |
 | V0.2 | 2026-05-18 | 状态更新：Draft → Accepted，Phase 0 完成 | YQuant |
 | V0.1 | 2026-05-17 | 初始创建，纳入 YQClaw RFC 体系方案 | PascalMao |
@@ -101,12 +102,19 @@ docs/rfc/08_research/argus/
     ↓
 Raw Layer 接收（日度 T+1）
     ↓
-Processed Layer 处理（贝叶斯信誉评分、多时间框架信号融合）
+Processed Layer 处理（产品信誉、调仓事件、Darwin 事件、贝叶斯评分、多时间框架信号融合）
     ↓
-Decision Layer 输出（argus_stock_pool 四区动态股票池）
+Decision Layer 输出（ZoneRuleEngine 基于 bayesian_score / consensus / crowding / Darwin 进行四区分类）
     ↓
 Signal 输出（argus_signal JSON → portfolio/strategy/trading）
 ```
+
+Phase 3 后，`ZoneRuleEngine` 是 Argus 与 Portfolio 共享的 zone 分类/迁移组件：
+
+- 配置入口：`skills/research/argus/config/zone_rules_template.yaml`，Python loader 为 `config/zone_rules.py`。
+- Argus 初始分类：`argus_signal_pool.entry_rules` 直接生成 `SCAN/WATCH/CANDIDATE/CONVICTION`。
+- Portfolio 增量迁移：`portfolio_transitions` 执行 one-step promote / demote / exit，并使用 hysteresis retention 阈值。
+- 旧 `pool_zones` / `zone_thresholds` 中的硬编码阈值仅作为历史兼容参考，新代码不得继续新增分散阈值。
 
 #### 4.1.2 Argus 与 Portfolio 模块的数据交换流程
 ```
@@ -233,12 +241,24 @@ TradingAgents MongoDB（portfolio_basic_info / portfolio_nav / portfolio_positio
     ↓ Read
 Argus Processed Layer（贝叶斯评分引擎）
     ↓
-Argus Decision Layer（argus_signal → argus_stock_pool）
+Argus Decision Layer（argus_signal → bayesian_score → ZoneRuleEngine → argus_signal_pool）
     ↓ Output
 portfolio / strategy / trading 模块消费
 ```
 
-#### 4.2.5 Argus 输出信号格式（YQClaw 全局信号标准）
+#### 4.2.5 Phase 3 计算顺序
+
+Phase 3 固化日度处理顺序，避免 zone 分类读取到未完成的派生字段：
+
+1. 读取 raw portfolio 数据并生成产品级信号。
+2. 先运行 Darwin 事件检测，形成当日行业级 `darwin_events`。
+3. 构造 stock-pool 记录时先合并信号、共识、拥挤度和行业 Darwin 标记。
+4. 调用 `BayesianScorer.score_signal_pool_records()` 写入 `bayesian_score`。
+5. 最后调用 `ZoneRuleEngine.classify_initial_zone()` 生成 `pool_zone` 和 `zone_decision`。
+
+因此 `bayesian_score` 在 zone 分类前必须存在；`darwin_moment` / `darwin_confidence` 在调用 `BayesianScorer` 和 `ZoneRuleEngine` 时均已可用。
+
+#### 4.2.6 Argus 输出信号格式（YQClaw 全局信号标准）
 ```json
 {
   "signal_id": "uuid",
