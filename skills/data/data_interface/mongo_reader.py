@@ -68,6 +68,10 @@ class MongoReader(IReader):
             query = {'trade_date': date}
         elif collection_name == 'portfolio_nav':
             query = {'nav_date': date}
+        elif collection_name == '05_portfolio_stock_pool':
+            query = {'status': 'active'}  # 股票池按 status=active 查询，不按日期
+        elif collection_name == '05_portfolio_stock_pool_audit':
+            query = {'event_date': date}  # 审计记录按 event_date 查询
         elif collection_name.startswith('08_research_argus_'):
             query = {'date': date}
         else:

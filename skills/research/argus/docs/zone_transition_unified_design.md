@@ -1,8 +1,8 @@
 # Argus 升区/降区统一设计方案
 
-## 1. 现状确认
+## 1. 改造前状态确认
 
-本设计基于以下代码现状：
+本节记录本设计形成时的改造前代码状态，用于说明为什么需要统一 `ZoneRuleEngine`；当前 runtime 状态见 §2.3。
 
 - `skills/research/argus/core/pool_manager.py`
   - `PoolManager.classify_stock()` 负责 Argus signal-pool 初始分区。
@@ -12,7 +12,7 @@
   - `WATCH`: `confidence >= 0.45`。
   - `SCAN`: 所有不满足上面规则的股票默认落入。
   - Darwin moment 至少落到 `CANDIDATE`。
-  - 当前没有 hysteresis。
+  - 改造前没有 hysteresis。
 
 - `skills/portfolio/stock_pool/auto_promoter.py`
   - `StockPoolAutoPromoter` 负责 Portfolio stock-pool active 记录的自动升降区。
@@ -20,7 +20,7 @@
   - 降区每次最多一级：`CONVICTION -> CANDIDATE -> WATCH -> SCAN`。
   - 升区和降区共用同一组 `ZONE_THRESHOLDS`。
   - 降区逻辑是“当前 zone 对应阈值不再满足则降一级”。
-  - 当前没有独立 hysteresis 阈值。
+  - 改造前没有独立 hysteresis 阈值。
 
 - `skills/portfolio/stock_pool/ingestion.py`
   - `ingest_signals_incremental()` 根据 current / previous signal-pool 差异产生 `entry/promote/demote/exit/update`。
@@ -38,9 +38,36 @@ skills/research/argus/config/zone_rules_template.yaml
 skills/research/argus/docs/zone_rule_engine_interfaces.py
 ```
 
-该接口文件当前是 documentation-only，可作为后续 `ZoneRuleEngine` 的最小实现契约。
+该接口文件是早期 documentation-only 草案；当前 runtime 实现以 `skills/research/argus/core/zone_rule_engine.py` 为准。
 
 ## 2. 核心设计决策
+
+### 2.0 Signal ID 生成策略（幂等性设计）
+
+**设计原则**：signal_id 基于业务键的确定性 hash，不使用随机 UUID。
+
+**生成公式**：
+```python
+key = f"{trade_date}:{product_code}:{wind_code}:{signal_type}"
+signal_id = f"argus:{sha256(key).hexdigest()[:20]}"
+```
+
+**目的**：
+- 支持 upsert 语义：同一业务键重跑时更新而非重复插入
+- 确保幂等性：相同输入永远产生相同的 signal_id
+- 支持增量更新：refresh_all 重跑不会膨胀数据
+
+**对比旧方案**：
+| 项目 | 旧方案 | 新方案 |
+|------|--------|--------|
+| signal_id 生成 | `uuid.uuid4()` 随机 | SHA256 确定性 hash |
+| 重跑行为 | 插入新记录，数据膨胀 | upsert 更新，幂等 |
+| ID 长度 | 36 字符 | 26 字符（argus: + 20 hex）|
+
+
+**实现文件**：
+- `skills/research/argus/core/signal_generator.py` — `_create_signal()` 方法
+- `skills/research/argus/cli/daily_processor.py` — `_write_signals_to_mongodb()` 使用 `bulk_write(upsert=True)`
 
 ### 2.1 SCAN 入口规则
 
@@ -89,11 +116,11 @@ argus_signal_pool:
 - `CONVICTION` 可以 entry、demote、exit；不能继续 promote。
 - `exit` 是生命周期退出，不能与 `demote` 混用。弱信号但仍有支撑时应降区；无当日支撑时才退出。
 
-### 2.3 是否引入 hysteresis
+### 2.3 Zone 转换 - Hysteresis 机制
 
-建议引入独立 hysteresis 阈值。
+已启用独立 hysteresis 阈值。
 
-当前 `auto_promoter` 升降区共用同一阈值，边界附近会产生潜在震荡。例如 `WATCH -> CANDIDATE` 升区阈值为 `bayesian >= 0.50` 且 `consensus >= 0.40`，若次日回落到 `0.49/0.39` 就会降回 WATCH；随后轻微回升又会再次升区。
+设计目的是避免边界震荡。例如 `WATCH -> CANDIDATE` 升区阈值为 `bayesian >= 0.55` 且 `consensus >= 0.40`，若次日只轻微回落，不应立即降回 WATCH；只有当前级 retention rule 失败时才降一级。
 
 统一模板采用 retention threshold：
 
@@ -123,7 +150,14 @@ portfolio_transitions:
       crowding_max: DANGER
 ```
 
-该设计会改变当前 `auto_promoter` 的降区行为，因此应由 `ZoneRuleEngine` feature flag 或 dry-run diff 验证后再接入 runtime。
+当前状态机由 `ZoneRuleEngine.classify_transition(metrics, current_zone)` 执行，顺序固定为：
+
+1. exit 优先：`missing_from_signal_pool` 时直接 `EXIT`，这是生命周期退出，不是降到 `SCAN`。
+2. promote 限一步：未退出时只检查下一档 zone 的晋级规则，最多上移一级。
+3. demote 限一步：若当前 zone 的 retention rule 失败，最多下移一级。
+4. retain：metrics 无显著变化、既未满足下一档晋级也未触发保留失败时，保持当前 zone。
+
+旧方案使用 `classify_initial_zone()` 每日重新计算，无历史状态，无法表达“进入更难、保留稍宽”的 retention buffer。
 
 ## 3. 统一 YAML 结构
 
@@ -186,7 +220,7 @@ class ZoneRuleEngine:
 
     def classify_signal_pool_record(self, record: dict) -> dict: ...
 
-    def evaluate_transition(self, current_zone: str, metrics: ZoneMetrics) -> ZoneDecision: ...
+    def classify_transition(self, metrics: ZoneMetrics, current_zone: str) -> ZoneDecision: ...
 
     def zone_delta_action(self, previous_zone: str | None, current_zone: str) -> str | None: ...
 
@@ -197,7 +231,7 @@ class ZoneRuleEngine:
 
 - 规则引擎必须是纯函数式业务模块，不直接读写 Mongo。
 - `PoolManager` 可作为兼容 facade，委托 `classify_initial_zone()`。
-- `StockPoolAutoPromoter` 只负责读取 active records、调用 `evaluate_transition()`、执行 `move_entry()`。
+- `StockPoolAutoPromoter` 只负责读取 active records、调用 `classify_transition()`、执行 `move_entry()`。
 - `StockPoolIngestionService` 可复用 `zone_delta_action()` 和 `extract_metrics()`，但仍保留同步和审计边界。
 
 ## 5. 接入策略

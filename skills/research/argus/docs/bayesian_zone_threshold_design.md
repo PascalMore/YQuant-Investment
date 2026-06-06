@@ -20,6 +20,8 @@
 
 Darwin override 采用 `darwin_moment` 触发、`bayesian_score` 或 `darwin_confidence` 保护的 floor-only 方案：仅在 `bayesian_score >= 0.45` 或 `darwin_confidence >= 0.70` 时把 zone 至少抬到 `CANDIDATE`；不直接强制 `CONVICTION`，高信念区仍必须满足常规 `bayesian_score/product_count/consensus/crowding` 条件。
 
+Signal ID 已切换为确定性幂等设计：基于 `date, product_code, wind_code, signal_type` 计算 SHA-256，输出格式为 `argus:{sha256_hash}` 前 20 字符。该设计支持 MongoDB upsert 语义，日度任务重跑不会重复写入；旧方案的随机 UUID 每次重跑都会产生新记录。
+
 ## 2. 为什么 defer 到 bayesian_score 后再分类
 
 当前 `daily_processor` 的顺序是：
@@ -88,6 +90,15 @@ Portfolio 升区每次最多一级，阈值与 entry 边界保持一致：
 | `CONVICTION` | `bayesian >= 0.68`, 产品数 `>=2`, consensus `>=0.50`, crowding `<=HIGH` | `CANDIDATE -> CONVICTION`: `0.75 / 3 / 0.60` | bayesian `-0.07`, consensus `-0.10`，产品数允许从 3 降到 2 |
 
 相对当前 auto_promoter，最大变化是降区不再使用同一组升区阈值。旧逻辑在 `0.50/0.70` 边界附近会频繁 promote/demote，新逻辑把状态机改成“进入更难，保留稍宽”，符合组合管理的低换手要求。
+
+当前调用方式为 `ZoneRuleEngine.classify_transition(metrics, current_zone)`，状态机顺序固定为：
+
+1. exit 优先：`missing_from_signal_pool` 时直接 `EXIT`。
+2. promote 限一步：满足下一档规则时最多上移一级。
+3. demote 限一步：当前级 retention rule 失败时最多下移一级。
+4. retain：metrics 无显著变化时保持当前 zone。
+
+旧方案 `classify_initial_zone()` 每日重新计算，无历史状态，不能区分“边际回落但仍应保留”和“首次分类”。
 
 ### 3.4 Exit
 

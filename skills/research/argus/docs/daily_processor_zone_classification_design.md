@@ -1,5 +1,14 @@
 # daily_processor zone 分类改造详细设计
 
+## 0. 当前实现校准（2026-06-06）
+
+本文档最初用于规划 daily_processor zone 分类改造。当前已完成两项关键变更：
+
+1. `signal_id` 已改为确定性幂等 ID：基于 `date, product_code, wind_code, signal_type` 计算 SHA-256，格式为 `argus:{sha256_hash}` 前 20 字符。旧随机 UUID 方案已不再作为标准。
+2. Portfolio zone 迁移已启用 Hysteresis 状态机：`ZoneRuleEngine.classify_transition(metrics, current_zone)` 按 exit / promote / demote / retain 顺序执行，promote 和 demote 每次最多移动一级，demote 使用当前级 retention rule。
+
+Hysteresis 的设计目的，是避免 `bayesian_score` 在阈值附近波动导致 zone 频繁跳动。旧的 `classify_initial_zone()` 每日重算方式没有历史状态，只适合 Argus signal-pool 初始分类，不适合作为 Portfolio active record 的迁移逻辑。
+
 ## 1. daily_processor zone 分类现状
 
 ### 1.1 代码位置
@@ -7,7 +16,7 @@
 本次分析的实际代码路径为：
 
 - `skills/research/argus/cli/daily_processor.py`
-- `skills/research/argus/core/pool_manager.py`
+- `skills/research/argus/core/zone_rule_engine.py`
 - `skills/research/argus/config/zone_rules_template.yaml`
 
 请求中给出的 `skills/research/argus/skills/research/argus/...` 路径在当前工作区不存在。
@@ -17,11 +26,11 @@
 #### daily_processor.py
 
 1. `process_date()`：`skills/research/argus/cli/daily_processor.py:40`
-   - `skills/research/argus/cli/daily_processor.py:59` 创建 `PoolManager()`。
-   - `skills/research/argus/cli/daily_processor.py:164-175` 计算 `consensus`、`crowding`，然后调用 `_build_stock_pool_records(...)`。
-   - `skills/research/argus/cli/daily_processor.py:176-179` 在 zone 分类后再执行 `BayesianScorer.score_signal_pool_records(...)`。
-   - `skills/research/argus/cli/daily_processor.py:182-189` 基于 `record['pool_zone']` 汇总 `pool_summary`。
-   - `skills/research/argus/cli/daily_processor.py:225-240` 将 `stock_pool_records` 写入 Argus signal pool，并同步到 Portfolio stock pool。
+   - 创建 `ZoneRuleEngine`，使用 `zone_rules_template.yaml` 作为统一规则源。
+   - 计算 `consensus`、`crowding`、Darwin 事件后构造 stock-level records。
+   - 先执行 `BayesianScorer.score_signal_pool_records(...)` 写入 `bayesian_score`。
+   - 再调用 `ZoneRuleEngine.classify_initial_zone(...)` 生成 Argus signal-pool 的初始 `pool_zone`。
+   - 同步到 Portfolio 时，存量 active record 使用 `classify_transition(metrics, current_zone)` 迁移。
 
 2. `_build_stock_pool_records()`：`skills/research/argus/cli/daily_processor.py:673`
    - `skills/research/argus/cli/daily_processor.py:683` 将当日 Darwin 事件按行业 `sw1_code` 建索引。
@@ -29,47 +38,31 @@
    - `skills/research/argus/cli/daily_processor.py:696` 计算 `products = sorted({signal.product_code})`。
    - `skills/research/argus/cli/daily_processor.py:697` 计算 `confidence = max(signal['confidence'])`。
    - `skills/research/argus/cli/daily_processor.py:698-703` 计算 `darwin_moment`：单条 signal metadata 有 Darwin，或股票所属行业命中当日 sector Darwin event。
-   - `skills/research/argus/cli/daily_processor.py:704-710` 调用 `pool_manager.classify_stock(wind_code, stock_name, confidence, products, darwin_moment)` 得到 `pool_zone`。
-   - `skills/research/argus/cli/daily_processor.py:713-732` 生成 stock pool record，将 `pool_zone`、`confidence`、`contributing_products_count`、`consensus_confidence`、`crowding_level`、`darwin_moment` 写入记录。
+   - 生成 stock pool record，将 `confidence`、`contributing_products_count`、`consensus_confidence`、`crowding_level`、`darwin_moment` 写入记录。
+   - `pool_zone` 由 Bayesian scoring 之后的 `ZoneRuleEngine.classify_initial_zone(...)` 统一生成。
 
 3. `_annotate_signals()`：`skills/research/argus/cli/daily_processor.py:736`
    - `skills/research/argus/cli/daily_processor.py:742` 建立 `pool_by_stock`。
    - `skills/research/argus/cli/daily_processor.py:750-756` 将 `pool_zone` 和 `contributing_products_count` 回填到 signal metadata。
    - 该函数不做分类，只传播 `_build_stock_pool_records()` 的分类结果。
 
-#### pool_manager.py
+#### zone_rule_engine.py
 
-1. `PoolManager.ZONES`：`skills/research/argus/core/pool_manager.py:22`
-   - 当前固定为 `['SCAN', 'WATCH', 'CANDIDATE', 'CONVICTION']`。
+1. `ZoneRuleEngine.classify_initial_zone(metrics)`：
+   - 用于 Argus signal-pool 初始分类。
+   - 基于 `bayesian_score`、`contributing_products_count`、`consensus_confidence`、`crowding_level`、`darwin_moment` 直接输出 `SCAN/WATCH/CANDIDATE/CONVICTION`。
 
-2. `PoolManager.__init__()`：`skills/research/argus/core/pool_manager.py:24`
-   - 当前读取 `ARGUS_CONFIG.get('pool_zones', {})`。
-   - `ARGUS_CONFIG` 来自 `skills/research/argus/config/config.py:10-11`，只加载 `argus_config.yaml`。
-   - 当前没有读取 `zone_rules_template.yaml`。
-
-3. `PoolManager.classify_stock()`：`skills/research/argus/core/pool_manager.py:27`
-   - 这是 Argus 初始 zone 分类的核心函数。
-   - 输入：`wind_code`、`stock_name`、`confidence`、`contributing_products`、`darwin_moment`。
-   - 输出：`SCAN` / `WATCH` / `CANDIDATE` / `CONVICTION`。
-   - 当前判断逻辑：
-     - `skills/research/argus/core/pool_manager.py:47-51`：若 `darwin_moment=True`，`base_zone='CANDIDATE'`，否则 `base_zone='SCAN'`。
-     - `skills/research/argus/core/pool_manager.py:54-57`：读取 `conviction/candidate/watch/scan` 配置；其中 `scan_config` 当前未实际使用。
-     - `skills/research/argus/core/pool_manager.py:60-62`：`confidence >= conviction.min_confidence(默认 0.75)` 且 `产品数 >= conviction.min_contributing_products(默认 3)`，返回 `CONVICTION`。
-     - `skills/research/argus/core/pool_manager.py:65-67`：`confidence >= candidate.min_confidence(默认 0.60)` 且 `产品数 >= candidate.min_contributing_products(默认 2)`，返回 `CANDIDATE`。
-     - `skills/research/argus/core/pool_manager.py:69-70`：若 `darwin_moment=True` 且未命中更高规则，返回 `CANDIDATE`，即 Darwin 保底 CANDIDATE。
-     - `skills/research/argus/core/pool_manager.py:73-74`：`confidence >= watch.min_confidence(默认 0.45)`，返回 `WATCH`。
-     - `skills/research/argus/core/pool_manager.py:77`：否则返回 `SCAN`。
-
-4. `PoolManager.update_pool()`：`skills/research/argus/core/pool_manager.py:79`
-   - 对每个 signal target 调用 `classify_stock()`。
-   - 当前 daily_processor 主流程不使用它生成 `stock_pool_records`，但它仍是分类逻辑的另一个入口，应保持兼容。
+2. `ZoneRuleEngine.classify_transition(metrics, current_zone)`：
+   - 用于 Portfolio active record 迁移。
+   - 执行顺序固定为 exit / promote / demote / retain。
+   - `missing_from_signal_pool` 直接触发 `EXIT`；promote 和 demote 每次最多一级；retain 表示 metrics 无显著变化时保持当前 zone。
 
 ### 1.3 当前流程图（文字版）
 
 ```text
 process_date(target_date)
   -> 读取 position/trade/product profile/industry/index 数据
-  -> 逐产品生成 signal，初始 signal.pool_zone='SCAN'
+  -> 逐产品生成 signal，signal_id 使用确定性 hash
   -> DarwinDetector.detect_for_date(...)
   -> ConsensusEngine.calculate_consensus(all_signals)
   -> CrowdingAnalyzer.analyze(...)
@@ -78,17 +71,13 @@ process_date(target_date)
        -> products = 贡献产品集合
        -> confidence = 该股票相关 signals 的最大 confidence
        -> darwin_moment = signal Darwin OR 同行业当日 Darwin event
-       -> PoolManager.classify_stock(confidence, products, darwin_moment)
-            -> 命中 CONVICTION 阈值：CONVICTION
-            -> 否则命中 CANDIDATE 阈值：CANDIDATE
-            -> 否则 Darwin：CANDIDATE
-            -> 否则命中 WATCH 阈值：WATCH
-            -> 否则：SCAN
-       -> 组装 stock_pool_record.pool_zone
-  -> BayesianScorer 追加 bayesian_score，不改变 pool_zone
+       -> 组装 stock_pool_record metrics
+  -> BayesianScorer 追加 bayesian_score
+  -> ZoneRuleEngine.classify_initial_zone(...) 生成 pool_zone
   -> _annotate_signals 回填 metadata.pool_zone
   -> 写入 08_research_argus_signal_pool
   -> Portfolio stock_pool incremental sync
+       -> ZoneRuleEngine.classify_transition(metrics, current_zone)
 ```
 
 ## 2. 改造后详细设计

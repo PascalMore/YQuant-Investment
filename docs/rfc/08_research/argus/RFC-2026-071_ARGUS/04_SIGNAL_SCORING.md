@@ -7,7 +7,7 @@ approval_status: "NOT_SUBMITTED"
 impl_status: "NOT_STARTED"
 version: "2.0.0-draft"
 created: "2026-04-12"
-last_updated: "2026-04-12"
+last_updated: "2026-06-06"
 drafter: "Internal Review Board"
 owner: "Internal Review Board"
 depends_on:
@@ -80,6 +80,35 @@ valid_until, metadata
 ```
 
 其中 `target_stocks` 包含 `wind_code`, `stock_name`, `action`, `holding_ratio_change`, `market_value_change`。
+
+### 0.4 Signal ID 生成策略（幂等性设计）
+
+当前 `signal_id` 已从随机 UUID 切换为确定性业务键 hash：
+
+- **设计原则**：`signal_id` 基于 `date, product_code, wind_code, signal_type` 的确定性 hash。
+- **格式**：`argus:{sha256_hash}` 前 20 字符。
+- **目的**：支持 upsert 语义，同一日度任务重跑不会重复写入，保证 `08_research_argus_signal` 可审计、可重放。
+- **对比**：旧方案使用随机 UUID，每次重跑产生新记录，下游只能事后按最新时间戳去重。
+
+等价实现：
+
+```python
+key = f"{date}:{product_code}:{wind_code}:{signal_type}"
+signal_id = f"argus:{sha256(key.encode()).hexdigest()[:20]}"
+```
+
+### 0.5 Zone 转换 - Hysteresis 机制
+
+当前 Portfolio 侧 zone 迁移由 `ZoneRuleEngine.classify_transition(metrics, current_zone)` 执行。Hysteresis 的设计目的，是避免 `bayesian_score` 在阈值附近波动导致 zone 频繁跳动。
+
+状态机逻辑固定为：
+
+1. exit 优先：`missing_from_signal_pool` 时直接 `EXIT`。
+2. promote 限一步：需满足下一档 zone 的晋级规则。
+3. demote 限一步：当前级 retention rule 失败才降一级。
+4. retain：metrics 无显著变化时保持当前 zone。
+
+旧方案 `classify_initial_zone()` 每日重新计算，无历史状态，不能表达 retention buffer。
 
 ---
 

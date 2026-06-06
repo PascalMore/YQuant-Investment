@@ -14,6 +14,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from pymongo import UpdateOne
+
 # Add workspace to path for direct script execution.
 sys.path.insert(0, '/home/pascal/.openclaw/workspace-yquant')
 
@@ -166,6 +168,7 @@ def process_date(
 
     consensus = consensus_engine.calculate_consensus(all_signals)
     crowding = crowding_analyzer.analyze(positions, trades, all_signals)
+    previous_signal_pool_for_exit = reader.read(previous_date, collection_name='08_research_argus_signal_pool')
     stock_pool_records = _build_stock_pool_records(
         date_to_process,
         all_signals,
@@ -177,6 +180,7 @@ def process_date(
         darwin_events,
         zone_rule_engine,
         bayesian_scorer,
+        previous_signal_pool_for_exit,
     )
     _annotate_signals(all_signals, stock_pool_records, consensus, crowding)
 
@@ -195,7 +199,7 @@ def process_date(
         writer = writer or MongoWriter(database=ARGUS_CONFIG.get('mongo', {}).get('database', 'tradingagents'))
         writer.ensure_argus_indexes()
         results['credential_scores_written'] = writer.write_argus_credential_scores(credential_records)
-        results['signals_written'] = writer.write_argus_signals(all_signals)
+        results['signals_written'] = _write_argus_signals(writer, all_signals)
 
         results['darwin_events_written'] = writer.write_argus_darwin_events(darwin_events) if darwin_events else 0
 
@@ -212,7 +216,6 @@ def process_date(
         _enrich_stock_pool_with_darwin_prosperity(
             stock_pool_records, darwin_events, consensus_direction, wind_to_sw1
         )
-        previous_signal_pool_for_exit = reader.read(previous_date, collection_name='08_research_argus_signal_pool')
         previous_signal_pool_by_stock = _build_previous_signal_pool_map(
             reader,
             current_date=date_to_process,
@@ -528,6 +531,25 @@ def _write_argus_signal_pool(writer: MongoWriter, stock_pool_records: List[Dict]
     return writer.write_argus_stock_pool(stock_pool_records)
 
 
+def _write_argus_signals(writer: MongoWriter, signals: List[Dict]) -> int:
+    if not signals:
+        return 0
+    if not hasattr(writer, 'db'):
+        return writer.write_argus_signals(signals)
+
+    operations = [
+        UpdateOne(
+            {'signal_id': signal['signal_id']},
+            {'$set': signal},
+            upsert=True,
+        )
+        for signal in signals
+    ]
+    if operations:
+        writer.db['08_research_argus_signal'].bulk_write(operations, ordered=False)
+    return len(operations)
+
+
 def _default_stock_pool_ingestion() -> Any:
     from skills.portfolio.stock_pool.ingestion import StockPoolIngestionService
     from skills.portfolio.stock_pool.repository import StockPoolRepository
@@ -682,10 +704,16 @@ def _build_stock_pool_records(
     darwin_events: Optional[List[Dict]] = None,
     zone_rule_engine: Optional[ZoneRuleEngine] = None,
     bayesian_scorer: Optional[BayesianScorer] = None,
+    existing_signal_pool_records: Optional[List[Dict]] = None,
 ) -> List[Dict]:
     zone_rule_engine = zone_rule_engine or ZoneRuleEngine.from_config(ZONE_RULES_CONFIG)
     bayesian_scorer = bayesian_scorer or BayesianScorer()
     darwin_by_sector: Dict[str, Dict] = {event.get('sw1_code'): event for event in darwin_events or []}
+    existing_by_wind_code = {
+        record.get('wind_code'): record
+        for record in existing_signal_pool_records or []
+        if record.get('wind_code')
+    }
     stock_signals = defaultdict(list)
     stock_names = {}
     for signal in signals:
@@ -730,7 +758,20 @@ def _build_stock_pool_records(
         })
     records = bayesian_scorer.score_signal_pool_records(records, signals)
     for record in records:
-        decision = zone_rule_engine.classify_initial_zone(record)
+        existing_record = existing_by_wind_code.get(record.get('wind_code'))
+        current_zone = existing_record.get('pool_zone', 'SCAN') if existing_record else 'SCAN'
+        decision = zone_rule_engine.classify_transition(record, current_zone)
+        if record.get('darwin_moment'):
+            darwin_decision = zone_rule_engine.classify_initial_zone(record)
+            if (
+                darwin_decision.rule_name == 'darwin_override'
+                and decision.target_zone is not None
+                and (
+                    zone_rule_engine.zone_rank[darwin_decision.target_zone]
+                    > zone_rule_engine.zone_rank[decision.target_zone]
+                )
+            ):
+                decision = darwin_decision
         record['pool_zone'] = decision.target_zone
         record['zone_decision'] = {
             'rule_name': decision.rule_name,
@@ -755,11 +796,13 @@ def _annotate_signals(
             continue
         pool_record = pool_by_stock.get(wind_code, {})
         crowding_data = crowding.get(wind_code, {})
+        pool_zone = pool_record.get('pool_zone', signal['metadata'].get('pool_zone', 'SCAN'))
+        signal['pool_zone'] = pool_zone
         signal['metadata'].update({
             'crowding_level': crowding_data.get('crowding_level', 'LOW'),
             'crowding_score': crowding_data.get('crowding_score', 0),
             'crowding_layers': crowding_data.get('layer_scores', {}),
-            'pool_zone': pool_record.get('pool_zone', signal['metadata'].get('pool_zone', 'SCAN')),
+            'pool_zone': pool_zone,
             'contributing_products_count': pool_record.get('contributing_products_count', 1),
             'consensus_direction': _signal_consensus_label(consensus.get(wind_code, {}).get('direction', 'NEUTRAL')),
         })

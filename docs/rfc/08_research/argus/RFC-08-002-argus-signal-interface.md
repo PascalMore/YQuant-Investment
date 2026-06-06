@@ -6,7 +6,7 @@
 | 作者 | YQuant |
 | 创建日期 | 2026-05-18 |
 | 最后更新 | 2026-06-06 |
-| 版本号 | V0.4 |
+| 版本号 | V0.5 |
 | 所属模块 | 08_research（投研分析） |
 | 依赖RFC | RFC-00-001-yqclaw-investment-global-architecture, RFC-08-001-argus-integration |
 | 替代RFC | 无 |
@@ -16,6 +16,7 @@
 ### 版本历史（Changelog）
 | 版本号 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
+| V0.5 | 2026-06-06 | 补充 Signal ID 幂等性设计，明确 signal_id 由业务键确定性生成 | YQuant |
 | V0.4 | 2026-06-06 | Phase 3：补充 stock_pool_record 派生字段、ZoneRuleEngine 分类结果、Darwin override 语义和 bayesian_score 前置约束 | YQuant |
 | V0.3 | 2026-05-19 | 补充 ArgusPortfolioSubscriber、Portfolio ingestion endpoint、MongoDB-only 数据流与 zone 映射 | YQuant |
 | V0.2 | 2026-05-18 | 状态更新：Draft → Accepted；集合名称更新为 tradingagents.08_research_argus_signal | YQuant |
@@ -40,7 +41,7 @@
 ### 3.1 标准 JSON Schema
 ```json
 {
-  "signal_id": "uuid-v4",
+  "signal_id": "argus:5f2c9b7e1a4d8c0b3e91",
   "source": "argus",
   "version": "1.0.0",
   "product_code": "SM001",
@@ -76,7 +77,7 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| signal_id | UUID | 是 | 信号唯一标识 |
+| signal_id | String | 是 | 信号唯一标识，格式为 `argus:{sha256_hash}` 前 20 字符 |
 | source | String | 是 | 信号来源，固定为 "argus" |
 | version | String | 是 | 信号格式版本，如 "1.0.0" |
 | product_code | String | 是 | 产品代码 |
@@ -103,7 +104,23 @@
 | darwin_confidence | Float | Darwin 事件置信度，缺失时为 null |
 | consensus_direction | Enum | 共识方向 |
 
-### 3.4 stock_pool_record 派生字段
+### 3.4 Signal ID 生成策略（幂等性设计）
+
+`signal_id` 使用确定性生成策略，不再使用随机 UUID。生成原则如下：
+
+- **设计原则**：`signal_id` 基于业务键 `date, product_code, wind_code, signal_type` 的确定性 hash。
+- **格式**：`argus:{sha256_hash}` 前 20 字符。
+- **目的**：支持 MongoDB upsert 语义，同一交易日、同一产品、同一股票、同一信号类型重跑不会重复插入，保证日度处理幂等。
+- **对比**：旧方案使用随机 UUID，每次重跑都会产生新记录，导致 `signal_id` 去重只能事后按最新时间戳裁剪。
+
+标准实现等价于：
+
+```python
+key = f"{date}:{product_code}:{wind_code}:{signal_type}"
+signal_id = f"argus:{sha256(key.encode()).hexdigest()[:20]}"
+```
+
+### 3.5 stock_pool_record 派生字段
 
 Argus 写入 `08_research_argus_signal_pool` 前，会把 `argus_signal` 聚合为单股单日记录。Phase 3 后该记录是 zone 分类的标准输入：
 

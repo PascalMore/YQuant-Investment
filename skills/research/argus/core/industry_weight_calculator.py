@@ -80,6 +80,16 @@ class IndustryWeightCalculator:
                 or baseline_60d.get(key, {}).get('product_name')
                 or ''
             )
+            if weight_pct < 0:
+                logger.warning(
+                    "[IndustryWeightCalculator] Negative weight_pct corrected to 0: "
+                    "date=%s product_code=%s sw1_code=%s weight_pct=%s",
+                    date,
+                    product_code,
+                    sw1_code,
+                    weight_pct,
+                )
+                weight_pct = 0.0
 
             records.append({
                 'date': date,

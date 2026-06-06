@@ -1,7 +1,7 @@
 # skills/research/argus/core/signal_generator.py
 """Multi-timeframe signal generation engine."""
 
-import uuid
+import hashlib
 import logging
 from datetime import datetime
 from typing import List, Dict, Optional
@@ -10,6 +10,12 @@ from ..config import ARGUS_CONFIG
 from .credibility import CredibilityScorer
 
 logger = logging.getLogger(__name__)
+
+
+def _generate_signal_id(trade_date: str, product_code: str, wind_code: str, signal_type: str) -> str:
+    """Generate deterministic signal_id from business keys for idempotent upsert."""
+    key = f"{trade_date}:{product_code}:{wind_code}:{signal_type}"
+    return f"argus:{hashlib.sha256(key.encode()).hexdigest()[:20]}"
 
 
 class SignalGenerator:
@@ -116,7 +122,7 @@ class SignalGenerator:
         wind_code = pos_change.get('asset_wind_code')
 
         return {
-            'signal_id': str(uuid.uuid4()),
+            'signal_id': _generate_signal_id(trade_date, product_code, wind_code, signal_type),
             'source': 'argus',
             'version': '1.0.0',
             'product_code': product_code,

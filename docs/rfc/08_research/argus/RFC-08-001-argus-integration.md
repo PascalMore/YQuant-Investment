@@ -6,7 +6,7 @@
 | 作者 | PascalMao |
 | 创建日期 | 2026-05-17 |
 | 最后更新 | 2026-06-06 |
-| 版本号 | V0.4 |
+| 版本号 | V0.5 |
 | 所属模块 | 08_research（投研分析） |
 | 依赖RFC | RFC-00-001-yqclaw-investment-global-architecture |
 | 替代RFC | 无 |
@@ -16,6 +16,7 @@
 ### 版本历史（Changelog）
 | 版本号 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
+| V0.5 | 2026-06-06 | 补充 Signal ID 幂等性设计与 Hysteresis 状态机调用契约 | YQuant |
 | V0.4 | 2026-06-06 | Phase 3：补充 ZoneRuleEngine 共享组件、YAML 统一阈值配置、Darwin/Bayesian/zone 分类计算顺序 | YQuant |
 | V0.3 | 2026-05-18 | 数据存储方案：删除独立SQLite，改用MongoDB新建集合（08_research_argus_*）；目录结构更新为skills/data + skills/infra + skills/research/argus；删除db/目录相关描述 | YQuant |
 | V0.2 | 2026-05-18 | 状态更新：Draft → Accepted，Phase 0 完成 | YQuant |
@@ -113,8 +114,19 @@ Phase 3 后，`ZoneRuleEngine` 是 Argus 与 Portfolio 共享的 zone 分类/迁
 
 - 配置入口：`skills/research/argus/config/zone_rules_template.yaml`，Python loader 为 `config/zone_rules.py`。
 - Argus 初始分类：`argus_signal_pool.entry_rules` 直接生成 `SCAN/WATCH/CANDIDATE/CONVICTION`。
-- Portfolio 增量迁移：`portfolio_transitions` 执行 one-step promote / demote / exit，并使用 hysteresis retention 阈值。
+- Portfolio 增量迁移：`portfolio_transitions` 通过 `ZoneRuleEngine.classify_transition(metrics, current_zone)` 执行 one-step promote / demote / exit，并使用 hysteresis retention 阈值。
 - 旧 `pool_zones` / `zone_thresholds` 中的硬编码阈值仅作为历史兼容参考，新代码不得继续新增分散阈值。
+
+#### 4.1.1.1 Zone 转换 - Hysteresis 机制
+
+Hysteresis 的设计目的，是避免 `bayesian_score` 在阈值附近小幅波动时导致 Portfolio stock pool 在相邻 zone 间频繁跳动。当前状态机逻辑固定为：
+
+1. exit 优先：`missing_from_signal_pool` 时直接 `EXIT`，这是生命周期退出，不是降到 `SCAN`。
+2. promote 限一步：未退出时只检查下一档 zone 的晋级规则，最多上移一级。
+3. demote 限一步：若当前 zone 的 retention rule 失败，最多下移一级。
+4. retain：metrics 无显著变化、既未满足下一档晋级也未触发保留失败时，保持当前 zone。
+
+调用方式为 `ZoneRuleEngine.classify_transition(metrics, current_zone)`。旧方案使用 `classify_initial_zone()` 每日重新计算 zone，不读取历史状态，因此无法区分“已在高区但短期回落”和“新进入标的首次分类”。
 
 #### 4.1.2 Argus 与 Portfolio 模块的数据交换流程
 ```
@@ -261,7 +273,7 @@ Phase 3 固化日度处理顺序，避免 zone 分类读取到未完成的派生
 #### 4.2.6 Argus 输出信号格式（YQClaw 全局信号标准）
 ```json
 {
-  "signal_id": "uuid",
+  "signal_id": "argus:5f2c9b7e1a4d8c0b3e91",
   "source": "argus",
   "product_code": "xxx",
   "signal_type": "BUY|SELL|HOLD",
@@ -278,6 +290,15 @@ Phase 3 固化日度处理顺序，避免 zone 分类读取到未完成的派生
   }
 }
 ```
+
+#### 4.2.7 Signal ID 生成策略（幂等性设计）
+
+Argus 输出信号的 `signal_id` 采用确定性业务键 hash：
+
+- **设计原则**：`signal_id` 基于 `date, product_code, wind_code, signal_type` 生成。
+- **格式**：`argus:{sha256_hash}` 前 20 字符。
+- **目的**：支持 upsert 语义，重跑同一日处理不会重复写入，便于审计与 Portfolio ingestion 去重。
+- **对比**：旧方案使用随机 UUID，每次重跑产生新记录，破坏日度批处理幂等性。
 
 ### 4.3 接口契约（API Contract）
 

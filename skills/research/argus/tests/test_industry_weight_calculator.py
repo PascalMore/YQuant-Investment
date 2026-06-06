@@ -60,6 +60,15 @@ class TestIndustryWeightCalculator(unittest.TestCase):
         self.assertIsNone(records[0]['weight_change_1d'])
         self.assertIsNone(records[0]['weight_change_30d'])
 
+    def test_negative_weight_pct_is_clipped_to_zero(self):
+        records = IndustryWeightCalculator.calculate(
+            '2026-05-06',
+            [{'product_code': 'SM004', 'asset_wind_code': '600519.SH', 'holding_ratio': -0.000008}],
+            [{'full_symbol': '600519.SH', 'sw1_code': '801880.SI', 'sw1_name': '有色金属'}],
+        )
+
+        self.assertEqual(records[0]['weight_pct'], 0.0)
+
 
 if __name__ == '__main__':
     unittest.main()
