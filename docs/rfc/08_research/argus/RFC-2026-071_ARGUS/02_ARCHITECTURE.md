@@ -5,9 +5,9 @@ rfc_id: RFC-2026-071
 doc_status: "AMENDED"
 approval_status: "ACCEPTED"
 impl_status: "PHASE_1_DRAFT"
-version: "3.0.0"
+version: "3.0.1"
 created: "2026-04-12"
-last_updated: "2026-06-06"
+last_updated: "2026-06-07"
 drafter: "Internal Review Board"
 owner: "Internal Review Board"
 depends_on:
@@ -27,6 +27,13 @@ amendment_level: L2
 
 > 本节为实现状态补充，不删除下方 v2.0.1/v3.0 原始设计。当前代码实现以 `skills/research/argus/` 为准。
 
+### 00.0 变更日志 / Changelog
+
+| 版本 | 日期 | 变更内容 |
+|:--|:--|:--|
+| 3.0.1 | 2026-06-07 | 更新 Portfolio 同步架构描述，明确 stock_pool zone 由 `StockPoolTransitionPipeline.run_incremental_transition()` 与 `ZoneRuleEngine.classify_transition()` 状态机驱动 |
+| 3.0.0 | 2026-06-06 | 补充当前实现校准、Signal ID 幂等性与 Hysteresis zone 迁移 |
+
 ### 00.1 实现状态追踪
 
 | 架构项 | 状态 | 当前实现 | 代码依据 |
@@ -34,7 +41,7 @@ amendment_level: L2
 | 日度处理入口 | IMPLEMENTED | `process_date()` 编排读取、计算、写入与 Portfolio 同步 | `cli/daily_processor.py` |
 | 数据存储 | IMPLEMENTED | MongoDB `tradingagents`，`08_research_argus_*` collections | `config/argus_config.yaml`, `MongoWriter` |
 | 行业权重 / Darwin / 共识方向 | IMPLEMENTED | Phase 4A/4B/4C 在 CLI 流程中执行 | `industry_weight_calculator.py`, `darwin_detector.py`, `consensus_direction.py` |
-| Portfolio 订阅 / 同步 | IMPLEMENTED | `daily_processor` 增量同步 signal_pool；另有 `ArgusPortfolioSubscriber` 读取 signal 生成 ingestion payload | `argus_portfolio_subscriber.py`, `skills/portfolio/stock_pool/ingestion.py` |
+| Portfolio 订阅 / 同步 | IMPLEMENTED | `daily_processor` 通过 `StockPoolTransitionPipeline.run_incremental_transition()` 增量同步 signal_pool；另有 `ArgusPortfolioSubscriber` 读取 signal 生成 ingestion payload | `argus_portfolio_subscriber.py`, `skills/portfolio/stock_pool/ingestion.py` |
 | Signal ID 幂等性 | IMPLEMENTED | `signal_id` 基于 `date, product_code, wind_code, signal_type` 确定性 SHA-256，格式 `argus:{hash20}`，支持 upsert 重跑不重复 | `core/signal_generator.py`, `cli/daily_processor.py` |
 | Hysteresis zone 迁移 | IMPLEMENTED | `ZoneRuleEngine.classify_transition(metrics, current_zone)` 执行 exit/promote/demote/retain 状态机，使用 retention thresholds 抑制边界震荡 | `core/zone_rule_engine.py`, `config/zone_rules_template.yaml` |
 | FastAPI / Jinja2 / HTMX | DEFERRED | 当前未发现 Web app/router/template 实现 | 代码目录无对应实现 |
@@ -48,7 +55,7 @@ amendment_level: L2
 | 数据库 | SQLite `argus.db`，Raw/Processed/Decision 三层 | MongoDB `tradingagents` |
 | 输入 | Excel / SQL INSERT / Raw tables | `portfolio_position`, `portfolio_trade`, `stock_sector_info`, `index_daily_quotes` |
 | 输出 | REST API / JSON / SQLite Decision layer | MongoDB `08_research_argus_*` + `logs/research/argus/argus_signal_YYYYMMDD.json` |
-| 组合侧接口 | Empire REST / JSON bridge | Portfolio `StockPoolIngestionService.ingest_signals_incremental()` |
+| 组合侧接口 | Empire REST / JSON bridge | Portfolio `StockPoolTransitionPipeline.run_incremental_transition()` + `ZoneRuleEngine.classify_transition()` |
 
 ### 00.3 当前实际数据流
 
@@ -70,6 +77,8 @@ ZoneRuleEngine
     ↓
 05_portfolio_stock_pool / 05_portfolio_stock_pool_audit
 ```
+
+Portfolio stock_pool 的 zone 由状态机迁移结果写入；ingestion 层负责持久化、审计和兼容接口，不直接用当日 Argus `pool_zone` 覆盖既有 Portfolio zone。
 
 `signal_id` 由业务键 `date, product_code, wind_code, signal_type` 确定性生成，格式为 `argus:{sha256_hash}` 前 20 字符。旧随机 UUID 方案会在重跑时产生新记录，当前实现改为 upsert-friendly idempotent key。
 

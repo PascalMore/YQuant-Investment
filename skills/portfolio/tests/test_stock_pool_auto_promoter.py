@@ -53,7 +53,7 @@ class StockPoolAutoPromoterTest(unittest.TestCase):
         """Non-dry-run promotion should move the record and audit the transition."""
         record_id = self._create(
             "WATCH",
-            {"bayesian_score": 0.55, "consensus_confidence": 0.44},
+            {"bayesian_score": 0.55, "contributing_products_count": 2, "consensus_confidence": 0.44},
         )
 
         result = self.promoter.evaluate_and_promote("2026-05-19", dry_run=False)
@@ -85,6 +85,37 @@ class StockPoolAutoPromoterTest(unittest.TestCase):
         result = self.promoter.evaluate_and_promote("2026-05-19", dry_run=True)
 
         self.assertEqual(result["items"], [])
+        self.assertEqual(result["skipped"], 1)
+
+    def test_uses_yaml_thresholds_instead_of_legacy_thresholds(self) -> None:
+        """SCAN promotion should follow YAML 0.35/1 thresholds, not legacy 0.30/2."""
+        self._create(
+            "SCAN",
+            {"bayesian_score": 0.34, "contributing_products_count": 2, "consensus_confidence": 0.34},
+        )
+        self._create(
+            "SCAN",
+            {"bayesian_score": 0.35, "contributing_products_count": 1, "consensus_confidence": 0.20},
+        )
+
+        result = self.promoter.evaluate_and_promote("2026-05-19", dry_run=True)
+
+        self.assertEqual(result["matched"], 1)
+        self.assertEqual(result["items"][0]["metrics"]["product_count"], 1)
+        self.assertEqual(result["items"][0]["thresholds"]["bayesian_min"], 0.35)
+        self.assertEqual(result["items"][0]["thresholds"]["product_count_min"], 1)
+        self.assertIn("zone_rules_template.yaml", result["rule_source"]["path"])
+
+    def test_missing_product_count_does_not_fallback_to_rule_minimum(self) -> None:
+        """Missing product counts should be evaluated as missing data, not auto-filled thresholds."""
+        self._create(
+            "WATCH",
+            {"bayesian_score": 0.60, "consensus_confidence": 0.45},
+        )
+
+        result = self.promoter.evaluate_and_promote("2026-05-19", dry_run=True)
+
+        self.assertEqual(result["matched"], 0)
         self.assertEqual(result["skipped"], 1)
 
 

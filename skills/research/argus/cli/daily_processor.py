@@ -8,6 +8,7 @@ Usage:
 """
 
 import json
+import inspect
 import sys
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -237,11 +238,23 @@ def process_date(
         if ingestion is None and not writer_injected:
             ingestion = _default_stock_pool_ingestion()
         if ingestion is not None:
-            results['portfolio_stock_pool_sync'] = ingestion.ingest_signals_incremental(
-                current_signals=stock_pool_records,
-                previous_signals=previous_signal_pool,
-                actor='system:argus',
-            )
+            if hasattr(ingestion, 'run_incremental_transition'):
+                results['portfolio_stock_pool_sync'] = ingestion.run_incremental_transition(
+                    current_signals=stock_pool_records,
+                    previous_signals=previous_signal_pool,
+                    actor='system:argus',
+                    event_date=date_to_process,
+                    dry_run=False,
+                )
+            else:
+                incremental_kwargs = {
+                    'current_signals': stock_pool_records,
+                    'previous_signals': previous_signal_pool,
+                    'actor': 'system:argus',
+                }
+                if 'event_date' in inspect.signature(ingestion.ingest_signals_incremental).parameters:
+                    incremental_kwargs['event_date'] = date_to_process
+                results['portfolio_stock_pool_sync'] = ingestion.ingest_signals_incremental(**incremental_kwargs)
 
         logger.info(
             '[Argus] Phase 4B: %d Darwin events, Phase 4C: prosperity=%s, Phase 5 sync=%s',
@@ -551,12 +564,13 @@ def _write_argus_signals(writer: MongoWriter, signals: List[Dict]) -> int:
 
 
 def _default_stock_pool_ingestion() -> Any:
-    from skills.portfolio.stock_pool.ingestion import StockPoolIngestionService
+    from skills.portfolio.stock_pool.ingestion import StockPoolIngestionService, StockPoolTransitionPipeline
     from skills.portfolio.stock_pool.repository import StockPoolRepository
     from skills.portfolio.stock_pool.service import StockPoolService
 
     database = ARGUS_CONFIG.get('mongo', {}).get('database', 'tradingagents')
-    return StockPoolIngestionService(StockPoolService(StockPoolRepository(database=database)))
+    ingestion = StockPoolIngestionService(StockPoolService(StockPoolRepository(database=database)))
+    return StockPoolTransitionPipeline(ingestion)
 
 
 

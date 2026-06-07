@@ -3,39 +3,16 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-from .models import PoolZone
 from .service import StockPoolService
-from skills.research.argus.core.zone_rule_engine import DEFAULT_ZONE_RULE_ENGINE, ZoneRuleEngine
+from skills.research.argus.config.zone_rules import DEFAULT_ZONE_RULES_PATH
+from skills.research.argus.core.zone_rule_engine import ZoneRuleEngine
 
 
 class StockPoolAutoPromoter:
     """Evaluate stock pool entries and move them between lifecycle zones."""
-
-    # TODO: Runtime thresholds now come from Argus config/zone_rules_template.yaml
-    # through ZoneRuleEngine. This legacy constant is retained for caller/test compatibility.
-    ZONE_THRESHOLDS = {
-        "scan_to_watch": {"bayesian_min": 0.30, "product_count_min": 2},
-        "watch_to_candidate": {"bayesian_min": 0.50, "consensus_min": 0.40},
-        "candidate_to_conviction": {
-            "bayesian_min": 0.70,
-            "product_count_min": 3,
-            "crowding_max": "DANGER",
-        },
-    }
-
-    PROMOTION_PATH = {
-        PoolZone.SCAN.value: (PoolZone.WATCH.value, "scan_to_watch"),
-        PoolZone.WATCH.value: (PoolZone.CANDIDATE.value, "watch_to_candidate"),
-        PoolZone.CANDIDATE.value: (PoolZone.CONVICTION.value, "candidate_to_conviction"),
-    }
-    DEMOTION_PATH = {
-        PoolZone.WATCH.value: (PoolZone.SCAN.value, "scan_to_watch"),
-        PoolZone.CANDIDATE.value: (PoolZone.WATCH.value, "watch_to_candidate"),
-        PoolZone.CONVICTION.value: (PoolZone.CANDIDATE.value, "candidate_to_conviction"),
-    }
-    CROWDING_RANK = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "DANGER": 3}
 
     def __init__(
         self,
@@ -43,12 +20,16 @@ class StockPoolAutoPromoter:
         thresholds: Optional[Dict[str, Dict[str, Any]]] = None,
         actor: str = "system:auto_promoter",
         zone_rule_engine: Optional[ZoneRuleEngine] = None,
+        zone_rules_path: Optional[str | Path] = None,
     ) -> None:
-        """Initialize with a stock pool service and optional threshold override."""
+        """Initialize with a stock pool service and YAML-backed zone rule engine."""
         self.stock_pool_service = stock_pool_service
-        self.thresholds = thresholds or self.ZONE_THRESHOLDS
+        # Deprecated compatibility argument. Runtime thresholds are owned by ZoneRuleEngine.
+        _ = thresholds
         self.actor = actor
-        self.zone_engine = zone_rule_engine or DEFAULT_ZONE_RULE_ENGINE
+        self.zone_rules_path = Path(zone_rules_path or DEFAULT_ZONE_RULES_PATH)
+        self.zone_rules_loaded_at = datetime.utcnow()
+        self.zone_engine = zone_rule_engine or ZoneRuleEngine.from_yaml(self.zone_rules_path)
 
     def evaluate_and_promote(self, trade_date: str, dry_run: bool = False) -> Dict[str, Any]:
         """Evaluate active entries and promote one zone when rules are satisfied."""
@@ -57,7 +38,7 @@ class StockPoolAutoPromoter:
             current_zone = record.get("pool_zone")
             decision = self._eval_promote(record, current_zone)
             if decision is None:
-                if current_zone in self.PROMOTION_PATH:
+                if self._has_transition_path("promote", current_zone):
                     summary["skipped"] += 1
                 continue
             self._append_or_apply(summary, record, decision.target_zone, decision.rule_name, decision.thresholds, dry_run)
@@ -70,7 +51,7 @@ class StockPoolAutoPromoter:
             current_zone = record.get("pool_zone")
             decision = self._eval_demote(record, current_zone)
             if decision is None:
-                if current_zone in self.DEMOTION_PATH:
+                if self._has_transition_path("demote", current_zone):
                     summary["skipped"] += 1
                 continue
             self._append_or_apply(summary, record, decision.target_zone, decision.rule_name, decision.thresholds, dry_run)
@@ -94,6 +75,26 @@ class StockPoolAutoPromoter:
         if not current_zone:
             return None
         return self.zone_engine.eval_exit(self._record_for_engine(record, current_zone), current_zone)
+
+    def _has_transition_path(self, action: str, current_zone: Optional[str]) -> bool:
+        """Return whether YAML defines an actionable one-step transition for this zone."""
+        if not current_zone:
+            return False
+        try:
+            zone = self.zone_engine.normalize_zone(current_zone)
+        except ValueError:
+            return False
+
+        transitions = self.zone_engine.config["portfolio_transitions"]
+        path_key = "promotion_path" if action == "promote" else "demotion_path"
+        rules_key = "promote_rules" if action == "promote" else "demote_rules"
+        path = transitions[path_key].get(zone)
+        if not path:
+            return False
+        if self.zone_engine.normalize_zone(path["target_zone"]) == zone:
+            return False
+        rule = transitions[rules_key].get(path["rule"], {})
+        return rule.get("demote_when") != "never"
 
     def should_promote(self, record: Dict[str, Any], target_zone: str, thresholds: Dict[str, Any]) -> bool:
         """Return True when a record satisfies the target zone threshold set."""
@@ -143,20 +144,6 @@ class StockPoolAutoPromoter:
         else:
             summary["errors"].append({"id": record["id"], "error": "transition_failed"})
 
-    def _passes_thresholds(self, metrics: Dict[str, Any], thresholds: Dict[str, Any]) -> bool:
-        if metrics["bayesian"] < float(thresholds.get("bayesian_min", 0)):
-            return False
-        if "product_count_min" in thresholds and metrics["product_count"] < int(thresholds["product_count_min"]):
-            return False
-        if "consensus_min" in thresholds and metrics["consensus"] < float(thresholds["consensus_min"]):
-            return False
-        if "crowding_max" in thresholds:
-            current = self.CROWDING_RANK.get(str(metrics["crowding_level"]).upper(), 0)
-            maximum = self.CROWDING_RANK.get(str(thresholds["crowding_max"]).upper(), 3)
-            if current > maximum:
-                return False
-        return True
-
     def _metrics(self, record: Dict[str, Any]) -> Dict[str, Any]:
         sources = [record]
         products = self._first(sources, ["contributing_products", "products"], [])
@@ -182,18 +169,24 @@ class StockPoolAutoPromoter:
         engine_record.setdefault("consensus_confidence", metrics["consensus"])
         engine_record.setdefault("crowding_level", metrics["crowding_level"])
         if engine_record.get("contributing_products_count") is None:
-            # Legacy stock-pool rows may not carry product_count. Preserve old API
-            # behavior by falling back to the rule's minimum instead of treating the
-            # field as an explicit zero.
-            path = self.zone_engine.config["portfolio_transitions"]["promotion_path"].get(str(current_zone).upper())
-            if path:
-                rule = self.zone_engine.config["portfolio_transitions"]["promote_rules"].get(path["rule"], {})
-                engine_record["contributing_products_count"] = rule.get("product_count_min", metrics["product_count"])
-            else:
-                engine_record["contributing_products_count"] = metrics["product_count"]
+            engine_record["contributing_products_count"] = metrics["product_count"]
         if engine_record.get("crowding_level") is None:
             engine_record["crowding_level"] = metrics["crowding_level"]
         return engine_record
+
+    def _rule_source(self) -> Dict[str, Any]:
+        try:
+            stat = self.zone_rules_path.stat()
+            modified_at = datetime.utcfromtimestamp(stat.st_mtime).isoformat()
+        except OSError:
+            modified_at = None
+        return {
+            "type": "yaml",
+            "path": str(self.zone_rules_path),
+            "loaded_at": self.zone_rules_loaded_at.isoformat(),
+            "modified_at": modified_at,
+            "version": self.zone_engine.config.get("version"),
+        }
 
     @staticmethod
     def _first(sources: Iterable[Dict[str, Any]], keys: List[str], default: Any) -> Any:
@@ -218,13 +211,13 @@ class StockPoolAutoPromoter:
         except (TypeError, ValueError):
             return 0
 
-    @staticmethod
-    def _empty_summary(trade_date: str, dry_run: bool, action: str) -> Dict[str, Any]:
+    def _empty_summary(self, trade_date: str, dry_run: bool, action: str) -> Dict[str, Any]:
         return {
             "trade_date": trade_date,
             "action": action,
             "dry_run": dry_run,
             "evaluated_at": datetime.utcnow().isoformat(),
+            "rule_source": self._rule_source(),
             "matched": 0,
             "changed": 0,
             "skipped": 0,

@@ -82,3 +82,8 @@ _Last updated: 2026-04-24_
 - prev_zone = previous.get("pool_zone") or None # "" → None action = self._zone_delta_action(prev_zone, curr_zone) if action is None: stock_pool_zone = existing.get("pool_zone") or None [score=0.898 recalls=0 avg=0.620 source=memory/2026-06-01.md:64-67]
 <!-- openclaw-memory-promotion:memory:memory/2026-06-01.md:68:68 -->
 - action = self._zone_delta_action(stock_pool_zone, curr_zone) or "update" [score=0.898 recalls=0 avg=0.620 source=memory/2026-06-01.md:68-68]
+
+## Promoted From Short-Term Memory (2026-06-08)
+
+<!-- openclaw-memory-promotion:memory:memory/2026-06-01.md:49:49 -->
+- `_zone_delta_action` 收到的 `previous["pool_zone"]` 是空字符串 `""` 而非 `None`，导致 `previous_zone not in ZONE_RANK` 分支返回 `"update"` 而非 `None`，`if action is None` 的备用逻辑永远不触发。 [score=0.897 recalls=0 avg=0.620 source=memory/2026-06-01.md:49-49]

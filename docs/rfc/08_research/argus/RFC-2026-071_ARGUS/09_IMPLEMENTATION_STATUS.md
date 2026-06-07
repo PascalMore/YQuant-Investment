@@ -4,10 +4,10 @@ title: "实现状态追踪 / Implementation Status"
 rfc_id: RFC-2026-071
 doc_status: "CURRENT_IMPLEMENTATION_NOTE"
 approval_status: "NOT_SUBMITTED"
-impl_status: "PHASE_4_5_IMPLEMENTED"
-version: "1.0.0"
+impl_status: "PHASE_5_IMPLEMENTED"
+version: "1.0.1"
 created: "2026-06-02"
-last_updated: "2026-06-02"
+last_updated: "2026-06-07"
 drafter: "YQuant Codex Principal"
 owner: "YQuant"
 depends_on:
@@ -23,6 +23,13 @@ amendment_level: L2
 
 > 本文件记录 2026-06-02 代码审查确认的 ARGUS 实际实现状态。原始 v2.0.1/v3.0 RFC 内容保留为设计基线；本文件用于标注当前实现与原始设计的差异。
 
+## 0 变更日志 / Changelog
+
+| 版本 | 日期 | 变更内容 |
+|:--|:--|:--|
+| 1.0.1 | 2026-06-07 | 更新 Phase 5 股票池同步为 `StockPoolTransitionPipeline.run_incremental_transition()` + `ZoneRuleEngine.classify_transition()` 状态机路径，明确 Portfolio zone 不由 ingestion 直接覆盖 |
+| 1.0.0 | 2026-06-02 | 初始实现状态追踪，记录 ARGUS Phase 1-4/5 当前落地情况 |
+
 ## 1 当前实现总览
 
 | 模块 | 状态 | 代码依据 | 说明 |
@@ -33,7 +40,7 @@ amendment_level: L2
 | Darwin 检测 Phase 4B | IMPLEMENTED | `core/darwin_detector.py` | 使用行业指数 20 日回撤 + 产品信誉分位数 + `weight_change_30d` 检测分歧。 |
 | Consensus Direction Phase 4C | IMPLEMENTED | `core/consensus_direction.py` | Prosperity Gauge + Conviction Radar，基于行业 30d/60d 权重变化。 |
 | 四区 signal_pool | IMPLEMENTED | `core/pool_manager.py`, `cli/daily_processor.py` | 生成 `SCAN/WATCH/CANDIDATE/CONVICTION`，写入 `08_research_argus_signal_pool`。 |
-| Portfolio 股票池同步 Phase 5 | IMPLEMENTED | `cli/daily_processor.py`, `skills/portfolio/stock_pool/ingestion.py` | `daily_processor` 调用 `ingest_signals_incremental()` 同步至 `05_portfolio_stock_pool` 并写审计。 |
+| Portfolio 股票池同步 Phase 5 | IMPLEMENTED | `cli/daily_processor.py`, `skills/portfolio/stock_pool/ingestion.py`, `skills/research/argus/core/zone_rule_engine.py` | `daily_processor` 通过 `StockPoolTransitionPipeline.run_incremental_transition()` 编排增量同步，并由 `ZoneRuleEngine.classify_transition()` 按当前 zone、YAML promotion / retention / exit 规则生成状态迁移和审计。 |
 | ARGUS signal 订阅器 Phase 5 | IMPLEMENTED | `argus_portfolio_subscriber.py` | 从 `08_research_argus_signal` 读取当日信号，转换为 Portfolio ingestion payload。 |
 | FastAPI/Jinja2/HTMX Web UI | DEFERRED | 未发现对应 app/router/template 实现 | 原始 RFC 设计保留；当前实现为纯 CLI + MongoDB。 |
 | SQLite 单库/三层 13 表 | DEFERRED | 当前 MongoWriter 写入 `08_research_*` 集合 | 原始 Schema 为设计基线，未作为当前运行数据层。 |
@@ -52,6 +59,8 @@ skills/research/argus/
 ├── config/
 │   ├── argus_config.yaml
 │   ├── config.py
+│   ├── zone_rules.py
+│   ├── zone_rules_template.yaml
 │   └── product_alias.yaml
 ├── core/
 │   ├── bayesian_scoring.py
@@ -63,7 +72,8 @@ skills/research/argus/
 │   ├── industry_weight_calculator.py
 │   ├── pool_manager.py
 │   ├── rebalancing_detector.py
-│   └── signal_generator.py
+│   ├── signal_generator.py
+│   └── zone_rule_engine.py
 └── docs/
     └── README.md
 ```
@@ -91,10 +101,14 @@ MongoDB:
   - 08_research_argus_darwin_event
   - 08_research_argus_consensus_direction
     ↓
+ZoneRuleEngine.classify_transition()
+    ↓
 Portfolio:
   - 05_portfolio_stock_pool
   - 05_portfolio_stock_pool_audit
 ```
+
+Portfolio stock_pool zone 由状态机驱动：`run_incremental_transition()` 将当前 signal_pool、前序 signal_pool 与现有 stock_pool 状态交给 `classify_transition()`，输出 entry / promote / demote / exit / retain 决策。Ingestion service 负责持久化与审计，不再把 Argus 当日 `pool_zone` 直接覆盖到 Portfolio 高优先级股票池。
 
 ## 4 当前 MongoDB 集合与唯一键
 
@@ -118,7 +132,7 @@ Portfolio:
 | 信号评分 | Beta 分布贝叶斯后验 + CI | `BayesianScorer` 当前为加权平均：rebalancing/product credibility/consensus/direction |
 | Darwin 弱/强手阈值 | 固定 `credibility < 0.5` / `> 0.7` | 当日信誉分位数：20th / 80th percentile |
 | Darwin 行业行为 | 通过窗口内权重 lookup 计算 | 使用 `IndustryWeightCalculator` 预计算的 `weight_change_30d` |
-| 股票池 Web 管理 | `/pool` 页面、手动归档、HTMX 操作 | 写入 `08_research_argus_signal_pool`，再增量同步 Portfolio 股票池 |
+| 股票池 Web 管理 | `/pool` 页面、手动归档、HTMX 操作 | 写入 `08_research_argus_signal_pool`，再通过 `StockPoolTransitionPipeline.run_incremental_transition()` 增量同步 Portfolio 股票池 |
 | Empire 接口 | REST API 主通道 + JSON 备用 | 当前未实现 REST；Phase 5 通过 Portfolio ingestion service 边界同步 |
 
 ## 6 运行入口
@@ -128,4 +142,3 @@ python -m skills.research.argus.cli.daily_processor 2026-03-11
 python -m skills.research.argus.cli.refresh_all
 python -m skills.research.argus.cli.backfill_phase4_bc
 ```
-

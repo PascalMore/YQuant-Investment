@@ -5,8 +5,8 @@
 | 状态 | 已采纳（Accepted） |
 | 作者 | YQuant |
 | 创建日期 | 2026-05-18 |
-| 最后更新 | 2026-06-06 |
-| 版本号 | V0.5 |
+| 最后更新 | 2026-06-07 |
+| 版本号 | V0.6 |
 | 所属模块 | 08_research（投研分析） |
 | 依赖RFC | RFC-00-001-yqclaw-investment-global-architecture, RFC-08-001-argus-integration |
 | 替代RFC | 无 |
@@ -16,6 +16,7 @@
 ### 版本历史（Changelog）
 | 版本号 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
+| V0.6 | 2026-06-07 | 补充 dry_run 与执行路径共享 `zone_rules_template.yaml` / `ZoneRuleEngine` 阈值逻辑，更新 Portfolio 状态机迁移接口说明 | YQuant |
 | V0.5 | 2026-06-06 | 补充 Signal ID 幂等性设计，明确 signal_id 由业务键确定性生成 | YQuant |
 | V0.4 | 2026-06-06 | Phase 3：补充 stock_pool_record 派生字段、ZoneRuleEngine 分类结果、Darwin override 语义和 bayesian_score 前置约束 | YQuant |
 | V0.3 | 2026-05-19 | 补充 ArgusPortfolioSubscriber、Portfolio ingestion endpoint、MongoDB-only 数据流与 zone 映射 | YQuant |
@@ -250,23 +251,21 @@ class ArgusPortfolioSubscriber:
 - **频率**：日度 T+1（每日 08:00 前生成）
 - **废弃项**：SQLite 与 JSONL 文件交换均不再作为标准接口；历史描述只保留为迁移参考。
 
-### 5.2 Portfolio ingestion endpoint
-Portfolio 应暴露 `POST /ingest-signals`，应用层通过依赖注入获取
-`StockPoolIngestionService`：
+### 5.2 Portfolio transition endpoint
+Portfolio 应暴露 `POST /ingest-signals` 或等价应用层入口，通过依赖注入获取
+`StockPoolTransitionPipeline`。该 pipeline 使用 `StockPoolIngestionService` 做持久化边界，并调用
+`ZoneRuleEngine.classify_transition()` 生成 entry / promote / demote / exit / retain 决策：
 
 ```python
-class StockPoolIngestionService:
-    def ingest_signals(
+class StockPoolTransitionPipeline:
+    def run_incremental_transition(
         self,
-        source: str,
-        signals: list[dict],
-        mode: str = "upsert_scan_only",
+        current_signals: list[dict],
+        previous_signals: list[dict],
         actor: str = "system:argus",
+        dry_run: bool = False,
     ) -> dict:
-        """消费 Argus payload，并通过 StockPoolService 间接写入股票池。"""
-
-    def map_argus_zone(self, argus_zone: str) -> str:
-        """映射 Argus zone 到 Portfolio zone。"""
+        """按 YAML-backed ZoneRuleEngine 执行 Portfolio stock_pool 增量迁移。"""
 ```
 
 推荐请求体：
@@ -274,19 +273,22 @@ class StockPoolIngestionService:
 ```json
 {
   "source": "argus",
-  "mode": "upsert_scan_only",
   "actor": "system:argus",
+  "dry_run": false,
+  "previous_signals": [],
   "signals": []
 }
 ```
 
-`mode` 语义：
+执行语义：
 
-| mode | 行为 |
+| 字段 / 模式 | 行为 |
 |---|---|
-| upsert_scan_only | 只写入 SCAN 区信号，默认模式，防止 Argus 直接污染高优先级股票池 |
-| upsert_all | 写入 SCAN/WATCH/CANDIDATE/CONVICTION，需人工确认后使用 |
-| dry_run | 只返回拟处理结果，不写入 MongoDB |
+| `dry_run=false` | 执行状态机迁移并写入 `05_portfolio_stock_pool` 与审计集合 |
+| `dry_run=true` | 只返回拟处理结果，不写入 MongoDB；预览使用与执行完全相同的 `zone_rules_template.yaml` 和 `ZoneRuleEngine.classify_transition()` 逻辑 |
+| `previous_signals` | 用于识别保留、升降级与 `missing_from_current_signal_pool` exit；节假日缺口应使用最近一次 prior signal_pool |
+
+接口约束：Portfolio stock_pool zone 不由 Argus 当日 `pool_zone` 或 ingestion payload 直接覆盖。`pool_zone` 是状态机输出，必须通过 YAML 中的 `portfolio_transitions.promote_rules`、`demote_rules`、`exit_rules` 与 hysteresis retention 计算。
 
 ### 5.3 Zone 映射表
 
@@ -313,8 +315,9 @@ Darwin override 是 floor-only 规则：
 Argus signal (MongoDB 08_research_argus_signal)
   -> ArgusPortfolioSubscriber.get_latest_signals(trade_date, min_confidence)
   -> ArgusPortfolioSubscriber.to_portfolio_ingest_payload(signals, mode)
-  -> StockPoolService.ingest_signals(source="argus", signals, mode)
-  -> StockPoolRepository.create()/update_fields()
+  -> StockPoolTransitionPipeline.run_incremental_transition(current_signals, previous_signals, dry_run)
+  -> ZoneRuleEngine.classify_transition(metrics, current_zone)
+  -> StockPoolRepository.create()/update_fields() when dry_run=false
   -> 05_portfolio_stock_pool
 ```
 

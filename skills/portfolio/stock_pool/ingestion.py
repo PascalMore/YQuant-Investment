@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from .models import PoolZone
 from .service import StockPoolService
+from skills.research.argus.core.zone_rule_engine import DEFAULT_ZONE_RULE_ENGINE, ZoneRuleEngine
 
 
 ARGUS_TO_PORTFOLIO_ZONE = {
@@ -36,6 +37,7 @@ STOCK_POOL_METRIC_FIELDS = (
     "contributing_products",
     "contributing_products_count",
     "darwin_moment",
+    "missing_from_signal_pool",
 )
 
 
@@ -45,6 +47,7 @@ class StockPoolIngestionService:
     def __init__(self, stock_pool_service: StockPoolService) -> None:
         """Initialize ingestion with an existing StockPoolService."""
         self.stock_pool_service = stock_pool_service
+        self.zone_engine = DEFAULT_ZONE_RULE_ENGINE
 
     def ingest_signals(
         self,
@@ -69,7 +72,7 @@ class StockPoolIngestionService:
         }
         for signal in signals:
             try:
-                record = self._normalize_record(source, signal)
+                record = self._normalize_record(source, signal, classify_initial=False)
                 if mode == "upsert_scan_only" and record["pool_zone"] != PoolZone.SCAN.value:
                     summary["skipped"] += 1
                     continue
@@ -141,16 +144,24 @@ class StockPoolIngestionService:
             raise ValueError(f"Unsupported Argus pool zone: {argus_zone}")
         return ARGUS_TO_PORTFOLIO_ZONE[normalized]
 
-    def _normalize_record(self, source: str, signal: Dict[str, Any]) -> Dict[str, Any]:
+    def _normalize_record(
+        self,
+        source: str,
+        signal: Dict[str, Any],
+        classify_initial: bool = True,
+    ) -> Dict[str, Any]:
         zone = signal.get("pool_zone") or (signal.get("metadata") or {}).get("pool_zone") or "SCAN"
         record = dict(signal)
-        record["pool_zone"] = self.map_argus_zone(zone) if source == "argus" else PoolZone(zone).value
         record["source"] = source
         record.setdefault("source_project", source)
         record["stock_code"] = record.get("stock_code") or str(record["wind_code"]).split(".")[0]
         record.setdefault("tags", [])
         record.setdefault("memo", "")
         self._apply_stock_pool_metrics(record)
+        if classify_initial:
+            record["pool_zone"] = self.zone_engine.classify_initial_zone(record).target_zone
+        else:
+            record["pool_zone"] = self.map_argus_zone(zone) if source == "argus" else PoolZone(zone).value
         if not self._is_structured_entry_reason(record.get("entry_reason")):
             record["entry_reason"] = self._build_entry_reason(record, "new_entry", None, record["pool_zone"])
         return record
@@ -231,6 +242,7 @@ class StockPoolIngestionService:
                 or old_reason.get("darwin_moment")
                 or (record.get("metadata") or {}).get("darwin_moment")
             ),
+            "missing_from_signal_pool": bool(record.get("missing_from_signal_pool", False)),
         }
 
     @staticmethod
@@ -247,6 +259,7 @@ class StockPoolIngestionService:
             "contributing_products": products,
             "contributing_products_count": product_count,
             "darwin_moment": metrics["darwin_moment"],
+            "missing_from_signal_pool": metrics["missing_from_signal_pool"],
         }
         record.update(top_level_metrics)
         return top_level_metrics
@@ -326,7 +339,7 @@ class StockPoolIngestionService:
         records: Dict[str, Dict[str, Any]] = {}
         for signal in signals:
             try:
-                record = self._normalize_record("argus", signal)
+                record = self._normalize_record("argus", signal, classify_initial=True)
                 records[record["wind_code"]] = record
             except (KeyError, ValueError) as exc:
                 summary["errors"].append({"dataset": label, "signal": signal.get("signal_id"), "error": str(exc)})
@@ -336,18 +349,18 @@ class StockPoolIngestionService:
     def _apply_entry(self, record: Dict[str, Any], actor: str, summary: Dict[str, Any], event_date: Optional[str] = None) -> None:
         existing = self._active_record(record["wind_code"])
         if existing:
-            # Stock was in stock_pool before; compute correct zone action
-            zone_action = self._zone_delta_action(
-                existing.get("pool_zone"),
-                record.get("pool_zone"),
-            ) or "update"
+            # The Portfolio stock_pool zone is authoritative for existing records.
+            # Incremental ingestion only refreshes metrics and clears a stale
+            # missing marker; state transitions run in StockPoolTransitionPipeline.
+            zone_action = "update"
             record["entry_reason"] = self._build_entry_reason(
                 record,
                 zone_action,
                 existing.get("pool_zone"),
-                record.get("pool_zone"),
+                existing.get("pool_zone"),
             )
-            self._apply_record_update(existing["id"], record, zone_action, actor, summary, event_date=event_date)
+            patch = self._changed_field_patch(existing, record, include_zone=False)
+            self._apply_record_update(existing["id"], record, zone_action, actor, summary, patch, event_date=event_date)
             return
         record["entry_reason"] = self._build_entry_reason(record, "new_entry", None, record.get("pool_zone"))
         record_id = self.stock_pool_service.create_entry(record, actor, event_date=event_date)
@@ -366,17 +379,21 @@ class StockPoolIngestionService:
             existing.get("pool_zone"),
             None,
         )
-        self.stock_pool_service.update_entry(
+        changed = self.stock_pool_service.update_entry(
             existing["id"],
-            {"entry_reason": entry_reason},
+            {"entry_reason": entry_reason, "missing_from_signal_pool": True},
             actor,
-            audit_action="exit_reason",
+            audit_action="update",
             event_date=event_date,
         )
-        reason = entry_reason["reason"]
-        if self.stock_pool_service.deactivate_entry(existing["id"], reason, actor, audit_action="exit", event_date=event_date):
-            summary["exit"] += 1
-            summary["items"].append({"action": "exit", "id": existing["id"], "wind_code": record["wind_code"]})
+        summary["exit"] += 1
+        summary["items"].append(
+            {
+                "action": "mark_missing_from_signal_pool" if changed else "missing_already_marked",
+                "id": existing["id"],
+                "wind_code": record["wind_code"],
+            }
+        )
 
     def _apply_existing_delta(
         self,
@@ -394,19 +411,14 @@ class StockPoolIngestionService:
             summary["items"].append({"action": "entry", "id": record_id, "wind_code": current["wind_code"]})
             return
 
-        action = self._zone_delta_action(previous["pool_zone"], current["pool_zone"])
-        if action is None:
-            # previous_zone was None (holiday gap) — resolve against stock_pool zone.
-            # Stock was already in stock_pool, so compare stock_pool zone with current zone.
-            stock_pool_zone = existing.get("pool_zone")
-            action = self._zone_delta_action(stock_pool_zone, current["pool_zone"]) or "update"
+        action = "update"
         current["entry_reason"] = self._build_entry_reason(
             current,
             action,
-            previous.get("pool_zone"),
-            current.get("pool_zone"),
+            existing.get("pool_zone"),
+            existing.get("pool_zone"),
         )
-        patch = self._changed_field_patch(existing, current, include_zone=True)
+        patch = self._changed_field_patch(existing, current, include_zone=False)
 
         self._apply_record_update(existing["id"], current, action, actor, summary, patch, event_date=event_date)
 
@@ -422,19 +434,8 @@ class StockPoolIngestionService:
     ) -> None:
         # If caller passed a patch, use it. Otherwise compute from DB.
         existing_record = self.stock_pool_service.repository.get_by_id(record_id) or {}
-        computed_patch = self._changed_field_patch(
-            existing_record,
-            record,
-            include_zone=True,
-        )
+        computed_patch = self._changed_field_patch(existing_record, record, include_zone=False)
         patch = patch if patch is not None else computed_patch
-        # Force-include pool_zone when zone actually changed in the record vs DB.
-        # This handles: (a) promote/demote where zone changed, (b) update where zone changed
-        # but computed_patch was empty because other fields were the same.
-        rec_zone = record.get("pool_zone")
-        db_zone = existing_record.get("pool_zone")
-        if rec_zone and db_zone and rec_zone != db_zone and "pool_zone" not in patch:
-            patch["pool_zone"] = rec_zone
         if not patch:
             summary["skipped"] += 1
             summary["items"].append({"action": "no_change", "id": record_id, "wind_code": record["wind_code"]})
@@ -493,3 +494,199 @@ class StockPoolIngestionService:
             for field_name in field_names
             if existing.get(field_name) != record.get(field_name)
         }
+
+
+class StockPoolTransitionPipeline:
+    """Run Argus signal ingestion followed by Portfolio stock_pool state transitions."""
+
+    def __init__(
+        self,
+        ingestion_service: StockPoolIngestionService,
+        zone_rule_engine: Optional[ZoneRuleEngine] = None,
+    ) -> None:
+        self.ingestion_service = ingestion_service
+        self.stock_pool_service = ingestion_service.stock_pool_service
+        self.zone_engine = zone_rule_engine or DEFAULT_ZONE_RULE_ENGINE
+
+    def run_incremental_transition(
+        self,
+        current_signals: List[Dict[str, Any]],
+        previous_signals: List[Dict[str, Any]],
+        actor: str = "system:argus",
+        event_date: Optional[str] = None,
+        dry_run: bool = True,
+    ) -> Dict[str, Any]:
+        """Sync metrics, then execute one-step zone transitions from current stock_pool state."""
+        if not event_date and current_signals:
+            event_date = current_signals[0].get("date")
+
+        ingestion_summary = None
+        if not dry_run:
+            ingestion_summary = self.ingestion_service.ingest_signals_incremental(
+                current_signals=current_signals,
+                previous_signals=previous_signals,
+                actor=actor,
+                event_date=event_date,
+            )
+
+        summary: Dict[str, Any] = {
+            "source": "argus",
+            "mode": "incremental_transition",
+            "dry_run": dry_run,
+            "current": len(current_signals),
+            "previous": len(previous_signals),
+            "ingestion": ingestion_summary,
+            "entry": 0 if ingestion_summary is None else ingestion_summary.get("entry", 0),
+            "exit": 0,
+            "promote": 0,
+            "demote": 0,
+            "retain": 0,
+            "update": 0,
+            "skipped": 0,
+            "errors": [],
+            "items": [],
+        }
+
+        current_by_code = self._normalized_map(current_signals, summary, "current")
+        previous_by_code = self._normalized_map(previous_signals, summary, "previous")
+        new_entry_ids = self._new_entry_ids(ingestion_summary)
+        for record in self._active_records():
+            if record["id"] in new_entry_ids:
+                summary["items"].append(
+                    {
+                        "action": "entry_initial_zone",
+                        "id": record["id"],
+                        "wind_code": record.get("wind_code"),
+                        "target_zone": record.get("pool_zone"),
+                    }
+                )
+                continue
+            try:
+                transition_record = self._record_for_transition(record, current_by_code, previous_by_code)
+                decision = self.zone_engine.classify_transition(transition_record, record.get("pool_zone", "SCAN"))
+                self._append_or_apply(summary, record, transition_record, decision, actor, event_date, dry_run)
+            except (KeyError, ValueError) as exc:
+                summary["errors"].append({"wind_code": record.get("wind_code"), "error": str(exc)})
+                summary["skipped"] += 1
+        return summary
+
+    def _normalized_map(
+        self,
+        signals: List[Dict[str, Any]],
+        summary: Dict[str, Any],
+        label: str,
+    ) -> Dict[str, Dict[str, Any]]:
+        normalize_summary = {"errors": [], "skipped": 0}
+        records = self.ingestion_service._normalize_signal_map(signals, normalize_summary, label)
+        summary["errors"].extend(normalize_summary["errors"])
+        summary["skipped"] += normalize_summary["skipped"]
+        return records
+
+    @staticmethod
+    def _new_entry_ids(ingestion_summary: Optional[Dict[str, Any]]) -> set[str]:
+        if not ingestion_summary:
+            return set()
+        return {
+            item["id"]
+            for item in ingestion_summary.get("items", [])
+            if item.get("action") == "entry" and item.get("id")
+        }
+
+    def _active_records(self) -> List[Dict[str, Any]]:
+        records: List[Dict[str, Any]] = []
+        cursor: Optional[str] = None
+        while True:
+            page = self.stock_pool_service.get_pool(
+                source="argus",
+                status="active",
+                limit=200,
+                cursor=cursor,
+            )
+            records.extend(page["items"])
+            cursor = page.get("next_cursor")
+            if not cursor:
+                return records
+
+    @staticmethod
+    def _record_for_transition(
+        record: Dict[str, Any],
+        current_by_code: Dict[str, Dict[str, Any]],
+        previous_by_code: Dict[str, Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        transition_record = dict(record)
+        wind_code = record.get("wind_code")
+        if wind_code in current_by_code:
+            for field_name in STOCK_POOL_METRIC_FIELDS:
+                transition_record[field_name] = current_by_code[wind_code].get(field_name)
+            transition_record["missing_from_signal_pool"] = False
+        elif wind_code in previous_by_code:
+            transition_record["missing_from_signal_pool"] = True
+        return transition_record
+
+    def _append_or_apply(
+        self,
+        summary: Dict[str, Any],
+        record: Dict[str, Any],
+        transition_record: Dict[str, Any],
+        decision: Any,
+        actor: str,
+        event_date: Optional[str],
+        dry_run: bool,
+    ) -> None:
+        action = "retain" if decision.action == "update" and decision.target_zone == record.get("pool_zone") else decision.action
+        item = {
+            "action": action,
+            "id": record["id"],
+            "wind_code": record.get("wind_code"),
+            "from_zone": record.get("pool_zone"),
+            "target_zone": decision.target_zone,
+            "rule": decision.rule_name,
+            "metrics": decision.metrics,
+            "thresholds": decision.thresholds,
+        }
+        summary["items"].append(item)
+        if dry_run:
+            summary[action] += 1
+            return
+
+        if action == "exit":
+            reason = StockPoolIngestionService._entry_reason_text(
+                record.get("wind_code", ""),
+                "exit",
+                record.get("pool_zone"),
+                None,
+                transition_record,
+            )
+            if self.stock_pool_service.deactivate_entry(record["id"], reason, actor, audit_action="exit", event_date=event_date):
+                summary["exit"] += 1
+            else:
+                summary["errors"].append({"id": record["id"], "error": "exit_failed"})
+            return
+
+        if action in {"promote", "demote"}:
+            entry_reason = StockPoolIngestionService._build_entry_reason(
+                transition_record,
+                action,
+                record.get("pool_zone"),
+                decision.target_zone,
+            )
+            patch = {
+                "pool_zone": decision.target_zone,
+                "entry_reason": entry_reason,
+                "missing_from_signal_pool": False,
+            }
+            if self.stock_pool_service.update_entry(record["id"], patch, actor, audit_action=action, event_date=event_date):
+                summary[action] += 1
+            else:
+                summary["errors"].append({"id": record["id"], "error": f"{action}_failed"})
+            return
+
+        self.stock_pool_service.repository.write_audit(
+            record["id"],
+            "retain",
+            record,
+            record,
+            actor,
+            event_date=event_date,
+        )
+        summary["retain"] += 1

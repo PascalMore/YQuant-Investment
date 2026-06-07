@@ -11,19 +11,20 @@ from typing import Any, Dict, List
 sys.path.insert(0, "/home/pascal/.openclaw/workspace-yquant")
 
 from skills.data.data_interface import MongoReader
-from skills.portfolio.stock_pool.ingestion import StockPoolIngestionService
+from skills.portfolio.stock_pool.ingestion import StockPoolIngestionService, StockPoolTransitionPipeline
 from skills.portfolio.stock_pool.repository import StockPoolRepository
 from skills.portfolio.stock_pool.service import StockPoolService
 
 
 SIGNAL_POOL_COLLECTION = "08_research_argus_signal_pool"
-SUMMARY_KEYS = ("entry", "promote", "demote", "exit", "update", "skipped")
+SUMMARY_KEYS = ("entry", "promote", "demote", "exit", "retain", "update", "skipped")
 
 
 def backfill_audit(start_date: str, end_date: str, database: str = "tradingagents") -> Dict[str, Any]:
     """Replay adjacent Argus signal-pool snapshots into Portfolio stock-pool audit."""
     reader = MongoReader(database=database)
     ingestion = StockPoolIngestionService(StockPoolService(StockPoolRepository(database=database)))
+    pipeline = StockPoolTransitionPipeline(ingestion)
     dates = _available_signal_pool_dates(reader, start_date, end_date)
 
     total = {key: 0 for key in SUMMARY_KEYS}
@@ -31,10 +32,12 @@ def backfill_audit(start_date: str, end_date: str, database: str = "tradingagent
     for previous_date, current_date in zip(dates, dates[1:]):
         previous = reader.read(previous_date, collection_name=SIGNAL_POOL_COLLECTION)
         current = reader.read(current_date, collection_name=SIGNAL_POOL_COLLECTION)
-        summary = ingestion.ingest_signals_incremental(
+        summary = pipeline.run_incremental_transition(
             current_signals=current,
             previous_signals=previous,
             actor="system:argus_backfill",
+            event_date=current_date,
+            dry_run=False,
         )
         for key in SUMMARY_KEYS:
             total[key] += summary.get(key, 0)

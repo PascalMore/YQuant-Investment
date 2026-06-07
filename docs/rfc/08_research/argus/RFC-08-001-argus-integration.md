@@ -5,8 +5,8 @@
 | 状态 | Accepted |
 | 作者 | PascalMao |
 | 创建日期 | 2026-05-17 |
-| 最后更新 | 2026-06-06 |
-| 版本号 | V0.5 |
+| 最后更新 | 2026-06-07 |
+| 版本号 | V0.6 |
 | 所属模块 | 08_research（投研分析） |
 | 依赖RFC | RFC-00-001-yqclaw-investment-global-architecture |
 | 替代RFC | 无 |
@@ -16,6 +16,7 @@
 ### 版本历史（Changelog）
 | 版本号 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
+| V0.6 | 2026-06-07 | 合并 SPEC.md，新增 Zone Rule 统一配置附录，并更新 Phase 1/2/3 实现状态 | YQuant |
 | V0.5 | 2026-06-06 | 补充 Signal ID 幂等性设计与 Hysteresis 状态机调用契约 | YQuant |
 | V0.4 | 2026-06-06 | Phase 3：补充 ZoneRuleEngine 共享组件、YAML 统一阈值配置、Darwin/Bayesian/zone 分类计算顺序 | YQuant |
 | V0.3 | 2026-05-18 | 数据存储方案：删除独立SQLite，改用MongoDB新建集合（08_research_argus_*）；目录结构更新为skills/data + skills/infra + skills/research/argus；删除db/目录相关描述 | YQuant |
@@ -442,3 +443,68 @@ Argus 处理完成后，通过 `ArgusSignalExporter` 输出信号到文件或直
 - TradingAgents-CN mongo-init.js（MongoDB Schema）
 - YQClaw 八大标准化体系（RFC-00-001 第5章）
 - docs/rfc/TEMPLATE_DIFF_REPORT.md（模板差异报告）
+
+## 附录 A：Zone Rule 统一配置参考
+
+`skills/research/argus/config/zone_rules_template.yaml` 是 Argus signal-pool 初始分类与 Portfolio stock-pool 状态迁移的单一阈值来源。运行时通过 `skills.research.argus.config.zone_rules.load_zone_rules_config()` 加载，并由 `ZoneRuleEngine` 消费。
+
+必需顶层字段包括 `version`、`zones`、`score_policy`、`argus_signal_pool`、`portfolio_transitions`、`darwin`、`crowding`。旧 `pool_zones` / `zone_thresholds` / `ZONE_THRESHOLDS` 仅作为历史兼容参考，新实现与文档不得新增分散阈值。
+
+### A.1 Argus 初始 Zone 分类
+
+初始分类在 `BayesianScorer` 完成后执行，以 `bayesian_score` 为主评分；缺失时才按 YAML `score_policy.argus_initial.fallback` 兼容读取 `bayesian`、`score`、`confidence`。
+
+| Zone | Bayesian | Products | Consensus | Crowding |
+|---|---:|---:|---:|---|
+| `CONVICTION` | `>= 0.75` | `>= 3` | `>= 0.60` | `<= HIGH` |
+| `CANDIDATE` | `>= 0.55` | `>= 2` | `>= 0.40` | `<= DANGER` |
+| `WATCH` | `>= 0.35` | `>= 1` | `>= 0.20` | no limit |
+| `SCAN` | residual | residual | residual | no limit |
+
+`SCAN` 是无条件 residual zone，不是低分专用桶。高分标的若未通过产品数、共识或拥挤度 gate，会继续按 `evaluation_order` 向下匹配下一条规则。
+
+### A.2 Darwin Override
+
+Darwin 行业事件在 signal-pool record 构造前检测。`darwin_moment`、`darwin_confidence`、`darwin_event_id` 先附加到记录，再进入 Bayesian scoring 和 zone classification。
+
+Darwin override 是 floor-only：
+
+- 命中 `darwin_moment=true` 且满足 guard（`bayesian_score >= 0.45` 或 `darwin_confidence >= 0.70`）时，最低提升到 `CANDIDATE`。
+- Darwin 不直接强制 `CONVICTION`；进入 `CONVICTION` 仍需满足常规 Bayesian、产品数、共识与拥挤度规则。
+- Crowding 是 zone 上限约束：`CANDIDATE <= DANGER`，`CONVICTION <= HIGH`。
+
+### A.3 日度计算顺序
+
+```text
+signals -> consensus -> crowding -> build signal-pool records -> BayesianScorer -> ZoneRuleEngine.classify_initial_zone() -> write
+```
+
+该顺序替代旧的 pre-Bayesian confidence 分类，确保 Argus 与 Portfolio zone 决策共享同一组 `bayesian_score` 阈值。
+
+### A.4 Portfolio Transitions
+
+Portfolio 迁移每次运行最多移动一档：
+
+| Promotion | Bayesian | Products | Consensus | Crowding |
+|---|---:|---:|---:|---|
+| `SCAN -> WATCH` | `>= 0.35` | `>= 1` | `>= 0.20` | no limit |
+| `WATCH -> CANDIDATE` | `>= 0.55` | `>= 2` | `>= 0.40` | `<= DANGER` |
+| `CANDIDATE -> CONVICTION` | `>= 0.75` | `>= 3` | `>= 0.60` | `<= HIGH` |
+
+降级使用独立 retention thresholds，而不是晋级阈值。该 hysteresis 设计用于减少边界震荡：
+
+| Current Zone | Retention | Demote Target |
+|---|---|---|
+| `WATCH` | Bayesian `>= 0.25`, products `>= 1`, consensus `>= 0.10` | `SCAN` |
+| `CANDIDATE` | Bayesian `>= 0.48`, products `>= 1`, consensus `>= 0.30`, crowding `<= DANGER` | `WATCH` |
+| `CONVICTION` | Bayesian `>= 0.68`, products `>= 2`, consensus `>= 0.50`, crowding `<= HIGH` | `CANDIDATE` |
+
+`exit` 是 lifecycle inactive，触发条件为 `missing_from_current_signal_pool`，不是降级到 `SCAN`。
+
+### A.5 Phase 状态
+
+| Phase | 状态 | 说明 |
+|---|---|---|
+| Phase 1 | implemented | `PoolManager` 与 `StockPoolAutoPromoter` 已依赖 YAML-backed `ZoneRuleEngine`。 |
+| Phase 2 | implemented | `daily_processor.py` 在 zone 分类前调用 `BayesianScorer` 写入 `bayesian_score`。 |
+| Phase 3 | implemented | Argus 初始分类与 Portfolio 增量迁移已统一使用 `ZoneRuleEngine`、YAML 阈值、Darwin floor 与 hysteresis retention。 |
