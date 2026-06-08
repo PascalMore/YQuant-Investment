@@ -82,7 +82,7 @@ argus_signal_pool:
       crowding_max: null
     candidate:
       target_zone: CANDIDATE
-      bayesian_min: 0.55
+      bayesian_min: 0.45
       product_count_min: 2
       product_count_max: null
       consensus_min: 0.40
@@ -171,7 +171,7 @@ portfolio_transitions:
       crowding_max: null
     watch_to_candidate:
       target_zone: CANDIDATE
-      bayesian_min: 0.55
+      bayesian_min: 0.45
       product_count_min: 2
       consensus_min: 0.40
       crowding_max: DANGER
@@ -199,7 +199,7 @@ portfolio_transitions:
       current_zone: CANDIDATE
       target_zone: WATCH
       demote_when: fail_retention
-      bayesian_min: 0.48
+      bayesian_min: 0.45
       product_count_min: 1
       consensus_min: 0.30
       crowding_max: DANGER
