@@ -80,7 +80,32 @@ ZoneRuleEngine
 
 Portfolio stock_pool 的 zone 由状态机迁移结果写入；ingestion 层负责持久化、审计和兼容接口，不直接用当日 Argus `pool_zone` 覆盖既有 Portfolio zone。
 
-`signal_id` 由业务键 `date, product_code, wind_code, signal_type` 确定性生成，格式为 `argus:{sha256_hash}` 前 20 字符。旧随机 UUID 方案会在重跑时产生新记录，当前实现改为 upsert-friendly idempotent key。
+### 00.4 Signal ID 生成策略（幂等性设计）
+
+`signal_id` 不再使用随机 UUID，而是由业务键确定性生成：
+
+- **设计原则**：`signal_id` 基于业务键 `date, product_code, wind_code, signal_type` 的确定性 hash。
+- **格式**：`argus:{sha256_hash}` 前 20 字符。
+- **目的**：支持 upsert 语义，同一日度任务重跑不会重复写入，保证 Argus 输出具备幂等性和可重放性。
+- **对比**：旧方案使用随机 UUID，每次重跑产生新记录，下游只能事后去重。
+
+等价实现：
+
+```python
+key = f"{date}:{product_code}:{wind_code}:{signal_type}"
+signal_id = f"argus:{sha256(key.encode()).hexdigest()[:20]}"
+```
+
+### 00.5 Zone 转换 - Hysteresis 机制
+
+Hysteresis 的设计目的，是避免 `bayesian_score` 在阈值附近波动导致 Portfolio stock_pool zone 频繁跳动。当前 Portfolio 增量迁移调用 `ZoneRuleEngine.classify_transition(metrics, current_zone)`，并按以下状态机执行：
+
+1. exit 优先：`missing_from_signal_pool` 时直接 `EXIT`。
+2. promote 限一步：未退出时只检查下一档 zone 的晋级规则，最多上移一级。
+3. demote 限一步：当前级保留规则失败才降一级。
+4. retain：metrics 无显著变化时保持当前 zone。
+
+旧方案使用 `classify_initial_zone()` 每日重新计算 zone，不读取历史状态，因此无法表达 retention buffer，也更容易在阈值边界产生震荡。
 
 原始 §2 中 FastAPI/Jinja2/HTMX/Pico CSS 技术栈保留为 Web UI 设计基线；截至 2026-06-02 当前实现未启用。
 

@@ -44,12 +44,14 @@ skills/research/argus/docs/zone_rule_engine_interfaces.py
 
 ### 2.0 Signal ID 生成策略（幂等性设计）
 
-**设计原则**：signal_id 基于业务键的确定性 hash，不使用随机 UUID。
+**设计原则**：signal_id 基于业务键 `date, product_code, wind_code, signal_type` 的确定性 hash，不使用随机 UUID。
+
+**格式**：`argus:{sha256_hash}` 前 20 字符。
 
 **生成公式**：
 ```python
-key = f"{trade_date}:{product_code}:{wind_code}:{signal_type}"
-signal_id = f"argus:{sha256(key).hexdigest()[:20]}"
+key = f"{date}:{product_code}:{wind_code}:{signal_type}"
+signal_id = f"argus:{sha256(key.encode()).hexdigest()[:20]}"
 ```
 
 **目的**：
