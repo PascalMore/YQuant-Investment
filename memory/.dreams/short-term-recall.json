@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-06-09T19:00:20.466Z",
+  "updatedAt": "2026-06-10T19:00:05.128Z",
   "entries": {
     "memory:memory/2026-04-05.md:1:38": {
       "key": "memory:memory/2026-04-05.md:1:38",
@@ -5126,23 +5126,25 @@
       "startLine": 1,
       "endLine": 30,
       "source": "memory",
-      "snippet": "# 2026-05-03 Daily Memory ## Smart Money Portfolio Pipeline 上线 ### 目录结构 ``` data/source/smart-money/{日期}/ ├── image/ # 图片截图（OCR处理） └── message/ # 文本/CSV数据 ``` ### 核心文件 - `skills/data/data-pipeline/scripts/smart_money_watcher.py` — 自动监控新文件并触发 pipeline - `start_smart_money_watcher.sh` — 启动脚本（start/stop/status） ### Pipeline 流程 - **Image**: OCR (PaddleOCR) → Excel → Normalize → Validate → MongoDB - **Message**: Parse → Excel → Normalize → Validate → MongoDB ### 今日数据（2026-05-03） - 收到 4 张持仓截图（21:30 ~ 21:42） - 处理结果：47 → 46 → 46 → 46 条记录 - 所有数据已入库 MongoDB（tradingagents 数据库） - 目录已创建：`data/source/smart-money/2026-05-03/image/` ### 待完成 - [ ] 将 smart_money_watcher 注册为 systemd 服务（开机自启） - [ ] 持仓对比",
-      "recallCount": 3,
+      "snippet": "# 2026-05-03 Daily Memory ## Smart Money Portfolio Pipeline 上线 ### 目录结构 ``` data/source/smart-money/{日期}/ ├── image/ # 图片截图（OCR处理） └── message/ # 文本/CSV数据 ``` ### 核心文件 - `skills/data/data-pipeline/scripts/smart_money_watcher.py` — 自动监控新文件并触发 pipeline - `start_smart_money_watcher.sh` — 启动脚本（start/stop/status） ### Pipeline 流程 - **Image**: OCR (PaddleOCR) → Excel → Normalize → Validate → MongoDB - **Message**: Parse → Excel → Normalize → Validate → MongoDB ### 今日数据（2026-05-03） - 收到 4 张持仓截图（21:30 ~ 21:42） - 处理结果：47 → 46 → 46 → 46 条记录 - 所有数据已入库 MongoDB（tradingagents 数据库） - 目录已创建：`data/source/smart-money/2026-05-03/image/` ### 待完成 - [ ] 将 smart_money_watcher 注册为 systemd 服务（开机自启） - [ ] 持仓对比分析（三张图差异） - [ ] 确认 message 目录的文本 pipeline 是否正常工作",
+      "recallCount": 4,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 3,
+      "totalScore": 4,
       "maxScore": 1,
       "firstRecalledAt": "2026-05-04T13:53:18.981Z",
-      "lastRecalledAt": "2026-06-08T01:43:25.203Z",
+      "lastRecalledAt": "2026-06-10T01:32:15.675Z",
       "queryHashes": [
         "3e91dd63304e",
         "185e33bb39ec",
-        "2fcf56d15fe2"
+        "2fcf56d15fe2",
+        "bcc89be72806"
       ],
       "recallDays": [
         "2026-05-04",
         "2026-05-08",
-        "2026-06-08"
+        "2026-06-08",
+        "2026-06-10"
       ],
       "conceptTags": [
         "data/source/smart-money",
@@ -5153,7 +5155,8 @@
         "smart",
         "money",
         "portfolio"
-      ]
+      ],
+      "promotedAt": "2026-06-10T19:00:05.128Z"
     },
     "memory:memory/2026-05-04.md:1:32": {
       "key": "memory:memory/2026-05-04.md:1:32",
@@ -5902,18 +5905,20 @@
       "endLine": 30,
       "source": "memory",
       "snippet": "# 2026-05-12 Daily Memory ## 项目架构 - RFC 体系初始化 - docs/rfc/ 目录已创建，共 11 个子目录（00_project_overview ~ 10_infra） - 各子目录均已放置 RFC-00-000-rfc-template.md 标准模板 - docs/rfc/00_project_overview/ 下新增 RFC-00-001-yquant-investment-global-architecture.md（项目总架构RFC初稿） - 重要：新增了 06_strategy（策略研发）和 09_reports（报告定制）两个模块 ## Smart Money 数据入库 ### 已处理图片（inbound 目录） - bd2775a1: SM001 portfolio 2026-04-21（35条） - de9cdd2e: SM002 portfolio 2026-04-21（43条） - 489335e7: SM003 portfolio 2026-04-21（28条） - 7c3c1fd1: SM004 portfolio 2026-04-21（31条） - aa5c3fbb: SM012 portfolio 2026-04-21（34条） - 29588b5c: trade 2026-04-20（30条） - 467ddd93: SM012 portfolio 2026-04-16（34条，图片OCR） - 3254d0da: SM004 portfolio 2026-04-16（32条，图片OCR） - b4",
-      "recallCount": 1,
+      "recallCount": 2,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 2,
       "maxScore": 1,
       "firstRecalledAt": "2026-05-20T14:08:15.293Z",
-      "lastRecalledAt": "2026-05-20T14:08:15.293Z",
+      "lastRecalledAt": "2026-06-10T00:36:55.817Z",
       "queryHashes": [
-        "5c75b43594b8"
+        "5c75b43594b8",
+        "6d4bb98a5b91"
       ],
       "recallDays": [
-        "2026-05-20"
+        "2026-05-20",
+        "2026-06-10"
       ],
       "conceptTags": [
         "docs/rfc",
@@ -59719,6 +59724,2315 @@
         "记录",
         "mongodb",
         "upserted"
+      ]
+    },
+    "memory:memory/2026-04-09.md:114:144": {
+      "key": "memory:memory/2026-04-09.md:114:144",
+      "path": "memory/2026-04-09.md",
+      "startLine": 114,
+      "endLine": 144,
+      "source": "memory",
+      "snippet": "4. **yfinance rate limiting**：美股和港股指数获取受限 ### 已修复 - 发件人昵称：已添加 `EMAIL_SENDER_NAME` 环境变量支持，默认 \"YQClaw智能投资助手\" ### 邮件发送命令 ```bash python3 ~/.openclaw/workspace/skills/common/utils/email/send_email.py \\ \"532484187@qq.com\" \\ \"🌈 全球市场日报 2026-04-09\" \\ \"$(cat ~/.openclaw/workspace/skills/investment/research/daily-market-analysis/reports/global_market_report_20260409.html)\" ``` ### 关键文件路径 - 报告生成器：`~/.openclaw/workspace/skills/investment/research/daily-market-analysis/src/new_services/report_generator.py` - 数据适配器：`~/.openclaw/workspace/skills/investment/research/daily-market-analysis/src/new_services/market_data_adapter.py` - 邮件脚本：`~/.openclaw/workspace/skills/common/utils/email/send_email.py`",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-06-10T00:36:55.817Z",
+      "lastRecalledAt": "2026-06-10T00:36:55.817Z",
+      "queryHashes": [
+        "6d4bb98a5b91"
+      ],
+      "recallDays": [
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "email-sender-name",
+        "qq.com",
+        "yfinance",
+        "rate",
+        "limiting",
+        "指数",
+        "获取",
+        "受限"
+      ]
+    },
+    "memory:memory/2026-04-09.md:285:315": {
+      "key": "memory:memory/2026-04-09.md:285:315",
+      "path": "memory/2026-04-09.md",
+      "startLine": 285,
+      "endLine": 315,
+      "source": "memory",
+      "snippet": "4. **yfinance rate limiting**：美股和港股指数获取受限 ### 已修复 - 发件人昵称：已添加 `EMAIL_SENDER_NAME` 环境变量支持，默认 \"YQClaw智能投资助手\" ### 邮件发送命令 ```bash python3 ~/.openclaw/workspace/skills/common/utils/email/send_email.py \\ \"532484187@qq.com\" \\ \"🌈 全球市场日报 2026-04-09\" \\ \"$(cat ~/.openclaw/workspace/skills/investment/research/daily-market-analysis/reports/global_market_report_20260409.html)\" ``` ### 关键文件路径 - 报告生成器：`~/.openclaw/workspace/skills/investment/research/daily-market-analysis/src/new_services/report_generator.py` - 数据适配器：`~/.openclaw/workspace/skills/investment/research/daily-market-analysis/src/new_services/market_data_adapter.py` - 邮件脚本：`~/.openclaw/workspace/skills/common/utils/email/send_email.py`",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-06-10T00:36:55.817Z",
+      "lastRecalledAt": "2026-06-10T00:36:55.817Z",
+      "queryHashes": [
+        "6d4bb98a5b91"
+      ],
+      "recallDays": [
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "email-sender-name",
+        "qq.com",
+        "yfinance",
+        "rate",
+        "limiting",
+        "指数",
+        "获取",
+        "受限"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:71:71": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:71:71",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 71,
+      "endLine": 71,
+      "source": "memory",
+      "snippet": "Assistant: 文档更新完成 ✅ 验证结果： | 检查项 | 状态 | |--------|------| | `SPEC.md` 已删除 | ✅ | | `SPEC.md` 从 MANIFEST.sha256 移除 | ✅ | | RFC-08-001 新增\"附录 A：Zone Rule 统一配置参考\" | ✅ | | RFC-08-001 版本更新 V0.6，Phase 1/2/3 标为 implemented | ✅ | | 05_POOL_WEB.md 移除硬编码阈值，指向 YAML | ✅ | | 09_IMPLEMENTATION_ST",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "spec.md",
+        "manifest.sha256",
+        "rfc-08-001",
+        "v0.6",
+        "1/2/3",
+        "05-pool-web.md",
+        "09-implementation-st",
+        "更新"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:72:72": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:72:72",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 72,
+      "endLine": 72,
+      "source": "memory",
+      "snippet": "Assistant: **Stock Pool（status=active）各 Zone 数量** | Zone | 数量 | |------|------| | **CANDIDATE** | **2** ✅ | | **SCAN** | **8** | | **WATCH** | **131** | | ~~CONVICTION~~ | 0 | | **合计（active）** | **141** | | inactive | 508 | --- **CANDIDATE（2只）** | 代码 | 名称 | bayesian | 产品数 | |----",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "stock",
+        "pool",
+        "status",
+        "active",
+        "zone",
+        "数量",
+        "candidate",
+        "scan"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:73:73": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:73:73",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 73,
+      "endLine": 73,
+      "source": "memory",
+      "snippet": "Assistant: 0.45 | 3 | | 300308.SZ | 中际旭创 | 0.43 | 3 | | 688981.SH | 中芯国际 | 0.42 | 2 | 这些股票符合 CANDIDATE 的数值条件但未被推进，可能与 `_zone_delta_action` 的转换逻辑有关（需检查 `previous[\"pool_zone\"]` 是否为空字符串导致逻辑分支异常）。",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "0.45",
+        "300308.sz",
+        "0.43",
+        "688981.sh",
+        "0.42",
+        "zone-delta-action",
+        "pool-zone",
+        "国际"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:74:74": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:74:74",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 74,
+      "endLine": 74,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6d534de0e51cc2a700c58d7c7bb] 用户724532: 请仔细核查下，因为之前测算的时候，宁德时代、泡泡玛特，华润置地 都是属于candicate 现在真的刷新就不再了 请仔细再检查下程序和数据",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "仔细",
+        "核查",
+        "因为",
+        "之前",
+        "时候",
+        "时代"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:75:75": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:75:75",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 75,
+      "endLine": 75,
+      "source": "memory",
+      "snippet": "Assistant: 好的，我仔细查一下。先看这几只股票的完整记录，再查规则逻辑。",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "好的",
+        "仔细",
+        "一下",
+        "先看",
+        "股票",
+        "完整",
+        "记录",
+        "规则"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:76:76": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:76:76",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 76,
+      "endLine": 76,
+      "source": "memory",
+      "snippet": "Assistant: 找到问题了！看 `entry_reason` 字段： ``` 'Demote: CANDIDATE→WATCH: 300750.SZ bayesian=0.45, crowding=MEDIUM, contributing_products=4' ``` 宁德时代曾经被分入 CANDIDATE，但立刻又被**降级**回 WATCH。让我查保留阈值：",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "entry-reason",
+        "300750.sz",
+        "0.45",
+        "contributing-products",
+        "找到",
+        "问题",
+        "demote",
+        "candidate"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:77:77": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:77:77",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 77,
+      "endLine": 77,
+      "source": "memory",
+      "snippet": "Assistant: **根因找到了。** 问题出在 `candidate_retention`（保留阈值）和 `watch_to_candidate`（晋升阈值）之间有**磁滞回线缺口**： | 规则 | bayesian_min | |------|-------------| | `watch_to_candidate`（晋升） | **0.45** ✓ | | `candidate_retention`（保留） | **0.48** ✗ | 宁德时代/泡泡玛特/华润置地 bayesian=0.45： - **第一天**：通过晋升门槛 → 进入 C",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "candidate-retention",
+        "watch-to-candidate",
+        "bayesian-min",
+        "0.45",
+        "0.48",
+        "宁德时代/泡泡玛特/华润置地",
+        "根因",
+        "找到"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:78:78": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:78:78",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 78,
+      "endLine": 78,
+      "source": "memory",
+      "snippet": "Assistant: 好的，发现完整问题了： **CANDIDATE 区的磁滞配置是反向的**（保留比晋升还难），导致边界值股票会振荡。现在修复：",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "好的",
+        "发现",
+        "完整",
+        "问题",
+        "candidate",
+        "配置",
+        "反向",
+        "保留"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:79:79": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:79:79",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 79,
+      "endLine": 79,
+      "source": "memory",
+      "snippet": "Assistant: 修复完成。保留阈值 `candidate_retention.bayesian_min` 从 0.48 改为 0.45，与晋升阈值对齐。 **修复前后对比：** | 规则 | 修复前 | 修复后 | |------|--------|--------| | `watch_to_candidate` 晋升 | ≥ 0.45 | ≥ 0.45 | | `candidate_retention` 保留 | ≥ **0.48** ❌ | ≥ **0.45** ✅ | 修复前：bayesian=0.45 的股票能进 CANDIDATE 但立刻",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "candidate-retention.bayesian-min",
+        "0.48",
+        "0.45",
+        "watch-to-candidate",
+        "candidate-retention",
+        "修复",
+        "完成",
+        "保留"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:80:80": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:80:80",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 80,
+      "endLine": 80,
+      "source": "memory",
+      "snippet": "Assistant: 好的，我直接查一下当前数据库的实际状态和数据。",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "好的",
+        "直接",
+        "一下",
+        "当前",
+        "数据",
+        "实际",
+        "状态"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:81:81": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:81:81",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 81,
+      "endLine": 81,
+      "source": "memory",
+      "snippet": "Assistant: 全部在 CANDIDATE 里了！刚才第一次查询有 bug，修正重查： **结果确认（2026-06-04 已生效）：** | 股票 | bayesian | products | 状态 | |------|----------|----------|------| | 300750.SZ 宁德时代 | 0.45 | 4 | ✅ CANDIDATE | | 9992.HK 泡泡玛特 | 0.45 | 3 | ✅ CANDIDATE | | 1109.HK 华润置地 | 0.45 | 3 | ✅ CANDIDATE | | 0883.",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "300750.sz",
+        "0.45",
+        "9992.hk",
+        "1109.hk",
+        "全部",
+        "candidate",
+        "刚才",
+        "第一次"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:82:82": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:82:82",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 82,
+      "endLine": 82,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6d5c120528bcc27614a842fc46f] 用户724532: 请帮我统计下 sm 5个产品 今年以来的收益率是多少 根据nav表",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "统计",
+        "产品",
+        "今年",
+        "以来",
+        "收益",
+        "多少"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:83:83": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:83:83",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 83,
+      "endLine": 83,
+      "source": "memory",
+      "snippet": "Assistant: **SM 5产品 2026年收益率（截至2026-06-04）** | 产品 | 年初净值 | 最新净值 | YTD | |------|---------|---------|-----| | SM001 景顺灵活1号 | 1.1610 | 1.3353 | **+15.01%** | | SM002 易方达均衡配置 | 1.3763 | 1.6178 | **+17.55%** | | SM003 常春藤优选3号 | 1.0125 | 1.1644 | **+15.00%** | | SM004 信澳领先成长 | 0.6158",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "截至2026-06-04",
+        "1.1610",
+        "1.3353",
+        "15.01",
+        "1.3763",
+        "1.6178",
+        "17.55",
+        "1.0125"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:36:36": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:36:36",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 36,
+      "endLine": 36,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/7fcf48b0-f5b6-479c-af63-5dd890c51847.jpg (image/jpeg) | media://inbound/7fcf48b0-f5b6-479c-af63-5dd890c51847.jpg] [message_id: om_x100b6d4fc028a4b0b03de2af2d33966] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "7fcf48b0",
+        "f5b6",
+        "479c"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:37:37": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:37:37",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 37,
+      "endLine": 37,
+      "source": "memory",
+      "snippet": "Assistant: ✅ **2张图片入库完成** | 图片 | 格式 | 记录 | |------|------|------| | 7fcf48b0 | Portfolio（持仓） | basic_info 1 / nav 1 / **21条持仓** | | 867b24d0 | Trade（交易） | **5条交易**（已存在，更新） |",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "basic-info",
+        "图片",
+        "完成",
+        "格式",
+        "记录",
+        "7fcf48b0",
+        "portfolio",
+        "nav"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:38:38": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:38:38",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 38,
+      "endLine": 38,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/fbdfb2af-148e-458d-88e5-a402ec01bf47.jpg (image/jpeg) | media://inbound/fbdfb2af-148e-458d-88e5-a402ec01bf47.jpg] [message_id: om_x100b6d4fc02600b0b1fea6352acfe66] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "fbdfb2af",
+        "148e",
+        "458d"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:39:39": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:39:39",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 39,
+      "endLine": 39,
+      "source": "memory",
+      "snippet": "Assistant: ✅ 入库完成 - **格式**：Portfolio（持仓） - **记录**：basic_info 1 / nav 1 / **33条持仓**",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "basic-info",
+        "完成",
+        "格式",
+        "portfolio",
+        "记录",
+        "nav"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:40:40": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:40:40",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 40,
+      "endLine": 40,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/522fb832-e6a8-49dc-8c6f-9c9a4ad013cd.jpg (image/jpeg) | media://inbound/522fb832-e6a8-49dc-8c6f-9c9a4ad013cd.jpg] [message_id: om_x100b6d4fc03e8ca0b21cfef6fee7135] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "522fb832",
+        "e6a8",
+        "49dc"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:41:41": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:41:41",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 41,
+      "endLine": 41,
+      "source": "memory",
+      "snippet": "Assistant: ✅ 入库完成 — Portfolio，**17条持仓**",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "完成",
+        "portfolio"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:42:42": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:42:42",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 42,
+      "endLine": 42,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/87090ac2-2e2c-490e-ba15-b01776e58268.jpg (image/jpeg) | media://inbound/87090ac2-2e2c-490e-ba15-b01776e58268.jpg] [message_id: om_x100b6d4fc037ccb8b16cc2162a97103] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "87090ac2",
+        "2e2c",
+        "490e"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:43:43": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:43:43",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 43,
+      "endLine": 43,
+      "source": "memory",
+      "snippet": "Assistant: ✅ 入库完成 — Portfolio，**30条持仓**",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "完成",
+        "portfolio"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:44:44": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:44:44",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 44,
+      "endLine": 44,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/b443405d-f61b-4f54-a1b0-70d7f4297c13.jpg (image/jpeg) | media://inbound/b443405d-f61b-4f54-a1b0-70d7f4297c13.jpg] [message_id: om_x100b6d4fc1cc44a8b04d38e0acf564b] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "b443405d",
+        "f61b",
+        "4f54"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:45:45": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:45:45",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 45,
+      "endLine": 45,
+      "source": "memory",
+      "snippet": "Assistant: ✅ 入库完成 — Portfolio，**29条持仓**",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "完成",
+        "portfolio"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:46:46": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:46:46",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 46,
+      "endLine": 46,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/6352809a-9c18-4b37-bc4e-d1ee40aae7e6.jpg (image/jpeg) | media://inbound/6352809a-9c18-4b37-bc4e-d1ee40aae7e6.jpg] [message_id: om_x100b6d4fc1063ca8b20898f7f9dac44] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "6352809a",
+        "9c18",
+        "4b37"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:47:47": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:47:47",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 47,
+      "endLine": 47,
+      "source": "memory",
+      "snippet": "Assistant: ✅ 入库完成 — Portfolio，**29条持仓**",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "完成",
+        "portfolio"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:1:1": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:1:1",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 1,
+      "endLine": 1,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6dbf5993f8acc107a2d4e327e5d] 用户724532: 我看了早上8点的全球市场日报，第三章节 各市场复盘，为什么只有美股，A股和港股的 每天7:30的 daily stock analysis会发两封邮件，其中一封里面就有是a股 港股 美股的的复盘",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "看了",
+        "早上",
+        "全球",
+        "市场",
+        "日报",
+        "第三"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:2:2": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:2:2",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 2,
+      "endLine": 2,
+      "source": "memory",
+      "snippet": "Assistant: 找到问题了。`_generate_market_review()` 函数只有 A股 和 美股两个分支，**港股（H股）被漏掉了**。 来看一下完整代码确认：",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "generate-market-review",
+        "找到",
+        "问题",
+        "函数",
+        "只有",
+        "分支",
+        "漏掉",
+        "来看"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:3:3": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:3:3",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 3,
+      "endLine": 3,
+      "source": "memory",
+      "snippet": "Assistant: 确认了问题：`_generate_market_review()` 漏掉了港股分支。`get_hk_market_review()` 方法已存在，只是没被调用。修复一下：",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "generate-market-review",
+        "get-hk-market-review",
+        "确认",
+        "问题",
+        "漏掉",
+        "分支",
+        "方法",
+        "存在"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:4:4": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:4:4",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 4,
+      "endLine": 4,
+      "source": "memory",
+      "snippet": "Assistant: 修复完成。来跑一下生成测试确认没有报错：",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "修复",
+        "完成",
+        "一下",
+        "生成",
+        "测试",
+        "确认",
+        "没有"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:5:5": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:5:5",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 5,
+      "endLine": 5,
+      "source": "memory",
+      "snippet": "Assistant: **Bug 已修复。** **根因**：`report_generator.py` 的 `_generate_market_review()` 方法只调用了 `get_cn_market_review()` 和 `get_us_market_review()`，漏掉了 `get_hk_market_review()`，导致港股复盘从未生成。 **修复内容**：在 A股 和 美股之间插入港股分支： ```python # 之前（漏了港股） if cn_review: sections.append(make_card(\"🇨🇳\",",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "report-generator.py",
+        "generate-market-review",
+        "get-cn-market-review",
+        "get-us-market-review",
+        "get-hk-market-review",
+        "cn-review",
+        "sections.append",
+        "make-card"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:6:6": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:6:6",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 6,
+      "endLine": 6,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/a174979f-07e7-4147-b789-6bd73b734834.jpg (image/jpeg) | media://inbound/a174979f-07e7-4147-b789-6bd73b734834.jpg] [Image] User text: [Feishu ou_4ba9dccf7c86e42b89a1efef6f3a09ea Wed 2026-06-10 09:11 GMT+8] [message_id: om_x100b6dbfd3edb8bcc18",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "om-x100b6dbfd3edb8bcc18",
+        "media",
+        "attached",
+        "inbound",
+        "a174979f",
+        "07e7"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:7:7": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:7:7",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 7,
+      "endLine": 7,
+      "source": "memory",
+      "snippet": "User: elements like a status bar",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "elements",
+        "like",
+        "status",
+        "bar"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:8:8": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:8:8",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 8,
+      "endLine": 8,
+      "source": "memory",
+      "snippet": "Assistant: 识别完成。这是一张 **CCT-001** 产品的持仓快照（2026-06-08），共 31 只股票，总规模约 28 亿元。 现在通过 Image Pipeline 入库：",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "cct-001",
+        "识别",
+        "完成",
+        "一张",
+        "cct",
+        "产品",
+        "快照",
+        "股票"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:9:9": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:9:9",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 9,
+      "endLine": 9,
+      "source": "memory",
+      "snippet": "Assistant: ✅ **CCT-001 持仓已入库（2026-06-08）** | 项目 | 结果 | |------|------| | 格式识别 | 持仓（portfolio）✅ | | 解析行数 | 31 条 | | 产品代码 | SM012（CCT-001） | | 截止日期 | 2026-06-08 | | 最新净值 | 1.6685 | | 最新规模 | 27.98 亿 | | MongoDB | basic_info ✅, nav ✅, position ✅（31 条） | | 格式修正 | ST华通 → 世纪华通（1 条） | 数据",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "cct-001",
+        "1.6685",
+        "27.98",
+        "basic-info",
+        "cct",
+        "项目",
+        "结果",
+        "格式"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:10:10": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:10:10",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 10,
+      "endLine": 10,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/8547d332-349e-4925-8f68-72c87f140b0e.jpg (image/jpeg) | media://inbound/8547d332-349e-4925-8f68-72c87f140b0e.jpg] [Image] User text: [Feishu ou_4ba9dccf7c86e42b89a1efef6f3a09ea Wed 2026-06-10 09:14 GMT+8] [message_id: om_x100b6dbfd3eaf8a8c01",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "om-x100b6dbfd3eaf8a8c01",
+        "media",
+        "attached",
+        "inbound",
+        "8547d332",
+        "349e"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:11:11": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:11:11",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 11,
+      "endLine": 11,
+      "source": "memory",
+      "snippet": "Assistant: ✅ **SM004（ZO-002）持仓已入库（2026-06-08）** | 项目 | 结果 | |------|------| | 格式识别 | 持仓（portfolio）✅ | | 解析行数 | 39 条 | | 产品代码 | SM004（ZO-002） | | 截止日期 | 2026-06-08 | | 最新净值 | 0.7813 | | MongoDB | basic_info ✅, nav ✅, position ✅（39 条） | | 格式修正 | 2 条名称更正 | 数据已写入 MongoDB。",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "zo-002",
+        "0.7813",
+        "basic-info",
+        "sm004",
+        "项目",
+        "结果",
+        "格式",
+        "识别"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:12:12": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:12:12",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 12,
+      "endLine": 12,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/fb147b83-13bd-409c-808a-8306088f648c.jpg (image/jpeg) | media://inbound/fb147b83-13bd-409c-808a-8306088f648c.jpg] [Image] User text: [Feishu ou_4ba9dccf7c86e42b89a1efef6f3a09ea Wed 2026-06-10 09:17 GMT+8] [message_id: om_x100b6dbfd3e0b13cc23",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "om-x100b6dbfd3e0b13cc23",
+        "media",
+        "attached",
+        "inbound",
+        "fb147b83",
+        "13bd"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:84:84": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:84:84",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 84,
+      "endLine": 84,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6d5c237afca8c43b83880146b3b] 用户724532: 产品的中文名 你是怎么获取的 我记得有一个js cct等对应的映射吧",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "产品",
+        "中文",
+        "你是",
+        "怎么",
+        "获取",
+        "记得"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:85:85": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:85:85",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 85,
+      "endLine": 85,
+      "source": "memory",
+      "snippet": "Assistant: 你说得对，我刚才那5个中文名是**凭记忆写的，并没有查表**。让我找一下实际的产品名称映射配置：",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "说得",
+        "刚才",
+        "中文",
+        "记忆",
+        "写的",
+        "没有",
+        "查表",
+        "一下"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:86:86": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:86:86",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 86,
+      "endLine": 86,
+      "source": "memory",
+      "snippet": "Assistant: 找到了！实际映射关系是： | 前缀 | 含义 | |------|------| | JS | 景顺 | | ZO | 中欧 | | CCT | 常春藤 | | FD | 富达 | | RD | 日斗 | | QG | 泉果 | | XQ | 兴全 | | HTF | 汇添富 | | YFD | 易方达 | 所以正确的产品名应该是： - SM001 → **景顺-001**（非\"景顺灵活1号\"） - SM002 → **景顺-002** - SM003 → **中欧-001**（非\"常春藤优选3号\"） - SM004 → **中欧-",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "景顺-001",
+        "景顺-002",
+        "中欧-001",
+        "找到",
+        "实际",
+        "映射",
+        "关系",
+        "含义"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:87:87": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:87:87",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 87,
+      "endLine": 87,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6d5cc4c19094c42af067309416b] 用户724532: 嗯 需要",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "需要"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:88:88": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:88:88",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 88,
+      "endLine": 88,
+      "source": "memory",
+      "snippet": "Assistant: **SM 5产品 2026年收益率（截至2026-06-04）** | 产品 | 年初净值 | 最新净值 | YTD | 最新规模 | |------|---------|---------|-----|---------| | SM001 景顺-001 | 1.1610 | 1.3353 | **+15.01%** | 228.8万 | | SM002 景顺-002 | 1.3763 | 1.6178 | **+17.55%** | 124.0万 | | SM003 中欧-001 | 1.0125 | 1.1644 | **+15",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "截至2026-06-04",
+        "景顺-001",
+        "1.1610",
+        "1.3353",
+        "15.01",
+        "228.8万",
+        "景顺-002",
+        "1.3763"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:89:89": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:89:89",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 89,
+      "endLine": 89,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6d5cb754f50cc45aafbcd8b6e32] 用户724532: 图片数据入库",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "图片",
+        "数据"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:90:90": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:90:90",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 90,
+      "endLine": 90,
+      "source": "memory",
+      "snippet": "Assistant: 请发图片，我会自动走统一 Pipeline 识别格式并入库。日期默认用今天（2026-06-08），如果有误请告知。",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "图片",
+        "自动",
+        "统一",
+        "pipeline",
+        "识别",
+        "格式",
+        "并入",
+        "日期"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:91:91": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:91:91",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 91,
+      "endLine": 91,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/afdb94df-8465-4381-a062-57b23dbd9bf4.jpg (image/jpeg) | media://inbound/afdb94df-8465-4381-a062-57b23dbd9bf4.jpg] [message_id: om_x100b6d5cb4fe12d8c444939445f1e74] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "afdb94df",
+        "a062",
+        "57b23dbd9bf4"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:92:92": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:92:92",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 92,
+      "endLine": 92,
+      "source": "memory",
+      "snippet": "Assistant: 找到了，直接跑 Pipeline：",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "找到",
+        "直接",
+        "pipeline"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:93:93": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:93:93",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 93,
+      "endLine": 93,
+      "source": "memory",
+      "snippet": "Assistant: ✅ 图片识别入库完成（2026-06-08） **格式**: 持仓格式（31条持仓记录） **产品**: 1个产品 **入库结果**: - `portfolio_nav`: upsert 1（净值数据） - `portfolio_position`: upsert 31（持仓明细） - `portfolio_basic_info`: modified 1（产品信息更新） 文件名已保存至 `smart-money/2026-06-08/image/portfolio_20260608_174936.xlsx`",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "portfolio-nav",
+        "portfolio-position",
+        "portfolio-basic-info",
+        "图片",
+        "识别",
+        "完成",
+        "格式",
+        "记录"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:94:94": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:94:94",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 94,
+      "endLine": 94,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/91258c44-4c36-4590-87c5-b4a0cbe59560.jpg (image/jpeg) | media://inbound/91258c44-4c36-4590-87c5-b4a0cbe59560.jpg] [message_id: om_x100b6d5cb4f4c4a8c3c1e0af1b8fecb] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "91258c44",
+        "4c36",
+        "87c5"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-08.txt:95:95": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-08.txt:95:95",
+      "path": "memory/.dreams/session-corpus/2026-06-08.txt",
+      "startLine": 95,
+      "endLine": 95,
+      "source": "memory",
+      "snippet": "Assistant: ✅ 入库完成（2026-06-08） **格式**: 持仓格式（39条持仓记录） **入库结果**: - `portfolio_nav`: upsert 1 - `portfolio_position`: upsert 38, modified 1 - `portfolio_basic_info`: modified 1 文件名: `smart-money/2026-06-08/image/portfolio_20260608_175119.xlsx`",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "b2d79ea44bad"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "portfolio-nav",
+        "portfolio-position",
+        "portfolio-basic-info",
+        "完成",
+        "格式",
+        "记录",
+        "结果",
+        "upsert"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:48:48": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:48:48",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 48,
+      "endLine": 48,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/0cf9e999-7d1a-43aa-9787-6e246d47af65.jpg (image/jpeg) | media://inbound/0cf9e999-7d1a-43aa-9787-6e246d47af65.jpg] [message_id: om_x100b6d4fc11f04b0b32698f51b6d2d8] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "0cf9e999",
+        "7d1a",
+        "43aa"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:49:49": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:49:49",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 49,
+      "endLine": 49,
+      "source": "memory",
+      "snippet": "Assistant: ✅ 入库完成 — Portfolio，**30条持仓**",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "完成",
+        "portfolio"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:50:50": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:50:50",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 50,
+      "endLine": 50,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/1fed4a1d-ed2a-4729-83c9-fe2fded184a8.jpg (image/jpeg) | media://inbound/1fed4a1d-ed2a-4729-83c9-fe2fded184a8.jpg] [message_id: om_x100b6d4fc114b0a0b013e896ea391bf] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "1fed4a1d",
+        "ed2a",
+        "83c9"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:51:51": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:51:51",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 51,
+      "endLine": 51,
+      "source": "memory",
+      "snippet": "Assistant: ✅ 入库完成 — Portfolio，**17条持仓**",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "完成",
+        "portfolio"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:52:52": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:52:52",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 52,
+      "endLine": 52,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/8942bd63-ecd6-49ae-aea7-cf936724ffe4.jpg (image/jpeg) | media://inbound/8942bd63-ecd6-49ae-aea7-cf936724ffe4.jpg] [message_id: om_x100b6d4fc112cca4b1b19e10d1907df] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "8942bd63",
+        "ecd6",
+        "49ae"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:53:53": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:53:53",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 53,
+      "endLine": 53,
+      "source": "memory",
+      "snippet": "Assistant: ✅ 入库完成 — Portfolio，**33条持仓**",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "完成",
+        "portfolio"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:54:54": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:54:54",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 54,
+      "endLine": 54,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/66e975c2-6361-4055-9273-255a22bc8613.jpg (image/jpeg) | media://inbound/66e975c2-6361-4055-9273-255a22bc8613.jpg] [message_id: om_x100b6d4fc12514acb154a09970bf83f] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "66e975c2",
+        "255a22bc8613",
+        "jpg"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:55:55": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:55:55",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 55,
+      "endLine": 55,
+      "source": "memory",
+      "snippet": "Assistant: ✅ 入库完成 — Portfolio，**21条持仓**",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "完成",
+        "portfolio"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:56:56": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:56:56",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 56,
+      "endLine": 56,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/17232c3f-61e6-414b-900b-fe522f128008.jpg (image/jpeg) | media://inbound/17232c3f-61e6-414b-900b-fe522f128008.jpg] [message_id: om_x100b6d4fc13d4878b205bed43145488] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "17232c3f",
+        "61e6",
+        "414b"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:57:57": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:57:57",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 57,
+      "endLine": 57,
+      "source": "memory",
+      "snippet": "Assistant: ✅ 入库完成 — Trade（交易），**10条记录**",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "完成",
+        "trade",
+        "交易",
+        "记录"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:58:58": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:58:58",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 58,
+      "endLine": 58,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/b312223d-41f3-4987-9de4-645293c44e0f.jpg (image/jpeg) | media://inbound/b312223d-41f3-4987-9de4-645293c44e0f.jpg] [message_id: om_x100b6d4fde559ca4b26772316002eb1] 用户724532: <media:image>",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "media",
+        "attached",
+        "inbound",
+        "b312223d",
+        "41f3",
+        "9de4"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-09.txt:59:59": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-09.txt:59:59",
+      "path": "memory/.dreams/session-corpus/2026-06-09.txt",
+      "startLine": 59,
+      "endLine": 59,
+      "source": "memory",
+      "snippet": "Assistant: ✅ 入库完成 — Trade（交易），**11条记录**",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "25f210cf024c"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "完成",
+        "trade",
+        "交易",
+        "记录"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:13:13": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:13:13",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 13,
+      "endLine": 13,
+      "source": "memory",
+      "snippet": "Assistant: ✅ **SM001（ZO-001）持仓已入库（2026-06-08）** | 项目 | 结果 | |------|------| | 格式识别 | 持仓（portfolio）✅ | | 解析行数 | 19 条 | | 产品代码 | SM001（ZO-001） | | 截止日期 | 2026-06-08 | | 最新净值 | 1.1303 | | MongoDB | basic_info ✅, nav ✅, position ✅（19 条） | | 格式修正 | XD中控技 → 中控技术（1 条） | --- 今日三张持仓图均已入库：",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "zo-001",
+        "1.1303",
+        "basic-info",
+        "sm001",
+        "项目",
+        "结果",
+        "格式",
+        "识别"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:14:14": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:14:14",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 14,
+      "endLine": 14,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/ba4a42d5-7e7e-481f-a4cc-59fae0c03226.jpg (image/jpeg) | media://inbound/ba4a42d5-7e7e-481f-a4cc-59fae0c03226.jpg] [Image] User text: [Feishu ou_4ba9dccf7c86e42b89a1efef6f3a09ea Wed 2026-06-10 09:18 GMT+8] [message_id: om_x100b6dbfd3feb0a4c43",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "om-x100b6dbfd3feb0a4c43",
+        "media",
+        "attached",
+        "inbound",
+        "ba4a42d5",
+        "7e7e"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:15:15": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:15:15",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 15,
+      "endLine": 15,
+      "source": "memory",
+      "snippet": "User: other major hol",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "other",
+        "major",
+        "hol"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:16:16": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:16:16",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 16,
+      "endLine": 16,
+      "source": "memory",
+      "snippet": "Assistant: ✅ **SM002（JS-002）持仓已入库（2026-06-08）** | 项目 | 结果 | |------|------| | 格式识别 | 持仓（portfolio）✅ | | 解析行数 | 37 条 | | 产品代码 | SM002（JS-002） | | 截止日期 | 2026-06-08 | | 最新净值 | 1.5128 | | 最新规模 | 1.19 亿 | | MongoDB | basic_info ✅, nav ✅, position ✅（37 条） | | 格式修正 | 3 条名称更正（兴福电子/东方铝业/",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "js-002",
+        "1.5128",
+        "1.19",
+        "basic-info",
+        "兴福电子/东方铝业",
+        "sm002",
+        "项目",
+        "结果"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:17:17": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:17:17",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 17,
+      "endLine": 17,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/73c23634-8efb-4c68-81c7-d1d9e557750f.jpg (image/jpeg) | media://inbound/73c23634-8efb-4c68-81c7-d1d9e557750f.jpg] [Image] User text: [Feishu ou_4ba9dccf7c86e42b89a1efef6f3a09ea Wed 2026-06-10 09:20 GMT+8] [message_id: om_x100b6dbfd3f4cca4c34",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "om-x100b6dbfd3f4cca4c34",
+        "media",
+        "attached",
+        "inbound",
+        "73c23634",
+        "8efb"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:18:18": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:18:18",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 18,
+      "endLine": 18,
+      "source": "memory",
+      "snippet": "Assistant: ✅ **SM001（JS-001）持仓已入库（2026-06-08）** | 项目 | 结果 | |------|------| | 格式识别 | 持仓（portfolio）✅ | | 解析行数 | 35 条 | | 产品代码 | SM001（JS-001） | | 截止日期 | 2026-06-08 | | 最新净值 | 1.2678 | | MongoDB | basic_info ✅, nav ✅, position ✅（35 条） | --- 今日五张持仓图全部入库完毕： | 产品 | 代码 | 持仓数 | 净值 | |--",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "js-001",
+        "1.2678",
+        "basic-info",
+        "sm001",
+        "项目",
+        "结果",
+        "格式",
+        "识别"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:19:19": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:19:19",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 19,
+      "endLine": 19,
+      "source": "memory",
+      "snippet": "User: [media attached: media://inbound/551a4d30-7b0d-45da-9b3a-a4bb96fe5c88.jpg (image/jpeg) | media://inbound/551a4d30-7b0d-45da-9b3a-a4bb96fe5c88.jpg] [Image] User text: [Feishu ou_4ba9dccf7c86e42b89a1efef6f3a09ea Wed 2026-06-10 09:21 GMT+8] [message_id: om_x100b6dbfd3f2dca8c24",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "image/jpeg",
+        "message-id",
+        "om-x100b6dbfd3f2dca8c24",
+        "media",
+        "attached",
+        "inbound",
+        "551a4d30",
+        "7b0d"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:20:20": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:20:20",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 20,
+      "endLine": 20,
+      "source": "memory",
+      "snippet": "User: strategy report.",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "strategy",
+        "report"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:21:21": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:21:21",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 21,
+      "endLine": 21,
+      "source": "memory",
+      "snippet": "Assistant: ✅ **SM004 交易记录已入库（2026-06-08）** | 项目 | 结果 | |------|------| | 格式识别 | 交易（trade）✅ | | 解析行数 | 10 条 | | 产品代码 | SM004 | | 截止日期 | 2026-06-08 | | MongoDB | portfolio_trade ✅（10 条） | 包含工商银行、农业银行等 10 只个股的买卖方向及变化金额数据。",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "portfolio-trade",
+        "sm004",
+        "交易",
+        "记录",
+        "项目",
+        "结果",
+        "格式",
+        "识别"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:22:22": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:22:22",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 22,
+      "endLine": 22,
+      "source": "memory",
+      "snippet": "User: [message_id: om_x100b6dbfa7b540a0c34ccc23baf7714] 用户724532: 请重新触发下smart money 数据发送telegram的任务",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "message-id",
+        "用户",
+        "重新",
+        "触发",
+        "smart",
+        "money",
+        "数据",
+        "发送"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:23:23": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:23:23",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 23,
+      "endLine": 23,
+      "source": "memory",
+      "snippet": "Assistant: 找到了，是 `daily-smartmoney-analysis` 每天 20:30 的任务。现在手动触发：",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "daily-smartmoney-analysis",
+        "找到",
+        "smartmoney",
+        "analysis",
+        "每天",
+        "任务",
+        "现在",
+        "触发"
+      ]
+    },
+    "memory:memory/.dreams/session-corpus/2026-06-10.txt:24:24": {
+      "key": "memory:memory/.dreams/session-corpus/2026-06-10.txt:24:24",
+      "path": "memory/.dreams/session-corpus/2026-06-10.txt",
+      "startLine": 24,
+      "endLine": 24,
+      "source": "memory",
+      "snippet": "Assistant: ✅ **Smart Money 任务已重新触发并发送成功** - 数据库最新日期：2026-06-08 - 持仓记录：27 条（今天入库的 5 个产品） - 交易记录：10 条 - Excel 已发送至 Telegram：`📊 每日报告 2026-06-08`",
+      "recallCount": 0,
+      "dailyCount": 1,
+      "groundedCount": 0,
+      "totalScore": 0.58,
+      "maxScore": 0.58,
+      "firstRecalledAt": "2026-06-10T19:00:05.128Z",
+      "lastRecalledAt": "2026-06-10T19:00:05.128Z",
+      "queryHashes": [
+        "660dc72d44f8"
+      ],
+      "recallDays": [
+        "2026-06-11",
+        "2026-06-10"
+      ],
+      "conceptTags": [
+        "smart",
+        "money",
+        "任务",
+        "重新",
+        "触发",
+        "发送",
+        "成功",
+        "数据"
       ]
     }
   }

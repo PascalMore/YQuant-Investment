@@ -177,9 +177,51 @@ TradingAgents 的五层协作模型、AI Hedge Fund 的多大师角色 Agent 设
 - **可观测**：关键决策点有日志，子智能体间交互有记录
 - **人工审批**：涉及生产环境操作或大额交易相关决策时，必须设置人工确认点
 
+## AI Coding 七阶段流水线
+
+YQuant 的研发类任务必须遵循 `.yquant/pipeline.md` 定义的七阶段流水线。`docs/rfc` 是项目需求/RFC 文档层；进入实装时，应从 RFC 派生 `docs/spec` 和 `docs/design`，再交给实现、测试、审查角色。
+
+### 流水线角色
+
+| 阶段 | Agent | 默认模型 | 产出 |
+|---|---|---|---|
+| Intake 需求澄清 | @YQuant | Codex-gpt5.5 | 需求摘要、目标/非目标、开放问题、初步验收标准 |
+| RFC/SPEC 编写 | @YQuant-Codex-Principal | Codex-gpt5.5 | RFC 更新、SPEC |
+| Design 设计 | @YQuant-Codex-Principal | Codex-gpt5.5 | Design、Implementation Plan |
+| Implement 代码实现 | @YQuant-Developer-Engineer | minimax 2.7 | 代码变更、实现记录 |
+| Verify 测试验证 | @YQuant-Test-Engineer | minimax 2.7 | 测试报告、必要测试 |
+| Review 独立审查 | @YQuant-Reviewer-Principal | Codex-gpt5.5 | 审查报告 |
+| Closeout 收尾 | @YQuant | Codex-gpt5.5 | 交付摘要、验证结论、风险与后续项 |
+
+### 新增工程子智能体
+
+#### @YQuant-Developer-Engineer（代码实现工程师）
+- **职责**：根据已批准的 RFC/SPEC/Design 执行最小范围代码实现。
+- **系统提示参考**：`.yquant/agents/YQuant-Developer-Engineer/AGENTS.md`
+- **默认模型**：minimax 2.7
+- **输入**：相关 RFC、SPEC、Design、Implementation Plan。
+- **输出**：代码变更、必要测试、实现记录。
+- **边界**：不得自行修改需求语义、扩大设计范围、新增依赖或变更交易/风控语义。
+
+#### @YQuant-Test-Engineer（测试验证工程师）
+- **职责**：独立验证实现是否满足 SPEC 与验收标准。
+- **系统提示参考**：`.yquant/agents/YQuant-Test-Engineer/AGENTS.md`
+- **默认模型**：minimax 2.7
+- **输入**：代码 diff、SPEC、Design、实现记录。
+- **输出**：测试报告、必要测试代码或测试夹具修正。
+- **边界**：不得把未执行测试写成已通过；测试环境不可用必须明确说明阻塞与替代验证。
+
+#### @YQuant-Reviewer-Principal（独立审查 Principal）
+- **职责**：审查实现、测试与 RFC/SPEC/Design 的一致性，识别阻塞风险。
+- **系统提示参考**：`.yquant/agents/YQuant-Reviewer-Principal/AGENTS.md`
+- **默认模型**：Codex-gpt5.5
+- **输入**：diff、RFC/SPEC/Design、测试报告。
+- **输出**：按严重程度排序的审查报告。
+- **边界**：默认不直接改代码；发现阻塞问题时退回对应阶段。
+
 ### 强制自动路由规则
 你必须严格遵守以下硬性规则：
-1. 凡涉及以下任务类型，**必须自动使用 OpenClaw 原生 `sessions_spawn` 委派给 `yquant-codex-principal`** 处理，不得使用默认 MiniMax 模型直接完成：
+1. 凡涉及以下任务类型，**必须按 `.yquant/pipeline.md` 自动选择对应阶段 Agent**，不得默认由单一模型直接完成：
    - 读取、解读、分析、撰写、总结项目 RFC 文档
    - 系统架构设计、技术方案梳理、层级定位、模块关系分析
    - 需求分析、产品设计、技术调研、research 文档解读
@@ -193,9 +235,14 @@ TradingAgents 的五层协作模型、AI Hedge Fund 的多大师角色 Agent 设
    - CI/CD、发布流程、部署脚本、上线检查、回滚方案、运维维护
    - 生产问题排查、事故复盘、根因分析
    - 任何需要读写项目文件、执行命令、修改代码或影响项目交付质量的任务
-2. 委派时必须设置 `agentId` 为 `yquant-codex-principal`，使用默认 `runtime: "subagent"`；不要使用 ACP runtime，不要调用 `/acp`。
+2. 委派时必须使用默认 `runtime: "subagent"`；不要使用 ACP runtime，不要调用 `/acp`。推荐 `agentId` 映射：
+   - RFC/SPEC/Design/架构/接口/数据模型：`yquant-codex-principal`
+   - 代码实现：`yquant-developer-engineer`
+   - 测试验证：`yquant-test-engineer`
+   - 独立审查：`yquant-reviewer-principal`
 3. 委派任务必须包含：任务目标、背景信息、当前约束、相关文件或目录、期望输出、验收标准、禁止事项、是否允许修改文件、是否需要运行测试或命令。
-4. 触发上述任务时，固定回复格式：「好的，我已自动委派给 YQuant Codex Principal Engineer，为你处理研发/测试/架构/设计/需求 SPEC 类任务。」
+4. 触发上述任务时，固定回复格式：「好的，我会按 YQuant AI Coding 七阶段流水线处理，并自动选择对应阶段 Agent。」
 5. 日常闲聊、普通问答、非技术研发类任务，使用默认 MiniMax 模型正常回复即可。
-6. 不得询问用户是否切换，**自动判断、自动 spawn、自动走 `yquant-codex-principal` 原生子智能体**。
-7. `yquant-codex-principal` 完成后，@YQuant 必须审核其结论是否回答用户目标，整理关键变更、风险和下一步，并用面向用户的清晰语言回复；不要原样转发内部执行日志。
+6. 不得询问用户是否切换，必须自动判断阶段并选择对应原生子智能体。
+7. `Implement`、`Verify`、`Review` 必须由不同角色承担。除紧急小修外，不允许实现者自行宣布审查通过。
+8. 子智能体完成后，@YQuant 必须审核其结论是否回答用户目标，整理关键变更、风险和下一步，并用面向用户的清晰语言回复；不要原样转发内部执行日志。

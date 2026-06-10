@@ -1292,6 +1292,7 @@ class ReportGenerator:
         """生成各市场复盘（样式B · 简约卡片）"""
         sections = []
         cn_review = self.adapter.get_cn_market_review()
+        hk_review = self.adapter.get_hk_market_review()
         us_review = self.adapter.get_us_market_review()
 
         def make_card(emoji, title, summary, body_text, css_class):
@@ -1302,6 +1303,11 @@ class ReportGenerator:
             summary = self._get_analysis("A股") or ""
             body = _strip_first_heading(cn_review)
             sections.append(make_card("🇨🇳", "A股复盘", summary, body, "card-cn"))
+
+        if hk_review:
+            summary = self._get_analysis("H股") or ""
+            body = _strip_first_heading(hk_review)
+            sections.append(make_card("🇭🇰", "港股复盘", summary, body, "card-hk"))
 
         if us_review:
             summary = self._get_analysis("美股") or ""

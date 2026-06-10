@@ -87,3 +87,8 @@ _Last updated: 2026-04-24_
 
 <!-- openclaw-memory-promotion:memory:memory/2026-06-01.md:49:49 -->
 - `_zone_delta_action` 收到的 `previous["pool_zone"]` 是空字符串 `""` 而非 `None`，导致 `previous_zone not in ZONE_RANK` 分支返回 `"update"` 而非 `None`，`if action is None` 的备用逻辑永远不触发。 [score=0.897 recalls=0 avg=0.620 source=memory/2026-06-01.md:49-49]
+
+## Promoted From Short-Term Memory (2026-06-11)
+
+<!-- openclaw-memory-promotion:memory:memory/2026-05-03.md:1:30 -->
+- # 2026-05-03 Daily Memory ## Smart Money Portfolio Pipeline 上线 ### 目录结构 ``` data/source/smart-money/{日期}/ ├── image/ # 图片截图（OCR处理） └── message/ # 文本/CSV数据 ``` ### 核心文件 - `skills/data/data-pipeline/scripts/smart_money_watcher.py` — 自动监控新文件并触发 pipeline - `start_smart_money_watcher.sh` — 启动脚本（start/stop/status） ### Pipeline 流程 - **Image**: OCR (PaddleOCR) → Excel → Normalize → Validate → MongoDB - **Message**: Parse → Excel → Normalize → Validate → MongoDB ### 今日数据（2026-05-03） - 收到 4 张持仓截图（21:30 ~ 21:42） - 处理结果：47 → 46 → 46 → 46 条记录 - 所有数据已入库 MongoDB（tradingagents 数据库） - 目录已创建：`data/source/smart-money/2026-05-03/image/` ### 待完成 - [ ] 将 smart_money_watcher 注册为 systemd 服务（开机自启） - [ ] 持仓对比分析（三张图差异） - [ ] 确认 message 目录的文本 pipeline 是否正常工作 [score=0.976 recalls=4 avg=1.000 source=memory/2026-05-03.md:1-30]
