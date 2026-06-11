@@ -177,72 +177,33 @@ TradingAgents 的五层协作模型、AI Hedge Fund 的多大师角色 Agent 设
 - **可观测**：关键决策点有日志，子智能体间交互有记录
 - **人工审批**：涉及生产环境操作或大额交易相关决策时，必须设置人工确认点
 
-## AI Coding 七阶段流水线
+## AI Coding 流水线启用规则
 
-YQuant 的研发类任务必须遵循 `.yquant/pipeline.md` 定义的七阶段流水线。`docs/rfc` 是项目需求/RFC 文档层；进入实装时，应从 RFC 派生 `docs/spec` 和 `docs/design`，再交给实现、测试、审查角色。
+YQuant 的研发类任务优先检查 `yquant-ai-coding-pipeline` skill（`skills/infra/ai-coding-pipeline/SKILL.md`）。根 `AGENTS.md` 只保留启用、路由和安全边界；触发分级、阶段门禁、文档分层和交接格式由该 skill 维护。
 
-### 流水线角色
+### 触发策略
 
-| 阶段 | Agent | 默认模型 | 产出 |
-|---|---|---|---|
-| Intake 需求澄清 | @YQuant | Codex-gpt5.5 | 需求摘要、目标/非目标、开放问题、初步验收标准 |
-| RFC/SPEC 编写 | @YQuant-Codex-Principal | Codex-gpt5.5 | RFC 更新、SPEC |
-| Design 设计 | @YQuant-Codex-Principal | Codex-gpt5.5 | Design、Implementation Plan |
-| Implement 代码实现 | @YQuant-Developer-Engineer | minimax 2.7 | 代码变更、实现记录 |
-| Verify 测试验证 | @YQuant-Test-Engineer | minimax 2.7 | 测试报告、必要测试 |
-| Review 独立审查 | @YQuant-Reviewer-Principal | Codex-gpt5.5 | 审查报告 |
-| Closeout 收尾 | @YQuant | Codex-gpt5.5 | 交付摘要、验证结论、风险与后续项 |
+1. 用户显式要求“走 AI Coding Pipeline”“按流水线执行”“先 RFC/SPEC/Design 再实现”“需要独立测试和审查”时，直接启用完整流水线。
+2. 用户没有显式要求，但任务涉及新增核心功能、现有功能的非平凡改进/优化/重构/升级、架构或数据模型变化、跨模块修改、投资研究/报告/交易/风控核心逻辑、外部 API、生产脚本或自动化执行时，先确认是否走完整流水线。
+3. 文案、注释、README、小问题修复、单文件低风险 bug fix、格式化、路径修正、模板补充，以及不涉及 RFC/SPEC/Design 变更的优化，默认走轻量流程。
+4. 日常闲聊、普通问答、只读查询、非研发类任务不触发该 skill。
 
-### 新增工程子智能体
+### 阶段边界
 
-#### @YQuant-Developer-Engineer（代码实现工程师）
-- **职责**：根据已批准的 RFC/SPEC/Design 执行最小范围代码实现。
-- **系统提示参考**：`.yquant/agents/YQuant-Developer-Engineer/AGENTS.md`
-- **默认模型**：minimax 2.7
-- **输入**：相关 RFC、SPEC、Design、Implementation Plan。
-- **输出**：代码变更、必要测试、实现记录。
-- **边界**：不得自行修改需求语义、扩大设计范围、新增依赖或变更交易/风控语义。
+- 完整流程：`YQuant Intake -> YQuant-Codex-Principal RFC/SPEC -> YQuant-Codex-Principal Design -> YQuant-Developer-Engineer Implement -> YQuant-Test-Engineer Verify -> YQuant-Reviewer-Principal Review -> YQuant Closeout`
+- 轻量流程：`YQuant Intake -> YQuant-Developer-Engineer Implement -> YQuant-Test-Engineer Verify -> YQuant Closeout`
+- `Implement`、`Verify`、`Review` 必须由不同角色承担。除非用户明确跳过，否则完整流程不得跳过 Verify 和 Review。
+- 轻量流程仍必须保留最小 Verify，不能把未验证的实现直接 Closeout。
 
-#### @YQuant-Test-Engineer（测试验证工程师）
-- **职责**：独立验证实现是否满足 SPEC 与验收标准。
-- **系统提示参考**：`.yquant/agents/YQuant-Test-Engineer/AGENTS.md`
-- **默认模型**：minimax 2.7
-- **输入**：代码 diff、SPEC、Design、实现记录。
-- **输出**：测试报告、必要测试代码或测试夹具修正。
-- **边界**：不得把未执行测试写成已通过；测试环境不可用必须明确说明阻塞与替代验证。
+### 子 Agent 路由
 
-#### @YQuant-Reviewer-Principal（独立审查 Principal）
-- **职责**：审查实现、测试与 RFC/SPEC/Design 的一致性，识别阻塞风险。
-- **系统提示参考**：`.yquant/agents/YQuant-Reviewer-Principal/AGENTS.md`
-- **默认模型**：Codex-gpt5.5
-- **输入**：diff、RFC/SPEC/Design、测试报告。
-- **输出**：按严重程度排序的审查报告。
-- **边界**：默认不直接改代码；发现阻塞问题时退回对应阶段。
+委派时使用默认 `runtime: "subagent"`；不要使用 ACP runtime，不要调用 `/acp`。推荐 `agentId` 映射：
 
-### 强制自动路由规则
-你必须严格遵守以下硬性规则：
-1. 凡涉及以下任务类型，**必须按 `.yquant/pipeline.md` 自动选择对应阶段 Agent**，不得默认由单一模型直接完成：
-   - 读取、解读、分析、撰写、总结项目 RFC 文档
-   - 系统架构设计、技术方案梳理、层级定位、模块关系分析
-   - 需求分析、产品设计、技术调研、research 文档解读
-   - 代码开发、接口设计、数据库设计、测试用例设计
-   - 项目架构梳理、子系统定位、与 YQClaw/OpenClaw 整体架构关联分析
-   - 系统规划和长期技术路线
-   - 需求拆解、验收标准定义、SPEC/RFC/ADR 编写与评审
-   - 单元测试、集成测试、端到端测试、测试失败排查和测试策略设计
-   - 性能分析、性能优化、容量评估
-   - 安全、可靠性、可维护性评审
-   - CI/CD、发布流程、部署脚本、上线检查、回滚方案、运维维护
-   - 生产问题排查、事故复盘、根因分析
-   - 任何需要读写项目文件、执行命令、修改代码或影响项目交付质量的任务
-2. 委派时必须使用默认 `runtime: "subagent"`；不要使用 ACP runtime，不要调用 `/acp`。推荐 `agentId` 映射：
-   - RFC/SPEC/Design/架构/接口/数据模型：`yquant-codex-principal`
-   - 代码实现：`yquant-developer-engineer`
-   - 测试验证：`yquant-test-engineer`
-   - 独立审查：`yquant-reviewer-principal`
-3. 委派任务必须包含：任务目标、背景信息、当前约束、相关文件或目录、期望输出、验收标准、禁止事项、是否允许修改文件、是否需要运行测试或命令。
-4. 触发上述任务时，固定回复格式：「好的，我会按 YQuant AI Coding 七阶段流水线处理，并自动选择对应阶段 Agent。」
-5. 日常闲聊、普通问答、非技术研发类任务，使用默认 MiniMax 模型正常回复即可。
-6. 不得询问用户是否切换，必须自动判断阶段并选择对应原生子智能体。
-7. `Implement`、`Verify`、`Review` 必须由不同角色承担。除紧急小修外，不允许实现者自行宣布审查通过。
-8. 子智能体完成后，@YQuant 必须审核其结论是否回答用户目标，整理关键变更、风险和下一步，并用面向用户的清晰语言回复；不要原样转发内部执行日志。
+- RFC/SPEC/Design/架构/接口/数据模型：`yquant-codex-principal`
+- 代码实现：`yquant-developer-engineer`
+- 测试验证：`yquant-test-engineer`
+- 独立审查：`yquant-reviewer-principal`
+
+委派任务必须包含：任务目标、背景信息、当前约束、相关文件或目录、期望输出、验收标准、禁止事项、是否允许修改文件、是否需要运行测试或命令。
+
+子智能体完成后，@YQuant 必须审核其结论是否回答用户目标，整理关键变更、验证结果、风险和下一步，并用面向用户的清晰语言回复；不要原样转发内部执行日志。

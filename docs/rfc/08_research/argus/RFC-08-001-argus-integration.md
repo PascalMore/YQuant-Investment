@@ -442,7 +442,6 @@ Argus 处理完成后，通过 `ArgusSignalExporter` 输出信号到文件或直
 - RFC-2026-071_ARGUS/03_SCHEMA.md（13 表 DDL）
 - TradingAgents-CN mongo-init.js（MongoDB Schema）
 - YQClaw 八大标准化体系（RFC-00-001 第5章）
-- docs/rfc/TEMPLATE_DIFF_REPORT.md（模板差异报告）
 
 ## 附录 A：Zone Rule 统一配置参考
 

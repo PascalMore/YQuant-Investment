@@ -311,6 +311,7 @@ RFC 文件统一保存在 `docs/rfc/` 下，按模块分目录管理：
 
 ```
 docs/rfc/
+  RFC-00-000-rfc-template.md
   00_project_overview/
     RFC-00-001-yqclaw-investment-global-architecture.md
     RFC-00-000-rfc-template.md
@@ -416,4 +417,3 @@ YQClaw Investment 采用 **RFC 先行，AI 实装跟进** 的强约束：
 ## 参考资料
 - RFC-00-000-rfc-template.md — RFC 标准模板
 - RFC-08-001-argus-integration.md — Argus 子项目 YQClaw 体系桥接文档
-- docs/rfc/TEMPLATE_DIFF_REPORT.md — 各模块 RFC 模板差异报告

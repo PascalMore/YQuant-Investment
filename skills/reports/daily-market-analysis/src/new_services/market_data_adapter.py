@@ -334,8 +334,18 @@ class MarketDataAdapter:
         """
         sections = {}
         
-        # 方式1: 以下为美股大盘复盘（market_review 格式）
-        if "以下为美股大盘复盘" in content:
+        # 方式0: 最新 market_review 格式（> 以下为下一市场大盘复盘 分隔 A股/港股/美股）
+        if "以下为下一市场大盘复盘" in content:
+            parts = content.split("> 以下为下一市场大盘复盘")
+            # parts[0] = A股内容（从 # A股大盘复盘 开始）
+            # parts[1] = 港股+美股（# 港股大盘复盘 ... > 以下为下一市场大盘复盘 # 美股大盘复盘 ...）
+            # parts[2] = 美股内容（如果有更多）
+            if len(parts) >= 1 and "# A股大盘复盘" in parts[0]:
+                sections['cn'] = parts[0].split("# A股大盘复盘")[1].strip()
+            if len(parts) >= 2 and "# 美股大盘复盘" in parts[-1]:
+                sections['us'] = parts[-1].split("# 美股大盘复盘")[1].strip()
+        # 方式1: 以下为美股大盘复盘（market_review 旧格式）
+        elif "以下为美股大盘复盘" in content:
             parts = content.split("以下为美股大盘复盘")
             cn_part = parts[0]
             us_part = parts[1] if len(parts) > 1 else ""

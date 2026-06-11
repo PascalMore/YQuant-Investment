@@ -57,8 +57,10 @@ class AllWeatherMarketReport:
     def _fetch_reviews(self):
         self._cn_review = self._get_cn_review()
         self._us_review = self._get_us_review()
-        self._hk_review = self.data_adapter.get_hk_market_review()
-        self._crypto_review = self.data_adapter.get_crypto_market_review()
+        hk_raw = self.data_adapter.get_hk_market_review()
+        self._hk_review = self._strip_ai_tags(hk_raw) if hk_raw else None
+        crypto_raw = self.data_adapter.get_crypto_market_review()
+        self._crypto_review = self._strip_ai_tags(crypto_raw) if crypto_raw else None
     
     def _generate_header(self) -> str:
         weekday = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][self.report_date.weekday()]
@@ -448,10 +450,21 @@ class AllWeatherMarketReport:
         
         return "\n".join(sections)
     
+    def _strip_ai_tags(self, text: str) -> str:
+        """去掉文本中的 AI 思考标签和残余内容"""
+        import re
+        # 去掉 <think> ...（有闭合）和 <think> ...（无闭合）
+        text = re.sub(r'<th[\s\S]*?>', '', text)   # 去掉 <th...> 到对应 </th>（非贪婪）
+        text = re.sub(r'<th[\s\S]*', '', text)    # 去掉 <th...> 到字符串末尾（无闭合）
+        # 去掉 Markdown 图片/链接格式残留（AI 思考中可能插入的链接）
+        text = re.sub(r'!?\[([^\]]*)\]\([^)]*\)', r'\1', text)
+        return text.strip()
+
     def _get_cn_review(self) -> Optional[str]:
         try:
             review = self.data_adapter.get_cn_market_review()
             if review:
+                review = self._strip_ai_tags(review)
                 lines = review.split('\n')
                 result_lines = []
                 skip_title = True
@@ -470,6 +483,7 @@ class AllWeatherMarketReport:
         try:
             review = self.data_adapter.get_us_market_review()
             if review:
+                review = self._strip_ai_tags(review)
                 lines = review.split('\n')
                 result_lines = []
                 skip_title = True
