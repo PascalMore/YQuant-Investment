@@ -72,3 +72,4 @@ memory/.dreams/
 
 # Auto-push marker (transient)
 .last_sent
+data/

@@ -1,4 +1,15 @@
 {
   "version": 1,
-  "files": {}
+  "files": {
+    "memory/2026-06-12-1852.md": {
+      "mtimeMs": 1781261537841,
+      "size": 7194,
+      "lastDreamingDayIngested": "2026-06-13"
+    },
+    "memory/2026-06-12-1903.md": {
+      "mtimeMs": 1781262212268,
+      "size": 2771,
+      "lastDreamingDayIngested": "2026-06-13"
+    }
+  }
 }

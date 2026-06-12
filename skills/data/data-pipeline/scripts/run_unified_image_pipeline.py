@@ -342,10 +342,14 @@ async def run_pipeline(
 
 def main():
     parser = argparse.ArgumentParser(description="Unified Image Pipeline (Auto-detect portfolio vs trade)")
-    parser.add_argument("--image", required=True, help="Path to image file")
+    parser.add_argument("--image", help="Path to image file")
     parser.add_argument("--date", default=datetime.now().strftime("%Y-%m-%d"), help="Data date (YYYY-MM-DD), i.e. the date in the spreadsheet. Used for OCR and MongoDB records.")
     parser.add_argument("--dry-run", action="store_true", help="Skip MongoDB write")
+    parser.add_argument("--version", action="version", version="0.1.0")
     args = parser.parse_args()
+
+    if not args.image:
+        parser.error("the following arguments are required: --image")
 
 
     # Folder date is always system date (when the image was received/uploaded)

@@ -342,6 +342,16 @@ class MarketDataAdapter:
             # parts[2] = 美股内容（如果有更多）
             if len(parts) >= 1 and "# A股大盘复盘" in parts[0]:
                 sections['cn'] = parts[0].split("# A股大盘复盘")[1].strip()
+            # 解析港股：从 parts[1] 中提取 # 港股大盘复盘 ... > 以下为下一市场大盘复盘
+            if len(parts) >= 2:
+                hk_part = parts[1]  # 包含 # 港股大盘复盘 ...
+                if "# 港股大盘复盘" in hk_part:
+                    hk_content = hk_part.split("# 港股大盘复盘")[1]
+                    # 去掉 "> 以下为下一市场大盘复盘" 及之后的内容
+                    marker = "> 以下为下一市场大盘复盘"
+                    if marker in hk_content:
+                        hk_content = hk_content.split(marker)[0]
+                    sections['hk'] = hk_content.strip()
             if len(parts) >= 2 and "# 美股大盘复盘" in parts[-1]:
                 sections['us'] = parts[-1].split("# 美股大盘复盘")[1].strip()
         # 方式1: 以下为美股大盘复盘（market_review 旧格式）
@@ -1167,9 +1177,21 @@ class MarketDataAdapter:
     # 预留接口
     # ========================================
     
-    def get_hk_market_review(self) -> str:
-        """港股复盘 - 待实现"""
-        return "### 港股市场概况\n\n港股复盘待接入。"
+    def get_hk_market_review(self) -> Optional[str]:
+        """获取港股大盘复盘（从 reports 目录读取）"""
+        report_path = self._get_latest_report_path()
+        if not report_path:
+            return None
+
+        try:
+            with open(report_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            sections = self._parse_report_sections(content)
+            return sections.get('hk')
+        except Exception as e:
+            print(f"[Adapter] 读取港股复盘失败：{e}")
+            return None
     
     def get_commodity_market_review(self) -> str:
         """生成大宗商品市场复盘（黄金、原油）"""

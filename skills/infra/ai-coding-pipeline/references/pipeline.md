@@ -4,20 +4,20 @@
 
 | 阶段 | Agent | 默认模型 | 产出 | 是否允许改代码 |
 |---|---|---|---|---|
-| 1 Intake | YQuant | Codex-gpt5.5 | `00-intake.md` 或简短需求澄清摘要 | 否 |
-| 2 RFC/SPEC | YQuant-Codex-Principal | Codex-gpt5.5 | RFC 更新、`docs/spec/*.md` 或 `02-spec.md` | 通常否 |
-| 3 Design | YQuant-Codex-Principal | Codex-gpt5.5 | `docs/design/*.md`、`03-design.md`、`04-implementation-plan.md` | 否 |
-| 4 Implement | YQuant-Developer-Engineer | minimax 2.7 | 代码变更、实现记录 | 是 |
-| 5 Verify | YQuant-Test-Engineer | minimax 2.7 | 测试、`05-test-report.md` | 仅测试/夹具 |
-| 6 Review | YQuant-Reviewer-Principal | Codex-gpt5.5 | `06-review.md` 或审查意见 | 否 |
-| 7 Closeout | YQuant | Codex-gpt5.5 | `07-closeout.md`、面向用户的交付摘要 | 否 |
+| 1 Intake | YQuant | `zai/glm-5.1`，fallback `minimax/MiniMax-M2.7` | `00-intake.md` 或简短需求澄清摘要 | 否 |
+| 2 RFC/SPEC | YQuant-Codex-Principal | `codex/gpt-5.5`，fallback `zai/glm-5.1` | RFC 更新、`docs/spec/*.md` 或 `02-spec.md` | 通常否 |
+| 3 Design | YQuant-Codex-Principal | `codex/gpt-5.5`，fallback `zai/glm-5.1` | `docs/design/*.md`、`03-design.md`、`04-implementation-plan.md` | 否 |
+| 4 Implement | YQuant-Developer-Engineer | `minimax/MiniMax-M2.7`，fallback `zai/glm-5.1` | 代码变更、实现记录 | 是 |
+| 5 Verify | YQuant-Test-Engineer | `minimax/MiniMax-M2.7`，fallback `zai/glm-5.1` | 测试、`05-test-report.md` | 仅测试/夹具 |
+| 6 Review | YQuant-Reviewer-Principal | `zai/glm-5.1`，fallback `codex/gpt-5.5` | `06-review.md` 或审查意见 | 否 |
+| 7 Closeout | YQuant | `zai/glm-5.1`，fallback `minimax/MiniMax-M2.7` | `07-closeout.md`、面向用户的交付摘要 | 否 |
 
 ## 任务目录
 
-非平凡工程任务使用以下目录结构：
+非平凡工程任务的运行记录属于过程性数据，放在 `data/tasks/` 下：
 
 ```text
-tasks/active/YYYY-MM-DD-short-name/
+data/tasks/active/YYYY-MM-DD-short-name/
   00-intake.md
   01-rfc-link.md
   02-spec.md
@@ -28,7 +28,13 @@ tasks/active/YYYY-MM-DD-short-name/
   07-closeout.md
 ```
 
-完成后移动到 `tasks/done/`。小型机械修改可以跳过任务目录，但最终输出仍必须包含验证说明。
+模板放在：
+
+```text
+data/tasks/templates/ai-coding-pipeline-run.md
+```
+
+完成后移动到 `data/tasks/done/`。小型机械修改可以跳过任务目录，但最终输出仍必须包含验证说明。
 
 ## 触发分级
 

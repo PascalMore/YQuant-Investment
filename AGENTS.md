@@ -181,6 +181,8 @@ TradingAgents 的五层协作模型、AI Hedge Fund 的多大师角色 Agent 设
 
 YQuant 的研发类任务优先检查 `yquant-ai-coding-pipeline` skill（`skills/infra/ai-coding-pipeline/SKILL.md`）。根 `AGENTS.md` 只保留启用、路由和安全边界；触发分级、阶段门禁、文档分层和交接格式由该 skill 维护。
 
+AI Coding 流水线各 Agent 的实际模型路由以 `/home/pascal/.openclaw/openclaw.json` 为准；文档中的模型说明只作为当前配置摘要，修改模型时必须同步更新配置和说明。
+
 ### 触发策略
 
 1. 用户显式要求“走 AI Coding Pipeline”“按流水线执行”“先 RFC/SPEC/Design 再实现”“需要独立测试和审查”时，直接启用完整流水线。

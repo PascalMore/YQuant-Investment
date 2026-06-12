@@ -4,6 +4,8 @@
 
 负责 Intake、编排和 Closeout。
 
+当前模型：默认 `zai/glm-5.1`，第一 fallback `minimax/MiniMax-M2.7`。
+
 必须提供：
 - 用户目标
 - 当前阶段
@@ -20,6 +22,8 @@
 ## YQuant-Codex-Principal
 
 负责 RFC/SPEC/Design。
+
+当前模型：默认 `codex/gpt-5.5`，fallback `zai/glm-5.1`。
 
 输入：
 - Intake 摘要
@@ -40,7 +44,9 @@
 
 ## YQuant-Developer-Engineer
 
-负责实现。默认模型：`minimax 2.7`。
+负责实现。
+
+当前模型：默认 `minimax/MiniMax-M2.7`，fallback `zai/glm-5.1`。
 
 输入：
 - RFC/SPEC/DESIGN
@@ -62,7 +68,9 @@
 
 ## YQuant-Test-Engineer
 
-负责独立验证。默认模型：`minimax 2.7`。
+负责独立验证。
+
+当前模型：默认 `minimax/MiniMax-M2.7`，fallback `zai/glm-5.1`。
 
 输入：
 - diff
@@ -83,7 +91,9 @@
 
 ## YQuant-Reviewer-Principal
 
-负责独立审查。默认模型：`Codex-gpt5.5`。
+负责独立审查。
+
+当前模型：默认 `zai/glm-5.1`，fallback `codex/gpt-5.5`。
 
 输入：
 - diff
@@ -96,6 +106,7 @@
 - 通过/退回决定
 
 规则：
+- Review 结论表示 review gate 的通过/退回结果，而非实现完成度评分
 - 问题优先，摘要其次
 - 不重复实现/测试日志
 - 默认不直接改代码
