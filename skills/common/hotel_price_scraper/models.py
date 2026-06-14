@@ -12,6 +12,7 @@ class HotelPriceRecord:
     hotel_name: str
     platform: str
     checkin_date: date
+    room_category: str
     room_type: str
     price: Decimal | None
     currency: str

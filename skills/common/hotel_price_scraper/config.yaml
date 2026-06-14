@@ -1,38 +1,87 @@
+concurrent: 2
+hotels:
+- hotel_key: legasta_shirakawa
+  name: ホテルレガスタ京都白川三条
+  platforms:
+    booking: legasta-kyoto-shirakawa-sanjo
+    jalan: '377340'
+- hotel_key: ms_sanjo_wakoku
+  name: エムズホテル三条WAKOKU
+  platforms:
+    booking: m-39-s-inn-sanjo-wakoku
+    jalan: '384997'
+- hotel_key: stay_sakura_higashiyama
+  name: ステイサクラ京都東山三条
+  platforms:
+    booking: stay-sakurajing-du-dong-shan-bai-chuan
+    jalan: '385920'
+- hotel_key: rakuten_urban_shijo
+  name: 楽天ステイアーバン四条河原町
+  platforms:
+    booking: meldia-shijo-kawaramachi
+    jalan: ''
+- hotel_key: carta_gion
+  name: カルタホテル京都祇園
+  platforms:
+    booking: carta-jing-du-he-yuan-ting
+    jalan: ''
+- hotel_key: travertin_kiyamachi
+  name: ホテルトラベルティン京都木屋町
+  platforms:
+    booking: hoterutoraberuteinjing-du-mu-wu-ting
+    jalan: ''
+platforms:
+  booking:
+    cookie: pcm_personalization_disabled=0; cors_js=1; BJS=-; _gid=GA1.2.569493800.1781447265;
+      _gcl_au=1.1.141748001.1781447265; bkng_prue=1; _yjsu_yjad=1781447266.c9544cbb-0c22-400e-ac2f-e72774ccb491;
+      FPID=FPID2.2.qfowcXg%2F2kIYue3CJqHjggYfJqBuz1756THbY0NgGas%3D.1781447265; FPAU=1.1.141748001.1781447265;
+      FPLC=iV%2FgPvR7qDr8ntLpb8sLKsbAPP5OpmMaoQ3YXmhXEpX%2BV1ii%2FcuG8%2Bvt7s5PLcKohpl1Ec3EwUjBq29lB6JBXpNyxz7v%2FTM5i4Sh9kcazbgEjS0gKBXsvhvSi8FMqA%3D%3D;
+      b=%7B%22countLang%22%3A3%7D; __gads=ID=91a8af9f1e9e9026:T=1781449550:RT=1781449550:S=ALNI_MaQCncphhWomI-V9EmFbeQEF-kXaQ;
+      __gpi=UID=0000146a97b2f6bb:T=1781449550:RT=1781449550:S=ALNI_MbYakzF-QCaMOdzRilgp9NjLFdOgg;
+      __eoi=ID=01c7ac27bc07867d:T=1781449550:RT=1781449550:S=AA-AfjYmhrvyTtjQMyLC9KtwdHqr;
+      cgumid=MMev-F9CdzQ1ZXpZSWVLeGVLQzBNbTJmSWpmMWRMcDFzakZ6NExQelNWeWt6U0ptaFpKNlR5WCUyRjdFQklHNUR4JTJCSjVKUw;
+      g_state={"i_l":0,"i_ll":1781451479357,"i_b":"YI13ETo0NLqkHbzKqQUvEXdu2O7sLF4ec+NmSnt/MHA","i_e":{"enable_itp_optimization":0},"i_et":1781447264196};
+      bkng_sso_session=eyJib29raW5nX2dsb2JhbCI6W3sibG9naW5faGludCI6IktZa2hrclRUaE5rMWw5SXZtb0ZEb0VzeWxMcExTcWswUEdSVEF2MU5PMUUifV19;
+      bkng_sso_ses=eyJib29raW5nX2dsb2JhbCI6W3siaCI6IktZa2hrclRUaE5rMWw5SXZtb0ZEb0VzeWxMcExTcWswUEdSVEF2MU5PMUUifV19;
+      pcm_consent=consentedAt%3D2026-06-14T15%3A39%3A27.259Z%26countryCode%3DSG%26expiresAt%3D2026-12-11T15%3A39%3A27.259Z%26implicit%3Dfalse%26regulation%3Dnone%26legacyRegulation%3Dnone%26consentId%3D967b997d-49e9-47aa-ba4d-69be54e0eb45%26analytical%3Dtrue%26marketing%3Dtrue;
+      bkng_sso_auth=CAIQi4nT0gIaigHXgKvVbYKIJ+WUpJQcY8wn9ewn7k9cTX1prlnspkXqu/OqPDYqGDmn9YfqsEW0dItNo4wS6q8iBeUSyqgbJyduVwlYtnRlz51VrvfoIi73hmyBonm2raBDd12l5KHI2yZsDAF9y73OjFuRDX6qk8aiqYUmUpw64LF/LZOseqzvVb4WppkxGrVRYG4=;
+      OptanonConsent=implicitConsentCountry=nonGDPR&implicitConsentDate=1781447263609&isGpcEnabled=0&datestamp=Sun+Jun+14+2026+23%3A40%3A33+GMT%2B0800+(%E4%B8%AD%E5%9B%BD%E6%A0%87%E5%87%86%E6%97%B6%E9%97%B4)&version=202501.2.0&browserGpcFlag=0&isIABGlobal=false&hosts=&consentId=d9fff652-b075-4aa3-9979-9fd0fc156f54&interactionCount=1&isAnonUser=1&landingPath=NotLandingPage&groups=C0001%3A1%2CC0002%3A1%2CC0004%3A1&AwaitingReconsent=false;
+      _rdt_uuid=1781447265919.31c0a7d6-6cbb-437b-afae-9a1ed5b80b9c; _rdt_em=4733a9b5639a8c947953ff389d589621715099c44e14214e96257487baa9a527;
+      _rdt_pn=8bb76ff9b1e908d5afb33343f0915fe45b325ce3d7f191e9dc92cd0b0768db20:; _ga=GA1.1.1130212413.1781447265;
+      cto_bundle=Zm9Tol91MmNQdFp0djJlaHolMkJiMWoxcGVWJTJGZWd6MyUyRkdTYTVSWDhzc2xTbiUyQjh1RWk3TERJREE2azliR0FEUyUyRm43SVElMkZSc1FOaFVudll1UHdhJTJGREt1NkxpMXRMcTZmYVYlMkZEOXNkWHdjTDB6eWd0eTJ5VUtEcUZJQVlEWlE1ZWRxVjJZSCUyQnlHV1VKMmUydnVPWTQwejRYQ2xSTVElM0QlM0Q;
+      bkng=11UmFuZG9tSVYkc2RlIyh9Yaa29%2F3xUOLb9qg0InA%2FFDexx07aKTHHeBvCRlh8h7UaKTUdhI1CECZNs%2BUrNwsx88rHfOITokh1agL%2F8Gj%2FoP5VCjxqgAFvU39NhmS%2Bz4AeXoTFEjAaQZbXo1fHOSvHwN7boixFoT1WAzHkLxbegJiDeMkT%2FHVD7jnc%2FUqvyvrs79Dao%2FBhjXthmbkHVRy39tHozmLBfuXgPZNkA3l34yqI4M3QX%2B8DbT8l06S0NmPl;
+      _ga_A12345=GS2.1.s1781447265$o1$g1$t1781451646$j60$l0$h1113623490; aws-waf-token=589f0ea6-3515-4fcb-8a1e-ccf122c8d76e:BgoAlhltsPZyAAAA:futC+vD6hF9/xRe+eVsSuiNylkEp0duKEUP+bOXx/FeScsUdJrPpssjJcmHWDWwib+FLEu6Awgkepanpasg8AllgVf6X7MBoPNbrX/y/2krd9gg5/kfkCUaO1Urvrz4H/yOjFQ6izCrNlPbsucFtjdU6PYxPB2YgUq7+NUAiSE9g28Q/SeoY5gqr7PGGnXLsUcBJ1wGKHsNHijrMaHXdJh0rXER+5c3IKjBuWqwD0WaYsGaapngBb2CiF2BRl0XEa1Y=;
+      _uetsid=3690496067fd11f195bef385da63c16c; _uetvid=3690641067fd11f1996941de3bfda2a8
+  jalan:
+    cookie: log_sys_uid=MTc4MTQ0NzY2OTU0NEdvc1lh; JalanSESSIONID=Jalan0XPd4dvKLhh9i9qbNP3VjeExSn6;
+      _gcl_au=1.1.327409601.1781447672; AMCVS_840813355385EAFC0A490D4D%40AdobeOrg=1;
+      s_ecid=MCMID%7C60657245966927606854314329356841612395; _ga=GA1.2.14508172.1781447673;
+      _gid=GA1.2.813753985.1781447673; _twpid=tw.1781447672871.231477543921131101;
+      AMCV_840813355385EAFC0A490D4D%40AdobeOrg=1585540135%7CMCIDTS%7C20619%7CMCMID%7C60657245966927606854314329356841612395%7CMCAAMLH-1782052472%7C3%7CMCAAMB-1782052472%7CRKhpRz8krg2tLO6pguXWp5olkAcUniQYPHaMWWgdJ3xzPWQmdj0y%7CMCOPTOUT-1781454872s%7CNONE%7CMCAID%7CNONE%7CvVersion%7C4.4.0;
+      s_sess=%20s_cc%3Dtrue%3B; _yjsu_yjad=1781447672.6f65b03b-0b6a-4e6d-ac18-60fa65a2f519;
+      _fbp=fb.1.1781447673173.94416277431326751; snexid=c6492bed-323f-4af0-abc8-993aa1ffe857;
+      snexid_r=c6492bed-323f-4af0-abc8-993aa1ffe857; _tt_enable_cookie=1; _ttp=01KV38WHQ2E6X5VTYF2W75QXCN_.tt.1;
+      r_ad_token1=5MYEYW00KBF0P001syQd; r_ad_token2=5MYEYW00KBF0P001syQd; _tktmp=_tkinDate%3d2026-07-04%3b_tkoutDate%3d2026-07-05%3b;
+      tabFlg=1; dflt_srch_prm=1#; __utma=93745542.14508172.1781447673.1781451782.1781451782.1;
+      __utmc=93745542; __utmz=93745542.1781451782.1.1.utmcsr=(direct)|utmccn=(direct)|utmcmd=(none);
+      JalanSession-inbcs01=Bxf4-_DLBeteZaKJVYN1nZUtBzJxjoN8J9_A5wrwbRHCXYPSGnB3dqjPF83mCmctVGGisvDeinQKUXuqwBomzph7lquatbT3egYdfWLnKdODQzCqIvhjMdEhg0ytB8RMt;
+      Hm_lvt_95d6f0a21e5886868fa613d3fb03f5ae=1781451806; HMACCOUNT=7E0CE4DF616F99D4;
+      Hm_lpvt_95d6f0a21e5886868fa613d3fb03f5ae=1781451840; sc_jalangb_fr=2026%3A06%3A15;
+      s_sq=%5B%5BB%5D%5D; sc_jalangb_nr=1781453664768-New; history=JalanRH4sIAAAAAAAAAA3ISRHAQAwDMDAhYMdHZvkTa%2FWU7mTMQF0aHkTPl39msUUZkE4%2FEx261CoAAAA%3D;
+      s_pers=%20s_cap_id%3D%7C1844523790986%3B%20s_cm%3D1%7C1781455498718%3B; JSESSIONID=1C6F725F42A019845CC2BB11EA8A99B7.60101;
+      JalanSession01=C00lio0inw88Qx6wKXDBDHcgbw; _p_cnt_j=14; _ga_V6KNXLCNBC=GS2.2.s1781451785$o2$g1$t1781453700$j4$l0$h0;
+      _uetsid=29c4ee3067fe11f1b1bf837e6d3d3cb2|uxs4p3|2|g6w|0|2356; ttcsid_CP7UULBC77UDEGHHH8AG=1781451785345::gMuQfFFh0SVfYwndg91d.2.1781453700618.1;
+      ttcsid_D18DG93C77UBBP7SA87G=1781451785350::rOulD2KzyRgWo8BOp20n.2.1781453700624.1;
+      ttcsid=1781451785346::pR27suCM1fOpLfT3aT9n.2.1781453700879.0::1.1910901.1915256::1860173.16.925.960::1853565.50.181;
+      ttcsid_D772OLBC77UA7GO2QKRG=1781451785351::1RSZPFG3ea50P4OdINYx.2.1781453700883.1;
+      _ga_WJJ1XDMVS0=GS2.2.s1781451785$o2$g1$t1781453700$j5$l0$h0; _uetvid=29c51c8067fe11f1b2d8df52da0df418|135h1u4|1781453701709|2|1|bat.bing.com/p/insights/c/k;
+      cto_bundle=T489819lc0VRSFJBWCUyQlNGM1FDQnJkNXlxVVgydnZiVXZTNzN2cDNHVXJLWDJHTllidjl5ODBYJTJCOWMlMkJyQyUyQm9jbWVSSUpNQk91bzglMkZaaUxYZmU1RHBtYnhOSEdiVXNtJTJGN2trVXJtZGxiZmZtTUo0NDNodWNUS29qeHlxVmM5MHk0TDBKbGlqemkwaExESmZ3OVdEUXViY1RSZmclM0QlM0Q;
+      _dd_s=logs=1&id=c34c8842-290c-49f1-a15d-00ae24b21c9e&created=1781451781285&expire=1781454598551
 query:
-  days_ahead: 30
-  nights: 1
   adults: 2
   children: 0
-  rooms: 1
   currency: JPY
-
+  days_ahead: 30
+  nights: 1
+  rooms: 1
 request_interval_seconds: 3
-concurrent: 2
-
-platforms:
-  jalan:
-    cookie: ""
-  booking:
-    cookie: ""
-  trip:
-    cookie_path: /home/pascal/.openclaw/workspace-yquant/skills/common/su-scraper/scripts/trip_cookies.json
-
-hotels:
-  - hotel_key: kyoto_kawaramachi_01
-    name: Kyoto Kawaramachi Hotel 01
-    platforms:
-      jalan: "336386"
-      booking: hua-zhu-jing-du-he-yuan-ting-hoteru
-      trip: "107897404"
-  - hotel_key: kyoto_kawaramachi_02
-    name: Kyoto Kawaramachi Hotel 02
-    platforms:
-      jalan: "342602"
-      booking: meldia-shijo-kawaramachi
-      trip: "49490579"
-  - hotel_key: kyoto_kawaramachi_03
-    name: Kyoto Kawaramachi Hotel 03
-    platforms:
-      jalan: "385462"
-      booking: jing-du-he-yuan-ting-wen-quan-kong-ting-hoterujing-du
-      trip: "2496417"

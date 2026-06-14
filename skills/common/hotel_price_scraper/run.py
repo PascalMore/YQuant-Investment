@@ -12,7 +12,7 @@ def main() -> int:
     parser.add_argument("--config", default="config.yaml")
     parser.add_argument("--env", default=str(Path(__file__).resolve().parents[2] / ".env"))
     parser.add_argument("--output-dir", default="output")
-    parser.add_argument("--platform", choices=["all", "jalan", "booking", "trip"], default="all")
+    parser.add_argument("--platform", choices=["all", "jalan", "booking"], default="all")
     parser.add_argument("--days", type=int, default=None)
     parser.add_argument("--send-email", action="store_true")
     args = parser.parse_args()

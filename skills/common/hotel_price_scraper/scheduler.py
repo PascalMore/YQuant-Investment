@@ -9,7 +9,6 @@ import yaml
 
 from BookingScraper import BookingScraper
 from JalanScraper import JalanScraper
-from TripScraper import TripScraper
 from email_service import EmailService
 from excel_exporter import ExcelExporter
 from models import HotelPriceRecord, RunResult
@@ -18,7 +17,6 @@ from models import HotelPriceRecord, RunResult
 SCRAPER_CLASSES = {
     "jalan": JalanScraper,
     "booking": BookingScraper,
-    "trip": TripScraper,
 }
 
 
@@ -82,8 +80,6 @@ class HotelPriceScheduler:
         start_date = date.today()
 
         try:
-            if platform == "trip" and not scraper.validate_cookie():
-                raise RuntimeError("Trip cookie file missing or empty")
             for hotel in self.config.get("hotels", []):
                 hotel_id = str(hotel.get("platforms", {}).get(platform, "")).strip()
                 if not hotel_id:
@@ -111,11 +107,6 @@ class HotelPriceScheduler:
             "request_interval": self.request_interval,
             "cookie": platform_config.get("cookie", ""),
         }
-        if platform == "trip":
-            common["cookie_path"] = platform_config.get(
-                "cookie_path",
-                str(Path(__file__).resolve().parents[1] / "su-scraper" / "scripts" / "trip_cookies.json"),
-            )
         return SCRAPER_CLASSES[platform](**common)
 
     def _selected_platforms(self, platform: str) -> list[str]:

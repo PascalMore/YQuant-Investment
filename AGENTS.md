@@ -196,6 +196,7 @@ AI Coding 流水线各 Agent 的实际模型路由以 `/home/pascal/.openclaw/op
 - 轻量流程：`YQuant Intake -> YQuant-Developer-Engineer Implement -> YQuant-Test-Engineer Verify -> YQuant Closeout`
 - `Implement`、`Verify`、`Review` 必须由不同角色承担。除非用户明确跳过，否则完整流程不得跳过 Verify 和 Review。
 - 轻量流程仍必须保留最小 Verify，不能把未验证的实现直接 Closeout。
+- **三层文档强制**：完整流程中 RFC、SPEC、Design 必须分别产出独立文件（`docs/rfc/`、`docs/spec/`、`docs/design/`），不允许合并。YQuant Orchestrator 在 RFC/SPEC 阶段和 Design 阶段结束后必须校验文件存在性，缺失则退回。
 
 ### 子 Agent 路由
 

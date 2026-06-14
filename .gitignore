@@ -62,13 +62,10 @@ tmp/
 temp/
 
 # Memory and transient files
-memory/*.md
+memory/
 !memory/.gitkeep
 skills/data/source/
 .env
-
-# OpenClaw dreaming (transient session memory)
-memory/.dreams/
 
 # Auto-push marker (transient)
 .last_sent

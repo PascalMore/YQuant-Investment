@@ -1,5 +1,24 @@
 # RFC/SPEC/DESIGN 文档分层
 
+## 强制规则
+
+完整流水线中，RFC/SPEC/Design **必须产出三个独立文件**，分别存放在 `docs/rfc/`、`docs/spec/`、`docs/design/` 对应模块子目录下。不允许将三层合并到一个 RFC 文件中。
+
+### 阶段门禁校验
+
+YQuant Orchestrator 在完成每个阶段后，必须校验产出物存在性：
+
+| 阶段 | 校验项 | 不通过时行为 |
+|---|---|---|
+| RFC/SPEC 结束 | `docs/rfc/{模块}/RFC-XX-XXX-*.md` 已更新 **且** `docs/spec/SPEC-XX-XXX-*.md` 已创建 | 退回，补齐后再进入 Design |
+| Design 结束 | `docs/design/DESIGN-XX-XXX-*.md` 已创建 | 退回，补齐后再进入 Implement |
+| Implement 结束 | Developer 引用了 SPEC 和 DESIGN 文件路径 | 退回，要求补引用 |
+| Review 结束 | Reviewer 校验实现与 SPEC 一致 | 偏离则退回 Implement |
+
+轻量流程（小改动）可以不创建三层文件，但 Closeout 中必须说明跳过原因。
+
+---
+
 ## `docs/rfc`
 
 项目需求与架构约束层。

@@ -55,6 +55,28 @@ class BaseHotelScraper(ABC):
         if self.request_interval > 0:
             time.sleep(self.request_interval)
 
+    # -------------------------------------------------------------------------
+    # Room category classification
+    # -------------------------------------------------------------------------
+    @staticmethod
+    def _classify_room_category(room_name: str) -> str | None:
+        """Classify a room name into 'twin' or 'double', or None if unmatched.
+
+        Rule: check twin first (more specific), then double.
+        - twin  : room_name contains "ツイン" or "twin" (case-insensitive)
+        - double: room_name contains "ダブル" or "double" (case-insensitive)
+        - None  : no match
+        """
+        lower = room_name.lower()
+        if "ツイン" in room_name or "twin" in lower:
+            return "twin"
+        if "ダブル" in room_name or "double" in lower:
+            return "double"
+        return None
+
+    # -------------------------------------------------------------------------
+    # Record building
+    # -------------------------------------------------------------------------
     def build_records(
         self,
         *,
@@ -68,6 +90,7 @@ class BaseHotelScraper(ABC):
                     hotel_name=hotel_name,
                     platform=self.platform,
                     checkin_date=checkin,
+                    room_category="",
                     room_type="",
                     price=None,
                     currency=self.currency,
@@ -75,18 +98,49 @@ class BaseHotelScraper(ABC):
                 )
             ]
 
-        return [
-            HotelPriceRecord(
-                hotel_name=hotel_name,
-                platform=self.platform,
-                checkin_date=checkin,
-                room_type=(room.get("room") or "").strip(),
-                price=parse_price(room.get("price")),
-                currency=self.currency,
-                status="正常" if parse_price(room.get("price")) is not None else "抓取失败",
+        # Classify each room, skip None categories
+        categorized: dict[str, list[tuple[str, Decimal | None]]] = {}
+        for room in rooms:
+            room_type = (room.get("room") or "").strip()
+            category = self._classify_room_category(room_type)
+            if category is None:
+                continue
+            price = parse_price(room.get("price"))
+            categorized.setdefault(category, []).append((room_type, price))
+
+        # Produce one record per category (lowest price)
+        records: list[HotelPriceRecord] = []
+        for category, items in categorized.items():
+            best = min(items, key=lambda x: x[1] if x[1] is not None else float("inf"))
+            best_room_type, best_price = best
+            records.append(
+                HotelPriceRecord(
+                    hotel_name=hotel_name,
+                    platform=self.platform,
+                    checkin_date=checkin,
+                    room_category=category,
+                    room_type=best_room_type,
+                    price=best_price,
+                    currency=self.currency,
+                    status="正常" if best_price is not None else "抓取失败",
+                )
             )
-            for room in rooms
-        ]
+
+        # If nothing matched, emit a "满房" record
+        if not records:
+            records.append(
+                HotelPriceRecord(
+                    hotel_name=hotel_name,
+                    platform=self.platform,
+                    checkin_date=checkin,
+                    room_category="",
+                    room_type="",
+                    price=None,
+                    currency=self.currency,
+                    status="满房",
+                )
+            )
+        return records
 
 
 def load_legacy_module(filename: str) -> ModuleType:

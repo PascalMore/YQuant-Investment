@@ -1,6 +1,6 @@
 ---
 name: hotel_price_scraper
-description: 每周抓取 Jalan、Booking、Trip.com/Ctrip 目标酒店未来 30 天标准双人间 1 晚价格走势，合并输出 Excel 并通过邮件发送；用于酒店价格监控、周报附件生成、cookie 初始化和价格抓取失败排查。
+description: 每周一抓取 Booking 和 Jalan 目标酒店未来 30 天大床房（ダブル）和双床房（ツイン）最低价，合并输出 Excel 并通过邮件发送；用于酒店价格监控、周报附件生成和价格抓取失败排查。
 ---
 
 # Hotel Price Scraper
@@ -10,10 +10,20 @@ description: 每周抓取 Jalan、Booking、Trip.com/Ctrip 目标酒店未来 30
 使用本技能处理以下任务：
 
 - 每周一自动抓取酒店价格走势。
-- 查询 Jalan、Booking、Trip.com/Ctrip 指定酒店未来 30 天房价。
+- 查询 Booking、Jalan 指定酒店未来 30 天**大床房和双床房**最低价。
 - 生成酒店价格 Excel 周报并邮件发送。
-- 初始化或刷新 Trip.com Selenium cookie。
 - 排查酒店价格抓取、cookie 过期、平台页面解析失败等问题。
+
+## 目标酒店（6 家）
+
+| # | hotel_key | 酒店名 | Booking | Jalan |
+|---|-----------|--------|---------|-------|
+| 1 | legasta_shirakawa | ホテルレガスタ京都白川三条 | ✅ | ✅ |
+| 2 | ms_sanjo_wakoku | エムズホテル三条WAKOKU | ✅ | ✅ |
+| 3 | stay_sakura_higashiyama | ステイサクラ京都東山三条 | ✅ | ✅ |
+| 4 | rakuten_urban_shijo | 楽天ステイアーバン四条河原町 | ✅ | ❌ |
+| 5 | carta_gion | カルタホテル京都祇園 | ✅ | ❌ |
+| 6 | travertin_kiyamachi | ホテルトラベルティン京都木屋町 | ✅ | ❌ |
 
 ## 输入
 
@@ -24,12 +34,10 @@ description: 每周抓取 Jalan、Booking、Trip.com/Ctrip 目标酒店未来 30
 配置应包含：
 
 - 查询参数：`days_ahead`、`nights`、`adults`、`children`、`rooms`、`currency`。
-- 房型匹配关键词：用于识别标准双人间。
-- 酒店列表：每个酒店的内部 `hotel_key`、展示名和各平台 ID。
-- 平台 cookie 引用：Jalan/Booking 使用 requests session cookie；Trip 默认读取旧版 `skills/common/su-scraper/scripts/trip_cookies.json`。
-- 酒店列表：统一写在 `config.yaml`，每个酒店提供 `hotel_key`、展示名和各平台 ID。
+- 酒店列表：每个酒店的 `hotel_key`、展示名和各平台 ID。
+- 平台 cookie：Jalan/Booking 使用 requests session cookie。
 
-邮件配置固定从以下文件读取：
+邮件配置从以下文件读取：
 
 `~/.openclaw/workspace-yquant/skills/.env`
 
@@ -37,7 +45,20 @@ description: 每周抓取 Jalan、Booking、Trip.com/Ctrip 目标酒店未来 30
 
 - `EMAIL_SENDER`
 - `EMAIL_PASSWORD`
-- `EMAIL_RECEIVERS`
+- `EMAIL_RECEIVERS`（多个收件人用逗号分隔）
+
+## 房型规则
+
+每次抓取同时收集两种房型：
+
+| room_category | 匹配关键词（不区分大小写） |
+|---------------|-------------------------|
+| `double` | ダブル、double |
+| `twin` | ツイン、twin |
+
+- 匹配优先级：先检查 twin，再检查 double
+- 每种房型在同一家酒店同一天取**最低价**
+- 不匹配任何关键词的房型自动跳过
 
 ## 输出
 
@@ -49,17 +70,16 @@ Excel 文件：
 
 Sheet：
 
-- `summary`：按酒店、平台、入住日期汇总标准双人间优先报价。
-- `jalan`：Jalan 原始标准化记录。
-- `booking`：Booking 原始标准化记录。
-- `trip`：Trip 原始标准化记录。
-- `errors`：单平台、单酒店、单日期失败记录。
-- `run_meta`：运行元数据、配置摘要和统计。
+- `Summary`：交叉对比表（hotel_name × checkin_date → booking_double/twin, jalan_double/twin 最低价）。
+- `Booking`：Booking 原始标准化记录（含 room_category 列）。
+- `Jalan`：Jalan 原始标准化记录（含 room_category 列）。
+- `Errors`：单平台、单酒店、单日期失败记录。
+- `RunMeta`：运行元数据、配置摘要和统计。
 
 邮件：
 
 - 主题：`【YQuant】酒店价格周报 YYYY-MM-DD`
-- 正文：成功平台、失败平台、酒店数、有效报价数、错误摘要。
+- 正文：酒店数、有效报价数、错误数、错误摘要。
 - 附件：统一 Excel 文件。
 
 ## 依赖环境
@@ -67,14 +87,10 @@ Sheet：
 Python 依赖：
 
 ```bash
-pip install pandas openpyxl requests beautifulsoup4 selenium python-dotenv pyyaml
+pip install pandas openpyxl requests beautifulsoup4 python-dotenv pyyaml
 ```
 
-系统依赖：
-
-- Chrome 或 Chromium。
-- 与浏览器版本匹配的 ChromeDriver，或 Selenium Manager 可自动解析驱动。
-- 可访问目标平台网页的网络环境。
+> Trip.com 相关的 selenium 依赖已不再是必需（第一版不含 Trip 平台）。
 
 ## 使用方式
 
@@ -89,26 +105,11 @@ python3 run.py --config config.yaml --env /home/pascal/.openclaw/workspace-yquan
 
 ```bash
 python3 run.py --config config.yaml --platform booking --days 30
+python3 run.py --config config.yaml --platform jalan --days 30
 python3 run.py --config config.yaml --platform all --days 30
 ```
 
-支持平台：
-
-- `jalan`
-- `booking`
-- `trip`
-
-### 初始化 Trip cookie
-
-Trip.com 需要 Selenium 打开页面并人工完成登录或验证。
-
-```bash
-python3 init_trip_cookie.py --cookie-path /home/pascal/.openclaw/workspace-yquant/skills/common/su-scraper/scripts/trip_cookies.json
-```
-
-运行后等待浏览器打开，在 60 秒内完成登录或验证，脚本保存：
-
-`skills/common/su-scraper/scripts/trip_cookies.json`
+支持平台：`jalan`、`booking`、`all`
 
 ### crontab
 
@@ -124,20 +125,19 @@ python3 init_trip_cookie.py --cookie-path /home/pascal/.openclaw/workspace-yquan
 - 单平台失败不应中断全局任务；记录错误后继续其他平台。
 - 每次请求间隔 3 秒，调度器并发上限为 2。
 - Jalan 和 Booking 使用 `requests.Session` 维持 cookie。
-- Trip 使用 Selenium 初始化和复用 cookie。
 - 不自动绕过验证码，不使用高并发代理池。
-- 输出 Excel 必须三平台合并到一个文件，不再生成三个独立附件。
+- 输出 Excel 必须所有平台合并到一个文件。
 
 ## 开发测试
 
 ```bash
 cd /home/pascal/.openclaw/workspace-yquant/skills/common/hotel_price_scraper
 python3 -m pytest tests
-python3 run.py --platform jalan --days 1
+python3 run.py --platform booking --days 1
 python3 run.py --platform all --days 1
 ```
 
 ## 参考文档
 
-- 需求与技术方案：`RFC.md`
+- 需求与技术方案：`docs/rfc/02_common/RFC-02-003-hotel-price-scraper.md`
 - su-scraper 重构设计：`REFACTOR_DESIGN.md`

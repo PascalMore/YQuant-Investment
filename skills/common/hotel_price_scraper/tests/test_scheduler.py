@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from models import HotelPriceRecord
-from scheduler import HotelPriceScheduler
+from scheduler import HotelPriceScheduler, SCRAPER_CLASSES
 
 
 class FailingScraper:
@@ -27,6 +27,7 @@ class WorkingScraper:
                 hotel_name=f"Hotel {hotel_id}",
                 platform="booking",
                 checkin_date=checkin,
+                room_category="double",
                 room_type="Double",
                 price=Decimal("100"),
                 currency="JPY",
@@ -77,6 +78,12 @@ platforms:
             self.assertEqual(len(result.errors), 1)
             self.assertEqual(result.errors[0]["platform"], "jalan")
             self.assertTrue(result.output_path.exists())
+
+    def test_scrape_classes_only_has_jalan_and_booking(self):
+        """Verify TripScraper has been removed from SCRAPER_CLASSES."""
+        self.assertIn("jalan", SCRAPER_CLASSES)
+        self.assertIn("booking", SCRAPER_CLASSES)
+        self.assertNotIn("trip", SCRAPER_CLASSES)
 
 
 if __name__ == "__main__":
