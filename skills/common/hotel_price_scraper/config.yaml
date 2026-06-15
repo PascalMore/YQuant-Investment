@@ -30,6 +30,26 @@ hotels:
   platforms:
     booking: hoterutoraberuteinjing-du-mu-wu-ting
     jalan: ''
+- hotel_key: waka_asakusa_wakokoro
+  name: 若・浅草和心ホテル
+  platforms:
+    booking: hua-zhu-qian-cao-he-xin-hoteru
+    jalan: ''
+- hotel_key: super_hotel_asakusa
+  name: スーパーホテル浅草
+  platforms:
+    booking: super-asakusa
+    jalan: ''
+- hotel_key: other_space_asakusa
+  name: OTHER SPACE Asakusa
+  platforms:
+    booking: k3-asakusa-dong-jing
+    jalan: ''
+- hotel_key: hop_inn_tokyo_asakusa
+  name: Hop Inn Tokyo Asakusa
+  platforms:
+    booking: hop-inn-tokyo-asakusa
+    jalan: ''
 platforms:
   booking:
     cookie: pcm_personalization_disabled=0; cors_js=1; BJS=-; _gid=GA1.2.569493800.1781447265;

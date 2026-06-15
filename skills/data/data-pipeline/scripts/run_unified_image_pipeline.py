@@ -8,7 +8,6 @@ Usage:
 import argparse
 import asyncio
 import logging
-import re
 import shutil
 import sys
 from datetime import datetime
@@ -23,13 +22,23 @@ import pandas as pd
 from extractors.minimax_image_extractor import MiniMaxImageExtractor
 from transformers.portfolio_excel_transformer import PortfolioExcelTransformer
 from transformers.trade_excel_transformer import TradeExcelTransformer
-from transformers.a_share_name_corrector import correct_dataframe_asset_names
+from transformers.a_share_name_corrector import AUDIT_ATTR
+from transformers.asset_identity_review import (
+    apply_asset_identity_review,
+    build_review_summary,
+    correct_stock_names,
+    filter_pending_normalized_records,
+    high_risk_asset_name_issues,
+    save_pending_review,
+    split_review_rows,
+    standardize_asset_name,
+    standardize_df_asset_names,
+)
 from transformers.image_portfolio_normalizer import normalize_all as normalize_portfolio
 from transformers.trade_normalizer import normalize_all as normalize_trade
 from validators.trade_validator import validate_trade, ValidationResult
 from validators.portfolio_validator import validate_position, validate_nav, validate_basic_info
 from loaders.mongodb_loader import PortfolioMongoLoader
-from stock_name_corrections import STOCK_NAME_CORRECTIONS
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,50 +52,6 @@ logger = logging.getLogger(__name__)
 TRADE_UNIQUE = {"变化比例", "变化金额"}
 # Portfolio-unique columns (not present in trade format)
 PORTFOLIO_UNIQUE = {"持仓比例", "最新净值", "最新份额", "最新规模"}
-
-
-def standardize_asset_name(name: str) -> str:
-    """Standardize stock name: remove spaces, unify full-width/half-width characters."""
-    if not isinstance(name, str):
-        return name
-    # Remove all whitespace
-    name = re.sub(r'\s+', '', name)
-    # Unify full-width parentheses to half-width
-    name = name.replace('（', '(').replace('）', ')')
-    # Unify full-width dash to half-width dash (－ → -, — → -)
-    name = name.replace('－', '-').replace('—', '-')
-    # Unify full-width ASCII letters (Ｗ→W, Ｂ→B, etc.)
-    name = name.translate(str.maketrans('ＷＸＹＺＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶ', 
-                                       'WXYZABCDEFGHIJKLMNOPQRSTUV'))
-    return name
-
-
-def standardize_df_asset_names(df: pd.DataFrame) -> pd.DataFrame:
-    """Standardize asset_name column in DataFrame if present."""
-    df = df.copy()
-    if '资产名称' in df.columns:
-        df['资产名称'] = df['资产名称'].apply(standardize_asset_name)
-    return df
-
-
-def correct_stock_names(df: pd.DataFrame) -> pd.DataFrame:
-    """Correct stock names using a pre-defined mapping. If code not in mapping, skip."""
-    df = df.copy()
-    if '资产名称' not in df.columns or 'Wind代码' not in df.columns:
-        return df
-    
-    def correct_name(row):
-        code = row.get('Wind代码', '')
-        name = row.get('资产名称', '')
-        if not code or not name:
-            return name
-        correct_name = STOCK_NAME_CORRECTIONS.get(code)
-        if correct_name and name != correct_name:
-            return correct_name
-        return name
-    
-    df['资产名称'] = df.apply(correct_name, axis=1)
-    return df
 
 
 def detect_format(df: pd.DataFrame) -> str:
@@ -245,17 +210,12 @@ async def run_pipeline(
     records = correct_year_if_ocr_error(records)
     df = records[0]["df"]
 
-    # Step 1c: Standardize asset names (remove spaces, unify full/half-width chars)
-    df = standardize_df_asset_names(df)
+    # Step 1c: Conservative asset identity review before DB load
+    df = apply_asset_identity_review(df)
     records[0]["df"] = df
-
-    # Step 1d: Correct stock names via pre-defined mapping
-    df = correct_stock_names(df)
-    records[0]["df"] = df
-
-    # Step 1e: Correct A-share names via stock_basic_info master data before DB load
-    df = correct_dataframe_asset_names(df)
-    records[0]["df"] = df
+    asset_name_issues = high_risk_asset_name_issues(df)
+    if asset_name_issues:
+        logger.warning("[Step1c] Pending asset identity review: %s", asset_name_issues)
 
     # Step 1f: Detect format
     fmt = detect_format(df)
@@ -267,9 +227,39 @@ async def run_pipeline(
     new_path = archive_image(image_path, folder_date, source_root, prefix, timestamp)
     excel_path = save_excel(df, folder_date, source_root, base_name, "image")
     logger.info(f"[Step1] Saved: {new_path}, {excel_path}")
+    accepted_df, pending_df = split_review_rows(df)
+    pending = save_pending_review(
+        pending_df=pending_df,
+        audit=asset_name_issues,
+        source_root=source_root,
+        folder_date=folder_date,
+        prefix=prefix,
+        timestamp=timestamp,
+        fmt=fmt,
+        source_path=str(new_path),
+        excel_path=str(excel_path),
+    )
+    review = build_review_summary(
+        total_rows=len(df),
+        accepted_rows=len(accepted_df),
+        pending_rows=len(pending_df),
+        audit=df.attrs.get(AUDIT_ATTR, []),
+        pending=pending,
+    )
 
     if dry_run:
-        return {"image": str(new_path), "excel_path": str(excel_path), "rows": len(df), "format": fmt, "dry_run": True}
+        return {
+            "status": "dry_run",
+            "image": str(new_path),
+            "excel_path": str(excel_path),
+            "rows": len(df),
+            "format": fmt,
+            "dry_run": True,
+            "review": review,
+            "pending": pending,
+            "asset_name_audit": df.attrs.get(AUDIT_ATTR, []),
+            "blocked": bool(pending),
+        }
 
     # Step 2: Transform based on format
     if fmt == "trade":
@@ -279,8 +269,22 @@ async def run_pipeline(
             raise ValueError("No daily_data after transform")
         daily_data = nested[0]["daily_data"][0]
         normalized = normalize_trade(daily_data)
+        normalized = filter_pending_normalized_records(normalized, pending_df, "trade")
         records_to_validate = normalized.get("trade", [])
         logger.info(f"[Step2] Trade records: {len(records_to_validate)}")
+        if not records_to_validate:
+            return {
+                "status": "pending_review" if pending else "failed",
+                "image": str(new_path),
+                "excel_path": str(excel_path),
+                "rows": 0,
+                "format": fmt,
+                "trade": 0,
+                "review": review,
+                "pending": pending,
+                "validation": {"valid": True},
+                "mongodb": {"trade": 0},
+            }
 
         vr = validate_trade(records_to_validate)
         if vr.has_errors:
@@ -294,11 +298,14 @@ async def run_pipeline(
         result = loader.load_trade({"trade": records_to_validate})
         logger.info(f"[Step4] MongoDB trade: {result.get('trade', 0)}")
         return {
+            "status": "partial_success" if pending else "success",
             "image": str(new_path),
             "excel_path": str(excel_path),
             "rows": len(records_to_validate),
             "format": fmt,
             "trade": result.get("trade", 0),
+            "review": review,
+            "pending": pending,
             "validation": {"valid": True},
             "mongodb": result,
         }
@@ -306,8 +313,24 @@ async def run_pipeline(
         transformer = PortfolioExcelTransformer()
         nested = transformer.transform(records)
         normalized = normalize_portfolio(nested[0])
+        normalized = filter_pending_normalized_records(normalized, pending_df, "portfolio")
         position_records = normalized.get("position", [])
         logger.info(f"[Step2] Position records: {len(position_records)}")
+        if not position_records and pending:
+            return {
+                "status": "pending_review",
+                "image": str(new_path),
+                "excel_path": str(excel_path),
+                "rows": 0,
+                "format": fmt,
+                "basic_info": 0,
+                "nav": 0,
+                "position": 0,
+                "review": review,
+                "pending": pending,
+                "validation": {"valid": True},
+                "mongodb": {"basic_info": 0, "nav": 0, "position": 0},
+            }
 
         vr_pos = validate_position(position_records)
         vr_basic = validate_basic_info(normalized.get("basic_info", []))
@@ -328,6 +351,7 @@ async def run_pipeline(
         result = loader.load_all(normalized)
         logger.info(f"[Step4] MongoDB: basic={result.get('basic_info', 0)}, nav={result.get('nav', 0)}, position={result.get('position', 0)}")
         return {
+            "status": "partial_success" if pending else "success",
             "image": str(new_path),
             "excel_path": str(excel_path),
             "rows": len(position_records),
@@ -335,6 +359,8 @@ async def run_pipeline(
             "basic_info": result.get("basic_info", 0),
             "nav": result.get("nav", 0),
             "position": result.get("position", 0),
+            "review": review,
+            "pending": pending,
             "validation": {"valid": True},
             "mongodb": result,
         }

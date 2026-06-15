@@ -28,13 +28,24 @@ class BookingScraper(BaseHotelScraper):
 
     def _build_url(self, hotel_id: str, checkin: date, checkout: date) -> str:
         return (
-            f"https://www.booking.com/hotel/jp/{hotel_id}.ja.html"
+            f"https://www.booking.com/hotel/jp/{hotel_id}.html"
             f"?checkin={checkin}&checkout={checkout}"
             f"&group_adults={self.adults}&group_children={self.children}"
             f"&no_rooms={self.rooms}&selected_currency=JPY&lang=ja"
         )
 
     def _fetch_page(self, url: str) -> str:
+        last_error: Exception | None = None
+        for attempt in range(3):
+            try:
+                return self._fetch_page_once(url)
+            except Exception as exc:
+                last_error = exc
+                time.sleep(2 + attempt)
+        assert last_error is not None
+        raise last_error
+
+    def _fetch_page_once(self, url: str) -> str:
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as p:
@@ -62,32 +73,72 @@ class BookingScraper(BaseHotelScraper):
                 context.add_cookies(cookies)
 
             page = context.new_page()
-            page.goto(url, timeout=30000)
-            time.sleep(3)
+            page.goto(url, timeout=45000, wait_until="domcontentloaded")
+            self._wait_for_stable_page(page)
 
             # Handle PIPL consent wall (React SPA needs full render)
-            if "consent" in page.title().lower():
+            if "consent" in self._safe_title(page).lower():
                 # Wait for React to render checkboxes and buttons
                 time.sleep(2)
                 page.evaluate(
-                    "() => { const cb = document.querySelector('input[name=\"selectAll\"]'); "
-                    "if (cb) cb.click(); }"
+                    "() => { "
+                    "const boxes = document.querySelectorAll('input[type=\"checkbox\"]'); "
+                    "for (const cb of boxes) { if (!cb.checked) cb.click(); } "
+                    "}"
                 )
                 time.sleep(1)
                 page.evaluate(
                     "() => { const btns = document.querySelectorAll('button'); "
                     "for (const btn of btns) { "
-                    "if (btn.textContent.includes('同意')) { btn.click(); return; } } }"
+                    "const text = btn.textContent || ''; "
+                    "if (text.includes('同意') || text.includes('Agree')) { btn.click(); return; } } }"
                 )
                 # Wait for page navigation after consent
-                time.sleep(8)
+                self._wait_for_stable_page(page, timeout=20000)
 
             # Extra wait for hotel page content to load
-            time.sleep(2)
+            self._wait_for_stable_page(page, timeout=20000)
 
-            html = page.content()
+            html = self._safe_content(page)
             browser.close()
             return html
+
+    def _wait_for_stable_page(self, page, timeout: int = 15000) -> None:
+        """Wait through Booking's client-side navigation without failing hard."""
+        try:
+            page.wait_for_load_state("domcontentloaded", timeout=timeout)
+        except Exception:
+            pass
+        try:
+            page.wait_for_load_state("networkidle", timeout=timeout)
+        except Exception:
+            pass
+        try:
+            page.wait_for_selector("h2.pp-header__title, .hprt-roomtype-icon-link, body", timeout=timeout)
+        except Exception:
+            pass
+        time.sleep(1)
+
+    def _safe_title(self, page) -> str:
+        for attempt in range(3):
+            try:
+                return page.title()
+            except Exception:
+                self._wait_for_stable_page(page, timeout=10000)
+                time.sleep(1 + attempt)
+        return ""
+
+    def _safe_content(self, page) -> str:
+        last_error: Exception | None = None
+        for attempt in range(3):
+            try:
+                return page.content()
+            except Exception as exc:
+                last_error = exc
+                self._wait_for_stable_page(page, timeout=10000)
+                time.sleep(1 + attempt)
+        assert last_error is not None
+        raise last_error
 
     def _parse_page(self, html: str) -> tuple[str | int, list[dict[str, Any]]]:
         soup = BeautifulSoup(html, "html.parser")

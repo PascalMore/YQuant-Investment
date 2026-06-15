@@ -21,6 +21,15 @@ from pandas import DataFrame, read_csv
 
 from transformers.portfolio_excel_transformer import PortfolioExcelTransformer
 from transformers.trade_excel_transformer import TradeExcelTransformer
+from transformers.a_share_name_corrector import AUDIT_ATTR
+from transformers.asset_identity_review import (
+    apply_asset_identity_review,
+    build_review_summary,
+    filter_pending_normalized_records,
+    high_risk_asset_name_issues,
+    save_pending_review,
+    split_review_rows,
+)
 from transformers.image_portfolio_normalizer import normalize_all as normalize_portfolio
 from transformers.trade_normalizer import normalize_all as normalize_trade
 from validators.trade_validator import validate_trade, ValidationResult
@@ -126,12 +135,36 @@ async def run_pipeline(raw_text: str, date_str: str, source_root: Path, folder_d
     if fmt == "portfolio" and "截止日期" not in df.columns:
         df["截止日期"] = date_str
         logger.info(f"[Step1] Added 截止日期 = {date_str}")
+    df = apply_asset_identity_review(df)
+    asset_name_issues = high_risk_asset_name_issues(df)
+    if asset_name_issues:
+        logger.warning("[Step1] Pending asset identity review: %s", asset_name_issues)
+
     prefix = "trade" if fmt == "trade" else "portfolio"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     # Archive to folder_date (system date), not data date
     txt_path = save_raw_txt(raw_text, folder_date, source_root, prefix, timestamp)
     excel_path = save_excel(df, folder_date, source_root, prefix, timestamp)
     logger.info(f"[Step1] Saved: {txt_path}, {excel_path}")
+    accepted_df, pending_df = split_review_rows(df)
+    pending = save_pending_review(
+        pending_df=pending_df,
+        audit=asset_name_issues,
+        source_root=source_root,
+        folder_date=folder_date,
+        prefix=prefix,
+        timestamp=timestamp,
+        fmt=fmt,
+        source_path=str(txt_path),
+        excel_path=str(excel_path),
+    )
+    review = build_review_summary(
+        total_rows=len(df),
+        accepted_rows=len(accepted_df),
+        pending_rows=len(pending_df),
+        audit=df.attrs.get(AUDIT_ATTR, []),
+        pending=pending,
+    )
 
     if fmt == "trade":
         # --- Trade Pipeline ---
@@ -141,11 +174,23 @@ async def run_pipeline(raw_text: str, date_str: str, source_root: Path, folder_d
             raise ValueError("No daily_data after transform")
         daily_data = nested[0]["daily_data"][0]
         normalized = normalize_trade(daily_data)
+        normalized = filter_pending_normalized_records(normalized, pending_df, "trade")
         records = normalized.get("trade", [])
         logger.info(f"[Step2] Trade records: {len(records)}")
 
         if not records:
-            raise ValueError("No trade records after normalization")
+            return {
+                "status": "pending_review" if pending else "failed",
+                "rows": 0,
+                "format": "trade",
+                "trade": 0,
+                "txt": str(txt_path),
+                "excel": str(excel_path),
+                "review": review,
+                "pending": pending,
+                "validation": {"valid": True},
+                "mongodb": {"trade": 0},
+            }
 
         vr = validate_trade(records)
         if vr.has_errors:
@@ -156,17 +201,27 @@ async def run_pipeline(raw_text: str, date_str: str, source_root: Path, folder_d
                 logger.warning(f"[Step3] Validation warning: {w}")
 
         if dry_run:
-            return {"rows": len(records), "format": "trade", "dry_run": True}
+            return {
+                "status": "dry_run",
+                "rows": len(records),
+                "format": "trade",
+                "dry_run": True,
+                "review": review,
+                "pending": pending,
+            }
 
         loader = PortfolioMongoLoader()
         result = loader.load_trade({"trade": records})
         logger.info(f"[Step4] MongoDB trade: {result.get('trade', 0)}")
         return {
+            "status": "partial_success" if pending else "success",
             "rows": len(records),
             "format": "trade",
             "trade": result.get("trade", 0),
             "txt": str(txt_path),
             "excel": str(excel_path),
+            "review": review,
+            "pending": pending,
             "validation": {"valid": True},
             "mongodb": result,
         }
@@ -176,8 +231,24 @@ async def run_pipeline(raw_text: str, date_str: str, source_root: Path, folder_d
         transformer = PortfolioExcelTransformer()
         nested = transformer.transform([{"df": df, "source": "message"}])
         normalized = normalize_portfolio(nested[0])
+        normalized = filter_pending_normalized_records(normalized, pending_df, "portfolio")
         position_records = normalized.get("position", [])
         logger.info(f"[Step2] Position records: {len(position_records)}")
+        if not position_records and pending:
+            return {
+                "status": "pending_review",
+                "rows": 0,
+                "format": "portfolio",
+                "basic_info": 0,
+                "nav": 0,
+                "position": 0,
+                "txt": str(txt_path),
+                "excel": str(excel_path),
+                "review": review,
+                "pending": pending,
+                "validation": {"valid": True},
+                "mongodb": {"basic_info": 0, "nav": 0, "position": 0},
+            }
 
         vr_pos = validate_position(position_records)
         vr_basic = validate_basic_info(normalized.get("basic_info", []))
@@ -195,12 +266,20 @@ async def run_pipeline(raw_text: str, date_str: str, source_root: Path, folder_d
                 logger.warning(f"[Step3] Validation warning: {w}")
 
         if dry_run:
-            return {"rows": len(position_records), "format": "portfolio", "dry_run": True}
+            return {
+                "status": "dry_run",
+                "rows": len(position_records),
+                "format": "portfolio",
+                "dry_run": True,
+                "review": review,
+                "pending": pending,
+            }
 
         loader = PortfolioMongoLoader()
         result = loader.load_all(normalized)
         logger.info(f"[Step4] MongoDB: basic={result.get('basic_info', 0)}, nav={result.get('nav', 0)}, position={result.get('position', 0)}")
         return {
+            "status": "partial_success" if pending else "success",
             "rows": len(position_records),
             "format": "portfolio",
             "basic_info": result.get("basic_info", 0),
@@ -208,6 +287,8 @@ async def run_pipeline(raw_text: str, date_str: str, source_root: Path, folder_d
             "position": result.get("position", 0),
             "txt": str(txt_path),
             "excel": str(excel_path),
+            "review": review,
+            "pending": pending,
             "validation": {"valid": True},
             "mongodb": result,
         }

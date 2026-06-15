@@ -25,8 +25,9 @@ from watchdog.events import FileSystemEventHandler, FileCreatedEvent, FileModifi
 
 # 本地模块
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from run_image_pipeline import run_pipeline as run_image_pipeline_async
-from run_message_pipeline import run_pipeline as run_message_pipeline_async
+from batch_report import format_batch_summary, summarize_batch_results
+from run_unified_image_pipeline import run_pipeline as run_image_pipeline_async
+from run_unified_message_pipeline import run_pipeline as run_message_pipeline_async
 
 
 # 配置日志
@@ -83,14 +84,19 @@ class PortfolioPipeline:
                 image_path=str(image_path),
                 date_str=date_str,
                 source_root=SOURCE_ROOT,
+                folder_date=date_str,
                 dry_run=False,
             )
             logger.info(f"[Image Pipeline] ✅ 完成: {result}")
             return {
                 "type": "image",
+                "status": result.get("status", "success"),
                 "source": result.get("image"),
                 "excel": result.get("excel_path"),
                 "rows": result.get("rows"),
+                "format": result.get("format"),
+                "review": result.get("review"),
+                "pending": result.get("pending"),
                 "mongodb": result.get("mongodb"),
             }
         except Exception as e:
@@ -115,14 +121,19 @@ class PortfolioPipeline:
                 raw_text=message_path.read_text(encoding="utf-8"),
                 date_str=date_str,
                 source_root=SOURCE_ROOT,
+                folder_date=date_str,
                 dry_run=False,
             )
             logger.info(f"[Message Pipeline] ✅ 完成: {result}")
             return {
                 "type": "message",
-                "source": result.get("excel_path"),  # 原文件路径
-                "excel": result.get("excel_path"),
+                "status": result.get("status", "success"),
+                "source": result.get("txt") or result.get("excel"),
+                "excel": result.get("excel"),
                 "rows": result.get("rows"),
+                "format": result.get("format"),
+                "review": result.get("review"),
+                "pending": result.get("pending"),
                 "mongodb": result.get("mongodb"),
             }
         except Exception as e:
@@ -259,7 +270,15 @@ async def process_existing_files(processed_files: set) -> list[dict]:
             results.append(result)
         except Exception as e:
             logger.error(f"处理失败 {path}: {e}")
+            results.append({
+                "type": file_type,
+                "source": str(path),
+                "status": "failed",
+                "error": str(e),
+            })
 
+    summary = summarize_batch_results(results)
+    logger.info("\n%s", format_batch_summary(summary))
     return results
 
 

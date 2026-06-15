@@ -69,4 +69,4 @@ skills/data/source/
 
 # Auto-push marker (transient)
 .last_sent
-data/
+/data/

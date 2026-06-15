@@ -48,3 +48,10 @@ STOCK_NAME_CORRECTIONS = {
     "9988.HK": "阿里巴巴-W",
     "9998.HK": "阿里巴巴-W",
 }
+
+# Some holdings screenshots use common brand names while the Wind security name
+# follows the listed company name. Treat these as aliases, then store the
+# standardized name from STOCK_NAME_CORRECTIONS.
+STOCK_NAME_ALIASES = {
+    "2097.HK": {"蜜雪冰城"},
+}

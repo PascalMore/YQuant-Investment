@@ -67,12 +67,15 @@ def connect_mongodb(uri: str, db_name: str):
         sys.exit(1)
 
 
-def get_latest_date(db, collection_name: str) -> str:
-    """获取指定表的最新日期"""
+def get_latest_date(db, collection_name: str, max_date: date = None) -> str:
+    """获取指定表的最新日期，可限定不超过 max_date。"""
     try:
         collection = db[collection_name]
         date_field = "position_date" if collection_name == "portfolio_position" else "trade_date"
-        result = collection.find_one(sort=[(date_field, -1)], projection={date_field: 1})
+        query = {}
+        if max_date is not None:
+            query[date_field] = {"$lte": max_date.isoformat()}
+        result = collection.find_one(query, sort=[(date_field, -1)], projection={date_field: 1})
         if result and date_field in result:
             return result[date_field]
         return None
@@ -323,6 +326,9 @@ def _should_skip_report(report_date: date) -> bool:
     try:
         last_sent = datetime.strptime(marker.read_text().strip(), "%Y-%m-%d").date()
         print(f"[跳过检查] 上次发送数据日期: {last_sent}")
+        if last_sent > today:
+            print(f"[跳过检查] .last_sent 是未来日期 {last_sent}，视为无效标记")
+            return False
     except Exception as e:
         print(f"[跳过检查] 无法读取 .last_sent ({e})，不跳过")
         return False
@@ -333,8 +339,8 @@ def _should_skip_report(report_date: date) -> bool:
         client.admin.command('ping')
         db = client[MONGODB_DB]
 
-        position_date = get_latest_date(db, "portfolio_position")
-        trade_date = get_latest_date(db, "portfolio_trade")
+        position_date = get_latest_date(db, "portfolio_position", max_date=today)
+        trade_date = get_latest_date(db, "portfolio_trade", max_date=today)
 
         client.close()
 
@@ -344,7 +350,7 @@ def _should_skip_report(report_date: date) -> bool:
             pd.Timestamp(trade_date) if trade_date else pd.Timestamp.min
         ).date()
 
-        print(f"[跳过检查] 数据库最新日期: {latest_db_date}, 上次发送日期: {last_sent}")
+        print(f"[跳过检查] 数据库最新日期(<= {today}): {latest_db_date}, 上次发送日期: {last_sent}")
 
         # 如果数据库最新日期 <= 上次发送日期，跳过
         if latest_db_date <= last_sent:
@@ -388,7 +394,7 @@ def main():
     
     # 3. 获取持仓表最新日期
     print("\n[3/6] 查询持仓表最新日期...")
-    latest_date = get_latest_date(db, "portfolio_position")
+    latest_date = get_latest_date(db, "portfolio_position", max_date=today)
     if not latest_date:
         print("❌ 无法获取持仓表最新日期")
         sys.exit(1)

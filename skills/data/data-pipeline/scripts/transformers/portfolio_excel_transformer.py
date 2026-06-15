@@ -136,11 +136,12 @@ class PortfolioExcelTransformer(BaseTransformer):
                 # Strip percentage suffix before numeric conversion
                 df[col] = df[col].apply(lambda x: str(x).replace('%', '').replace('％', '') if isinstance(x, str) else x)
                 df[col] = pd.to_numeric(df[col], errors="coerce")
-                # Convert percentage to decimal (e.g. 9.44% -> 0.0944)
-                # If value > 0.1, treat as percentage string from text message (need /100)
-                # If value <= 0.1, treat as already-decimal from image OCR (no /100)
+                # Convert whole-number percentages to decimal (e.g. 9.44 -> 0.0944).
+                # Decimal OCR values such as 0.1012 already mean 10.12% and must stay as-is.
+                # Single-name positions are assumed not to exceed 40%; values above 0.4
+                # are treated as whole-number percentages from OCR/Excel.
                 if col == "持仓比例":
-                    df[col] = df[col].apply(lambda x: round(x / 100, 4) if x > 0.1 else x)
+                    df[col] = df[col].apply(lambda x: round(x / 100, 4) if x > 0.4 else x)
 
         daily_data = []
         for date, date_group in df.groupby("截止日期", sort=False):
