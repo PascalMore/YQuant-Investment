@@ -345,3 +345,92 @@ ext = MessagePortfolioExtractor()
 records = await ext.extract("2026-05-03")  # 传入日期字符串
 # → [{"df": DataFrame, "source_path": "..."}]
 ```
+
+## Smart Money Batch Closeout（YQuant 会话集成）
+
+
+当用户在飞书会话中发送图片批次后跟「图片批次已上传」等触发词时，YQuant 需要：
+1. 累积每张图片的处理结果
+2. 检测触发词后调用批次 closeout
+3. 发送 closeout 文本给用户
+
+### 触发词
+
+```python
+BATCH_END_PHRASES = [
+    "图片批次已上传",
+    "就这些",
+    "处理完了",
+    "发完了",
+    "没有了",
+]
+
+
+def is_batch_end(message: str) -> bool:
+    """检测用户消息是否为批次结束信号。"""
+    return any(phrase in message for phrase in BATCH_END_PHRASES)
+```
+
+### 模块使用
+
+所有函数在 `scripts/image_batch_state.py`：
+
+```python
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent / "scripts"))
+from image_batch_state import add_image_result, close_batch_now, check_and_send_pending_closeout
+```
+
+### YQuant 会话流程
+
+```python
+# 1. 每张图片处理后，累积结果
+pipeline_result = await run_unified_image_pipeline(...)
+add_image_result(pipeline_result)
+
+# 2. 用户发送触发词 → 调用 close_batch_now() 并发送
+if is_batch_end(user_message):
+    closeout = close_batch_now()
+    if closeout:
+        await message(closeout["message_text"])
+    else:
+        await message("当前没有待处理的图片批次。")
+```
+
+
+### closeout 结构
+
+`close_batch_now()` 返回：
+
+```python
+{
+    "kind": "smart_money_batch_closeout",
+    "status": "closed_clean" | "closed_needs_confirmation" | "closed_with_failures" | "closed_dry_run" | "closed_empty",
+    "totals": {"files": N, "success": N, ...},
+    "mongodb_counts": {"position": N, "trade": N},
+    "needs_confirmation_items": [...],
+    "failed_items": [...],
+    "confirmation": {"required": bool, "question": str, "expected_user_action": str},
+    "message_text": "Smart Money 批次处理 Closeout\n\n状态：closed_clean\n..."
+}
+```
+
+
+### 状态判定优先级
+
+| 条件 | status |
+|------|--------|
+| 0 个文件 | `closed_empty` |
+| 有 failed | `closed_with_failures` |
+| 有 pending_rows / partial / pending_review | `closed_needs_confirmation` |
+| 有 dry_run | `closed_dry_run` |
+| 全部成功 | `closed_clean` |
+
+
+### 状态文件
+
+运行时状态文件写在 `WORKSPACE/.openclaw/`：
+- `image_batch_results.json` — 累积中的图片结果
+
+正常情况下用户无感，仅用于 YQuant 重启后的状态恢复。本方案不使用 30s timer；批次结束完全由用户发送「图片批次已上传」等触发词决定。

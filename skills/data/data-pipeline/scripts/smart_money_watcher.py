@@ -25,7 +25,7 @@ from watchdog.events import FileSystemEventHandler, FileCreatedEvent, FileModifi
 
 # 本地模块
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from batch_report import format_batch_summary, summarize_batch_results
+from batch_report import format_batch_closeout, format_batch_summary, summarize_batch_results
 from run_unified_image_pipeline import run_pipeline as run_image_pipeline_async
 from run_unified_message_pipeline import run_pipeline as run_message_pipeline_async
 
@@ -243,12 +243,12 @@ def scan_existing_files(date_str: Optional[str] = None) -> list[Path]:
     return files
 
 
-async def process_existing_files(processed_files: set) -> list[dict]:
+async def process_existing_files(processed_files: set, date_str: Optional[str] = None) -> list[dict]:
     """处理已存在的文件（不重复处理）"""
     pipeline = PortfolioPipeline()
     results = []
 
-    for path in scan_existing_files():
+    for path in scan_existing_files(date_str):
         if str(path) in processed_files:
             continue
 
@@ -261,10 +261,11 @@ async def process_existing_files(processed_files: set) -> list[dict]:
             continue
 
         try:
+            file_date = pipeline.detect_date_from_path(path)
             if file_type == "image":
-                result = await pipeline.process_image(path)
+                result = await pipeline.process_image(path, file_date)
             else:
-                result = await pipeline.process_message(path)
+                result = await pipeline.process_message(path, file_date)
 
             processed_files.add(str(path))
             results.append(result)
@@ -279,6 +280,7 @@ async def process_existing_files(processed_files: set) -> list[dict]:
 
     summary = summarize_batch_results(results)
     logger.info("\n%s", format_batch_summary(summary))
+    logger.info("\n%s", format_batch_closeout(summary, f"Smart Money {date_str or '全量扫描'}"))
     return results
 
 
@@ -348,19 +350,23 @@ def main():
     if args.once:
         # 单次扫描模式
         loop = asyncio.get_event_loop()
-        results = loop.run_until_complete(process_existing_files(processed_files))
+        results = loop.run_until_complete(process_existing_files(processed_files, args.once))
+        summary = summarize_batch_results(results)
         for r in results:
             print(f"✅ {r}")
+        print("\n" + format_batch_closeout(summary, f"Smart Money {args.once}"))
         save_processed()
         return
 
     if args.scan_all:
         loop = asyncio.get_event_loop()
         results = loop.run_until_complete(process_existing_files(processed_files))
+        summary = summarize_batch_results(results)
         for r in results:
             print(f"✅ {r}")
         save_processed()
         print(f"\n已处理 {len(results)} 个文件")
+        print("\n" + format_batch_closeout(summary, "Smart Money 全量扫描"))
         return
 
     # 守护进程模式

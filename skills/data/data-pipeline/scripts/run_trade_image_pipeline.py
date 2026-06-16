@@ -133,7 +133,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Skip MongoDB write")
     args = parser.parse_args()
 
-    source_root = Path(__file__).parent.parent / "data" / "source" / "smart-money"
+    source_root = Path(__file__).resolve().parents[4] / "skills" / "data" / "source" / "smart-money"
     result = asyncio.run(run_pipeline(args.image, args.date, source_root, dry_run=args.dry_run))
     logger.info(f"[Done] Result: {result}")
 

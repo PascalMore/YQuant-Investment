@@ -32,7 +32,7 @@ class MessagePortfolioExtractor(BaseExtractor):
         """
         if source_dir is None:
             source_dir = (
-                Path(__file__).resolve().parents[4]
+                Path(__file__).resolve().parents[5]
                 / "skills" / "data" / "source" / "smart-money"
             )
         self.source_dir = Path(source_dir)

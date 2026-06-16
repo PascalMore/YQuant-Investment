@@ -276,8 +276,8 @@ def main():
         print("请使用 -i '文本' 或 -f /path/to/file.txt 提供数据")
         sys.exit(1)
 
-    # source_root: 向上两级到 workspace-yquant/skills/data/source/smart-money
-    source_root = Path(__file__).resolve().parents[2] / "source" / "smart-money"
+    # source_root: workspace-yquant/skills/data/source/smart-money
+    source_root = Path(__file__).resolve().parents[4] / "skills" / "data" / "source" / "smart-money"
 
     import asyncio
     result = asyncio.run(run_pipeline(raw_text, args.date, source_root, dry_run=args.dry_run))

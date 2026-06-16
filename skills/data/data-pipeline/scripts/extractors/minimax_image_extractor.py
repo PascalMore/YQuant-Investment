@@ -7,6 +7,7 @@ table images, then parses the output into a pandas DataFrame.
 Step 2 of the Image Portfolio Data Pipeline (replaces PaddleOCRImageExtractor).
 """
 import subprocess
+import asyncio
 import json
 import re
 import tempfile
@@ -60,7 +61,8 @@ class MiniMaxImageExtractor(BaseExtractor):
         """
         if output_dir is None:
             output_dir = (
-                Path(__file__).resolve().parents[4]
+                Path(__file__).resolve().parents[5]
+                / "skills"
                 / "data"
                 / "source"
                 / "smart-money"
@@ -109,7 +111,7 @@ class MiniMaxImageExtractor(BaseExtractor):
     async def _run_vision_extraction(self, img_path: Path) -> pd.DataFrame:
         """
         Execute mmx vision describe and parse the output.
-        Retries up to 3 times on timeout.
+        Retries up to 3 times on timeout and transient MiniMax service errors.
 
         Args:
             img_path: Path to the image file.
@@ -124,10 +126,11 @@ class MiniMaxImageExtractor(BaseExtractor):
             "--prompt", VISION_PROMPT,
         ]
 
-        loop = __import__("asyncio").get_event_loop()
-        max_retries = 3
+        loop = asyncio.get_event_loop()
+        max_attempts = 3
+        attempt_logs: list[dict[str, Any]] = []
 
-        for attempt in range(max_retries):
+        for attempt in range(1, max_attempts + 1):
             try:
                 proc = await loop.run_in_executor(
                     None,
@@ -138,19 +141,53 @@ class MiniMaxImageExtractor(BaseExtractor):
                         timeout=120,  # 2 min timeout for vision
                     ),
                 )
-                break  # Success, exit loop
-            except subprocess.TimeoutExpired:
-                if attempt == max_retries - 1:
-                    raise RuntimeError(
-                        f"MiniMax vision timed out after {max_retries} attempts for {img_path.name}"
-                    )
-                print(f"  [MiniMax Vision] Timeout, retrying ({attempt + 1}/{max_retries})...")
-                continue
+                if proc.returncode == 0:
+                    if attempt_logs:
+                        self._write_vision_debug("retry", img_path, cmd, attempt_logs)
+                    break
 
-        if proc.returncode != 0:
-            raise RuntimeError(
-                f"MiniMax vision failed for {img_path.name}:\n{proc.stderr}"
-            )
+                failure = {
+                    "attempt": attempt,
+                    "returncode": proc.returncode,
+                    "stdout": proc.stdout,
+                    "stderr": proc.stderr,
+                    "retryable": self._is_retryable_failure(proc.stdout, proc.stderr),
+                }
+                attempt_logs.append(failure)
+                if failure["retryable"] and attempt < max_attempts:
+                    backoff_seconds = 2 ** (attempt - 1)
+                    print(
+                        f"  [MiniMax Vision] transient failure, retrying "
+                        f"({attempt}/{max_attempts}) after {backoff_seconds}s..."
+                    )
+                    await asyncio.sleep(backoff_seconds)
+                    continue
+
+                self._write_vision_debug("error", img_path, cmd, attempt_logs)
+                raise RuntimeError(
+                    f"MiniMax vision failed for {img_path.name} after {attempt} attempt(s):\n"
+                    f"{proc.stderr or proc.stdout}"
+                )
+            except subprocess.TimeoutExpired:
+                attempt_logs.append({
+                    "attempt": attempt,
+                    "returncode": None,
+                    "stdout": "",
+                    "stderr": f"timeout after 120s for {img_path.name}",
+                    "retryable": True,
+                })
+                if attempt == max_attempts:
+                    self._write_vision_debug("error", img_path, cmd, attempt_logs)
+                    raise RuntimeError(
+                        f"MiniMax vision timed out after {max_attempts} attempts for {img_path.name}"
+                    )
+                backoff_seconds = 2 ** (attempt - 1)
+                print(
+                    f"  [MiniMax Vision] Timeout, retrying "
+                    f"({attempt}/{max_attempts}) after {backoff_seconds}s..."
+                )
+                await asyncio.sleep(backoff_seconds)
+                continue
 
         output = proc.stdout.strip()
         print(f"  [MiniMax Vision] {img_path.name}: {len(output)} chars output")
@@ -166,6 +203,48 @@ class MiniMaxImageExtractor(BaseExtractor):
         df = self._parse_vision_output(output)
 
         return df
+
+    def _is_retryable_failure(self, stdout: str, stderr: str) -> bool:
+        """Return whether a MiniMax CLI failure looks transient."""
+        text = f"{stdout or ''}\n{stderr or ''}".lower()
+        retryable_markers = (
+            "system error",
+            "temporarily",
+            "timeout",
+            "timed out",
+            "rate limit",
+            "too many requests",
+            "http 429",
+            "http 500",
+            "http 502",
+            "http 503",
+            "http 504",
+        )
+        return any(marker in text for marker in retryable_markers)
+
+    def _write_vision_debug(
+        self,
+        status: str,
+        img_path: Path,
+        cmd: list[str],
+        attempts: list[dict[str, Any]],
+    ) -> Path:
+        """Persist MiniMax vision retry/failure diagnostics for later analysis."""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        debug_path = self.debug_dir / f"pic_{timestamp}_vision_{status}.json"
+        payload = {
+            "status": status,
+            "created_at": datetime.now().isoformat(timespec="seconds"),
+            "image_path": str(img_path),
+            "image_name": img_path.name,
+            "command": cmd,
+            "attempts": attempts,
+        }
+        debug_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
+        return debug_path
 
     def _parse_vision_output(self, output: str) -> pd.DataFrame:
         """
