@@ -229,7 +229,13 @@ def save_pending_review(
         "csv": str(csv_path),
     }
     json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
-    return {"csv": str(csv_path), "json": str(json_path), "rows": len(pending_df), "issues": audit}
+
+    # F-008: 生成标准补录命令，供 pipeline 调用方（AI/Orchestrator）直接使用
+    apply_cmd = (
+        f"python3 {Path(__file__).parent.parent / 'load_pending_confirmed.py'}"
+        f" --csv \"{csv_path}\""
+    )
+    return {"csv": str(csv_path), "json": str(json_path), "rows": len(pending_df), "issues": audit, "apply_command": apply_cmd}
 
 
 def build_review_summary(

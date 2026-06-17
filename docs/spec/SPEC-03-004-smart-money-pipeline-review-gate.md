@@ -7,7 +7,7 @@
 | 状态 | Accepted |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-06-15 |
-| 最后更新 | 2026-06-15 |
+| 最后更新 | 2026-06-17 |
 | 来源 RFC | RFC-03-004 |
 | 目标模块 | data-pipeline |
 | 适配 Agent | YQuant-Developer-Engineer, YQuant-Test-Engineer |
@@ -26,11 +26,12 @@
 - [x] pending CSV/JSON 审计产物。
 - [x] 批次汇总函数与 watcher `--once/--scan-all` 汇总输出。
 - [x] 单元测试覆盖核心行为。
+- [ ] pending 确认后通过 `load_pending_confirmed.py` 补录入库闭环。
+- [ ] pending 审计 JSON 标记 `resolved` 状态。
 
 ### 2.2 Out of Scope
 
-- [ ] 人工确认 UI。
-- [ ] 自动把 pending 文件重新写库的交互流程。
+- [ ] 人工确认 UI（Feishu 交互式确认或 Web UI）。
 - [ ] 生产 MongoDB schema 迁移。
 - [ ] 历史数据修复。
 
@@ -45,6 +46,9 @@
 | F-005 | dry-run | `dry_run=True` | 不写 MongoDB，仍返回复核汇总 | pending 文件可不强制写库但应返回 blocked/pending 信息 |
 | F-006 | 批次汇总 | 多个 pipeline result | 汇总总数、成功、部分成功、pending、失败、入库计数 | 失败项保留错误消息 |
 | F-007 | 兼容原返回 | 原调用方读取 `rows/format/mongodb/excel_path` | 字段仍存在 | 新字段向后兼容 |
+| F-008 | `apply_command` 生成 | pending 行存在时 | 返回值包含 `apply_command` 字段，值为标准 CLI 命令字符串 | 无 pending 时该字段为空或不存在 |
+| F-009 | `--date` 批量补录模式 | `load_pending_confirmed.py --date 2026-06-15` | 加载指定日期下所有已确认的 pending CSV 并逐个补录 | 指定日期无 pending 文件时返回 `{loaded: 0}` |
+| F-010 | resolved 标记 | 补录成功后 | pending JSON 中 `review_status` 更新为 `resolved`，记录 `resolved_at` 时间戳 | 补录失败时不标记 resolved |
 
 ## 4. 数据与接口契约
 
@@ -76,6 +80,10 @@
 | A-004 | message pipeline 使用同样复核规则 | 单元测试 |
 | A-005 | batch summary 汇总状态和 pending 行数正确 | 单元测试 |
 | A-006 | 无 pending 的现有测试通过 | pytest 回归 |
+| A-007 | pending 结果包含 `apply_command` 字段且格式正确 | 单元测试 |
+| A-008 | `load_pending_confirmed` 正确过滤 confirmed 行并 upsert | 单元测试 monkeypatch loader |
+| A-009 | `--date` 批量模式加载指定日期全部 pending 文件 | 单元测试 |
+| A-010 | 补录成功后 pending JSON 标记为 `resolved` | 单元测试 |
 
 ## 6. 测试要求
 
@@ -107,4 +115,5 @@
 
 ## 8. 开放问题
 
-- [ ] 人工确认补录 CLI/UI 的交互形态另开后续 SPEC。
+- ~~人工确认补录 CLI/UI 的交互形态另开后续 SPEC~~ → **已解决**：采用 `load_pending_confirmed.py` CLI 补录，通过 `apply_command` 字段串联。Feishu/Web UI 确认入口未来另开 RFC。
+- [ ] `load_pending_confirmed` 目前仅支持 position 和 trade，是否需要扩展到其他数据类型（如 NAV/basic_info）。

@@ -269,7 +269,14 @@ def _format_batch_closeout_text(closeout: dict[str, Any]) -> str:
             csv_path = pending_files.get("csv") or ""
             lines.append(f"- {source}: pending_rows={pending_rows}, csv={csv_path}")
         if len(needs_confirmation_items) > 10:
-            lines.append(f"... 还有 {len(needs_confirmation_items) - 10} 项未显示")
+            lines.append(f"... 还有 {len(needs_confirmation_items) - 10} 项未展示")
+
+        # F-008: 补录命令提示
+        lines.append("")
+        lines.append("补录命令：确认后运行")
+        lines.append("  python3 load_pending_confirmed.py --date <批次日期>")
+        lines.append("或逐文件处理：")
+        lines.append("  python3 load_pending_confirmed.py --csv <pending_csv路径>")
 
     if failed_items:
         lines.append("")
