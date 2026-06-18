@@ -96,3 +96,14 @@ _Last updated: 2026-04-24_
 - "timestamp": "Fri 2026-06-12 18:54 GMT+8" [score=0.871 recalls=0 avg=0.620 source=memory/2026-06-12-1903.md:16-16]
 <!-- openclaw-memory-promotion:memory:memory/2026-06-12-1903.md:20:20 -->
 - Sender (untrusted metadata): [score=0.871 recalls=0 avg=0.620 source=memory/2026-06-12-1903.md:20-20]
+
+## Promoted From Short-Term Memory (2026-06-19)
+
+<!-- openclaw-memory-promotion:memory:memory/2026-06-12-1903.md:23:25 -->
+- "label": "用户724532 (ou_4ba9dccf7c86e42b89a1efef6f3a09ea)", "id": "ou_4ba9dccf7c86e42b89a1efef6f3a09ea", "name": "用户724532" [score=0.889 recalls=0 avg=0.620 source=memory/2026-06-12-1903.md:23-25]
+<!-- openclaw-memory-promotion:memory:memory/2026-06-12-1852.md:11:11 -->
+- 可以，你发过来吧。 [score=0.879 recalls=0 avg=0.620 source=memory/2026-06-12-1852.md:11-11]
+<!-- openclaw-memory-promotion:memory:memory/2026-06-12-1903.md:29:31 -->
+- [message_id: om_x100b6d8a16c40ca8c344869a797b2cf] 用户724532: YQuant 设置fallback 为minimax/MiniMax-M2.7, codex/gpt-5.5, minimax/MiniMax-M2.7-highspeed assistant: [score=0.862 recalls=0 avg=0.620 source=memory/2026-06-12-1903.md:29-31]
+<!-- openclaw-memory-promotion:memory:memory/2026-06-12-1852.md:9:9 -->
+- assistant: [score=0.859 recalls=0 avg=0.620 source=memory/2026-06-12-1852.md:9-9]

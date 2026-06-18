@@ -65,6 +65,11 @@ def _detect_format(headers: list[str]) -> str:
     return "portfolio"
 
 
+def _first_existing_column(cols: set[str], candidates: tuple[str, ...]) -> str | None:
+    """Return the first available column name from candidates."""
+    return next((col for col in candidates if col in cols), None)
+
+
 def load_pending_positions(pending_csv_path: str, name_mapping: dict | None = None) -> dict:
     """
     Load confirmed pending position records from pending CSV.
@@ -141,15 +146,23 @@ def load_pending_trades(pending_csv_path: str, name_mapping: dict | None = None)
     df = pd.read_csv(path, dtype=str).fillna("")
     cols = set(df.columns)
 
-    if "变化比例" not in cols and "方向" not in cols:
-        return {"loaded": 0, "errors": ["Not a trade-format CSV"]}
+    date_col = _first_existing_column(cols, ("日期", "截止日期"))
+    ratio_col = _first_existing_column(cols, ("变化比例", "持仓比例"))
+    required_cols = ["名称复核状态", "Wind代码", "产品代码", "资产名称", "变化金额", "方向"]
+    missing = [col for col in required_cols if col not in cols]
+    if date_col is None:
+        missing.append("日期/截止日期")
+    if ratio_col is None:
+        missing.append("变化比例/持仓比例")
+    if missing:
+        return {"loaded": 0, "errors": [f"Missing required trade columns: {', '.join(missing)}"]}
 
     pending_statuses = {"pending_review", "pending", "review"}
     df_confirmed = df[
         ~df["名称复核状态"].str.lower().isin(pending_statuses)
         & df["Wind代码"].str.strip().ne("")
         & df["产品代码"].str.strip().ne("")
-        & df["日期"].str.strip().ne("")
+        & df[date_col].str.strip().ne("")
     ]
 
     records = []
@@ -163,11 +176,11 @@ def load_pending_trades(pending_csv_path: str, name_mapping: dict | None = None)
             if name_mapping and code in name_mapping:
                 asset_name = name_mapping[code]
             records.append({
-                "trade_date": str(row["日期"].strip()),
+                "trade_date": str(row[date_col].strip()),
                 "product_code": row["产品代码"].strip(),
                 "asset_wind_code": code,
                 "asset_name": asset_name,
-                "change_ratio": _parse_pct(row["变化比例"]),
+                "change_ratio": _parse_pct(row[ratio_col]),
                 "change_amount": _parse_num(row["变化金额"]),
                 "direction": row["方向"].strip(),
                 "updated_at": now,

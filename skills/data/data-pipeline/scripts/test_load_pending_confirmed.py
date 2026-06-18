@@ -28,6 +28,14 @@ from load_pending_confirmed import (
 )
 
 
+class CaptureTradeLoader:
+    records = []
+
+    def upsert_trade(self, records):
+        self.__class__.records = records
+        return len(records)
+
+
 # ---------------------------------------------------------------------------
 # F-008: apply_command in save_pending_review
 # ---------------------------------------------------------------------------
@@ -95,6 +103,69 @@ def test_detect_format_portfolio():
 def test_detect_format_trade():
     df = pd.DataFrame(columns=["日期", "产品代码", "Wind代码", "变化比例", "方向"])
     assert _detect_format(list(df.columns)) == "trade"
+
+
+def test_detect_format_trade_with_pending_alias_columns():
+    df = pd.DataFrame(columns=["截止日期", "产品代码", "Wind代码", "持仓比例", "变化金额", "方向"])
+    assert _detect_format(list(df.columns)) == "trade"
+
+
+def test_load_pending_trades_accepts_alias_columns(monkeypatch):
+    """Trade pending CSV may use 截止日期/持仓比例; loader must receive standard schema."""
+    import load_pending_confirmed
+
+    CaptureTradeLoader.records = []
+    monkeypatch.setattr(load_pending_confirmed, "PortfolioMongoLoader", CaptureTradeLoader)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        csv_path = Path(tmpdir) / "trade_pending.csv"
+        pd.DataFrame([{
+            "截止日期": "2026-06-16",
+            "产品代码": "SM004",
+            "产品名称": "ZO-002",
+            "Wind代码": "001399.SZ",
+            "资产名称": "惠科股份",
+            "持仓比例": "0.0001",
+            "变化金额": "15473",
+            "方向": "买入",
+            "名称复核状态": "confirmed",
+            "主数据名称": "",
+            "名称复核原因": "confirmed by user",
+        }]).to_csv(csv_path, index=False)
+
+        result = load_pending_trades(str(csv_path))
+
+    assert result["loaded"] == 1
+    assert result["errors"] == []
+    assert len(CaptureTradeLoader.records) == 1
+    record = CaptureTradeLoader.records[0]
+    assert record["trade_date"] == "2026-06-16"
+    assert record["product_code"] == "SM004"
+    assert record["asset_wind_code"] == "001399.SZ"
+    assert record["asset_name"] == "惠科股份"
+    assert record["change_ratio"] == pytest.approx(0.0001)
+    assert record["change_amount"] == 15473.0
+    assert record["direction"] == "买入"
+    assert not {"截止日期", "产品代码", "Wind代码", "持仓比例", "变化金额", "方向", "资产名称"} & set(record)
+
+
+def test_load_pending_trades_rejects_missing_trade_date_alias():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        csv_path = Path(tmpdir) / "bad_trade_pending.csv"
+        pd.DataFrame([{
+            "产品代码": "SM004",
+            "Wind代码": "001399.SZ",
+            "资产名称": "惠科股份",
+            "持仓比例": "0.0001",
+            "变化金额": "15473",
+            "方向": "买入",
+            "名称复核状态": "confirmed",
+        }]).to_csv(csv_path, index=False)
+
+        result = load_pending_trades(str(csv_path))
+
+    assert result["loaded"] == 0
+    assert "日期/截止日期" in result["errors"][0]
 
 
 # ---------------------------------------------------------------------------
