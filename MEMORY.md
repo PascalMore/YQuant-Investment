@@ -107,3 +107,8 @@ _Last updated: 2026-04-24_
 - [message_id: om_x100b6d8a16c40ca8c344869a797b2cf] 用户724532: YQuant 设置fallback 为minimax/MiniMax-M2.7, codex/gpt-5.5, minimax/MiniMax-M2.7-highspeed assistant: [score=0.862 recalls=0 avg=0.620 source=memory/2026-06-12-1903.md:29-31]
 <!-- openclaw-memory-promotion:memory:memory/2026-06-12-1852.md:9:9 -->
 - assistant: [score=0.859 recalls=0 avg=0.620 source=memory/2026-06-12-1852.md:9-9]
+
+## Promoted From Short-Term Memory (2026-06-20)
+
+<!-- openclaw-memory-promotion:memory:memory/2026-06-12-1852.md:13:13 -->
+- 我帮你加两个地方： [score=0.867 recalls=0 avg=0.620 source=memory/2026-06-12-1852.md:13-13]
