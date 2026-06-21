@@ -112,3 +112,8 @@ _Last updated: 2026-04-24_
 
 <!-- openclaw-memory-promotion:memory:memory/2026-06-12-1852.md:13:13 -->
 - 我帮你加两个地方： [score=0.867 recalls=0 avg=0.620 source=memory/2026-06-12-1852.md:13-13]
+
+## Promoted From Short-Term Memory (2026-06-21)
+
+<!-- openclaw-memory-promotion:memory:memory/2026-06-16.md:29:29 -->
+- 30 20 * * 1-5 cd /home/pascal/.openclaw/workspace-yquant/skills/reports/daily-smartmoney-analysis/scripts && /home/pascal/.openclaw/workspace-yquant/skills/research/daily_stock_analysis/.venv/bin/python3.10 daily_export_report.py [score=0.890 recalls=0 avg=0.620 source=memory/2026-06-16.md:29-29]
