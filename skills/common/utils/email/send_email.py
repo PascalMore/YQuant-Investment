@@ -18,7 +18,7 @@ SMTP_SERVER = os.getenv("EMAIL_SMTP_SERVER", "smtp.qq.com")
 _port = os.getenv("EMAIL_SMTP_PORT")
 SMTP_PORT = int(_port) if _port else 465
 SENDER_EMAIL = os.getenv("EMAIL_SENDER")
-SENDER_NAME = os.getenv("EMAIL_SENDER_NAME", "YQClaw智能投资助手")
+SENDER_NAME = os.getenv("EMAIL_SENDER_NAME", "YQuant智能投资助手")
 AUTHORIZATION_CODE = os.getenv("EMAIL_SMTP_PASSWORD") or os.getenv("EMAIL_PASSWORD")
 USE_TLS = (os.getenv("EMAIL_USE_TLS") or "false").lower() == "true"
 # ===============================================

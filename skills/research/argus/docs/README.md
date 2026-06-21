@@ -1,6 +1,6 @@
 # Argus - 机构智慧资金行为追踪系统
 
-基于 YQClaw Investment 的 Argus 子项目，实现机构资金行为的日度追踪与分析。
+基于 YQuant-Investment 的 Argus 子项目，实现机构资金行为的日度追踪与分析。
 
 ## 目录结构
 

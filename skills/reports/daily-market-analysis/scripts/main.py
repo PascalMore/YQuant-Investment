@@ -64,7 +64,7 @@ def get_default_config():
                 "username": "532484187@qq.com",
                 "password": "vyzfsxtfuqufcaed",
                 "recipients": ["532484187@qq.com"],
-                "sender_name": "YQClaw智能投资助手",
+                "sender_name": "YQuant智能投资助手",
                 "is_html": True
             }
         },

@@ -4,7 +4,7 @@
 
 ## 项目概述
 
-- **项目名称**：YQClaw-Investment 智能量化投资系统
+- **项目名称**：YQuant-Investment 智能量化投资系统
 - **目录**：workspace-yquant
 - **目标**：对标顶级对冲基金的量化投研体系
 

@@ -8,7 +8,7 @@
 | 最后更新 | 2026-06-07 |
 | 版本号 | V0.6 |
 | 所属模块 | 08_research（投研分析） |
-| 依赖RFC | RFC-00-001-yqclaw-investment-global-architecture, RFC-08-001-argus-integration |
+| 依赖RFC | RFC-00-001-yquant-investment-global-architecture, RFC-08-001-argus-integration |
 | 替代RFC | 无 |
 | 适配AI工具 | OpenClaw、Claude Code |
 | 标签 | #argus #接口 #信号 #portfolio #标准化 |
@@ -33,7 +33,7 @@
 - 置信度阈值、降级策略需要显式声明，避免误用
 
 ### 2.2 与 RFC-08-001 的关系
-- RFC-08-001：定义 Argus 如何纳入 YQClaw 体系、数据源选择、模块定位
+- RFC-08-001：定义 Argus 如何纳入 YQuant 体系、数据源选择、模块定位
 - **RFC-08-002**：定义 Argus 输出信号的格式和消费接口契约
 - 两者共同构成 Argus 与其他模块的完整接口规范
 

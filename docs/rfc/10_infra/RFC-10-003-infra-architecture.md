@@ -8,7 +8,7 @@
 | 最后更新 | 2026-05-18 |
 | 版本号 | V0.1 |
 | 所属模块 | 10_infra（基础设施） |
-| 依赖RFC | RFC-00-001-yqclaw-investment-global-architecture |
+| 依赖RFC | RFC-00-001-yquant-investment-global-architecture |
 | 替代RFC | 无 |
 | 适配AI工具 | OpenClaw、Claude Code |
 | 标签 | #infra #架构 #日志 #工具 #复用 |
@@ -36,7 +36,7 @@
 ### 3.1 必须目标（Must-Have）
 - [ ] 统一日志工具（输出到 `logs/{submodule}/{module}_{YYYYMMDD}.log`）
 - [ ] 日期处理工具（交易日判断、日期获取）
-- [ ] 日志格式符合 YQClaw 规范
+- [ ] 日志格式符合 YQuant 规范
 
 ### 3.2 非目标（Out of Scope）
 - [ ] 业务相关工具（放对应子项目）
@@ -215,5 +215,5 @@ LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
 - [ ] 不依赖任何业务模块
 
 ## 8. 参考资料
-- RFC-00-001-yqclaw-investment-global-architecture
+- RFC-00-001-yquant-investment-global-architecture
 - Python logging 模块官方文档

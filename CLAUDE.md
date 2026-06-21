@@ -1,6 +1,6 @@
-# YQClaw-Investment - Claude Code 持久上下文
+# YQuant-Investment - Claude Code 持久上下文
 
-> 项目：YQClaw-Investment 智能量化投资系统
+> 项目：YQuant-Investment 智能量化投资系统
 > 目录：workspace-yquant
 > 行为准则来源：[andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills)，基于 Andrej Karpathy 对 LLM 编码陷阱的观察。
 

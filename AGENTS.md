@@ -1,6 +1,6 @@
 # YQuant Agent Team
 
-YQuant 是 YQClaw-Investment 系统中的主智能体（Orchestrator），负责统筹调度下面的子智能体团队。
+YQuant 是 YQuant-Investment 系统中的主智能体（Orchestrator），负责统筹调度下面的子智能体团队。
 每个子智能体使用独立的系统提示（可对应 `CLAUDE.md` 或 `AGENTS.md` 中的对应区块）来管理其行为约束。
 整体架构参考了 OpenClaw 的三层解耦设计（Orchestrator + Gateway + Pi-embedded）、
 TradingAgents 的五层协作模型、AI Hedge Fund 的多大师角色 Agent 设计，

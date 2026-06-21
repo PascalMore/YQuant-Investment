@@ -1,4 +1,4 @@
-# RFC-08-001：Argus 子项目接入 YQClaw RFC 体系规范
+# RFC-08-001：Argus 子项目接入 YQuant RFC 体系规范
 ## 元数据（Metadata）
 | 项 | 值|
 |---|---|
@@ -8,10 +8,10 @@
 | 最后更新 | 2026-06-07 |
 | 版本号 | V0.6 |
 | 所属模块 | 08_research（投研分析） |
-| 依赖RFC | RFC-00-001-yqclaw-investment-global-architecture |
+| 依赖RFC | RFC-00-001-yquant-investment-global-architecture |
 | 替代RFC | 无 |
 | 适配AI工具 | OpenClaw、Claude Code |
-| 标签 | #argus #子模块 #research #机构资金 #YQClaw标准化 |
+| 标签 | #argus #子模块 #research #机构资金 #YQuant标准化 |
 
 ### 版本历史（Changelog）
 | 版本号 | 日期 | 更新内容 | 负责人 |
@@ -21,10 +21,10 @@
 | V0.4 | 2026-06-06 | Phase 3：补充 ZoneRuleEngine 共享组件、YAML 统一阈值配置、Darwin/Bayesian/zone 分类计算顺序 | YQuant |
 | V0.3 | 2026-05-18 | 数据存储方案：删除独立SQLite，改用MongoDB新建集合（08_research_argus_*）；目录结构更新为skills/data + skills/infra + skills/research/argus；删除db/目录相关描述 | YQuant |
 | V0.2 | 2026-05-18 | 状态更新：Draft → Accepted，Phase 0 完成 | YQuant |
-| V0.1 | 2026-05-17 | 初始创建，纳入 YQClaw RFC 体系方案 | PascalMao |
+| V0.1 | 2026-05-17 | 初始创建，纳入 YQuant RFC 体系方案 | PascalMao |
 
 ## 1. 执行摘要
-本文档定义 Argus（机构智慧资金行为追踪系统）如何纳入 YQClaw Investment 统一 RFC 体系，包括 RFC 编号标准化、文档结构适配、模块定位明确、以及底层数据接口对接 TradingAgents MongoDB portfolio 表的修改方案。Argus 现有 RFC-2026-071 保持作为详细设计参考，新文档作为 YQClaw 体系的标准化 wrapper。
+本文档定义 Argus（机构智慧资金行为追踪系统）如何纳入 YQuant-Investment 统一 RFC 体系，包括 RFC 编号标准化、文档结构适配、模块定位明确、以及底层数据接口对接 TradingAgents MongoDB portfolio 表的修改方案。Argus 现有 RFC-2026-071 保持作为详细设计参考，新文档作为 YQuant 体系的标准化 wrapper。
 
 ## 2. 背景与动机
 ### 2.1 Argus 现状
@@ -35,10 +35,10 @@
 - 与主系统接口：JSON file exchange + Claude bridge（非直接数据库访问）
 - **当前状态**：设计已批准（RFC-2026-071 APPROVED），代码本体尚未实装
 
-### 2.2 纳入 YQClaw 的必要性
-1. **RFC 生命周期统一**：Argus 独立 RFC-2026-071 与 YQClaw RFC 机制（Draft→Review→Accepted→Implemented）不兼容
+### 2.2 纳入 YQuant 的必要性
+1. **RFC 生命周期统一**：Argus 独立 RFC-2026-071 与 YQuant RFC 机制（Draft→Review→Accepted→Implemented）不兼容
 2. **模块依赖标准化**：Argus 的 signal 输出需被 05_portfolio、06_strategy 等模块消费，需标准接口
-3. **全局规范一致**：目录结构、代码风格、接口契约、日志规范需对齐 YQClaw 八大标准化体系
+3. **全局规范一致**：目录结构、代码风格、接口契约、日志规范需对齐 YQuant 八大标准化体系
 4. **AI 实装可追踪**：所有代码实装必须关联 RFC，无 RFC 不许实装
 
 ### 2.3 Argus 现有 RFC 结构分析
@@ -85,8 +85,8 @@ docs/rfc/08_research/argus/
 
 ## 3. 目标与非目标
 ### 3.1 必须目标（Must-Have）
-- [ ] Argus RFC 纳入 YQClaw 统一 RFC 体系，完成编号映射与状态对齐
-- [ ] Argus 输出信号（argus_signal）格式符合 YQClaw 全局信号标准
+- [ ] Argus RFC 纳入 YQuant 统一 RFC 体系，完成编号映射与状态对齐
+- [ ] Argus 输出信号（argus_signal）格式符合 YQuant 全局信号标准
 - [ ] Argus 与 portfolio/strategy/trading 模块的接口标准化
 - [ ] Argus 底层数据接口对接方案确定（方案 B：SQLite + 接口层）
 
@@ -271,7 +271,7 @@ Phase 3 固化日度处理顺序，避免 zone 分类读取到未完成的派生
 
 因此 `bayesian_score` 在 zone 分类前必须存在；`darwin_moment` / `darwin_confidence` 在调用 `BayesianScorer` 和 `ZoneRuleEngine` 时均已可用。
 
-#### 4.2.6 Argus 输出信号格式（YQClaw 全局信号标准）
+#### 4.2.6 Argus 输出信号格式（YQuant 全局信号标准）
 ```json
 {
   "signal_id": "argus:5f2c9b7e1a4d8c0b3e91",
@@ -354,7 +354,7 @@ Argus 处理完成后，通过 `ArgusSignalExporter` 输出信号到文件或直
 ## 5. AI实装规范
 ### 5.1 必须执行
 - Argus 代码实装前必须先完成 RFC-08-002（接口标准）并进入 Accepted
-- 所有新增代码必须遵循 YQClaw 八大标准化体系
+- 所有新增代码必须遵循 YQuant 八大标准化体系
 - 接口模块使用 `common.utils.logging` 统一日志工具，禁止 print
 
 ### 5.2 先询问再执行
@@ -385,7 +385,7 @@ Argus 处理完成后，通过 `ArgusSignalExporter` 输出信号到文件或直
 ### 7.1 方案 A（已选用）：Argus 直接读取 TradingAgents MongoDB Portfolio 表
 - **方案**：Argus Raw Layer 直接从 `portfolio_basic_info / portfolio_nav / portfolio_position / portfolio_trade` 读取，不再维护独立的 argus.db
 - **优点**：数据单一来源，无冗余；与 data-pipeline 天然集成；维护成本低
-- **缺点**：Argus 与 TradingAgents 紧耦合（但可接受，Argus 本就是 YQClaw 体系内）
+- **缺点**：Argus 与 TradingAgents 紧耦合（但可接受，Argus 本就是 YQuant 体系内）
 - **选用原因**：portfolio 数据由 data-pipeline 统一导入，Argus 作为消费方直接订阅，无数据孤岛
 
 ### 7.2 方案 B（弃用）：保持独立 SQLite + 接口层
@@ -395,7 +395,7 @@ Argus 处理完成后，通过 `ArgusSignalExporter` 输出信号到文件或直
 
 ## 8. 验收标准
 ### 8.1 RFC 纳标验收
-- [ ] RFC-08-001 已创建并纳入 YQClaw RFC 索引，状态为 Accepted
+- [ ] RFC-08-001 已创建并纳入 YQuant RFC 索引，状态为 Accepted
 - [ ] Argus 原有 RFC-2026-071 作为参考子文档保留，无破坏性修改
 - [ ] RFC 编号映射完成（RFC-2026-071 → RFC-08-001）
 
@@ -403,7 +403,7 @@ Argus 处理完成后，通过 `ArgusSignalExporter` 输出信号到文件或直
 - [ ] `argus_portfolio_interface.py` 已创建并通过单元测试
 - [ ] `get_positions()` / `get_trades()` / `get_signals()` 返回格式符合规范
 - [ ] `export_to_portfolio_json()` 生成的文件可被 portfolio 模块消费
-- [ ] 日志路径（`logs/research/argus_interface_{YYYYMMDD}.log`）、日志格式符合 YQClaw 规范
+- [ ] 日志路径（`logs/research/argus_interface_{YYYYMMDD}.log`）、日志格式符合 YQuant 规范
 
 ### 8.3 实装验收（后续）
 - [ ] Argus Phase 1 代码实装完成（3 张 Raw 表 + CLI + SQL INSERT 模板）
@@ -413,7 +413,7 @@ Argus 处理完成后，通过 `ArgusSignalExporter` 输出信号到文件或直
 ## 9. 落地计划
 ### 9.1 第一阶段：RFC 纳标（1周）
 1. 完成 RFC-08-001 进入 Review 并获批 Accepted
-2. 创建 `docs/rfc/08_research/argus/INDEX.md` 作为 YQClaw 体系入口
+2. 创建 `docs/rfc/08_research/argus/INDEX.md` 作为 YQuant 体系入口
 3. 明确 Argus 与 portfolio 模块的接口契约（RFC-08-002 待建）
 
 ### 9.2 第二阶段：接口实装（2-3周）
@@ -436,12 +436,12 @@ Argus 处理完成后，通过 `ArgusSignalExporter` 输出信号到文件或直
 | Argus 与其他 08_research 子项目（如有）的协同方式 | 待定义 | 等待 08_research 模块总纲 RFC |
 
 ## 11. 参考资料
-- RFC-00-001-yqclaw-investment-global-architecture（全局架构总纲）
+- RFC-00-001-yquant-investment-global-architecture（全局架构总纲）
 - RFC-2026-071_ARGUS/INDEX.md（Argus 详细设计索引）
 - RFC-2026-071_ARGUS/02_ARCHITECTURE.md（独立子系统架构）
 - RFC-2026-071_ARGUS/03_SCHEMA.md（13 表 DDL）
 - TradingAgents-CN mongo-init.js（MongoDB Schema）
-- YQClaw 八大标准化体系（RFC-00-001 第5章）
+- YQuant 八大标准化体系（RFC-00-001 第5章）
 
 ## 附录 A：Zone Rule 统一配置参考
 

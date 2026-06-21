@@ -1,6 +1,6 @@
 # RFC 文档层
 
-`docs/rfc` 是 YQClaw Investment 的项目需求与架构约束层。当前目录下已有文档继续作为项目需求文档/RFC 使用，不需要迁移到 `docs/spec`。
+`docs/rfc` 是 YQuant-Investment 的项目需求与架构约束层。当前目录下已有文档继续作为项目需求文档/RFC 使用，不需要迁移到 `docs/spec`。
 
 ## 与 SPEC/DESIGN 的关系
 

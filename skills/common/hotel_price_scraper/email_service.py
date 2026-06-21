@@ -31,7 +31,7 @@ class EmailService:
                 continue
             key, value = line.split("=", 1)
             os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
-        os.environ.setdefault("EMAIL_SENDER_NAME", "YQClaw智能投资助手")
+        os.environ.setdefault("EMAIL_SENDER_NAME", "YQuant智能投资助手")
 
     def _load_email_module(self):
         spec = importlib.util.spec_from_file_location("yquant_send_email", EMAIL_MODULE_PATH)

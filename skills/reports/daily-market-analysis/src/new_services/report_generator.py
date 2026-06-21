@@ -1284,7 +1284,7 @@ class ReportGenerator:
             ))
 
         grid_html = '<div class="news-grid">\n' + '\n'.join(sections) + '\n</div>'
-        sender_name = self.config.get('push', {}).get('email', {}).get('sender_name', 'YQClaw智能投资助手')
+        sender_name = self.config.get('push', {}).get('email', {}).get('sender_name', 'YQuant智能投资助手')
         footer = f'<div class="news-footer">数据来源:MiniMax · DuckDuckGo · GNews | {sender_name}</div>'
         return grid_html + '\n' + footer
 
@@ -1384,7 +1384,7 @@ class ReportGenerator:
         insight = self._generate_insight()
 
         # 渲染模板
-        sender_name = self.config.get('push', {}).get('email', {}).get('sender_name', 'YQClaw智能投资助手')
+        sender_name = self.config.get('push', {}).get('email', {}).get('sender_name', 'YQuant智能投资助手')
         html = HTML_TEMPLATE.format(
             title="全球市场日报",
             date_str=today.strftime("%Y年%m月%d日"),

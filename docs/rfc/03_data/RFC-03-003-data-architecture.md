@@ -8,7 +8,7 @@
 | 最后更新 | 2026-05-18 |
 | 版本号 | V0.1 |
 | 所属模块 | 03_data（数据层） |
-| 依赖RFC | RFC-00-001-yqclaw-investment-global-architecture |
+| 依赖RFC | RFC-00-001-yquant-investment-global-architecture |
 | 替代RFC | 无 |
 | 适配AI工具 | OpenClaw、Claude Code |
 | 标签 | #data #架构 #接口 #复用 |
@@ -221,5 +221,5 @@ ARGUS_COLLECTIONS = {
 - [ ] 可被 skills/research/argus/ 等子项目调用
 
 ## 8. 参考资料
-- RFC-00-001-yqclaw-investment-global-architecture
+- RFC-00-001-yquant-investment-global-architecture
 - skills/data/data-pipeline/scripts/loaders/mongodb_loader.py

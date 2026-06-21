@@ -171,7 +171,7 @@ body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hir
 def do_send(html_content, subject):
     msg = MIMEMultipart('alternative')
     msg['Subject'] = subject
-    msg['From'] = formataddr(('YQClaw智能投资助手', '532484187@qq.com'))
+    msg['From'] = formataddr(('YQuant智能投资助手', '532484187@qq.com'))
     msg['To'] = '532484187@qq.com'
     msg.attach(MIMEText(html_content, 'html', 'utf-8'))
     ctx = ssl.create_default_context()

@@ -35,7 +35,7 @@
       "smtp_port": 587,
       "username": "532484187@qq.com",
       "password": "vyzfsxtfuqufcaed",
-      "sender_name": "YQClaw 智能投资助手",
+      "sender_name": "YQuant 智能投资助手",
       "recipients": ["532484187@qq.com"],
       "description": "邮件推送配置"
     }

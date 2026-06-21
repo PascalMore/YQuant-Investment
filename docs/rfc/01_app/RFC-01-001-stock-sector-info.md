@@ -8,7 +8,7 @@
 | 创建日期 | 2026-05-21 |
 | 最后更新 | 2026-06-04 |
 | 所属模块 | 01_app（应用层） |
-| 依赖RFC | RFC-00-001-yqclaw-investment-global-architecture |
+| 依赖RFC | RFC-00-001-yquant-investment-global-architecture |
 | 替代RFC | 无 |
 | 适配AI工具 | OpenClaw、Claude Code、Codex |
 | 标签 | #app #sector #industry-mapping #mongodb |

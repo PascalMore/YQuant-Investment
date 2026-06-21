@@ -1,4 +1,4 @@
-# RFC-00-001：YQClaw Investment，AI智能投资交易系统-总体架构设计
+# RFC-00-001：YQuant-Investment，AI智能投资交易系统-总体架构设计
 ## 元数据（Metadata）
 | 项 | 值|
 |---|---|
@@ -21,7 +21,7 @@
 | V1.2 | 2026-05-17 | 新增RFC规范管理体系与子模块RFC索引，完成章节结构优化，消除冗余重复 | Codex |
 
 ## 1. 执行摘要
-本RFC为 YQClaw Investment 项目（AI智能投资交易系统）唯一总架构规范，定义系统定位、整体架构、完整模块划分、依赖关系、数据流转、AI实装规则、开发标准与**全模块八大标准化体系**。项目业务功能涵盖了技术基础设施、数据底座、金融投资交易领域知识、组合管理及分析、策略研发及实盘、交易支持、投研分析、丰富的报告等，并对目录、代码、数据、接口、AI开发、异常容错、版本迭代、环境配置全维度规范。
+本RFC为 YQuant-Investment 项目（AI智能投资交易系统）唯一总架构规范，定义系统定位、整体架构、完整模块划分、依赖关系、数据流转、AI实装规则、开发标准与**全模块八大标准化体系**。项目业务功能涵盖了技术基础设施、数据底座、金融投资交易领域知识、组合管理及分析、策略研发及实盘、交易支持、投研分析、丰富的报告等，并对目录、代码、数据、接口、AI开发、异常容错、版本迭代、环境配置全维度规范。
 
 本文档是所有子模块RFC编写、AI工具自动化开发实装的唯一依据，所有子模块RFC及代码实装必须严格遵循本总纲规范，保障系统全局统一、架构一致、可运维、可复盘、可自动化落地、长期可迭代。
 
@@ -41,7 +41,7 @@
 
 ## 3. 目标与非目标
 ### 3.1 核心目标
-- [ ] 定义YQClaw Investment系统完整模块化架构，新增策略模块、报告模块，划分清晰模块边界
+- [ ] 定义YQuant-Investment系统完整模块化架构，新增策略模块、报告模块，划分清晰模块边界
 - [ ] 制定全系统统一RFC编写规范、模块命名、数据、接口、AI实装标准
 - [ ] 建立**八大全局标准化体系**，实现全模块工程规范统一
 - [ ] 明确模块依赖、数据流转，AI Agent全局调度逻辑
@@ -218,7 +218,7 @@
 
 ### 8.2 第二阶段：模块 RFC 补齐（2-4周）
 1. 按优先级补齐 03_data、05_portfolio、08_research、10_infra 模块级 RFC
-2. 建立 Argus 子项目与 YQClaw 体系的桥接（RFC-08-001）
+2. 建立 Argus 子项目与 YQuant 体系的桥接（RFC-08-001）
 3. 补齐 06_strategy、07_trading 策略与交易链路 RFC
 
 ### 8.3 第三阶段：实装与联调（4-8周）
@@ -232,9 +232,9 @@
 3. 定期审查 RFC 索引，清除 Obsolete 条目
 
 ## 9. RFC 规范管理体系
-本章节定义 YQClaw Investment 全项目 RFC 治理机制，是所有架构决策、模块设计、接口变更、数据结构变更与 AI 实装任务的统一入口。RFC 采用 **GitHub PR-based RFC + Markdown 文档 + 状态标签** 的轻量治理模式，保证规范可审阅、变更可追溯、实现可验收。
+本章节定义 YQuant-Investment 全项目 RFC 治理机制，是所有架构决策、模块设计、接口变更、数据结构变更与 AI 实装任务的统一入口。RFC 采用 **GitHub PR-based RFC + Markdown 文档 + 状态标签** 的轻量治理模式，保证规范可审阅、变更可追溯、实现可验收。
 
-> **说明**：RFC 管理体系作为项目治理的核心规范独立于前文八大标准化体系，八大体系约束工程实现层面，RFC体系约束决策与变更管理层面，两者共同构成 YQClaw 的完整工程规范。
+> **说明**：RFC 管理体系作为项目治理的核心规范独立于前文八大标准化体系，八大体系约束工程实现层面，RFC体系约束决策与变更管理层面，两者共同构成 YQuant 的完整工程规范。
 
 ### 10.1 RFC 目的与适用范围
 #### 10.1.1 目的
@@ -313,7 +313,7 @@ RFC 文件统一保存在 `docs/rfc/` 下，按模块分目录管理：
 docs/rfc/
   RFC-00-000-rfc-template.md
   00_project_overview/
-    RFC-00-001-yqclaw-investment-global-architecture.md
+    RFC-00-001-yquant-investment-global-architecture.md
     RFC-00-000-rfc-template.md
   01_app/
     RFC-{YY}-{NNN}-app-{简述}.md
@@ -376,7 +376,7 @@ issue → PR(draft) → review comment → merge(accepted) → implemented
 - 任何接口、Schema、策略逻辑、交易/风控链路变更，都必须**先更新 RFC，再进入实现**
 
 ### 10.9 AI 实装关联强制规则
-YQClaw Investment 采用 **RFC 先行，AI 实装跟进** 的强约束：
+YQuant-Investment 采用 **RFC 先行，AI 实装跟进** 的强约束：
 
 1. 所有代码实装、接口变更、数据库变更、策略逻辑变更、交易/风控链路变更**必须关联 RFC**
 2. **无 RFC 不许实装**；紧急修复可先提交最小补丁，但必须在同一工作周期内补齐事后 RFC
@@ -390,7 +390,7 @@ YQClaw Investment 采用 **RFC 先行，AI 实装跟进** 的强约束：
 
 | 模块编号 | 模块目录 | 当前 RFC 状态 | 说明 |
 |---|---|---|---|
-| 00 | 00_project_overview | RFC-00-001（已有） | YQClaw Investment 全局架构总纲；RFC-00-000 为通用模板 |
+| 00 | 00_project_overview | RFC-00-001（已有） | YQuant-Investment 全局架构总纲；RFC-00-000 为通用模板 |
 | 01 | 01_app | 待补充 | 需补充应用端架构、交互流程、权限、前后端接口 RFC |
 | 02 | 02_common | 待补充 | 需补充通用工具、日志、异常、配置、文档/OCR/PDF 等基础能力 RFC |
 | 03 | 03_data | 待补充 | 需补充多市场数据源、ETL、数据质量、数据字典、Schema RFC |
@@ -398,7 +398,7 @@ YQClaw Investment 采用 **RFC 先行，AI 实装跟进** 的强约束：
 | 05 | 05_portfolio | 待补充 | 需补充组合构建、持仓、调仓、风险预算、绩效归因 RFC |
 | 06 | 06_strategy | 待补充 | 需补充策略研发、回测、参数优化、过拟合检测、策略部署 RFC |
 | 07 | 07_trading | 待补充 | 需补充交易通道、订单管理、模拟盘/实盘边界、交易风控 RFC |
-| 08 | 08_research | ARGUS 子项目（已有设计包） | argus/RFC-2026-071_ARGUS/ 已包含设计文档；RFC-08-001-argus-integration.md 已桥接 YQClaw 体系 |
+| 08 | 08_research | ARGUS 子项目（已有设计包） | argus/RFC-2026-071_ARGUS/ 已包含设计文档；RFC-08-001-argus-integration.md 已桥接 YQuant 体系 |
 | 09 | 09_reports | 待补充 | 需补充日报/周报/月报、组合报告、风险报告、导出归档 RFC |
 | 10 | 10_infra | 待补充 | 需补充部署、调度、监控、权限、CI/CD、备份恢复 RFC |
 
@@ -416,4 +416,4 @@ YQClaw Investment 采用 **RFC 先行，AI 实装跟进** 的强约束：
 
 ## 参考资料
 - RFC-00-000-rfc-template.md — RFC 标准模板
-- RFC-08-001-argus-integration.md — Argus 子项目 YQClaw 体系桥接文档
+- RFC-08-001-argus-integration.md — Argus 子项目 YQuant 体系桥接文档
