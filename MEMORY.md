@@ -117,3 +117,14 @@ _Last updated: 2026-04-24_
 
 <!-- openclaw-memory-promotion:memory:memory/2026-06-16.md:29:29 -->
 - 30 20 * * 1-5 cd /home/pascal/.openclaw/workspace-yquant/skills/reports/daily-smartmoney-analysis/scripts && /home/pascal/.openclaw/workspace-yquant/skills/research/daily_stock_analysis/.venv/bin/python3.10 daily_export_report.py [score=0.890 recalls=0 avg=0.620 source=memory/2026-06-16.md:29-29]
+
+## Promoted From Short-Term Memory (2026-06-22)
+
+<!-- openclaw-memory-promotion:memory:memory/2026-06-15-1002.md:9:9 -->
+- user: Conversation info (untrusted metadata): [score=0.909 recalls=0 avg=0.620 source=memory/2026-06-15-1002.md:9-9]
+<!-- openclaw-memory-promotion:memory:memory/2026-06-15-1002.md:12:15 -->
+- "chat_id": "user:ou_4ba9dccf7c86e42b89a1efef6f3a09ea", "message_id": "om_x100b6dc1f75f34b0c43732c0b8e65a0", "sender_id": "ou_4ba9dccf7c86e42b89a1efef6f3a09ea", "sender": "用户724532", [score=0.909 recalls=0 avg=0.620 source=memory/2026-06-15-1002.md:12-15]
+<!-- openclaw-memory-promotion:memory:memory/2026-06-15-1002.md:16:16 -->
+- "timestamp": "Mon 2026-06-15 09:55 GMT+8" [score=0.909 recalls=0 avg=0.620 source=memory/2026-06-15-1002.md:16-16]
+<!-- openclaw-memory-promotion:memory:memory/2026-06-15-1002.md:20:20 -->
+- Sender (untrusted metadata): [score=0.909 recalls=0 avg=0.620 source=memory/2026-06-15-1002.md:20-20]

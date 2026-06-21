@@ -2,16 +2,17 @@
 """Unified logging utility."""
 
 import logging
-import os
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
+from .paths import logs_dir
 
 # Log format standard
 LOG_FORMAT = '%(asctime)s [%(levelname)s] %(name)s - %(message)s'
 LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
 
 # Root log directory
-LOG_ROOT = Path('/home/pascal/.openclaw/workspace-yquant/logs')
+LOG_ROOT = logs_dir()
 
 
 def get_logger(

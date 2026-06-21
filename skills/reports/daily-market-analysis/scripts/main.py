@@ -28,12 +28,15 @@ from pymongo import MongoClient
 # 添加父目录到路径
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.dirname(SCRIPT_DIR)
+WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, SCRIPT_DIR)
 sys.path.insert(0, PARENT_DIR)
+sys.path.insert(0, str(WORKSPACE_ROOT))
 
 # 导入新的报告生成器
 from all_weather_market_report import AllWeatherMarketReport
 from src.new_services.report_generator import ReportGenerator
+from skills.infra.paths import report_marker_path
 
 
 def load_config():
@@ -118,7 +121,7 @@ def send_email(report: str, config: dict, report_date: str, is_html=None):
         server.quit()
         print("✅ 邮件推送成功")
         # 标记今日已发送
-        marker = Path(os.path.expanduser('~/.openclaw/workspace-yquant/skills/reports/daily-market-analysis/.last_sent'))
+        marker = report_marker_path("daily-market-analysis")
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.touch()
         return True
@@ -171,7 +174,7 @@ def _should_skip_report(report_date: date) -> bool:
     - 如果是，跳过发送
     - 不检查组合数据日期（那是 SmartMoney 报告的逻辑）
     """
-    marker = Path(os.path.expanduser('~/.openclaw/workspace-yquant/skills/reports/daily-market-analysis/.last_sent'))
+    marker = report_marker_path("daily-market-analysis")
     today = date.today()
 
     # 非当日报告不检查

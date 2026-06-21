@@ -11,8 +11,14 @@ from pymongo import MongoClient
 
 from .base_writer import IWriter
 
+try:
+    from skills.infra.paths import shared_env_path
+except ModuleNotFoundError:
+    def shared_env_path():
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
+
 # Load .env from workspace root
-load_dotenv('/home/pascal/.openclaw/workspace-yquant/skills/.env')
+load_dotenv(shared_env_path())
 
 logger = logging.getLogger(__name__)
 

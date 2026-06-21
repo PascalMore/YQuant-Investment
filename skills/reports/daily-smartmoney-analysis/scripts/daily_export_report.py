@@ -18,6 +18,13 @@ from dotenv import load_dotenv
 from pymongo import MongoClient
 from openpyxl import Workbook
 
+try:
+    from skills.infra.paths import report_marker_path, shared_env_path
+except ModuleNotFoundError:
+    _WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
+    sys.path.insert(0, str(_WORKSPACE_ROOT))
+    from skills.infra.paths import report_marker_path, shared_env_path
+
 # ============== 配置 ==============
 MONGODB_URI = "mongodb://myq:6812345@172.25.240.1:27017/tradingagents"
 MONGODB_DB = "tradingagents"
@@ -34,7 +41,7 @@ TRADE_COLUMNS = [
 ]
 
 # 默认 .env 路径
-DEFAULT_ENV_PATH = str(Path(__file__).parents[4] / "skills" / ".env")
+DEFAULT_ENV_PATH = str(shared_env_path())
 
 
 def load_config(env_path: str = None) -> dict:
@@ -310,7 +317,7 @@ def _should_skip_report(report_date: date) -> bool:
     - 如果没有 .last_sent 文件 → 不跳过（发送）
     - 非当日报告不检查
     """
-    marker = Path(os.path.expanduser('~/.openclaw/workspace-yquant/skills/reports/daily-smartmoney-analysis/.last_sent'))
+    marker = report_marker_path("daily-smartmoney-analysis")
     today = date.today()
 
     # 非当日报告不检查
@@ -458,7 +465,7 @@ def main():
         success = send_telegram_file(bot_token, target_chat_id, excel_path, caption)
         if success:
             # 更新发送标记文件（存储实际数据日期）
-            marker = Path(os.path.expanduser('~/.openclaw/workspace-yquant/skills/reports/daily-smartmoney-analysis/.last_sent'))
+            marker = report_marker_path("daily-smartmoney-analysis")
             marker.write_text(str(latest_date))
             print(f"\n✅ 任务完成! (已记录数据日期: {latest_date})")
         else:

@@ -1,7 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-REPO_DIR="/home/pascal/.openclaw/workspace-yquant"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="${YQUANT_WORKSPACE:-$SCRIPT_DIR}"
 LOG_DIR="$REPO_DIR/logs/system/auto-push"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M')
 

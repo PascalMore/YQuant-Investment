@@ -10,6 +10,8 @@ dist/
 build/
 venv/
 .venv/
+.venv.*
+.venv_*
 ENV/
 env/
 pip-log.txt
@@ -70,4 +72,3 @@ skills/data/source/
 # Auto-push marker (transient)
 .last_sent
 /data/
-.venv_312
