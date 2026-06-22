@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="${YQUANT_WORKSPACE:-$SCRIPT_DIR}"
+REPO_DIR="${YQUANT_WORKSPACE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 LOG_DIR="$REPO_DIR/logs/system/auto-push"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M')
 
@@ -16,20 +16,20 @@ for submod in skills/apps/TradingAgents-CN skills/research/daily_stock_analysis;
     if [ ! -d "$submod" ]; then
         continue
     fi
-    
+
     cd "$REPO_DIR/$submod"
-    
+
     # Ensure we're on main branch, not detached HEAD
     if ! git symbolic-ref --quiet HEAD >/dev/null 2>&1; then
         git checkout main
     fi
-    
+
     BRANCH=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo "main")
-    
+
     # Fetch and pull latest first
     git fetch origin
     git pull --ff origin "$BRANCH" 2>/dev/null || true
-    
+
     # Check if there are local changes to commit
     if git diff origin/"$BRANCH" --quiet; then
         echo "[$TIMESTAMP] $submod: up to date with remote" >> "$LOG_DIR/auto_push_$(date +%Y%m%d).log"

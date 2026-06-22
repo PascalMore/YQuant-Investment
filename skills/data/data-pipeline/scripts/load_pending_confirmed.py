@@ -16,6 +16,10 @@ Standard schema (MUST use these exact field names):
 
 No master_asset_name, name_review_status, name_review_reason, review_resolved_at, etc.
 
+CSV 名称复核状态流转:
+  pending_review (待复核) → resolved (人工确认后统一标记) → 加载入库
+resolved 与 JSON status=resolved 保持一致。
+
 CLI usage:
     # Single file
     python3 load_pending_confirmed.py --csv path/to/pending.csv

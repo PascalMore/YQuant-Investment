@@ -51,7 +51,8 @@ workspace-yquant/
 │   ├── reports/             # 复盘报告
 │   ├── infra/               # 基础设施
 │   └── knowledge/           # 知识库
-└── auto_push.sh
+├── scripts/                 # 项目维护脚本
+│   └── auto_push.sh
 ```
 
 ---
@@ -128,3 +129,8 @@ _Last updated: 2026-04-24_
 - "timestamp": "Mon 2026-06-15 09:55 GMT+8" [score=0.909 recalls=0 avg=0.620 source=memory/2026-06-15-1002.md:16-16]
 <!-- openclaw-memory-promotion:memory:memory/2026-06-15-1002.md:20:20 -->
 - Sender (untrusted metadata): [score=0.909 recalls=0 avg=0.620 source=memory/2026-06-15-1002.md:20-20]
+
+## Promoted From Short-Term Memory (2026-06-23)
+
+<!-- openclaw-memory-promotion:memory:memory/2026-06-15-1002.md:23:25 -->
+- "label": "用户724532 (ou_4ba9dccf7c86e42b89a1efef6f3a09ea)", "id": "ou_4ba9dccf7c86e42b89a1efef6f3a09ea", "name": "用户724532" [score=0.926 recalls=0 avg=0.620 source=memory/2026-06-15-1002.md:23-25]

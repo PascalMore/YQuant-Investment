@@ -141,7 +141,7 @@ workspace-yquant/
 ├── MEMORY.md        # 长期记忆
 ├── memory/          # 每日记忆文件
 ├── skills/         # 技能模块
-│ ├── common/       # 通用工具（PDF解析、邮件、爬虫）
+│ ├── common/       # 通用工具（邮件、爬虫）
 │ ├── data/         # 数据采集与处理
 │ ├── research/     # 投研分析（因子、市场、另类数据）
 │ ├── strategies/    # 策略研发与回测
@@ -150,7 +150,8 @@ workspace-yquant/
 │ ├── reports/      # 复盘报告
 │ ├── infra/        # 基础设施
 │ └── knowledge/    # 知识库
-└── auto_push.sh    # 自动推送脚本
+├── scripts/        # 项目维护脚本
+│ └── auto_push.sh  # 自动推送脚本
 ```
 
 ### 智能体团队

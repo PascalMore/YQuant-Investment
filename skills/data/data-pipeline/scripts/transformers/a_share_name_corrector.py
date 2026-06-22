@@ -27,6 +27,7 @@ REVIEW_REASON_COL = "名称复核原因"
 STATUS_MATCHED = "matched"
 STATUS_AUTO_CORRECTED = "auto_corrected"
 STATUS_PENDING_REVIEW = "pending_review"
+STATUS_RESOLVED = "resolved"
 STATUS_MISSING_MASTER = "missing_master"
 
 _CORPORATE_ACTION_PREFIX_RE = re.compile(r"^(\*?ST|XD|DR|XR|N|C)+", re.IGNORECASE)
