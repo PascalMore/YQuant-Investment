@@ -72,3 +72,4 @@ skills/data/source/
 # Auto-push marker (transient)
 .last_sent
 /data/
+skills/common/hotel_price_scraper/output/

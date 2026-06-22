@@ -1,5 +1,0 @@
-﻿hotel_key,booking_id,status,records,evidence
-waka_asakusa_wakokoro,hua-zhu-qian-cao-he-xin-hoteru,ok,double=698; twin=738,single-hotel BookingScraper scrape on 2026-06-15
-super_hotel_asakusa,super-asakusa,ok_after_retry,double=515,single-hotel BookingScraper scrape succeeded on attempt 3 on 2026-06-15
-other_space_asakusa,k3-asakusa-dong-jing,ok_after_retry,double=454,single-hotel BookingScraper scrape succeeded on retry on 2026-06-15
-hop_inn_tokyo_asakusa,hop-inn-tokyo-asakusa,ok,double=557,single-hotel BookingScraper scrape on 2026-06-15
