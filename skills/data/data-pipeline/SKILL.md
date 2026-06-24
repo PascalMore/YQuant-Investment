@@ -468,11 +468,79 @@ Hermes `execute_code` 工具使用自己的 venv（无 pandas），**禁止**用
 - 脚本通过 `-e`/`-c` 参数注入代码时会触发审批，**不要**依赖这种方式
 - 若 pipeline 执行被安全策略拦截，切换 `terminal(background=true)` + `notify_on_complete=true` 提交后台任务
 
-### 图片 Vision 工具降级策略
+### 图片 Vision 策略（关键 Pitfall — 两层问题）
 
-- `vision_analyze`（Hermes 内置 Vision）报错 `Unknown Model` 时，**立即降级**到 `mcp_MiniMax_Token_Plan_MCP_understand_image`（MiniMax MCP 直接调用）
-- 不要反复重试 `vision_analyze`，MiniMax MCP 是确定可用的路径
-- 图片理解结果需要人工确认 OCR 精度，尤其是表格数据（持仓、交易记录等）
+图片处理涉及**两个独立环节**，每个环节都有坑：
+
+#### 环节 1：Gateway 自动路由（入站图片 → agent 看到什么）
+
+Hermes gateway 收到图片时，`_decide_image_input_mode()` 决定两种路由：
+
+- **native**：图片作为 `image_url` 附在用户 turn 上，agent 直接"看到"像素。
+- **text**：先调 `vision_analyze` 把图片转成文字描述，拼到消息前面，agent 只看到文字摘要。
+
+**决策逻辑**（`agent/image_routing.py`）：
+1. `agent.image_input_mode` 显式设置 → 遵从
+2. `auxiliary.vision.provider` 显式设置（非 auto/空）→ text
+3. `_lookup_supports_vision(provider, model)` 查 models.dev → True 则 native
+4. 否则 → text
+
+**⚠️ Pitfall：`custom:` 前缀的 provider 无法查 models.dev。**
+`PROVIDER_TO_MODELS_DEV` 只映射内置 provider 名（`minimax`、`zai` 等），
+不包含 `custom:minimax`。因此当 primary model 用 `custom:` provider 时，
+`_lookup_supports_vision` 返回 `None` → 走 text 路径 → **每张图都额外调一次 vision_analyze**。
+
+**修复**：在 config.yaml 里显式声明 `supports_vision`：
+
+```yaml
+model:
+  default: MiniMax-M3
+  provider: custom:minimax
+  supports_vision: true    # ← 绕过 models.dev 查找，直接 native
+```
+
+设为 `true` 后，MiniMax-M3 原生视觉生效，图片作为像素直接传给模型，
+**省掉一次 vision_analyze 调用**，且 agent 拿到的是原图而非 lossy 文字摘要。
+
+#### 环节 2：Agent 手动调 Vision 工具（对话中临时看图）
+
+当 agent 需要在对话中主动分析图片时（非 gateway 自动路由）：
+
+**优先 MiniMax MCP，vision_analyze 作兜底：**
+
+```python
+# Step 1: 直接用 MiniMax MCP
+mcp_MiniMax_Token_Plan_MCP_understand_image(
+    image_source="/path/to/img.jpg",
+    prompt="识别图片中所有文字、数字、表格内容..."
+)
+
+# Step 2: 如果 MiniMax 也失败，再降级到 vision_analyze
+# vision_analyze(...)  # Hermes 内置 Vision — 兜底选项
+```
+
+**理由**：MiniMax MCP 的 structured JSON 输出更完整（含 `structuredContent.tables`），
+更适合持仓截图、交易记录等结构化数据。`vision_analyze` 在图片分析场景中容易
+产生 `Duplicate tool output` 或截断输出。
+
+#### 双重分析问题
+
+如果不设 `supports_vision: true`，同一张图会被分析**两次**：
+1. Gateway 自动调 `vision_analyze`（text 路径预分析）
+2. Pipeline 正式 OCR 调 MiniMax CLI（`run_unified_image_pipeline.py`）
+
+两次调用走不同端点、不同额度，第二次才是正式入库。设 `supports_vision: true`
+后环节 1 消失，agent 直接看到原图，自主决定是否调 pipeline。
+
+**静态名称更名文件路径：** `skills/data/data-pipeline/scripts/stock_name_corrections.py`。该文件用于 OCR 识别后的 Wind code → 标准名称映射，修改后对新图片立即生效，无需重启任何服务。
+
+**Vision Provider Fallback（zai MCP）**
+
+`MiniMaxImageExtractor` 当前没有 fallback——MiniMax 套餐一旦耗尽，pipeline 立即失败。Fallback 走 agent 层：zai 提供的 `@z_ai/mcp-server`（GLM Coding Plan 套餐专属视觉 MCP，共享 5h prompt 池子，**不**按 token 付费）。
+
+- 配置方法、环境变量、启用开关、协议约定：`references/provider-fallback.md`
+- MCP server 完整配置片段（可直接 merge 到 config.yaml）：`templates/mcp-servers-zai-vision.yaml`
+- ⚠️ 关键变量名区分：`Z_AI_API_KEY`（zai MCP 用）≠ `GLM_API_KEY`（zai pay-as-you-go API 用）。两者在 Z.AI 后台是独立条目。
 
 **禁止行为（Pitfall）**
 

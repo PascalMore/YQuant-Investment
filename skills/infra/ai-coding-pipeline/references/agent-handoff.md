@@ -1,10 +1,19 @@
 # Agent 交接参考
 
+> 每个 Agent 的**当前主模型、fallback 链、compression 配置**不在本文档中维护，
+> 请查阅对应的 profile `config.yaml`。快速总览：
+>
+> ```bash
+> python3 scripts/infra/print_agent_models.py
+> ```
+>
+> 升级模型时只改 `config.yaml`，本 skill 不需要同步。
+
 ## YQuant
 
 负责 Intake、编排和 Closeout。
 
-当前模型：默认 `zai/glm-5.1`，第一 fallback `minimax/MiniMax-M2.7`。
+模型配置：`profiles/yquant/config.yaml`。
 
 必须提供：
 - 用户目标
@@ -23,7 +32,7 @@
 
 负责 RFC/SPEC/Design。
 
-当前模型：默认 `codex/gpt-5.5`，fallback `zai/glm-5.1`。
+模型配置：`profiles/yquantprincipal/config.yaml`。
 
 输入：
 - Intake 摘要
@@ -46,7 +55,7 @@
 
 负责实现。
 
-当前模型：默认 `minimax/MiniMax-M2.7`，fallback `zai/glm-5.1`。
+模型配置：`profiles/yquantdeveloper/config.yaml`。
 
 输入：
 - RFC/SPEC/DESIGN
@@ -70,7 +79,7 @@
 
 负责独立验证。
 
-当前模型：默认 `minimax/MiniMax-M2.7`，fallback `zai/glm-5.1`。
+模型配置：`profiles/yquanttester/config.yaml`。
 
 输入：
 - diff
@@ -93,7 +102,7 @@
 
 负责独立审查。
 
-当前模型：默认 `zai/glm-5.1`，fallback `codex/gpt-5.5`。
+模型配置：`profiles/yquantreviewer/config.yaml`。
 
 输入：
 - diff

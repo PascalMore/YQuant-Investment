@@ -134,3 +134,10 @@ _Last updated: 2026-04-24_
 
 <!-- openclaw-memory-promotion:memory:memory/2026-06-15-1002.md:23:25 -->
 - "label": "用户724532 (ou_4ba9dccf7c86e42b89a1efef6f3a09ea)", "id": "ou_4ba9dccf7c86e42b89a1efef6f3a09ea", "name": "用户724532" [score=0.926 recalls=0 avg=0.620 source=memory/2026-06-15-1002.md:23-25]
+
+## Promoted From Short-Term Memory (2026-06-25)
+
+<!-- openclaw-memory-promotion:memory:memory/2026-06-18.md:7:7 -->
+- **Goal**: Complete the pending review loop closure for Smart Money Pipeline — detecting pending → user confirmation → standard-script load → resolved marking. [score=0.926 recalls=0 avg=0.620 source=memory/2026-06-18.md:7-7]
+<!-- openclaw-memory-promotion:memory:memory/2026-06-18.md:12:13 -->
+- python3 load_pending_confirmed.py --csv <path> # single file python3 load_pending_confirmed.py --date 2026-06-17 # batch [score=0.926 recalls=0 avg=0.620 source=memory/2026-06-18.md:12-13]

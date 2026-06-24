@@ -1,0 +1,35 @@
+# 视觉 Provider Fallback 启用模板
+#
+# 用法：把本块 merge 进 ~/.hermes/profiles/yquant/config.yaml 的 mcp_servers 下
+# 前提：
+#   1. 在智谱个人中心「个人编程套餐 > 套餐概览」新建一个 Z_AI_API_KEY
+#   2. 把它加到 ~/.hermes/profiles/yquant/.env
+#   3. 需要 Node.js >= 18（@z_ai/mcp-server 是 npm 包）
+#   4. 重启 gateway 或 /new 让新 MCP server 加载
+#
+# 验证：发送一张图给 yquant，如果走 fallback 会在 agent 日志看到
+#   mcp tool call: zai-mcp-server/image_analysis
+
+mcp_servers:
+  "MiniMax Token Plan MCP":
+    # 已有，保持不变
+    command: uvx
+    args:
+      - minimax-coding-plan-mcp
+      - -y
+    env:
+      MINIMAX_API_KEY: "${YQUANT_MINIMAX_CODING_PLAN_API_KEY}"
+      MINIMAX_API_HOST: "${YQUANT_MINIMAX_API_HOST}"
+    connect_timeout: 120
+    timeout: 120
+
+  "Z.AI Vision MCP":                      # ← 新增
+    command: npx
+    args:
+      - "-y"
+      - "@z_ai/mcp-server"
+    env:
+      Z_AI_API_KEY: "${Z_AI_API_KEY}"     # 注意是 Z_AI_API_KEY，不是 GLM_API_KEY
+      Z_AI_MODE: ZHIPU
+    connect_timeout: 120
+    timeout: 120

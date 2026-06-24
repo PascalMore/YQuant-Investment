@@ -29,11 +29,11 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 
 HERMES_JOB_SCRIPT_MAP = {
-    "每日全球市场日报": "yquant-cron/daily-global-market-report.sh",
-    "每日SmartMoney数据报告发送": "yquant-cron/daily-smartmoney-data-report.sh",
-    "每日Argus数据批处理": "yquant-cron/daily-argus-batch-processing.sh",
-    "每周酒店价格抓取": "yquant-cron/weekly-hotel-price-scraper.sh",
-    "每日自动代码提交": "yquant-cron/daily-auto-code-commit.sh",
+    "每日全球市场日报": "daily-global-market-report.sh",
+    "每日SmartMoney数据报告发送": "daily-smartmoney-data-report.sh",
+    "每日Argus数据批处理": "daily-argus-batch-processing.sh",
+    "每周酒店价格抓取": "weekly-hotel-price-scraper.sh",
+    "每日自动代码提交": "daily-auto-code-commit.sh",
 }
 
 HERMES_REQUIRED_SOURCE_FILES = [
@@ -146,16 +146,14 @@ def load_profile_model(args: argparse.Namespace) -> AgentProfileModel:
         if content:
             model.source_files_read.append(fname)
             if fname == "MEMORY.md":
-                # Decide which memory goes where
-                if "USER.md" in model.source_files_read:
-                    model.user_memory = content
-                else:
-                    model.project_memory = content
+                # MEMORY.md is project-level memory, goes to memories/MEMORY.md
+                model.project_memory = content
 
     # Read USER.md separately
     user_md = read_source_file(root, "USER.md")
     if user_md:
-        model.source_files_read.append("USER.md")
+        if "USER.md" not in model.source_files_read:
+            model.source_files_read.append("USER.md")
         model.user_memory = user_md
 
     # F-002: parse heartbeat
@@ -398,17 +396,45 @@ def generate_hermes_profile(model: AgentProfileModel) -> dict[str, str]:
     # cron/jobs.json
     jobs_list = []
     missing_scripts = []
+    now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8))).isoformat()
     for job in model.scheduled_jobs:
         if job.enabled and job.script is None:
             missing_scripts.append(job.name)
         jobs_list.append({
             "name": job.name,
-            "schedule": job.schedule,
-            "enabled": job.enabled,
-            "schedule_type": job.schedule_type,
+            "prompt": "",
+            "skills": [],
+            "skill": None,
+            "model": None,
+            "provider": None,
+            "base_url": None,
             "script": job.script or None,
             "no_agent": job.no_agent,
+            "context_from": None,
+            "schedule": {
+                "kind": "cron",
+                "expr": job.schedule,
+                "display": job.schedule,
+            },
+            "schedule_display": job.schedule,
+            "repeat": {
+                "times": None,
+                "completed": 0,
+            },
+            "enabled": job.enabled,
+            "state": "scheduled",
+            "paused_at": None,
+            "paused_reason": None,
+            "created_at": now,
+            "next_run_at": None,
+            "last_run_at": None,
+            "last_status": None,
+            "last_error": None,
+            "last_delivery_error": None,
             "deliver": job.deliver,
+            "origin": None,
+            "enabled_toolsets": None,
+            "workdir": "/home/pascal/workspace/yquant-investment",
         })
     jobs_out = {
         "schema_version": 1,

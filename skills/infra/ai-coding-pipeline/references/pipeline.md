@@ -2,15 +2,21 @@
 
 ## 阶段总览
 
-| 阶段 | Agent | 默认模型 | 产出 | 是否允许改代码 |
+| 阶段 | Agent | 模型配置（不写死） | 产出 | 是否允许改代码 |
 |---|---|---|---|---|
-| 1 Intake | YQuant | `zai/glm-5.1`，fallback `minimax/MiniMax-M2.7` | `00-intake.md` 或简短需求澄清摘要 | 否 |
-| 2 RFC/SPEC | YQuant-Codex-Principal | `codex/gpt-5.5`，fallback `zai/glm-5.1` | RFC 更新、`docs/spec/*.md` 或 `02-spec.md` | 通常否 |
-| 3 Design | YQuant-Codex-Principal | `codex/gpt-5.5`，fallback `zai/glm-5.1` | `docs/design/*.md`、`03-design.md`、`04-implementation-plan.md` | 否 |
-| 4 Implement | YQuant-Developer-Engineer | `minimax/MiniMax-M2.7`，fallback `zai/glm-5.1` | 代码变更、实现记录 | 是 |
-| 5 Verify | YQuant-Test-Engineer | `minimax/MiniMax-M2.7`，fallback `zai/glm-5.1` | 测试、`05-test-report.md` | 仅测试/夹具 |
-| 6 Review | YQuant-Reviewer-Principal | `zai/glm-5.1`，fallback `codex/gpt-5.5` | `06-review.md` 或审查意见 | 否 |
-| 7 Closeout | YQuant | `zai/glm-5.1`，fallback `minimax/MiniMax-M2.7` | `07-closeout.md`、面向用户的交付摘要 | 否 |
+| 1 Intake | YQuant | `profiles/yquant/config.yaml` | `00-intake.md` 或简短需求澄清摘要 | 否 |
+| 2 RFC/SPEC | YQuant-Codex-Principal | `profiles/yquantprincipal/config.yaml` | RFC 更新、`docs/spec/*.md` 或 `02-spec.md` | 通常否 |
+| 3 Design | YQuant-Codex-Principal | `profiles/yquantprincipal/config.yaml` | `docs/design/*.md`、`03-design.md`、`04-implementation-plan.md` | 否 |
+| 4 Implement | YQuant-Developer-Engineer | `profiles/yquantdeveloper/config.yaml` | 代码变更、实现记录 | 是 |
+| 5 Verify | YQuant-Test-Engineer | `profiles/yquanttester/config.yaml` | 测试、`05-test-report.md` | 仅测试/夹具 |
+| 6 Review | YQuant-Reviewer-Principal | `profiles/yquantreviewer/config.yaml` | `06-review.md` 或审查意见 | 否 |
+| 7 Closeout | YQuant | `profiles/yquant/config.yaml` | `07-closeout.md`、面向用户的交付摘要 | 否 |
+
+> 查看每个 Agent 当前真实的主模型、fallback 链、compression 配置：
+> ```bash
+> python3 scripts/infra/print_agent_models.py
+> ```
+> 升级模型时**只改 `config.yaml`**，本 skill 不需要同步。
 
 ## 任务目录
 
