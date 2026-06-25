@@ -2,25 +2,25 @@
 
 ## 阶段总览
 
-| 阶段 | Agent | 模型配置（不写死） | 产出 | 是否允许改代码 |
+| 阶段 | 角色 | Hermes assignee profile | 产出 | 是否允许改代码 |
 |---|---|---|---|---|
-| 1 Intake | YQuant | `profiles/yquant/config.yaml` | `00-intake.md` 或简短需求澄清摘要 | 否 |
-| 2 RFC/SPEC | YQuant-Codex-Principal | `profiles/yquantprincipal/config.yaml` | RFC 更新、`docs/spec/*.md` 或 `02-spec.md` | 通常否 |
-| 3 Design | YQuant-Codex-Principal | `profiles/yquantprincipal/config.yaml` | `docs/design/*.md`、`03-design.md`、`04-implementation-plan.md` | 否 |
-| 4 Implement | YQuant-Developer-Engineer | `profiles/yquantdeveloper/config.yaml` | 代码变更、实现记录 | 是 |
-| 5 Verify | YQuant-Test-Engineer | `profiles/yquanttester/config.yaml` | 测试、`05-test-report.md` | 仅测试/夹具 |
-| 6 Review | YQuant-Reviewer-Principal | `profiles/yquantreviewer/config.yaml` | `06-review.md` 或审查意见 | 否 |
-| 7 Closeout | YQuant | `profiles/yquant/config.yaml` | `07-closeout.md`、面向用户的交付摘要 | 否 |
+| 1 Intake | YQuant | `yquant` | `00-intake.md` 或简短需求澄清摘要 | 否 |
+| 2 RFC/SPEC | YQuant-Codex-Principal | `yquantprincipal` | RFC 更新、`docs/spec/*.md` 或 `02-spec.md` | 通常否 |
+| 3 Design | YQuant-Codex-Principal | `yquantprincipal` | `docs/design/*.md`、`03-design.md`、`04-implementation-plan.md` | 否 |
+| 4 Implement | YQuant-Developer-Engineer | `yquantdeveloper` | 代码变更、实现记录 | 是 |
+| 5 Verify | YQuant-Test-Engineer | `yquanttester` | 测试、`05-test-report.md` | 仅测试/夹具 |
+| 6 Review | YQuant-Reviewer-Principal | `yquantreviewer` | `06-review.md` 或审查意见 | 否 |
+| 7 Closeout | YQuant | `yquant` | `07-closeout.md`、面向用户的交付摘要 | 否 |
 
 > 查看每个 Agent 当前真实的主模型、fallback 链、compression 配置：
 > ```bash
-> python3 scripts/infra/print_agent_models.py
+> python3 skills/common/utils/print_agent_models.py
 > ```
 > 升级模型时**只改 `config.yaml`**，本 skill 不需要同步。
 
 ## 任务目录
 
-非平凡工程任务的运行记录属于过程性数据，放在 `data/tasks/` 下：
+非平凡工程任务的运行记录属于过程性数据，优先由 Hermes Kanban task/comment/run 保存。需要项目内可读归档时，放在 `data/tasks/` 下：
 
 ```text
 data/tasks/active/YYYY-MM-DD-short-name/
@@ -126,8 +126,17 @@ YQuant Intake
 
 ## 路由规则
 
-- RFC/SPEC/Design/架构/API/数据模型：`yquant-codex-principal`
-- 代码实现：`yquant-developer-engineer`
-- 测试验证：`yquant-test-engineer`
-- 独立审查：`yquant-reviewer-principal`
-- Intake 和 Closeout：`YQuant`
+- RFC/SPEC/Design/架构/API/数据模型：Kanban `assignee="yquantprincipal"`
+- 代码实现：Kanban `assignee="yquantdeveloper"`
+- 测试验证：Kanban `assignee="yquanttester"`
+- 独立审查：Kanban `assignee="yquantreviewer"`
+- Intake 和 Closeout：`YQuant` 主 profile 自己完成
+
+## Hermes Kanban 执行规则
+
+- 正式流水线阶段必须用 `kanban_create` 创建任务，而不是 `delegate_task`。
+- 每个任务必须设置 `workspace_kind="dir"` 和 `workspace_path="/home/pascal/workspace/yquant-investment"`。
+- 有前置阶段时必须在创建子任务时设置 `parents=[...]`，不要只在正文里写“等待某任务完成”。
+- 创建后必须记录返回的 task id；没有 task id 就视为没有真实委派。
+- 如果 gateway 没有运行，ready task 不会自动执行；先启动或恢复 Hermes gateway。
+- `delegate_task` 可用于短推理、并行代码阅读等临时子任务，但不得替代 profile worker 角色切换。

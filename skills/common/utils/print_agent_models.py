@@ -6,9 +6,9 @@ All YQuant skills reference this script instead of hardcoding model names,
 so the docs stay valid across model upgrades.
 
 Usage:
-    python3 scripts/infra/print_agent_models.py
-    python3 scripts/infra/print_agent_models.py --json
-    python3 scripts/infra/print_agent_models.py --agent yquant
+    python3 skills/common/utils/print_agent_models.py
+    python3 skills/common/utils/print_agent_models.py --json
+    python3 skills/common/utils/print_agent_models.py --agent yquant
 
 The script is read-only. To change a model, edit the relevant profile's
 config.yaml directly (e.g. ~/.hermes/profiles/yquant/config.yaml), then
@@ -22,7 +22,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import yaml
+try:
+    import yaml  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover - exercised on minimal hosts
+    yaml = None
 
 
 # Profile → display name. Order is intentional (orchestrator first, then the
@@ -41,12 +44,86 @@ def _short_provider(p: str) -> str:
     return p or "?"
 
 
+def _strip_scalar(value: str) -> str:
+    value = value.strip()
+    if (value.startswith('"') and value.endswith('"')) or (
+        value.startswith("'") and value.endswith("'")
+    ):
+        return value[1:-1]
+    return value
+
+
+def _load_profile_without_yaml(text: str) -> dict[str, Any]:
+    """Parse the small config subset this report needs when PyYAML is absent."""
+    cfg: dict[str, Any] = {
+        "model": {},
+        "fallback_providers": [],
+        "agent": {},
+        "auxiliary": {"compression": {}},
+    }
+    section: str | None = None
+    subsection: str | None = None
+    current_fallback: dict[str, str] | None = None
+
+    for raw in text.splitlines():
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        indent = len(raw) - len(raw.lstrip(" "))
+        line = raw.strip()
+
+        if indent == 0 and line.endswith(":"):
+            section = line[:-1]
+            subsection = None
+            current_fallback = None
+            continue
+
+        if section == "model" and indent == 2 and ":" in line:
+            key, value = line.split(":", 1)
+            cfg["model"][key.strip()] = _strip_scalar(value)
+            continue
+
+        if section == "agent" and indent == 2 and ":" in line:
+            key, value = line.split(":", 1)
+            cfg["agent"][key.strip()] = _strip_scalar(value)
+            continue
+
+        if section == "fallback_providers":
+            if indent == 0 and not line.startswith("- "):
+                section = None
+                current_fallback = None
+                continue
+            if line.startswith("- "):
+                current_fallback = {}
+                cfg["fallback_providers"].append(current_fallback)
+                body = line[2:].strip()
+                if ":" in body:
+                    key, value = body.split(":", 1)
+                    current_fallback[key.strip()] = _strip_scalar(value)
+            elif current_fallback is not None and ":" in line:
+                key, value = line.split(":", 1)
+                current_fallback[key.strip()] = _strip_scalar(value)
+            continue
+
+        if section == "auxiliary":
+            if indent == 2 and line.endswith(":"):
+                subsection = line[:-1]
+                continue
+            if subsection == "compression" and indent == 4 and ":" in line:
+                key, value = line.split(":", 1)
+                cfg["auxiliary"]["compression"][key.strip()] = _strip_scalar(value)
+
+    return cfg
+
+
 def _load_profile(hermes_home: Path, profile: str) -> dict[str, Any] | None:
     path = hermes_home / "profiles" / profile / "config.yaml"
     if not path.exists():
         return None
     try:
-        return yaml.safe_load(path.read_text()) or {}
+        text = path.read_text()
+        if yaml is not None:
+            return yaml.safe_load(text) or {}
+        return _load_profile_without_yaml(text)
     except Exception as exc:
         return {"_error": f"failed to parse: {exc}"}
 

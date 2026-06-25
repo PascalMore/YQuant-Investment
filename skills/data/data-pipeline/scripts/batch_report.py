@@ -54,6 +54,12 @@ def summarize_batch_results(results: list[dict[str, Any]]) -> dict[str, Any]:
             "pending_files": pending_files,
             "error": item.get("error"),
         }
+        # F-011 (SPEC-03-006 §4.7): provider_status is an audit-only field
+        # that may be present on image pipeline results. We pass it through
+        # verbatim; it does NOT influence closeout status decisions.
+        provider_status = item.get("provider_status")
+        if provider_status:
+            summary_item["provider_status"] = provider_status
         summary["items"].append(summary_item)
 
         if int(review.get("pending_rows") or 0) > 0:
@@ -255,6 +261,16 @@ def _format_batch_closeout_text(closeout: dict[str, Any]) -> str:
     else:
         lines.append("入库：无")
 
+    # SPEC-03-006 §5.2: print one short provider line per file when the
+    # batch contains image-pipeline items. We deliberately do NOT print the
+    # full provider_status payload (which may include error stacks) — only
+    # name + fallback flag for human traceability.
+    provider_lines = _format_provider_lines(closeout)
+    if provider_lines:
+        lines.append("")
+        lines.append("OCR provider 来源：")
+        lines.extend(provider_lines)
+
     needs_confirmation_items = closeout.get("needs_confirmation_items") or []
     failed_items = closeout.get("failed_items") or []
 
@@ -309,3 +325,23 @@ def format_batch_closeout(
     else:
         closeout = build_batch_closeout(summary_or_closeout)
     return closeout["message_text"]
+
+
+def _format_provider_lines(closeout: dict[str, Any]) -> list[str]:
+    """Return a list of "source: provider=<name> fallback=<bool>" lines.
+
+    Only emits lines for items that have a ``provider_status`` attached
+    (i.e. went through the image OCR pipeline). Items without
+    ``provider_status`` are silently skipped.
+    """
+    out: list[str] = []
+    items = closeout.get("items") or []
+    for item in items:
+        provider_status = item.get("provider_status") if isinstance(item, dict) else None
+        if not provider_status:
+            continue
+        name = str(provider_status.get("name") or "unknown")
+        fallback = bool(provider_status.get("fallback_used"))
+        source = str(item.get("source") or item.get("image") or "<unknown>")
+        out.append(f"  - {source}: provider={name} fallback={fallback}")
+    return out

@@ -81,6 +81,7 @@ async def run_pipeline(
     if not records:
         raise ValueError("OCR 未提取到数据")
     df = records[0]["df"]
+    provider_status = (records[0] or {}).get("provider_status")
     logger.info(f"[Step1] OCR done: {len(df)} rows")
 
     # Step 1b: Archive image + save Excel
@@ -91,7 +92,13 @@ async def run_pipeline(
     logger.info(f"[Step1] Excel saved: {excel_path} ({len(df)} rows)")
 
     if dry_run:
-        return {"image": str(archived), "excel_path": str(excel_path), "rows": len(df), "dry_run": True}
+        return {
+            "image": str(archived),
+            "excel_path": str(excel_path),
+            "rows": len(df),
+            "dry_run": True,
+            "provider_status": provider_status,
+        }
 
     # Step 2: Transform
     transformer = TradeExcelTransformer()
@@ -124,6 +131,7 @@ async def run_pipeline(
         "trade": result.get("trade", 0),
         "validation": {"valid": True, "errors": vr.errors, "warnings": vr.warnings},
         "mongodb": result,
+        "provider_status": provider_status,
     }
 
 

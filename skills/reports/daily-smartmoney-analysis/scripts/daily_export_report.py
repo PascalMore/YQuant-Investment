@@ -109,36 +109,84 @@ def get_product_info_map(db) -> dict:
         return {}
 
 
-def query_positions(db, latest_date: str, min_holding_ratio: float = 0.04) -> pd.DataFrame:
-    """查询持仓数据"""
+# 持仓筛选规则：per-product override
+# 默认: holding_ratio >= 0.04 (4%)
+# SM004: 不按比例过滤，取前 11 大持仓
+POSITION_FILTER_RULES = {
+    "SM004": {"mode": "top_n", "n": 11},
+}
+
+
+def query_positions(
+    db,
+    latest_date: str,
+    min_holding_ratio: float = 0.04,
+    product_rules: dict = None,
+) -> pd.DataFrame:
+    """查询持仓数据。
+
+    Args:
+        db: MongoDB database.
+        latest_date: position_date to query.
+        min_holding_ratio: 默认最低持仓比例（适用于无 override 的产品）。
+        product_rules: {product_code: {"mode": "top_n", "n": 11}}
+            对特定产品使用 top-N 而非比例过滤。为 None 时使用
+            模块级 POSITION_FILTER_RULES。
+    """
+    if product_rules is None:
+        product_rules = POSITION_FILTER_RULES
+
     try:
         collection = db["portfolio_position"]
-        query = {
-            "position_date": latest_date,
-            "holding_ratio": {"$gte": min_holding_ratio}
-        }
-        cursor = collection.find(query).sort([("product_code", 1), ("holding_ratio", -1)])
-        
-        # 获取产品基础信息
+        # 不在 MongoDB 侧做 holding_ratio 过滤，改为 Python 侧 per-product 筛选
+        query = {"position_date": latest_date}
+        cursor = collection.find(query).sort(
+            [("product_code", 1), ("holding_ratio", -1)]
+        )
+
         product_info = get_product_info_map(db)
-        
-        data = []
+
+        # 先按产品分组
+        from collections import defaultdict
+
+        grouped: dict[str, list[dict]] = defaultdict(list)
         for doc in cursor:
             pc = doc.get("product_code", "")
+            grouped[pc].append(doc)
+
+        # 逐产品应用筛选规则
+        data = []
+        for pc in sorted(grouped.keys()):
+            docs = grouped[pc]
+            rule = product_rules.get(pc)
+            if rule and rule.get("mode") == "top_n":
+                # top-N 模式：按 holding_ratio 降序取前 N（已排序）
+                docs = docs[: rule.get("n", 10)]
+            else:
+                # 默认模式：holding_ratio >= min_holding_ratio
+                docs = [
+                    d
+                    for d in docs
+                    if d.get("holding_ratio", 0) >= min_holding_ratio
+                ]
+
             info = product_info.get(pc, {})
-            data.append({
-                "日期": doc.get("position_date", ""),
-                "产品代码": pc,
-                "产品名称": info.get("product_name", ""),
-                "资产名称": doc.get("asset_name", ""),
-                "Wind代码": doc.get("asset_wind_code", ""),
-                "持仓比例": doc.get("holding_ratio", 0),
-                "数量": doc.get("shares", 0),
-                "市值(本币)": doc.get("market_value", 0),
-                "最新净值": info.get("latest_nav", 0),
-                "最新规模": info.get("latest_aum", 0),
-            })
-        
+            for doc in docs:
+                data.append(
+                    {
+                        "日期": doc.get("position_date", ""),
+                        "产品代码": pc,
+                        "产品名称": info.get("product_name", ""),
+                        "资产名称": doc.get("asset_name", ""),
+                        "Wind代码": doc.get("asset_wind_code", ""),
+                        "持仓比例": doc.get("holding_ratio", 0),
+                        "数量": doc.get("shares", 0),
+                        "市值(本币)": doc.get("market_value", 0),
+                        "最新净值": info.get("latest_nav", 0),
+                        "最新规模": info.get("latest_aum", 0),
+                    }
+                )
+
         return pd.DataFrame(data)
     except Exception as e:
         print(f"❌ 查询持仓数据失败: {e}")

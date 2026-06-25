@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 # Ensure the script is importable
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
 from generate_agent_profile import (
     HERMES_JOB_SCRIPT_MAP,

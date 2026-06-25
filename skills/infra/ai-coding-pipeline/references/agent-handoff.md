@@ -4,7 +4,7 @@
 > 请查阅对应的 profile `config.yaml`。快速总览：
 >
 > ```bash
-> python3 scripts/infra/print_agent_models.py
+> python3 skills/common/utils/print_agent_models.py
 > ```
 >
 > 升级模型时只改 `config.yaml`，本 skill 不需要同步。
@@ -13,7 +13,7 @@
 
 负责 Intake、编排和 Closeout。
 
-模型配置：`profiles/yquant/config.yaml`。
+Hermes profile：`yquant`。
 
 必须提供：
 - 用户目标
@@ -27,12 +27,14 @@
 - 将子 Agent 原始日志直接转发给用户
 - 让 Implement、Verify、Review 合并为同一个角色
 - 对非平凡工程任务跳过验证
+- 用 `delegate_task` 假装完成正式流水线阶段
+- 只在文本中声明委派但不创建 Kanban task
 
 ## YQuant-Codex-Principal
 
 负责 RFC/SPEC/Design。
 
-模型配置：`profiles/yquantprincipal/config.yaml`。
+Hermes profile：`yquantprincipal`。
 
 输入：
 - Intake 摘要
@@ -55,7 +57,7 @@
 
 负责实现。
 
-模型配置：`profiles/yquantdeveloper/config.yaml`。
+Hermes profile：`yquantdeveloper`。
 
 输入：
 - RFC/SPEC/DESIGN
@@ -79,7 +81,7 @@
 
 负责独立验证。
 
-模型配置：`profiles/yquanttester/config.yaml`。
+Hermes profile：`yquanttester`。
 
 输入：
 - diff
@@ -102,7 +104,7 @@
 
 负责独立审查。
 
-模型配置：`profiles/yquantreviewer/config.yaml`。
+Hermes profile：`yquantreviewer`。
 
 输入：
 - diff

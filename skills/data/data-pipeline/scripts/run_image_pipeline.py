@@ -132,6 +132,7 @@ async def run_pipeline(
         raise ValueError("OCR 未提取到数据")
 
     df = records[0]["df"]
+    provider_status = (records[0] or {}).get("provider_status")
     print(f"[Step1] OCR 完成: {len(df)} rows")
 
     # Step 1b: 归档原始图片 + 保存 Excel
@@ -147,6 +148,7 @@ async def run_pipeline(
             "excel_path": str(excel_path),
             "rows": len(df),
             "dry_run": True,
+            "provider_status": provider_status,
         }
 
     # Step 2: Transform DataFrame → nested JSON
@@ -198,6 +200,7 @@ async def run_pipeline(
             "updated": result.get("updated", 0),
             "skipped": result.get("skipped", 0),
         },
+        "provider_status": provider_status,
     }
 
 

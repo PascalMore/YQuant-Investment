@@ -4,10 +4,10 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 | 草稿（Draft） |
+| 状态 | ✅ 已实现（Implemented） |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-06-25 |
-| 最后更新 | 2026-06-25 |
+| 最后更新 | 2026-06-25 (Closeout 完成) |
 | 来源 RFC | RFC-03-006 |
 | 目标模块 | data-pipeline（OCR Provider 层） |
 | 适配 Agent | YQuant-Developer-Engineer, YQuant-Test-Engineer |

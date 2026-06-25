@@ -204,7 +204,13 @@ async def run_pipeline(
     if not records:
         raise ValueError("OCR extracted no data")
     df = records[0]["df"]
+    provider_status = (records[0] or {}).get("provider_status")
     logger.info(f"[Step1] Parsed: {len(df)} rows, columns: {list(df.columns)}")
+    if provider_status:
+        logger.info(
+            f"[Step1] OCR provider={provider_status.get('name')} "
+            f"fallback_used={provider_status.get('fallback_used')}"
+        )
 
     # Step 1b: Fix OCR year errors (e.g., 2099 or 2024 misread for 2026)
     records = correct_year_if_ocr_error(records)
@@ -238,6 +244,7 @@ async def run_pipeline(
         fmt=fmt,
         source_path=str(new_path),
         excel_path=str(excel_path),
+        provider_status=provider_status,
     )
     review = build_review_summary(
         total_rows=len(df),
@@ -259,6 +266,7 @@ async def run_pipeline(
             "pending": pending,
             "asset_name_audit": df.attrs.get(AUDIT_ATTR, []),
             "blocked": bool(pending),
+            "provider_status": provider_status,
         }
 
     # Step 2: Transform based on format
@@ -284,6 +292,7 @@ async def run_pipeline(
                 "pending": pending,
                 "validation": {"valid": True},
                 "mongodb": {"trade": 0},
+                "provider_status": provider_status,
             }
 
         vr = validate_trade(records_to_validate)
@@ -308,6 +317,7 @@ async def run_pipeline(
             "pending": pending,
             "validation": {"valid": True},
             "mongodb": result,
+            "provider_status": provider_status,
         }
     else:
         transformer = PortfolioExcelTransformer()
@@ -330,6 +340,7 @@ async def run_pipeline(
                 "pending": pending,
                 "validation": {"valid": True},
                 "mongodb": {"basic_info": 0, "nav": 0, "position": 0},
+                "provider_status": provider_status,
             }
 
         vr_pos = validate_position(position_records)
@@ -363,6 +374,7 @@ async def run_pipeline(
             "pending": pending,
             "validation": {"valid": True},
             "mongodb": result,
+            "provider_status": provider_status,
         }
 
 

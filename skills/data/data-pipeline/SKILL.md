@@ -5,6 +5,8 @@ description: YQuant 数据管道框架。所有外部数据（API采集、文件
 
 # Data Pipeline
 
+> **📌 Image Pipeline 实战笔记**：`references/image-pipeline-workflow.md` 记录了 Smart Money 图片入库的完整实操流程、3 个日期概念辨析、孤儿 CSV 现象、NAV 字段名坑（`aum` 不是 `scale`）等本会话踩过的坑。新会话涉及图片入库前先看这个文件。
+
 ## 核心定位
 
 data-pipeline 是 YQuant 的**统一数据摄入框架**，负责将各种来源的原始数据转化为结构化、已校验的存储数据。
@@ -47,7 +49,7 @@ data-pipeline 是 YQuant 的**统一数据摄入框架**，负责将各种来源
 
 ```
 data-pipeline/
-├── SKILL.md                     ← 本文件
+├── SKILL.md                     ← 本文档
 ├── scripts/
 │   ├── pipeline.py              ← 管道引擎（核心编排）
 │   ├── extractors/
@@ -57,6 +59,17 @@ data-pipeline/
 │   │   ├── api_extractor.py     ← API 拉取（Tushare/AKShare）
 │   │   ├── file_extractor.py   ← 文件导入（CSV/Excel）
 │   │   └── message_extractor.py ← 聊天消息解析
+│   ├── providers/               ← ★ Vision OCR provider 子包（SPEC-03-006）
+│   │   ├── __init__.py          ← 包导出 + bootstrap_registry()
+│   │   ├── base.py              ← VisionProvider ABC、ProviderResult、FailureKind
+│   │   ├── registry.py          ← _REGISTRY、register/get_provider
+│   │   ├── router.py            ← VisionProviderRouter、RouterConfig
+│   │   ├── minimax_provider.py  ← MiniMaxVisionProvider（mmx vision describe）
+│   │   ├── zai_provider.py      ← ZAIVisionProvider（Z.AI MCP 图像分析）
+│   │   ├── prompts.py           ← VISION_PROMPT 常量
+│   │   ├── extract_json.py      ← extract_json、normalize_columns、clean_data
+│   │   ├── classify.py          ← classify_failure、sanitize_error
+│   │   └── health_check.py      ← check_minimax_cli、check_zai_mcp
 │   ├── transformers/
 │   │   ├── __init__.py
 │   │   ├── base.py             ← Transformer 基类
@@ -74,6 +87,7 @@ data-pipeline/
 │       ├── __init__.py
 │       └── base64_codec.py     ← JSON↔Base64 序列化（Transport 层）
 └── references/
+    ├── image-pipeline-workflow.md ← 图片入库实操笔记（本会话）
     └── schemas/                ← 各数据类型 Schema 定义
         ├── financial.yaml       ← 财务数据 Schema
         ├── price.yaml           ← 行情数据 Schema
@@ -236,7 +250,7 @@ result = await pipeline.run(source="/path/to/screenshot.png")
 |-----------|------|------|
 | `MiniMaxImageExtractor` | ✅ 已完成 | 从图片解析结构化数据（MiniMax CLI Vision） |
 | `ApiExtractor` | 待实现 | 从 Tushare/AKShare API 拉取 |
-| `FileExtractor` | 待实现 | 从 CSV/Excel 导入 |
+| `FileExtractor` | 待实现 | 从 CSV / Excel 导入 |
 | `MessageExtractor` | 待实现 | 从聊天消息解析结构化数据 |
 
 ## 已有 Codec
@@ -291,6 +305,160 @@ JSON↔Base64 不属于传统 ETL 的 Extract/Transform/Load 步骤，而是 **T
                                               ↑
                                    用于跨边界传输
                           （HTTP Header / JSON 字段 / 文件存储 / 消息队列）
+```
+
+## 读取（只读查询）：核对持仓 / 交易 / 产品元数据
+
+除了入库（write）路径外，`PortfolioMongoLoader` 也是核对库内数据最快的入口。
+**只读查询也应该走它**，不要手动拼 MongoClient 连接串（凭证从 `skills/.env` 加载的逻辑只在 loader 内部）。
+
+### 关键方法（容易猜错）
+
+- ✅ `loader._get_client()` — 返回 `MongoClient`
+- ✅ `loader._db()` — 返回 `Database`（内部走 `_get_client()` 懒加载）
+- ❌ `loader._client()` — **不存在**，调用会返回 `None`，然后 `None(...)` 报 `TypeError: 'NoneType' object is not callable`
+
+第一次用的时候大概率会写成 `loader._client()`（因为属性名带下划线），调试半天。
+
+### 一行式核对脚本
+
+```bash
+PYTHONPATH=skills/data/data-pipeline/scripts:/home/pascal/workspace/yquant-investment \
+  /home/pascal/workspace/yquant-investment/.venv/bin/python - <<'PY'
+from loaders.mongodb_loader import PortfolioMongoLoader
+db = PortfolioMongoLoader()._db()
+print(db["portfolio_position"].count_documents({"product_code": "SM002"}))
+PY
+```
+
+更完整的可复用模板见 `scripts/query_portfolio.py`（支持产品代码 + 日期范围 + 自动 sanity check）。
+
+### 业务日期字段（集合 → 业务日期字段名）
+
+| 集合 | 业务日期字段 |
+|------|------------|
+| `portfolio_basic_info` | 无（按 `product_code` 唯一） |
+| `portfolio_nav` | `nav_date` |
+| `portfolio_position` | `position_date` |
+| `portfolio_trade` | `trade_date` |
+
+复合唯一键：
+
+- `portfolio_position`: `(position_date, product_code, asset_wind_code)`
+- `portfolio_trade`: `(trade_date, product_code, asset_wind_code, direction)`
+
+### Pitfall: `product_code` vs `product_name` 是两个字段
+
+用户口语里可能说"ZO-002"或"那个中欧产品"，但 MongoDB 查询必须用 `product_code`（如 `SM004`）。混淆后会得到"无数据"假象。
+
+| 字段 | 含义 | 取值示例 |
+|------|------|---------|
+| `product_code` | 系统内唯一标识，查询用这个 | `SM001 / SM002 / SM003 / SM004 / SM012 / CCT-001` |
+| `product_name` | 业务展示名/对外名 | `ZO-001 / ZO-002 / ZO-003 / ZO-004 / ZO-012 / CCT-001` |
+
+诊断步骤：
+1. 用户报"查不到 XX" → 先看 `portfolio_basic_info`，里面有完整 product_code ↔ product_name 映射
+2. 在不知道 product_code 的情况下，可以用 `product_name` 反查：
+
+```python
+db["portfolio_basic_info"].find_one({"product_name": "ZO-002"})
+# → {"product_code": "SM004", "product_name": "ZO-002", ...}
+```
+
+3. 或者列全表自检：
+
+```bash
+python scripts/query_portfolio.py --list-products
+```
+
+`portfolio_position.distinct("product_code")` 当前：`SM001 / SM002 / SM003 / SM004 / SM012 / CCT-001`。
+`portfolio_basic_info.distinct("product_name")` 对应：`ZO-001 / ZO-002 / ZO-003 / ZO-004 / ZO-012 / CCT-001`。
+
+> 当 `query_portfolio.py --product SM004 --sanity` 返回 `candidates: []` 且 `all_distinct` 包含 `SM004`，说明用户可能用了产品名（如 `zo-002`），不是系统真的没数据。
+
+### Pitfall: 找不到 product_code 时的诊断流程
+
+当用户报"查不到 XX"时，按以下顺序确认（避免误判是 query 写错还是真的没数据）：
+
+1. **大小写/分隔符扫描** — 跑几个常见变体（`sm002 / SM002 / Sm002 / sm_002`），有时产品代码在入库时被规范化
+2. **正则扫描** — `re.compile("^sm.*002$", re.IGNORECASE)` 看有没有近义编码
+3. **`distinct("product_code")`** — 直接列出库里所有产品，避免被记忆中的代码误导
+4. **sanity check** — `count_documents({"product_code": X})` 全表累计，看是真的没数据还是范围写错
+5. **同库其他集合** — 查 `portfolio_basic_info`，如果元数据不存在说明这个产品根本没建过档
+
+只有 1–5 步全为空，才能下结论"该 product_code 在 tradingagents 库里不存在"。
+
+### 已知产品代码清单（截至 2026-06）
+
+`portfolio_position.distinct("product_code")` 当前：`SM001 / SM002 / SM003 / SM004 / SM012 / CCT-001`。
+
+如果用户提到不在这个清单里的产品代码，先用上面 1–5 步确认，再回问确认（避免用户记错/笔误）。
+
+## YQuant 会话入口：用户发图 → 归档 → 跑 pipeline
+
+用户在 YQuant 会话中发送图片时，**不要**直接从截图解析出结构化数据入库。正确流程：
+
+### 1. 归档图片（agent 第一步）
+
+收到用户图片后立即保存到归档目录（**先不要做任何 OCR/解析**）：
+
+```bash
+# 归档目录命名：使用系统当前日期（user 发送图片的"今天"）
+ARCHIVE_DATE=$(date +%Y-%m-%d)
+IMAGE_DIR="/home/pascal/workspace/yquant-investment/skills/data/source/smart-money/${ARCHIVE_DATE}/image"
+mkdir -p "$IMAGE_DIR"
+
+# 用有意义的文件名
+DST="$IMAGE_DIR/<type>_<ARCHIVE_DATE>_<HHMMSS>.jpg"
+cp <用户截图本地路径> "$DST"
+```
+
+**关键 Pitfall — 三个日期概念不要混淆**（2026-06-25 用户真实纠正过）：
+
+| 日期 | 含义 | 用途 |
+|------|------|------|
+| **归档日期** (archive_date) | 用户**发送图片的当天** | 目录命名 `skills/data/source/smart-money/{archive_date}/image/` |
+| **业务日期** (business_date) | 图片**内容显示的日期** | `--date` 参数、写入 MongoDB 的 `trade_date` / `position_date` 字段 |
+| **系统日期** (system_date) | pipeline **实际跑的时刻** | pipeline 内部归档目录会再用一次系统日期（可能和 archive_date 跨日） |
+
+**为什么归档日期 ≠ 业务日期**：用户可能 6/25 晚上发来 6/24 的日报，归档到 25（当天）；pipeline `--date 2026-06-24`（业务日期）。**这是 SKILL.md 里没说清的盲点**——之前容易误把业务日期当归档目录用。
+
+### 2. 跑 pipeline（agent 第二步）
+
+```bash
+cd /home/pascal/workspace/yquant-investment && \
+  PYTHONPATH=/home/pascal/workspace/yquant-investment \
+  .venv/bin/python \
+  skills/data/data-pipeline/scripts/run_unified_image_pipeline.py \
+  --image "$DST" \
+  --date <业务日期>
+```
+
+**注意**：pipeline 内部**会再次用系统当前日期建归档目录**（如 `2026-06-26/`），和 agent 第一步的归档目录（`2026-06-25/`）**可能不同**。这是预期行为——目录日期使用系统接收日期（SKILL.md 原文），不是 bug。
+
+### 3. 禁止行为（用户已明确纠正过）
+
+❌ **不要**从截图直接解析出结构化数据再写入 MongoDB。即使 OCR 后是同一份数据，也**必须**走 pipeline 流程，触发 `stock_basic_info` 名称复核、`missing_master` 状态标记等标准流程。
+
+❌ **不要**用 `execute_code` 工具跑 pipeline 验证查询——它用 Hermes venv，**没有 pymongo / openpyxl**。验证 MongoDB 入库用 `.venv/bin/python -c` + `PortfolioMongoLoader` 模板（见下方"运行验证"）。
+
+### 4. 运行验证（pipeline 跑完后）
+
+```bash
+cd /home/pascal/workspace/yquant-investment && \
+  PYTHONPATH=/home/pascal/workspace/yquant-investment:/home/pascal/workspace/yquant-investment/skills/data/data-pipeline/scripts \
+  .venv/bin/python -c "
+from loaders.mongodb_loader import PortfolioMongoLoader
+db = PortfolioMongoLoader()._db()
+print(db['portfolio_trade'].count_documents({'trade_date': '<业务日期>'}))
+# 进一步聚合 by product_code
+pipeline = [
+    {'\$match': {'trade_date': '<业务日期>'}},
+    {'\$group': {'_id': '\$product_code', 'count': {'\$sum': 1}}}
+]
+for d in db['portfolio_trade'].aggregate(pipeline):
+    print(f'  {d[\"_id\"]}: {d[\"count\"]} 条')
+"
 ```
 
 ## 开发进度
@@ -353,6 +521,37 @@ records = await ext.extract("2026-05-03")  # 传入日期字符串
 ## Image Portfolio / Trade Pipeline（图片 OCR 输入）
 
 图片 pipeline 使用 MiniMax Vision OCR，将截图解析为 DataFrame，再自动识别为 portfolio 或 trade 格式，后续统一进入 Transform → Validate → MongoDB。
+
+### OCR Provider Fallback（MiniMax → Z.AI/GLM）
+
+图片 OCR 现在走 `VisionProviderRouter`，主 provider 失败时自动降级到 Z.AI/GLM Vision MCP。设计目标：让 MiniMax 配额耗尽 / 临时不可用时，pipeline 不再整图 `failed`，而是落到备用 provider 继续走通。
+
+**配置位置**：`~/.hermes/profiles/yquant/config.yaml` → `ocr_providers` 段。
+
+```yaml
+ocr_providers:
+  order: [minimax, zai]   # 主 provider + fallback 链（单向，决策 #6）
+  primary_timeout_seconds: 120
+  fallback_timeout_seconds: 240   # glm-4.6v OCR 复杂表格 ~100s，90s 不够
+  health_check_on_start: true
+  include_provider_status_in_debug: true
+```
+
+> ⚠️ **Timeout tuning（2026-06-26 实测）**：Router 内部用 `asyncio.wait_for(timeout=fallback_timeout_seconds + 30)`。glm-4.6v 处理复杂表格截图 OCR 需要 ~100-105s。原默认 90s（有效超时 120s）会被 SIGTERM 杀掉。调到 240s（有效超时 270s）后稳定通过。
+
+**不暴露原则**（决策 #1）：普通用户不能通过 CLI 切换 provider 顺序。`run_unified_image_pipeline.py` 不新增 `--provider-order` / `--ocr-fallback` 之类参数。需要临时改主备顺序，编辑 `config.yaml` 即可。
+
+**审计字段**：`MiniMaxImageExtractor.extract()` 返回的每条 record 现在多带一个 `provider_status` dict，含 `name` / `fallback_used` / `attempts` / `errors` 四个键。下游消费者（`save_pending_review` / `batch_report`）仅透传，不参与入库决策：
+- `pending.csv` 多一列 `provider`（值=`minimax` 或 `zai`）；旧调用方不传 `provider_status` 时**不写**新列（向后兼容）。
+- `pending.json` payload 多一个 `provider_status` 字段。
+- `batch_report` closeout 文本在末尾多一段「OCR provider 来源」短行（不打印完整 `provider_status` 全文）。
+
+**回滚**：将 `ocr_providers.order` 改为 `[minimax]`（仅主），Router 只跑 MiniMax，行为与改造前完全一致；无需回退 Extractor 代码。
+
+**参考资料**：
+- RFC：`docs/rfc/03_data/RFC-03-006-smart-money-ocr-provider-fallback.md`
+- SPEC：`docs/spec/03_data/SPEC-03-006-smart-money-ocr-provider-fallback.md`
+- Design：`docs/design/03_data/DESIGN-03-006-smart-money-ocr-provider-fallback.md`
 
 ### 批量图片并行处理模式
 
@@ -463,10 +662,22 @@ Hermes `execute_code` 工具使用自己的 venv（无 pandas），**禁止**用
 
 ### Hermes 工具阻塞与 Python 执行路径
 
-- **`execute_code`** 工具使用 Hermes Agent 自己的 venv（无 pandas），**禁止**用于执行 pipeline
+- **`execute_code`** 工具使用 Hermes Agent 自己的 venv（无 pandas / openpyxl / pymongo），**禁止**用于执行 pipeline 和验证 MongoDB 入库
 - 完整 Python path 命令（如 `.venv/bin/python ...`）**不触发** Hermes 安全审批，可直接执行
 - 脚本通过 `-e`/`-c` 参数注入代码时会触发审批，**不要**依赖这种方式
 - 若 pipeline 执行被安全策略拦截，切换 `terminal(background=true)` + `notify_on_complete=true` 提交后台任务
+
+### Pitfall — 用户发图入库的 3 个日期概念（2026-06-25 用户纠正过）
+
+agent 收到用户发图时，**3 个日期必须分别明确**：
+
+1. **归档日期** = 用户**发送图片的当天**（`date +%Y-%m-%d`）→ 目录命名
+2. **业务日期** = 图片内容显示的日期（`--date` 参数、入库字段 `trade_date` / `position_date`）
+3. **系统日期** = pipeline **实际跑的时刻**（pipeline 内部归档会再用一次，可能和 #1 跨日）
+
+**用户已明确纠正**：发图给 agent 时，**归档日期不是图片日期**。agent 第一次保存图片到 `source/smart-money/{X}/image/` 时，`X` 是**归档日期**（=今天），不是图片显示的日期（=业务日期）。
+
+**禁止行为**：从用户截图直接解析出结构化数据再写库。**必须**走 pipeline——触发 `stock_basic_info` 名称复核、`missing_master` 状态标记等标准审计流程。
 
 ### 图片 Vision 策略（关键 Pitfall — 两层问题）
 
@@ -539,10 +750,44 @@ mcp_MiniMax_Token_Plan_MCP_understand_image(
 `MiniMaxImageExtractor` 当前没有 fallback——MiniMax 套餐一旦耗尽，pipeline 立即失败。Fallback 走 agent 层：zai 提供的 `@z_ai/mcp-server`（GLM Coding Plan 套餐专属视觉 MCP，共享 5h prompt 池子，**不**按 token 付费）。
 
 - 配置方法、环境变量、启用开关、协议约定：`references/provider-fallback.md`
+- **运维实战笔记（2026-06-26 首次生产 fallback 测试）**：`references/provider-fallback-ops.md` — 含 2 个 Bug 修复记录（env 继承 + 超时调优）、Z_AI_VISION_MODEL 配置、诊断命令
 - MCP server 完整配置片段（可直接 merge 到 config.yaml）：`templates/mcp-servers-zai-vision.yaml`
 - ⚠️ 关键变量名区分：`Z_AI_API_KEY`（zai MCP 用）≠ `GLM_API_KEY`（zai pay-as-you-go API 用）。两者在 Z.AI 后台是独立条目。
 
-**禁止行为（Pitfall）**
+**Z.AI Vision MCP env 配置（2026-06-26 实测补充）**：
+
+```yaml
+mcp_servers:
+  "Z.AI Vision MCP":
+    command: npx
+    args: ["-y", "@z_ai/mcp-server"]
+    env:
+      Z_AI_API_KEY: ${Z_AI_API_KEY}
+      Z_AI_MODE: ZHIPU
+      Z_AI_VISION_MODEL: glm-4v-flash   # 可选：覆盖默认 glm-4.6v，flash 版更快
+    connect_timeout: 120
+    timeout: 120
+```
+
+> `Z_AI_VISION_MODEL` 是 `@z_ai/mcp-server` 的 env 变量（见源码 `build/core/environment.js` L108），默认 `glm-4.6v`。设置 `glm-4v-flash` 可加速简单图片，但复杂表格 OCR 仍建议 `glm-4.6v`（准确率更高）。
+
+**关键 Pitfall — ZAI MCP 子进程环境变量继承（2026-06-26 发现并修复）**：
+
+`zai_provider.py` 的 `ZAIMCPClient._load_server_params()` 构建 `StdioServerParameters` 时，**原代码只传 server 声明的 env vars（`Z_AI_API_KEY` / `Z_AI_MODE`），不继承 `PATH` / `HOME` 等基础变量**。导致 `npx` 子进程找不到 `node`，报 `Z_AI_API_KEY environment variable is required`（实际 key 已设置，但 npx 根本没启动到读取 env 那步）。
+
+**修复**：`_load_server_params()` 中 merge `os.environ` + server-specific vars：
+
+```python
+# ✅ 修复后（zai_provider.py L234-241）
+resolved = _resolve_env(env, os.environ)
+merged = dict(os.environ)  # inherit full parent environment
+merged.update(resolved)    # server-specific vars take precedence
+return StdioServerParameters(command=command, args=args, env=merged)
+```
+
+**关键 Pitfall — Fallback 超时不够（2026-06-26 实测）**：
+
+Router 用 `asyncio.wait_for(provider.describe(), timeout=fallback_timeout_seconds + 30)`。原配置 `fallback_timeout_seconds=90`（有效超时 120s），但 glm-4.6v 复杂表格 OCR 需要 ~103s。首次实测时 MCP server 正常启动、API 请求发出，但 120s 后被 SIGTERM 杀掉。调到 `240`（有效超时 270s）后稳定通过。
 
 **不要**为图片入库写自定义脚本或手动连接 MongoDB。正确做法只需一条命令：
 
@@ -684,6 +929,18 @@ python3 skills/data/data-pipeline/scripts/load_pending_confirmed.py \
 
 `--confirm-all` 会放行所有状态（包括 `pending_review`、`missing_master`），将 CSV 中 Wind 代码非空的行全部入库。
 
+### Pitfall — Pending CSV ≠ 未入库（2026-06-26 用户纠正过）
+
+**当用户问"还有 pending 要入库吗？"时，**不要**只扫 CSV 状态就回答。CSV 是审计文件，不是真理源。历史 pending CSV 经常是孤儿（pipeline 早期版本可能直接入库但 CSV 状态没回填）。
+
+**正确流程**：跨 CSV + MongoDB 双源核对。详见 `scripts/audit_pending_unmigrated.py`：
+
+```bash
+.venv/bin/python skills/data/data-pipeline/scripts/audit_pending_unmigrated.py
+```
+
+**实战发现（2026-06-26 实测）**：44 行 legacy pending CSV 中 **42 行（95.5%）已在 MongoDB**，仅 2 行真正未入库。盲目 `confirm-all` 全部 30 个 CSV 风险大，必须先核对。
+
 ### 安全设计
 
 | 状态 | 默认行为 | `--confirm-all` 行为 |
@@ -701,3 +958,16 @@ python3 load_pending_confirmed.py --csv pending.csv
 # Step 2: 用户确认后，再入剩余行
 python3 load_pending_confirmed.py --csv pending.csv --confirm-all
 ```
+
+### Pitfall — NAV 字段名是 `aum` 不是 `scale`（2026-06-26 误报）
+
+```python
+# ❌ 错误 — 字段名猜错，永远返回默认值 0
+rec = db['portfolio_nav'].find_one({'product_code': 'SM001'})
+print(rec.get('scale', 0))  # → 0（字段不存在，误报"scale 为 0"）
+
+# ✅ 正确 — 实际字段是 aum
+print(rec.get('aum'))  # → 226570340
+```
+
+**教训**：第一次用时先 `find_one({...})` 然后打印 `rec.keys()` 看实际字段。`portfolio_nav` 的实际字段是 `nav_date / product_code / nav / aum / share / updated_at`。

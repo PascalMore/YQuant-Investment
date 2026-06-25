@@ -307,7 +307,7 @@ def load_all_pending_for_date(
     Returns:
         Aggregate summary dict.
     """
-    source_root = Path(__file__).resolve().parents[4] / "skills" / "data" / "source" / "smart-money"
+    source_root = _scripts.parent.parent.parent / "data" / "source" / "smart-money"
     review_dir = source_root / date_str / "review_pending"
     csv_files = sorted(glob.glob(str(review_dir / "*_pending.csv")))
 

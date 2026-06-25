@@ -199,8 +199,17 @@ def save_pending_review(
     fmt: str,
     source_path: str,
     excel_path: str,
+    provider_status: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Persist pending rows and metadata for manual review."""
+    """Persist pending rows and metadata for manual review.
+
+    Args:
+        provider_status: Optional dict returned by the OCR provider router
+            (RFC-03-006 / SPEC-03-006). When provided, a ``provider`` column
+            is appended to the pending CSV and a ``provider_status`` block
+            is embedded in the pending JSON payload. Backward compatible:
+            when ``None`` (legacy callers) the new field is omitted.
+    """
     if pending_df.empty:
         return {}
 
@@ -215,6 +224,14 @@ def save_pending_review(
         json_path = review_dir / f"{base_name}_{counter:02d}.json"
         counter += 1
 
+    # F-010 (SPEC-03-006 §4.8): if a provider_status was provided, write the
+    # active provider name into a new CSV column. We do this *only* when
+    # provider_status is non-None — legacy callers get a backward-compatible
+    # CSV with no new column.
+    if provider_status:
+        provider_name = str(provider_status.get("name") or "unknown")
+        pending_df = pending_df.copy()
+        pending_df["provider"] = provider_name
     pending_df.to_csv(csv_path, index=False, encoding="utf-8-sig")
     payload = {
         "status": "pending_review",
@@ -228,6 +245,8 @@ def save_pending_review(
         "audit": audit,
         "csv": str(csv_path),
     }
+    if provider_status:
+        payload["provider_status"] = provider_status
     json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
 
     # F-008: 生成标准补录命令，供 pipeline 调用方（AI/Orchestrator）直接使用

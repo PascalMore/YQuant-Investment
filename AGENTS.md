@@ -181,7 +181,7 @@ TradingAgents 的五层协作模型、AI Hedge Fund 的多大师角色 Agent 设
 
 YQuant 的研发类任务优先检查 `yquant-ai-coding-pipeline` skill（`skills/infra/ai-coding-pipeline/SKILL.md`）。根 `AGENTS.md` 只保留启用、路由和安全边界；触发分级、阶段门禁、文档分层和交接格式由该 skill 维护。
 
-AI Coding 流水线各 Agent 的实际模型路由以 `/home/pascal/.openclaw/openclaw.json` 为准；文档中的模型说明只作为当前配置摘要，修改模型时必须同步更新配置和说明。
+AI Coding 流水线在 Hermes 中使用 Kanban profile worker 执行。各角色的实际模型、fallback 和压缩配置以 `~/.hermes/profiles/{profile}/config.yaml` 为准；修改模型时只改对应 Hermes profile 配置，不在本文档写死。
 
 ### 触发策略
 
@@ -200,13 +200,13 @@ AI Coding 流水线各 Agent 的实际模型路由以 `/home/pascal/.openclaw/op
 
 ### 子 Agent 路由
 
-委派时使用默认 `runtime: "subagent"`；不要使用 ACP runtime，不要调用 `/acp`。推荐 `agentId` 映射：
+正式流水线阶段必须用 Hermes Kanban 创建真实 profile worker 任务；不要用 OpenClaw `agentId`、`runtime: "subagent"`、ACP runtime 或 `/acp`。Hermes `delegate_task` 只适合短推理子任务，不适合按角色切换 profile/model。
 
-- RFC/SPEC/Design/架构/接口/数据模型：`yquant-codex-principal`
-- 代码实现：`yquant-developer-engineer`
-- 测试验证：`yquant-test-engineer`
-- 独立审查：`yquant-reviewer-principal`
+- RFC/SPEC/Design/架构/接口/数据模型：Kanban `assignee="yquantprincipal"`
+- 代码实现：Kanban `assignee="yquantdeveloper"`
+- 测试验证：Kanban `assignee="yquanttester"`
+- 独立审查：Kanban `assignee="yquantreviewer"`
 
-委派任务必须包含：任务目标、背景信息、当前约束、相关文件或目录、期望输出、验收标准、禁止事项、是否允许修改文件、是否需要运行测试或命令。
+委派任务必须包含：任务目标、背景信息、当前约束、相关文件或目录、期望输出、验收标准、禁止事项、是否允许修改文件、是否需要运行测试或命令。Kanban task 必须使用 `workspace_kind="dir"` 和 `workspace_path="/home/pascal/workspace/yquant-investment"`，有前置阶段时必须设置 `parents=[...]`。
 
 子智能体完成后，@YQuant 必须审核其结论是否回答用户目标，整理关键变更、验证结果、风险和下一步，并用面向用户的清晰语言回复；不要原样转发内部执行日志。

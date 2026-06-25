@@ -141,3 +141,10 @@ _Last updated: 2026-04-24_
 - **Goal**: Complete the pending review loop closure for Smart Money Pipeline — detecting pending → user confirmation → standard-script load → resolved marking. [score=0.926 recalls=0 avg=0.620 source=memory/2026-06-18.md:7-7]
 <!-- openclaw-memory-promotion:memory:memory/2026-06-18.md:12:13 -->
 - python3 load_pending_confirmed.py --csv <path> # single file python3 load_pending_confirmed.py --date 2026-06-17 # batch [score=0.926 recalls=0 avg=0.620 source=memory/2026-06-18.md:12-13]
+
+## Promoted From Short-Term Memory (2026-06-26)
+
+<!-- openclaw-memory-promotion:memory:memory/2026-06-19.md:7:7 -->
+- 今日 Pascal 发送了大量持仓截图和成交记录，Image Pipeline 持续运行。 [score=0.926 recalls=0 avg=0.620 source=memory/2026-06-19.md:7-7]
+<!-- openclaw-memory-promotion:memory:memory/2026-06-19.md:9:9 -->
+- **关键修复：pending 脏数据问题** [score=0.926 recalls=0 avg=0.620 source=memory/2026-06-19.md:9-9]
