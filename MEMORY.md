@@ -59,11 +59,6 @@ workspace-yquant/
 
 _Last updated: 2026-04-24_
 
-## Promoted From Short-Term Memory (2026-05-29)
-
-<!-- openclaw-memory-promotion:memory:memory/2026-04-06.md:60:105 -->
-- 上证指数: 3880.10 (↓1.00%) 深证成指: 13352.90 (↓0.99%) 创业板指: 3149.60 (↓0.73%) 科创50: 1256.21 (↓0.47%) 上涨 716 / 下跌 4746 涨停 38 / 跌停 46 成交额 16689亿 ``` ### 待完成 - [ ] 解决 litellm 代理问题（可能需要配置代理凭据或切换网络） - [ ] 补充 `analyzer_service` 模块 - [ ] 配置邮件推送（TOOLS.md 中已有 SMTP 配置） - [ ] 飞书 Webhook URL 待确认 - [ ] Tavily API Key（新闻搜索）待配置 --- ## 夜间调试记录 (2026-04-06 01:20-02:08) ### litellm/MiniMax 兼容性问题 ✅ 根因确认 **问题描述：** litellm 调用 MiniMax API 失败，报 `invalid api key (2049)` **根本原因：** - litellm MiniMax provider 使用 OpenAI 兼容端点 `/v1/chat/completions` - MiniMax 实际使用 Anthropic 兼容端点 `/v1/messages` - 即使配置了正确的 `base_url: "https://api.minimaxi.com/anthropic"`，litellm 内部仍然拼接错误路径 **测试验证：** - ✅ 直接用 `requests.post` 调用 MiniMax `/v1/messages` 成功 - ❌ litellm.completion() 始终调用错误端点 ### API Key 状态 | API | Key 格式 | 状态 | |-----|----------|------| | MiniMax | `sk-cp-6zYqByU7...` | ❌ 无效 (2049) - 可能已过期/被撤销 | | Gemini | - | ⚠️ Quota exceeded | | DeepSeek | 未知 | ❓ 未配置 | ### litellm Config 位置 ``` /home/pascal/.openclaw/workspace/skills/investment/research/daily_stock_analysis/litellm_config.yaml ``` [score=0.801 recalls=3 avg=0.692 source=memory/2026-04-06.md:60-105]
-
 ## Promoted From Short-Term Memory (2026-06-06)
 
 <!-- openclaw-memory-promotion:memory:memory/2026-06-01.md:60:61 -->
@@ -148,3 +143,14 @@ _Last updated: 2026-04-24_
 - 今日 Pascal 发送了大量持仓截图和成交记录，Image Pipeline 持续运行。 [score=0.926 recalls=0 avg=0.620 source=memory/2026-06-19.md:7-7]
 <!-- openclaw-memory-promotion:memory:memory/2026-06-19.md:9:9 -->
 - **关键修复：pending 脏数据问题** [score=0.926 recalls=0 avg=0.620 source=memory/2026-06-19.md:9-9]
+
+## Promoted From Short-Term Memory (2026-06-27)
+
+<!-- openclaw-memory-promotion:memory:memory/2026-06-19.md:21:24 -->
+- | 标的 | 代码 | 更正内容 | |------|------|---------| | 惠科股份 | 001399.SZ | `portfolio_position.asset_name` 原为"夏科股份"→ 更正为"惠科股份"（SM004，2026-06-16） | | 金钼股份 | 601958.SH | JS-002 持仓 OCR 识别有误 → 确认为金钼股份 | [score=0.936 recalls=0 avg=0.620 source=memory/2026-06-19.md:21-24]
+<!-- openclaw-memory-promotion:memory:memory/2026-06-19.md:25:28 -->
+- | 阿里巴巴-W | 9988.HK | JS-002 持仓（2025-09-08）→ 确认为阿里巴巴-W | | 国瓷材料 | 300285.SZ | SM003 持仓（2026-06-16）→ 确认为国瓷材料 | | 小鹏集团-W | 9868.HK | ZO-002 持仓（2025-08-27）→ OCR 为小鹏汽车-W → 确认更正为小鹏集团-W | | 蜜雪集团 | 2097.HK | JS-002 持仓（2025-08-27）→ OCR 为登富集团 → 确认更正为蜜雪集团 | [score=0.936 recalls=0 avg=0.620 source=memory/2026-06-19.md:25-28]
+<!-- openclaw-memory-promotion:memory:memory/2026-06-19.md:32:34 -->
+- | 状态 | 产品 | 日期 | 描述 | |------|------|------|------| | ⚠️ 待确认 | ZO-001 (SM003) | 2025-08-26 | Row 13：`300751.SZ`（迈为股份？宁德时代 300750.SZ？） | [score=0.936 recalls=0 avg=0.620 source=memory/2026-06-19.md:32-34]
+<!-- openclaw-memory-promotion:memory:memory/2026-06-19.md:36:36 -->
+- > 已在飞书提示 Pascal 确认，尚未收到回复。 [score=0.936 recalls=0 avg=0.620 source=memory/2026-06-19.md:36-36]

@@ -102,8 +102,10 @@ data-pipeline/
     ├── agent-overengineering-anti-patterns.md ← Agent 反模式清单
     ├── image-failure-postmortem.md      ← 2026-06-26 失败复盘
     ├── zai-mcp-tools.md                 ← Z.AI MCP tool 列表
+    ├── zai-mcp-fallback-runtime-2026-06-26.md ← 2026-06-26 晚间 fallback 三连坑修复
+    ├── zai-glm-endpoints.md             ← Z.AI / GLM endpoint 规范
     ├── provider-fallback.md             ← Vision provider fallback RFC/SPEC
-    ├── provider-fallback-ops.md         ← Fallback 运维实战
+    └── provider-fallback-ops.md         ← Fallback 运维实战
     └── schemas/                ← 各数据类型 Schema 定义
         ├── financial.yaml       ← 财务数据 Schema
         ├── price.yaml           ← 行情数据 Schema
@@ -981,19 +983,32 @@ mcp_servers:
 >
 > `glm-5.2` 不是这个 MCP server 的 vision model；它用于 Hermes `zai` provider 的 chat/compression/fallback。`glm-5.2` Coding Plan endpoint 需要显式使用 OpenAI Chat Completion URL `https://open.bigmodel.cn/api/coding/paas/v4`，不要误用 Anthropic Messages URL `https://open.bigmodel.cn/api/anthropic` 或普通 `/api/paas/v4`。详见 `references/zai-glm-endpoints.md`。
 
-**关键 Pitfall — ZAI MCP 子进程环境变量继承（2026-06-26 发现并修复）**：
+**关键 Pitfall — ZAI MCP 子进程拿不到 `Z_AI_API_KEY`（2026-06-26 晚间修复，commit `e78ccd8`）**：
 
-`zai_provider.py` 的 `ZAIMCPClient._load_server_params()` 构建 `StdioServerParameters` 时，**原代码只传 server 声明的 env vars（`Z_AI_API_KEY` / `Z_AI_MODE`），不继承 `PATH` / `HOME` 等基础变量**。导致 `npx` 子进程找不到 `node`，报 `Z_AI_API_KEY environment variable is required`（实际 key 已设置，但 npx 根本没启动到读取 env 那步）。
+`zai_provider.py` 的 `ZAIMCPClient._load_server_params()` 构建 `StdioServerParameters` 时，**原代码只读 `spec.get("env")`**，但 `_parse_mcp_servers()` 的轻量 YAML 解析器**不保留嵌套 mapping 上下文**——config.yaml 的 `env:` 块被拍平到 server spec 顶层，`spec.get("env")` 返回 `None`/`{}`。结果 npx 子进程没有任何 env vars 启动，z.ai MCP server 报 `Z_AI_API_KEY environment variable is required` + `McpError: Connection closed`。
 
-**修复**：`_load_server_params()` 中 merge `os.environ` + server-specific vars：
+**修复**（commit `e78ccd8`，`zai_provider.py` `_load_server_params`）：
 
 ```python
-# ✅ 修复后（zai_provider.py L234-241）
+# ✅ 修复后 — 两层防御
+env = spec.get("env") or {}
+if not isinstance(env, dict):
+    env = {}
+# Compatibility: 轻量 YAML parser 把 env: 块拍平到顶层
+if not env:
+    env = {k: v for k, v in spec.items() if isinstance(k, str) and k.isupper()}
+# Resolve ${VAR} + merge 父进程 os.environ（PATH/HOME 继承）
 resolved = _resolve_env(env, os.environ)
-merged = dict(os.environ)  # inherit full parent environment
-merged.update(resolved)    # server-specific vars take precedence
+merged = dict(os.environ)
+merged.update(resolved)
 return StdioServerParameters(command=command, args=args, env=merged)
 ```
+
+**关键区分**（与 `.env` self-load 的关系）：
+- 本 Bug 1：父进程 `os.environ` 有 `Z_AI_API_KEY`，但 zai provider 构造的 MCP 子进程 env 里没有（YAML 拍平 + 缺失 fallback merge）。
+- `.env` self-load：父进程 `os.environ` **就没有** `Z_AI_API_KEY`（Hermes gateway 没注入到 `terminal(background=true)` 启的子进程）。
+
+两个 Bug 都能报相同错误文本，但根因不同，修复点也不同。排查时先 `env | grep Z_AI_API_KEY` 看父进程有没有，再判断是哪个。
 
 **关键 Pitfall — Fallback 超时不够（2026-06-26 实测）**：
 
