@@ -27,7 +27,7 @@ provider_status: name=zai, fallback_used=True ✅
 duration_ms=103679 (≈103s)
 ```
 
-## 发现并修复的 2 个 Bug
+## 发现并修复的 4 个 Bug
 
 ### Bug 1: ZAI MCP 子进程缺少 PATH/HOME
 
@@ -58,6 +58,79 @@ return StdioServerParameters(command=command, args=args, env=merged)
 **根因**：Router 用 `asyncio.wait_for(timeout=fallback_timeout_seconds + 30)`。原配置 `fallback_timeout_seconds=90`（有效超时 120s）。glm-4.6v 处理复杂表格截图需要 ~100-105s，刚好卡在超时边界。
 
 **修复**：`config.yaml` 中 `fallback_timeout_seconds: 90 → 240`。
+
+### Bug 3: `_pick_image_tool` 启发式选错 tool（2026-06-26 发现，2026-06-26 修复）
+
+**症状**：zai MCP fallback 链路**实际上从未工作过**。minimax 主路径一直通，fallback 失败从未被发现。
+
+**根因**：`zai_provider.py` 的 `_pick_image_tool` 用 `name 包含 "image"` 子串匹配，遍历 `list_tools()` 返回的 8 个 tool 第一个匹配。`@z_ai/mcp-server` v0.1.2 暴露的 tools（按 list 顺序）：
+
+| 顺序 | tool 名 | 必填参数 | 是否能用于持仓 OCR |
+|---|---|---|---|
+| 1 | `ui_to_artifact` | `image_source, output_type, prompt` | ❌ 缺 `output_type` |
+| 2 | `extract_text_from_screenshot` | `image_source, prompt` | ✅ **首选** |
+| 3 | `diagnose_error_screenshot` | `image_source, prompt, context` | ⚠️ 偏题 |
+| 4 | `understand_technical_diagram` | `image_source, prompt, diagram_type` | ⚠️ 偏题 |
+| 5 | `analyze_data_visualization` | `image_source, prompt` | ✅ 也行 |
+| 6 | `ui_diff_check` | `expected, actual, prompt` | ❌ 双图 |
+| 7 | `analyze_image` | `image_source, prompt` | ✅ **兜底** |
+| 8 | `analyze_video` | `video_source, prompt` | ❌ 视频 |
+
+旧启发式匹配到 `ui_to_artifact`（第一个含 "image"），`output_type` 没传 → MCP server 报 `missing required argument: output_type` → fallback 失败。
+
+**修复**（`zai_provider.py` L431-453）：`_pick_image_tool` 改为显式 allowlist：
+
+```python
+# 修复后
+by_name = {getattr(t, "name", ""): t for t in tools}
+for preferred in ("extract_text_from_screenshot", "analyze_image"):
+    if preferred in by_name:
+        return by_name[preferred]
+# 然后才回到启发式 fallback
+```
+
+**用户决策**（2026-06-26）：优先 `extract_text_from_screenshot` → `analyze_image`。两者参数都是 `{image_source, prompt}` 最小集，适合持仓截图 OCR。
+
+**教训**：启发式字符串匹配遇上「多个 tool 共享子串」时容易选错。OCR/视觉类 MCP server 通常暴露 ≥5 个 tool，**必须用显式 allowlist**，不能纯靠子串。
+
+### Bug 4: 裸跑 `.venv/bin/python` 时 profile `.env` 不会被自动注入（2026-06-26 发现并修复）
+
+**症状**：`terminal(background=true)` 启的 `.venv/bin/python` 进程跑 pipeline → minimax 失败 → fallback zai → 报 `Z_AI_API_KEY environment variable is required`。
+
+**关键区分**（这跟 Bug 1 是**两个不同的问题**）：
+- **Bug 1**：zai_provider 自己构建的 `StdioServerParameters` 没继承父进程 env。已修。
+- **Bug 4**：父 Python 进程 `os.environ` 里**根本没有** `Z_AI_API_KEY`。是更上游的问题。
+
+**根因**：`Z_AI_API_KEY` 在 `~/.hermes/profiles/yquant/.env` 里设了，但 Hermes gateway **只给它自己启动的子进程注入 env**。`terminal(background=true)` 经由外部 shell 启进程，绕开了 gateway 的 env 注入。
+
+**验证**：
+```bash
+unset Z_AI_API_KEY
+.venv/bin/python -c "import os; print('Z_AI_API_KEY' in os.environ)"
+# → False  ← 父进程 os.environ 里就是没有
+```
+
+**修复**（双层防御，已落地）：
+1. `run_unified_image_pipeline.py` 入口处（line 16-24）：
+   ```python
+   _PROFILE_ENV = Path.home() / ".hermes" / "profiles" / "yquant" / ".env"
+   if _PROFILE_ENV.exists():
+       try:
+           from dotenv import load_dotenv as _load_profile_env
+           _load_profile_env(_PROFILE_ENV, override=False)
+       except ImportError:
+           pass
+   ```
+2. `zai_provider.py` 的 `ZAIVisionProvider.__init__` 内（line 67-80）：同样的 self-load，作为保险。
+
+两者都用 `override=False` — 幂等，Hermes 启的进程（已有 env）直接 skip。
+
+**症状 → 排查**：
+- 失败日志里 `Z_AI_API_KEY environment variable is required`
+- **不是** Bug 1 那个 PATH/HOME 继承 bug（已修）
+- 排查：`env | grep Z_AI_API_KEY` 看父进程有没有；没有就是 Bug 4
+
+**教训**：Hermes gateway 的 env 注入机制是**它自己启动的进程**才能享受。任何外部 shell 启的 Python 子进程（cron、terminal background、ad-hoc 脚本）都不会被注入。`dotenv` self-load 应该是数据 pipeline 的默认动作。
 
 ## 配置优化
 
