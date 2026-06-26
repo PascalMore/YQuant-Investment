@@ -244,7 +244,20 @@ class ZAIMCPClient:
         spec = servers[self._server_name]
         command = spec.get("command")
         args = list(spec.get("args") or [])
-        env = dict(spec.get("env") or {})
+        env = spec.get("env") or {}
+        if not isinstance(env, dict):
+            env = {}
+        # Compatibility: the lightweight YAML-ish parser used above does not
+        # preserve nested mapping context for `env:` blocks, so entries like
+        # `Z_AI_API_KEY: ${Z_AI_API_KEY}` can appear at the server-spec top
+        # level. Recover those uppercase environment keys here instead of
+        # launching the MCP server without credentials.
+        if not env:
+            env = {
+                k: v
+                for k, v in spec.items()
+                if isinstance(k, str) and k.isupper()
+            }
         # Resolve ${VAR} placeholders using current process env, then merge
         # with the parent environment so the subprocess inherits PATH, HOME,
         # and other variables needed by npx/node/uvx.
@@ -435,16 +448,16 @@ def _pick_image_tool(tools: list) -> Any:
     require arguments our provider cannot supply, e.g. ui_to_artifact needs
     `output_type`, diagnose_error_screenshot expects error context).
 
-    1. ``extract_text_from_screenshot`` — pure OCR (best fit for table
-       screenshots; params: image_source, prompt, programming_language).
-    2. ``analyze_image`` — general-purpose image analysis (params:
-       image_source, prompt — minimal surface).
+    1. ``analyze_image`` — general-purpose image analysis that follows the
+       JSON-output prompt used by this pipeline.
+    2. ``extract_text_from_screenshot`` — pure OCR fallback. It can return
+       plain text and may not satisfy the JSON contract, so do not prefer it.
     3. Heuristic fallback: any tool whose name contains "image".
     4. Heuristic fallback: any tool whose name contains "analyze"/"analyse".
     5. Last resort: ``tools[0]``.
     """
     by_name = {getattr(t, "name", ""): t for t in tools}
-    for preferred in ("extract_text_from_screenshot", "analyze_image"):
+    for preferred in ("analyze_image", "extract_text_from_screenshot"):
         if preferred in by_name:
             return by_name[preferred]
     for t in tools:

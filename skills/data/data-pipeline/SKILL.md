@@ -10,7 +10,9 @@ description: YQuant 数据管道框架。所有外部数据（API采集、文件
 >
 > **📌 6/26 早上失败复盘（Z_AI_API_KEY 缺失）**：`references/image-failure-postmortem.md` 记录早上 6 张并发跑 2 张失败的真正根因（profile .env 不注入裸跑子进程）+ 修复方案 + 验证步骤。看到 `Z_AI_API_KEY environment variable is required` 时**先看这个文件**，**不要直接套用 line 774 那个 pitfall**（那是另一回事）。
 >
-> **🔍 Z.AI MCP 工具清单（v0.1.2 实测）**：`references/zai-mcp-tools.md` — `@z_ai/mcp-server` 实际暴露 8 个 tool（`extract_text_from_screenshot` / `analyze_image` / `ui_to_artifact` 等），provider 选 tool 的优先级，**为什么以前 zai fallback 静默失败**（heuristic 选错 tool → 缺 required 参数）。`Z_AI_VISION_MODEL` 是 server 后端模型选择（`glm-4v-flash` / `glm-4.6v`），不影响 tool 选择。
+> **🔍 Z.AI MCP 工具清单（v0.1.2 实测）**：`references/zai-mcp-tools.md` — `@z_ai/mcp-server` 实际暴露 8 个 tool（`extract_text_from_screenshot` / `analyze_image` / `ui_to_artifact` 等），provider 选 tool 的优先级，**为什么以前 zai fallback 静默失败**（heuristic 选错 tool → 缺 required 参数）。图片 pipeline 的 JSON 提取优先 `analyze_image`，纯 OCR `extract_text_from_screenshot` 只作兜底。
+>
+> **🧯 Z.AI MCP fallback 生产修复（2026-06-26 晚间）**：`references/zai-mcp-fallback-runtime-2026-06-26.md` — MiniMax quota 耗尽后 ZAI fallback 的三连坑：`env:` 被轻量 YAML parser 拍平成顶层导致 MCP 子进程拿不到 `Z_AI_API_KEY`（已在代码里兼容）；tool 优先级改 `analyze_image` 优先（`extract_text_from_screenshot` 返回纯 OCR 文本无法满足 JSON 契约）。
 >
 > **🌐 Z.AI / GLM endpoint 规范（2026-06-26 实测）**：`references/zai-glm-endpoints.md` — `glm-5.2` Coding Plan 必须用 OpenAI Chat Completion endpoint `https://open.bigmodel.cn/api/coding/paas/v4`；Anthropic Messages endpoint `https://open.bigmodel.cn/api/anthropic` 只适合 Anthropic-compatible/custom provider；普通 `/api/paas/v4` 的 1113 不代表 Coding Plan 没额度。
 >
@@ -643,6 +645,8 @@ MiniMax raw/debug JSON 文件命名为 `pic_{timestamp}_vision_raw.json`、`pic_
 
 **原因**：同一个 shell 命令内的多个后台子进程（`&`）共享一个输出流，Hermes 的 `process` 工具只能追踪通过 `terminal(background=true)` 创建的独立任务，不识别 shell 内嵌的后台子进程。输出截断时只能重新运行。
 
+**后台任务无输出 ≠ 卡死**（2026-06-26 实战）：`run_unified_image_pipeline.py` 在非 TTY 后台进程里 stdout 可能被缓冲；OCR provider 等待期间 `process.poll/log` 可能连续数分钟显示空输出，但 Python 子进程 RSS/socket 仍在变化。不要因 0 输出立刻 kill 或重跑。先 `process.poll` 看进程仍 running；必要时用 `ps -eo pid,etimes,rss,args | grep run_unified_image_pipeline` 确认子进程仍活；等到 provider timeout/retry 自然完成。只有进程退出非 0 或超过预期 timeout 后，才按“两阶段失败处理”汇报临时方案。
+
 **会话累积模式**：如果用户分多次发送图片，每次新图片到来时继续独立后台提交，所有 pending 记录跨所有图片累积，等用户发送「就这些」等触发词后一次性展示所有 pending 汇总。
 
 **批次 closeout 后 pending 汇总命令**：
@@ -802,7 +806,10 @@ asyncio.run(main())
 
 `zai_provider._pick_image_tool` 之前用启发式（`name 包含 "image"`），从 `@z_ai/mcp-server` v0.1.2 暴露的 8 个 tool 里**第一个匹配**到的是 `ui_to_artifact`（要求必填 `output_type`，provider 没传 → MCP server 报 missing required argument）。Fallback 每次都失败，只是 minimax 主路径一直通所以没人发现。
 
-**修复**（已在 `zai_provider.py` line 431-453）：`_pick_image_tool` 改为显式 allowlist，**优先 `extract_text_from_screenshot` → `analyze_image` → 启发式 fallback**。这两个 tool 的 params 都是 `{image_source, prompt}`（最小可用集），适合持仓截图 OCR。
+-**2026-06-26 晚间二次修复**：后续实测发现 `extract_text_from_screenshot` 虽然参数最少，但它是纯 OCR 工具，可能返回普通文本而不是 pipeline prompt 要求的 JSON 数组，导致 `parse_error: no JSON array in zai output`。图片入库 pipeline 需要优先使用能遵循 JSON 输出 prompt 的 `analyze_image`。
+
+**当前正确优先级**（`zai_provider.py`）：`analyze_image` → `extract_text_from_screenshot` → 启发式 fallback。
+
 
 ### Pitfall — `.env` 不会被自动注入到 terminal background 进程（2026-06-26 修复）
 
@@ -970,7 +977,7 @@ mcp_servers:
     timeout: 120
 ```
 
-> `Z_AI_VISION_MODEL` 是 `@z_ai/mcp-server` 的 env 变量（见源码 `build/core/environment.js` L108），默认 `glm-4.6v`。设置 `glm-4v-flash` 可加速简单图片，但复杂表格 OCR 仍建议 `glm-4.6v`（准确率更高）。
+> `Z_AI_VISION_MODEL` 是 `@z_ai/mcp-server` 的 env 变量（见源码 `build/core/environment.js` L108），默认 `glm-4.6v`。设置 `glm-4v-flash` 可加速简单图片，但 `analyze_image` 在 `glm-4v-flash` 上会触发 `max_tokens parameter is illegal（范围[1,1024]）`，导致 `analyze_image` JSON 表格抽取失败（仍可跑 `extract_text_from_screenshot` 纯 OCR）。当前默认 `glm-4v-flash` 在 tool 优先级为 `analyze_image` 优先时无法走通 JSON 抽取；遇到 `max_tokens` 报错可临时改 `glm-5v-turbo`。
 >
 > `glm-5.2` 不是这个 MCP server 的 vision model；它用于 Hermes `zai` provider 的 chat/compression/fallback。`glm-5.2` Coding Plan endpoint 需要显式使用 OpenAI Chat Completion URL `https://open.bigmodel.cn/api/coding/paas/v4`，不要误用 Anthropic Messages URL `https://open.bigmodel.cn/api/anthropic` 或普通 `/api/paas/v4`。详见 `references/zai-glm-endpoints.md`。
 
@@ -992,15 +999,18 @@ return StdioServerParameters(command=command, args=args, env=merged)
 
 Router 用 `asyncio.wait_for(provider.describe(), timeout=fallback_timeout_seconds + 30)`。原配置 `fallback_timeout_seconds=90`（有效超时 120s），但 glm-4.6v 复杂表格 OCR 需要 ~103s。首次实测时 MCP server 正常启动、API 请求发出，但 120s 后被 SIGTERM 杀掉。调到 `240`（有效超时 270s）后稳定通过。
 
-**Z.AI MCP tool 优先级（2026-06-26 修复）**：
+**Z.AI MCP tool 优先级（2026-06-26 修复，晚间二次校准）**：
 
-`_pick_image_tool` 之前用纯启发式（name 含 "image"）会选到 `ui_to_artifact`，需要 `output_type` 参数 provider 没法填，导致 fallback 必然失败。修复后**显式白名单**：
+`_pick_image_tool` 之前用纯启发式（name 含 "image"）会选到 `ui_to_artifact`，需要 `output_type` 参数 provider 没法填，导致 fallback 必然失败。首次修复曾把 `extract_text_from_screenshot` 放在第一位，但生产验证发现它返回纯 OCR 文本，不能稳定满足 pipeline 的 JSON 数组契约。
 
-1. `extract_text_from_screenshot`（纯 OCR，参数最少）
-2. `analyze_image`（通用兜底）
+当前正确白名单：
+
+1. `analyze_image`（优先；遵循 prompt，能返回 JSON 数组/代码块，适合表格结构化）
+2. `extract_text_from_screenshot`（纯 OCR 兜底，可能触发 `no JSON array in zai output`）
 3. 启发式回退
 
-详见 `references/zai-mcp-tools.md`。
+详见 `references/zai-mcp-tools.md` 和 `references/zai-mcp-fallback-runtime-2026-06-26.md`。
+
 
 **不要**为图片入库写自定义脚本或手动连接 MongoDB。正确做法只需一条命令：
 
