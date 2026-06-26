@@ -56,17 +56,30 @@ class ZAIVisionProvider(VisionProvider):
         self,
         *,
         output_dir: Path | str | None = None,
-        date_str: str | None = None,
         mcp_server_name: str = DEFAULT_MCP_SERVER_NAME,
         timeout_seconds: int = 90,
         config_path: str | None = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(output_dir=output_dir, date_str=date_str, **kwargs)
+        super().__init__(output_dir=output_dir, **kwargs)
         self.mcp_server_name = mcp_server_name
         self.timeout_seconds = timeout_seconds
         self.config_path = config_path  # if None, ZAIMCPClient falls back to ~/.hermes
         self._mcp_client: Any = None  # ZAIMCPClient, lazy-initialised
+
+        # Self-load profile .env so Z_AI_API_KEY / Z_AI_MODE / Z_AI_VISION_MODEL
+        # are visible even when this provider is imported from a non-Hermes
+        # Python process (cron, ad-hoc scripts, terminal background tasks).
+        # Skip if the parent process already has the key (Hermes gateway path);
+        # override=False so we never clobber an explicitly-set value.
+        if not os.environ.get("Z_AI_API_KEY"):
+            _env_path = Path.home() / ".hermes" / "profiles" / "yquant" / ".env"
+            if _env_path.exists():
+                try:
+                    from dotenv import load_dotenv as _load_env
+                    _load_env(_env_path, override=False)
+                except ImportError:
+                    pass
 
     async def health_check(self) -> bool:
         """Return True if ``Z_AI_API_KEY`` is in env. Never raises."""
@@ -417,11 +430,23 @@ def _resolve_env(env: dict, base: dict) -> dict:
 def _pick_image_tool(tools: list) -> Any:
     """Choose the image-analysis tool from the server's list.
 
-    Heuristics:
-      1. Name contains "image" (case-insensitive).
-      2. Name contains "analyze"/"analyse" (fallback).
-      3. Otherwise: the first tool.
+    Priority order (explicit allowlist over heuristic — the @z_ai/mcp-server
+    v0.1.2 exposes 8 tools, several of which have "image" in the name but
+    require arguments our provider cannot supply, e.g. ui_to_artifact needs
+    `output_type`, diagnose_error_screenshot expects error context).
+
+    1. ``extract_text_from_screenshot`` — pure OCR (best fit for table
+       screenshots; params: image_source, prompt, programming_language).
+    2. ``analyze_image`` — general-purpose image analysis (params:
+       image_source, prompt — minimal surface).
+    3. Heuristic fallback: any tool whose name contains "image".
+    4. Heuristic fallback: any tool whose name contains "analyze"/"analyse".
+    5. Last resort: ``tools[0]``.
     """
+    by_name = {getattr(t, "name", ""): t for t in tools}
+    for preferred in ("extract_text_from_screenshot", "analyze_image"):
+        if preferred in by_name:
+            return by_name[preferred]
     for t in tools:
         name = (getattr(t, "name", "") or "").lower()
         if "image" in name:

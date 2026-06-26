@@ -2,8 +2,11 @@
 Trade Image Pipeline — Entry point for parsing trade data from image files.
 
 Usage:
-    python3 run_trade_image_pipeline.py --image path/to/image.jpg --date 2026-05-07
-    python3 run_trade_image_pipeline.py --image path/to/image.jpg --date 2026-05-07 --dry-run
+    python3 run_trade_image_pipeline.py --image path/to/image.jpg
+    python3 run_trade_image_pipeline.py --image path/to/image.jpg --dry-run
+
+Note: The trade_date written to MongoDB is detected from the image's "截止日期"
+column via OCR. There is no --date argument; archive folder always uses system date.
 """
 import argparse
 import asyncio
@@ -34,9 +37,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def save_excel(df: pd.DataFrame, date_str: str, source_root: Path, base_name: str) -> Path:
-    """Save DataFrame to Excel, archiving to source/smart-money/{date}/image/."""
-    image_dir = source_root / date_str / "image"
+def save_excel(df: pd.DataFrame, folder_date: str, source_root: Path, base_name: str) -> Path:
+    """Save DataFrame to Excel, archiving to source/smart-money/{folder_date}/image/."""
+    image_dir = source_root / folder_date / "image"
     image_dir.mkdir(parents=True, exist_ok=True)
     excel_path = image_dir / f"{base_name}.xlsx"
     counter = 1
@@ -47,9 +50,9 @@ def save_excel(df: pd.DataFrame, date_str: str, source_root: Path, base_name: st
     return excel_path
 
 
-def archive_image(image_path: Path, date_str: str, source_root: Path) -> Path:
-    """Archive original image to source/smart-money/{date}/image/."""
-    image_dir = source_root / date_str / "image"
+def archive_image(image_path: Path, folder_date: str, source_root: Path) -> Path:
+    """Archive original image to source/smart-money/{folder_date}/image/."""
+    image_dir = source_root / folder_date / "image"
     image_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     base_name = f"trade_{timestamp}"
@@ -64,19 +67,26 @@ def archive_image(image_path: Path, date_str: str, source_root: Path) -> Path:
 
 async def run_pipeline(
     image_path: str,
-    date_str: str,
     source_root: Path,
+    folder_date: str = None,
     dry_run: bool = False,
 ) -> dict:
-    """Full pipeline: Image → MiniMax OCR → Excel → Transform → Validate → MongoDB."""
+    """Full pipeline: Image → MiniMax OCR → Excel → Transform → Validate → MongoDB.
+
+    Args:
+        folder_date: System date when image was received (used for folder path). Defaults to today.
+    """
+    if folder_date is None:
+        folder_date = datetime.now().strftime("%Y-%m-%d")
+
     image_path = Path(image_path)
     if not image_path.exists():
         raise FileNotFoundError(f"Image not found: {image_path}")
 
     # Step 1: MiniMax OCR Image → DataFrame
     logger.info(f"[Step1] Starting OCR: {image_path}")
-    output_dir = source_root / date_str / "image"
-    extractor = MiniMaxImageExtractor(output_dir=str(output_dir), date_str=date_str)
+    output_dir = source_root / folder_date / "image"
+    extractor = MiniMaxImageExtractor(output_dir=str(output_dir))
     records = await extractor.extract(str(image_path))
     if not records:
         raise ValueError("OCR 未提取到数据")
@@ -85,9 +95,9 @@ async def run_pipeline(
     logger.info(f"[Step1] OCR done: {len(df)} rows")
 
     # Step 1b: Archive image + save Excel
-    archived = archive_image(image_path, date_str, source_root)
+    archived = archive_image(image_path, folder_date, source_root)
     base_name = archived.stem
-    excel_path = save_excel(df, date_str, source_root, base_name)
+    excel_path = save_excel(df, folder_date, source_root, base_name)
     logger.info(f"[Step1] Image archived: {archived}")
     logger.info(f"[Step1] Excel saved: {excel_path} ({len(df)} rows)")
 
@@ -136,14 +146,16 @@ async def run_pipeline(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Trade Image Pipeline")
+    parser = argparse.ArgumentParser(
+        description="Trade Image Pipeline. Trade date is detected from image via OCR."
+    )
     parser.add_argument("--image", required=True, help="Path to image file")
-    parser.add_argument("--date", required=True, help="Trade date (YYYY-MM-DD)")
     parser.add_argument("--dry-run", action="store_true", help="Skip MongoDB write")
+    parser.add_argument("--version", action="version", version="0.1.0")
     args = parser.parse_args()
 
     source_root = Path(__file__).resolve().parents[4] / "skills" / "data" / "source" / "smart-money"
-    result = asyncio.run(run_pipeline(args.image, args.date, source_root, dry_run=args.dry_run))
+    result = asyncio.run(run_pipeline(args.image, source_root, dry_run=args.dry_run))
     logger.info(f"[Done] Result: {result}")
 
 

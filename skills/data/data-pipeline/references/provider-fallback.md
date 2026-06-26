@@ -85,13 +85,27 @@ Z_AI_API_KEY=your-cp-...4e8e  # 在智谱个人中心「编程套餐」页面新
 - 让 agent 在主路径失败后用 MCP 工具走 fallback，最自然
 - MCP 模式下 prompt、错误处理、响应解析都由 zai 自家包封装好了
 
-## 3. MCP 提供的工具
+## 3. MCP 提供的工具（实测 v0.1.2）
 
 | 工具 | 用途 | 适用场景 |
 |------|------|---------|
-| `image_analysis` | 通用图像理解 | **OCR 场景首选**（持仓截图、表格） |
+| `extract_text_from_screenshot` | 纯 OCR 文本提取 | **OCR 场景首选**（持仓截图、表格、Excel 截图） |
+| `analyze_image` | 通用图像理解 | OCR 备选，参数 `{image_source, prompt}` |
 | `analyze_data_visualization` | 仪表盘/统计图表 | K 线图、收益曲线 |
-| `video_analysis` | 视频理解 | 不适用于截图 OCR |
+| `understand_technical_diagram` | 架构图/UML 解释 | 流程图、ER 图 |
+| `diagnose_error_screenshot` | 错误截图诊断 | 报错信息分析 |
+| `ui_to_artifact` | UI 截图 → 代码/spec | 用途不同，需要 `output_type` 必填参数 |
+| `ui_diff_check` | 两张 UI 截图 diff | 需同时传两张图 |
+| `analyze_video` | 视频理解 | 不适用于截图 OCR |
+
+**`_pick_image_tool` 优先级**（2026-06-26 修正）：
+1. `extract_text_from_screenshot`（明确选择）
+2. `analyze_image`（明确选择）
+3. 启发式 fallback：`name 包含 "image"`
+4. 启发式 fallback：`name 包含 "analyze"/"analyse"`
+5. `tools[0]`
+
+**绝对不要** 用「子串匹配 + 第一个」启发式 — 8 个 tool 里多个含 "image"，第一个是 `ui_to_artifact`（需要 `output_type`，provider 没传）→ 报 `missing required argument`。ZAI fallback 链路在修复前**从未真正工作过**。详见 `provider-fallback-ops.md` Bug 3。
 
 **额度规则**（关键）：
 - 视觉 MCP 共享 Coding Plan **5h prompt 资源池**——和主对话是**同一个池子**
@@ -179,7 +193,7 @@ python3 -m pytest tests/test_minimax_image_extractor.py::test_zai_fallback
 
 # 集成：真图跑一次 pipeline，确认 fallback 输出可被下游 _parse_vision_output 解析
 .venv/bin/python skills/data/data-pipeline/scripts/run_unified_image_pipeline.py \
-  --image tests/fixtures/portfolio_screenshot.png --date 2026-06-22 \
+  --image tests/fixtures/portfolio_screenshot.png \
   --force-fallback
 
 # 监控：fallback 命中率打到日志，定期 review

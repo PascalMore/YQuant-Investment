@@ -68,12 +68,10 @@ class VisionProviderRouter:
         *,
         factories: dict[str, ProviderFactory] | None = None,
         output_dir: Path | str | None = None,
-        date_str: str | None = None,
     ) -> None:
         self.config = config or RouterConfig()
         self._factories = factories  # optional override map (name -> factory)
         self.output_dir = output_dir
-        self.date_str = date_str
         # Track which providers we actually instantiated (for UT-20).
         self._instantiated: dict[str, VisionProvider] = {}
 
@@ -198,14 +196,8 @@ class VisionProviderRouter:
         if name in self._instantiated:
             return self._instantiated[name]
         if self._factories is not None and name in self._factories:
-            provider = self._factories[name](
-                output_dir=self.output_dir, date_str=self.date_str
-            )
+            provider = self._factories[name](output_dir=self.output_dir)
         else:
-            provider = get_provider(
-                name,
-                output_dir=self.output_dir,
-                date_str=self.date_str,
-            )
+            provider = get_provider(name, output_dir=self.output_dir)
         self._instantiated[name] = provider
         return provider

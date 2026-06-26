@@ -69,7 +69,7 @@ class PortfolioPipeline:
     @staticmethod
     async def process_image(image_path: Path, date_str: Optional[str] = None) -> dict:
         """
-        处理图片持仓数据：调用 run_image_pipeline.py 的 run_pipeline()
+        处理图片持仓数据：调用 run_unified_image_pipeline.run_pipeline()
         """
         if date_str is None:
             date_str = datetime.now().strftime("%Y-%m-%d")
@@ -80,9 +80,10 @@ class PortfolioPipeline:
         logger.info(f"[Image Pipeline] 开始处理: {image_path}")
 
         try:
+            # run_unified_image_pipeline.run_pipeline 已删除 date_str 参数
+            # (2026-06-26 阶段1清理); business date 由 OCR 自己从图内"截止日期"读取.
             result = await run_image_pipeline_async(
                 image_path=str(image_path),
-                date_str=date_str,
                 source_root=SOURCE_ROOT,
                 folder_date=date_str,
                 dry_run=False,

@@ -2,8 +2,12 @@
 Auto-detecting Image Pipeline — determines image type by column names, then routes to appropriate transformer.
 
 Usage:
-    python3 run_unified_image_pipeline.py --image path/to/image.jpg --date 2026-05-07
-    python3 run_unified_image_pipeline.py --image path/to/image.jpg --date 2026-05-07 --dry-run
+    python3 run_unified_image_pipeline.py --image path/to/image.jpg
+    python3 run_unified_image_pipeline.py --image path/to/image.jpg --dry-run
+
+Note: Business date (position_date / nav_date) is auto-detected by OCR from
+the image's "截止日期" column. There is no --date argument; passing the wrong
+date silently is more dangerous than letting OCR detect it from the image.
 """
 import argparse
 import asyncio
@@ -12,6 +16,18 @@ import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
+
+# Load profile .env BEFORE importing submodules that spawn provider subprocesses
+# (e.g. zai_provider reads Z_AI_API_KEY from os.environ when starting the
+# MCP stdio server). Idempotent and override=False: if the parent process
+# already has the vars set (e.g. via Hermes gateway), they are preserved.
+_PROFILE_ENV = Path.home() / ".hermes" / "profiles" / "yquant" / ".env"
+if _PROFILE_ENV.exists():
+    try:
+        from dotenv import load_dotenv as _load_profile_env
+        _load_profile_env(_PROFILE_ENV, override=False)
+    except ImportError:
+        pass
 
 # Add scripts/ to path for imports
 _scripts = Path(__file__).parent.resolve()
@@ -169,25 +185,28 @@ def archive_image(image_path: Path, date_str: str, source_root: Path, prefix: st
     shutil.copy2(str(image_path), str(new_path))
     return new_path
 
-
 async def run_pipeline(
     image_path: str,
-    date_str: str,
     source_root: Path,
     folder_date: str = None,
     output_dir: Path = None,
     dry_run: bool = False,
 ) -> dict:
-    """Full pipeline: Image → MiniMax OCR → Auto-detect → Transform → Validate → MongoDB.
-    
-    Args:
-        date_str: Data date from spreadsheet content (used for OCR context and MongoDB records)
-        folder_date: System date when image was received (used for folder path). Defaults to date_str.
-        output_dir: Directory for raw JSON debug files. Defaults to source_root/folder_date/image.
     """
-    # Folder date = system date (when image arrived), not data date
+    Full pipeline: Image → MiniMax OCR → Auto-detect → Transform → Validate → MongoDB.
+
+    Args:
+        folder_date: System date when image was received (used for folder path). Defaults to today.
+        output_dir: Directory for raw JSON debug files. Defaults to source_root/folder_date/image.
+
+    Note:
+        Business date (MongoDB position_date / nav_date / trade_date) is read from the
+        OCR-extracted "截止日期" column. There is no `--date` argument; passing the wrong
+        business date silently is more dangerous than letting OCR detect it from the image.
+    """
+    # Folder date = system date (when image arrived)
     if folder_date is None:
-        folder_date = date_str
+        folder_date = datetime.now().strftime("%Y-%m-%d")
 
     image_path = Path(image_path)
     if not image_path.exists():
@@ -199,7 +218,7 @@ async def run_pipeline(
 
     # Step 1: MiniMax OCR
     logger.info(f"[Step1] OCR: {image_path}")
-    extractor = MiniMaxImageExtractor(output_dir=str(output_dir), date_str=date_str)
+    extractor = MiniMaxImageExtractor(output_dir=str(output_dir))
     records = await extractor.extract(str(image_path))
     if not records:
         raise ValueError("OCR extracted no data")
@@ -379,9 +398,11 @@ async def run_pipeline(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Unified Image Pipeline (Auto-detect portfolio vs trade)")
+    parser = argparse.ArgumentParser(
+        description="Unified Image Pipeline (Auto-detect portfolio vs trade). "
+                    "Business date is detected from the image's '截止日期' column via OCR."
+    )
     parser.add_argument("--image", help="Path to image file")
-    parser.add_argument("--date", default=datetime.now().strftime("%Y-%m-%d"), help="Data date (YYYY-MM-DD), i.e. the date in the spreadsheet. Used for OCR and MongoDB records.")
     parser.add_argument("--dry-run", action="store_true", help="Skip MongoDB write")
     parser.add_argument("--version", action="version", version="0.1.0")
     args = parser.parse_args()
@@ -389,11 +410,10 @@ def main():
     if not args.image:
         parser.error("the following arguments are required: --image")
 
-
     # Folder date is always system date (when the image was received/uploaded)
     folder_date = datetime.now().strftime("%Y-%m-%d")
     source_root = Path(__file__).resolve().parents[4] / "skills" / "data" / "source" / "smart-money"
-    result = asyncio.run(run_pipeline(args.image, args.date, source_root, folder_date=folder_date, dry_run=args.dry_run))
+    result = asyncio.run(run_pipeline(args.image, source_root, folder_date=folder_date, dry_run=args.dry_run))
     logger.info(f"[Done] {result}")
 
 

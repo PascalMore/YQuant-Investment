@@ -2,10 +2,19 @@
 name: data-pipeline
 description: YQuant 数据管道框架。所有外部数据（API采集、文件导入、图片解析、消息提取）统一经由本管道处理，完成 Extract → Transform → Validate → Load 全流程。
 ---
-
 # Data Pipeline
 
-> **📌 Image Pipeline 实战笔记**：`references/image-pipeline-workflow.md` 记录了 Smart Money 图片入库的完整实操流程、3 个日期概念辨析、孤儿 CSV 现象、NAV 字段名坑（`aum` 不是 `scale`）等本会话踩过的坑。新会话涉及图片入库前先看这个文件。
+> **📌 Image Pipeline 实战笔记**：`references/image-pipeline-workflow.md` 记录 Smart Money 图片入库的完整实操流程、3 个日期概念辨析、孤儿 CSV 现象、NAV 字段名坑（`aum` 不是 `scale`）、`--date` 已删除等本会话踩过的坑。新会话涉及图片入库前先看这个文件。
+>
+> **📌 Agent 反模式清单（2026-06-26 用户明确反馈）**：`references/agent-overengineering-anti-patterns.md` 记录 9 条「agent 不要 over-engineer」反模式 — 收到图片后**只归档 + 跑 pipeline**，不要 vision 读图、不要 md5 去重、不要 sanity check、不要替用户决定并发/配额/降级、不要替用户猜 product_code 命名。新会话涉及图片入库前必看。
+>
+> **📌 6/26 早上失败复盘（Z_AI_API_KEY 缺失）**：`references/image-failure-postmortem.md` 记录早上 6 张并发跑 2 张失败的真正根因（profile .env 不注入裸跑子进程）+ 修复方案 + 验证步骤。看到 `Z_AI_API_KEY environment variable is required` 时**先看这个文件**，**不要直接套用 line 774 那个 pitfall**（那是另一回事）。
+>
+> **🔍 Z.AI MCP 工具清单（v0.1.2 实测）**：`references/zai-mcp-tools.md` — `@z_ai/mcp-server` 实际暴露 8 个 tool（`extract_text_from_screenshot` / `analyze_image` / `ui_to_artifact` 等），provider 选 tool 的优先级，**为什么以前 zai fallback 静默失败**（heuristic 选错 tool → 缺 required 参数）。`Z_AI_VISION_MODEL` 是 server 后端模型选择（`glm-4v-flash` / `glm-4.6v`），不影响 tool 选择。
+>
+> **🌐 Z.AI / GLM endpoint 规范（2026-06-26 实测）**：`references/zai-glm-endpoints.md` — `glm-5.2` Coding Plan 必须用 OpenAI Chat Completion endpoint `https://open.bigmodel.cn/api/coding/paas/v4`；Anthropic Messages endpoint `https://open.bigmodel.cn/api/anthropic` 只适合 Anthropic-compatible/custom provider；普通 `/api/paas/v4` 的 1113 不代表 Coding Plan 没额度。
+>
+> **🛠 env 加载诊断脚本**：`scripts/verify_env_loaded.sh` — 跑一次就能验证 pipeline 入口 + provider 入口的 self-load 是否都生效。`unset && .venv/bin/python` 模拟裸跑场景。
 
 ## 核心定位
 
@@ -57,7 +66,7 @@ data-pipeline/
 │   │   ├── base.py              ← Extractor 基类
 │   │   ├── image_parser.py      ← 图片解析（Vision 模型）
 │   │   ├── api_extractor.py     ← API 拉取（Tushare/AKShare）
-│   │   ├── file_extractor.py   ← 文件导入（CSV/Excel）
+│   │   ├── file_extractor.py   ← 文件导入（CSV / Excel）
 │   │   └── message_extractor.py ← 聊天消息解析
 │   ├── providers/               ← ★ Vision OCR provider 子包（SPEC-03-006）
 │   │   ├── __init__.py          ← 包导出 + bootstrap_registry()
@@ -87,7 +96,12 @@ data-pipeline/
 │       ├── __init__.py
 │       └── base64_codec.py     ← JSON↔Base64 序列化（Transport 层）
 └── references/
-    ├── image-pipeline-workflow.md ← 图片入库实操笔记（本会话）
+    ├── image-pipeline-workflow.md       ← 图片入库实操笔记
+    ├── agent-overengineering-anti-patterns.md ← Agent 反模式清单
+    ├── image-failure-postmortem.md      ← 2026-06-26 失败复盘
+    ├── zai-mcp-tools.md                 ← Z.AI MCP tool 列表
+    ├── provider-fallback.md             ← Vision provider fallback RFC/SPEC
+    ├── provider-fallback-ops.md         ← Fallback 运维实战
     └── schemas/                ← 各数据类型 Schema 定义
         ├── financial.yaml       ← 财务数据 Schema
         ├── price.yaml           ← 行情数据 Schema
@@ -249,9 +263,9 @@ result = await pipeline.run(source="/path/to/screenshot.png")
 | Extractor | 状态 | 说明 |
 |-----------|------|------|
 | `MiniMaxImageExtractor` | ✅ 已完成 | 从图片解析结构化数据（MiniMax CLI Vision） |
-| `ApiExtractor` | 待实现 | 从 Tushare/AKShare API 拉取 |
+| `ApiExtractor` | 待实现 | 从 Tushare / AKShare API 拉取 |
 | `FileExtractor` | 待实现 | 从 CSV / Excel 导入 |
-| `MessageExtractor` | 待实现 | 从聊天消息解析结构化数据 |
+| `MessageExtractor` | 待实现 | 从聊天消息中解析 |
 
 ## 已有 Codec
 
@@ -289,7 +303,7 @@ data = decode_base64(b64_str)
 ### 嵌套结构说明
 
 | 模式 | Base64 长度 | 适用场景 |
-|------|-------------|----------|
+|------|-------------|---------|
 | **nested + gzip** | ~5,700 chars | ✅ **生产/传输**（默认） |
 | flat + plain | ~89,000 chars | 调试/可读性要求高 |
 
@@ -394,6 +408,28 @@ python scripts/query_portfolio.py --list-products
 
 如果用户提到不在这个清单里的产品代码，先用上面 1–5 步确认，再回问确认（避免用户记错/笔误）。
 
+### 设计原则 — 接口层强制安全 > 文档层提醒安全（2026-06-26 用户明确原则）
+
+> 用户的工程原则：「**能否就不传呀，因为传错比不传更危险**」。
+
+**对新增/修改 argparse 参数的影响**：
+- 任何「可能传错」的参数都比「保留」更危险 → 默认应删除
+- argparse 接受但内部不读的字段 = **dead field = 设计债**，迟早被误用
+- 默认安全做法：参数化先做"实地调研"（grep 全链路引用 + 看 prompt / provider / loader 哪步真用它）→ 没用就删
+- 保留 dead field + 写 pitfall 不如直接删 — 让老调用方 argparse error 比静默接受错值更安全
+
+**对 SKILL.md 文档的影响**：
+- 当某段说「不要传 X」「X 是 no-op」→ **优先做接口级修复**（删 X），不是反复强调文档
+- 文档警告是兜底，不是首选
+- "Pitfall — X 参数是 no-op" 这种段是"未做接口修复时的临时护栏"；做完整治后该段改写为"X 已删除"的事实陈述
+
+**实战案例**（2026-06-26）：
+- `run_unified_image_pipeline.py` 的 `--date` 原本是 dead field（argparse 接、内部链路不读）
+- 三轮对话：发现 dead field → 用户要求删除 → 完整 4 阶段清理（接口 + provider 内部 + 调用方 + 文档）
+- 改完后 argparse 直接报错「unrecognized arguments: --date 2025-07-16」 → 强制让误用浮出水面
+
+**对其他模块的推广**：每次修改 pipeline / config / 业务入口前，先 grep 是否有「argparse 接受但内部不读」的 dead field。同样的改造已落地的：`run_unified_image_pipeline.py` / `run_image_pipeline.py` / `run_trade_image_pipeline.py`。未动的（按业务合理保留 `--date`）：`run_unified_message_pipeline.py` / `run_message_pipeline.py` / `run_trade_message_pipeline.py`（消息入口无 OCR，`--date` 是截止日期 hint，不是 dead field）。
+
 ## YQuant 会话入口：用户发图 → 归档 → 跑 pipeline
 
 用户在 YQuant 会话中发送图片时，**不要**直接从截图解析出结构化数据入库。正确流程：
@@ -408,8 +444,8 @@ ARCHIVE_DATE=$(date +%Y-%m-%d)
 IMAGE_DIR="/home/pascal/workspace/yquant-investment/skills/data/source/smart-money/${ARCHIVE_DATE}/image"
 mkdir -p "$IMAGE_DIR"
 
-# 用有意义的文件名
-DST="$IMAGE_DIR/<type>_<ARCHIVE_DATE>_<HHMMSS>.jpg"
+# 命名用时间戳，**不要加 _unknown 后缀**（2026-06-26 用户纠正：多此一举）
+DST="$IMAGE_DIR/portfolio_${ARCHIVE_DATE}_$(date +%H%M%S).jpg"
 cp <用户截图本地路径> "$DST"
 ```
 
@@ -418,20 +454,21 @@ cp <用户截图本地路径> "$DST"
 | 日期 | 含义 | 用途 |
 |------|------|------|
 | **归档日期** (archive_date) | 用户**发送图片的当天** | 目录命名 `skills/data/source/smart-money/{archive_date}/image/` |
-| **业务日期** (business_date) | 图片**内容显示的日期** | `--date` 参数、写入 MongoDB 的 `trade_date` / `position_date` 字段 |
+| **业务日期** (business_date) | 图片**内容显示的日期** | 由 OCR 自己从 `截止日期` 列读取，写入 MongoDB 的 `trade_date` / `position_date` / `nav_date` 字段 |
 | **系统日期** (system_date) | pipeline **实际跑的时刻** | pipeline 内部归档目录会再用一次系统日期（可能和 archive_date 跨日） |
 
-**为什么归档日期 ≠ 业务日期**：用户可能 6/25 晚上发来 6/24 的日报，归档到 25（当天）；pipeline `--date 2026-06-24`（业务日期）。**这是 SKILL.md 里没说清的盲点**——之前容易误把业务日期当归档目录用。
+**为什么归档日期 ≠ 业务日期**：用户可能 6/25 晚上发来 6/24 的日报，归档到 25（当天）；入库 `position_date` 走 OCR 识别的 6/24。**2026-06-26 改造后**：`run_unified_image_pipeline.py` 已删除 `--date` 参数，agent 不要再传日期，OCR 读完图自动入库。**这是 SKILL.md 里没说清的盲点**——之前容易误把业务日期当归档目录用。
 
 ### 2. 跑 pipeline（agent 第二步）
+
+**不要传 `--date` 参数**。`run_unified_image_pipeline.py` 已删除 `--date`（2026-06-26 改造），传了 argparse 会直接报错。正确命令：
 
 ```bash
 cd /home/pascal/workspace/yquant-investment && \
   PYTHONPATH=/home/pascal/workspace/yquant-investment \
   .venv/bin/python \
   skills/data/data-pipeline/scripts/run_unified_image_pipeline.py \
-  --image "$DST" \
-  --date <业务日期>
+  --image "$DST"
 ```
 
 **注意**：pipeline 内部**会再次用系统当前日期建归档目录**（如 `2026-06-26/`），和 agent 第一步的归档目录（`2026-06-25/`）**可能不同**。这是预期行为——目录日期使用系统接收日期（SKILL.md 原文），不是 bug。
@@ -441,6 +478,10 @@ cd /home/pascal/workspace/yquant-investment && \
 ❌ **不要**从截图直接解析出结构化数据再写入 MongoDB。即使 OCR 后是同一份数据，也**必须**走 pipeline 流程，触发 `stock_basic_info` 名称复核、`missing_master` 状态标记等标准流程。
 
 ❌ **不要**用 `execute_code` 工具跑 pipeline 验证查询——它用 Hermes venv，**没有 pymongo / openpyxl**。验证 MongoDB 入库用 `.venv/bin/python -c` + `PortfolioMongoLoader` 模板（见下方"运行验证"）。
+
+❌ **不要**在归档前 md5 去重 / 归档后 MongoDB sanity check（重发就让 pipeline 跑，MongoDB unique key 自然 upsert）。详见 `references/agent-overengineering-anti-patterns.md`。
+
+❌ **不要**在归档命名里猜 product_code（用时间戳即可，**不要**加 `_unknown` 后缀 — 用户 2026-06-26 明确反馈「为什么是 xxxx_unknown.jpg」）。详见 `references/agent-overengineering-anti-patterns.md`。
 
 ### 4. 运行验证（pipeline 跑完后）
 
@@ -559,16 +600,16 @@ ocr_providers:
 
 ```bash
 # ❌ 错误：6张图写在一个后台命令里，输出截断，无法追踪
+# （同时：传 --date 也会 argparse error；--date 已删除）
 for img in $IMAGES; do
   run_unified_image_pipeline.py --image $img --date $DATE &
 done
 wait   # 输出可能被截断
 
 # ✅ 正确：每张图独立后台任务，独立 session_id，可分别追踪
-PYBIN=/home/pascal/workspace/yquant-investment/skills/apps/TradingAgents-CN/.venv/bin/python
 for img in $IMAGES; do
   terminal(background=true, notify_on_complete=true,
-    command="cd /home/pascal/workspace/yquant-investment && $PYBIN skills/data/data-pipeline/scripts/run_unified_image_pipeline.py --image $img --date $DATE")
+    command="cd /home/pascal/workspace/yquant-investment && PYTHONPATH=/home/pascal/workspace/yquant-investment .venv/bin/python skills/data/data-pipeline/scripts/run_unified_image_pipeline.py --image $img")
 done
 # 等全部 notify 后再汇总
 ```
@@ -580,14 +621,14 @@ done
 
 > ⚠️ 不再经过 `TradingAgents-CN` 作为中转。每个 skill 的 venv 只管理自己。
 
-**入口脚本**：
+**入口脚本**（**2026-06-26 改造后**：`--date` 已删除，argparse 会拒绝 `--date`，agent 不要传）：
 
 ```bash
 cd /home/pascal/workspace/yquant-investment && \
   PYTHONPATH=/home/pascal/workspace/yquant-investment \
   .venv/bin/python \
   skills/data/data-pipeline/scripts/run_unified_image_pipeline.py \
-  --image /path/to/image.jpg --date 2026-06-22
+  --image /path/to/image.jpg
 ```
 
 > 注意：根目录 `.venv` 需要 `PYTHONPATH` 才能解析项目内部 `skills.xxx` 导入。`TradingAgents-CN` venv 因架构差异不经过根目录 fallback。
@@ -596,28 +637,9 @@ cd /home/pascal/workspace/yquant-investment && \
 
 - `skills/data/source/smart-money/{system_date}/image/`：归档原始图片、OCR raw JSON、生成的 Excel。
 - `skills/data/source/smart-money/{system_date}/review_pending/`：需要人工确认的 Wind code / asset name 异常 CSV 与 JSON。
-- `--date` 表示截图内容里的业务日期；目录日期使用系统接收日期，避免跨日批处理混淆。
+- 归档目录**永远用系统接收日期**（`folder_date = datetime.now()`），与 `--date` 无关。业务日期 `position_date` / `nav_date` 由 OCR 自己从图内 `截止日期` 列识别（2026-06-26 改造后 `run_unified_image_pipeline.py` 已删除 `--date` 参数）。
 
 MiniMax raw/debug JSON 文件命名为 `pic_{timestamp}_vision_raw.json`、`pic_{timestamp}_vision_retry.json` 或 `pic_{timestamp}_vision_error.json`，只作为 OCR 审计与问题复盘材料，不作为后续入库入口。
-
-### 批量图片并行处理模式
-
-当用户一次发送多张图片时（≥3张），正确做法是**每张图独立提交后台任务**，而不是在一个 for 循环里批量后台执行：
-
-```bash
-# ❌ 错误：6张图写在一个后台命令里，输出截断，无法追踪
-for img in $IMAGES; do
-  run_unified_image_pipeline.py --image $img --date $DATE &
-done
-wait   # 输出可能被截断
-
-# ✅ 正确：每张图独立后台任务，独立 session_id，可分别追踪
-for img in $IMAGES; do
-  terminal(background=true, notify_on_complete=true,
-    command="cd /home/pascal/workspace/yquant-investment && PYTHONPATH=/home/pascal/workspace/yquant-investment .venv/bin/python skills/data/data-pipeline/scripts/run_unified_image_pipeline.py --image $img --date $DATE")
-done
-# 等全部 notify 后再汇总
-```
 
 **原因**：同一个 shell 命令内的多个后台子进程（`&`）共享一个输出流，Hermes 的 `process` 工具只能追踪通过 `terminal(background=true)` 创建的独立任务，不识别 shell 内嵌的后台子进程。输出截断时只能重新运行。
 
@@ -647,11 +669,11 @@ for pf in pending_files:
 **venv 查找顺序**：模块自身 `venv/` → 项目根目录 `.venv/`。项目根目录 venv 已安装 pandas / openpyxl / pymongo / python-dotenv，可直接使用。
 
 ```bash
-# ✅ 正确 — 根目录 .venv + PYTHONPATH
+# ✅ 正确 — 根目录 .venv + PYTHONPATH（2026-06-26 改造后：不传 --date，OCR 自己识别业务日期）
 cd /home/pascal/workspace/yquant-investment && \
   PYTHONPATH=/home/pascal/workspace/yquant-investment \
   .venv/bin/python \
-  skills/data/data-pipeline/scripts/run_unified_image_pipeline.py --image ... --date ...
+  skills/data/data-pipeline/scripts/run_unified_image_pipeline.py --image ...
 
 # ❌ 错误 — 系统默认 python3 没有 pandas
 python3 skills/data/data-pipeline/scripts/run_unified_image_pipeline.py
@@ -672,12 +694,191 @@ Hermes `execute_code` 工具使用自己的 venv（无 pandas），**禁止**用
 agent 收到用户发图时，**3 个日期必须分别明确**：
 
 1. **归档日期** = 用户**发送图片的当天**（`date +%Y-%m-%d`）→ 目录命名
-2. **业务日期** = 图片内容显示的日期（`--date` 参数、入库字段 `trade_date` / `position_date`）
+2. **业务日期** = 图片内容显示的日期（OCR 自己从图内 `截止日期` 列识别；写入 MongoDB 的 `trade_date` / `position_date`）
 3. **系统日期** = pipeline **实际跑的时刻**（pipeline 内部归档会再用一次，可能和 #1 跨日）
+
+> 2026-06-26 改造后：`run_unified_image_pipeline.py` 不再接受 `--date` 参数。业务日期完全由 OCR 自己识别。归档目录 `folder_date` 永远用系统日期。
 
 **用户已明确纠正**：发图给 agent 时，**归档日期不是图片日期**。agent 第一次保存图片到 `source/smart-money/{X}/image/` 时，`X` 是**归档日期**（=今天），不是图片显示的日期（=业务日期）。
 
 **禁止行为**：从用户截图直接解析出结构化数据再写库。**必须**走 pipeline——触发 `stock_basic_info` 名称复核、`missing_master` 状态标记等标准审计流程。
+
+### 行为规范 — 发图后 agent 不要 over-engineer（2026-06-26 用户明确要求）
+
+收到图片时**只做 4 件事**，不要在前置或中间塞任何额外步骤：
+
+1. **归档**到 `skills/data/source/smart-money/{archive_date}/image/`
+2. **不读图** — 不用 `vision_analyze` / `mcp_Z_AI_Vision_MCP_*` / `mcp_MiniMax_Token_Plan_MCP_understand_image` 给用户描述图片内容（OCR 是 pipeline 的活，不是 agent 的）
+3. **不做去重 / sanity check**：
+   - 不要 `md5sum` 检查 image cache（重发就让 pipeline 跑多次，MongoDB unique key 自然 upsert）
+   - 不要 `db.portfolio_position.distinct('position_date')` 之类的预检
+   - 不要 `audit_pending_unmigrated.py` 预跑
+4. **不干预 pipeline**：
+   - 不替用户决定并发数 / 配额 / 降级（用 profile 默认）
+   - 不替用户猜 product_code 写文件名（命名用 `portfolio_{date}_{HHMMSS}.jpg` 时间戳即可，**不要**加 `_unknown` 后缀 — 用户 2026-06-26 明确反馈「为什么是 xxxx_unknown.jpg」多此一举）
+   - 不替用户预估配额消耗
+
+**唯一可问用户的场景**：当 OCR 识别出的 `截止日期` 与预期明显不符（可通过 `provider_status` 或 pending CSV 反查），或同一批图混了多业务日期 — 这时才需要用户确认。其余一律直接跑。
+
+完整 9 条反模式清单见 `references/agent-overengineering-anti-patterns.md`。
+
+**5. **不要传 `--date` 参数**。`run_unified_image_pipeline.py` 已删除 `--date`（2026-06-26 改造），传了 argparse 直接报错。业务日期由 OCR 自己从图内 `截止日期` 列识别，入库字段 `position_date` / `nav_date` 与 agent 无关。详见下方「Pitfall — `--date` 参数已从 `run_unified_image_pipeline.py` 接口删除」段。**
+
+### 行为规范 — 归档文件命名约定（2026-06-26 用户明确要求）
+
+归档时**用时间戳命名，不加 `_unknown` 后缀**：
+
+```bash
+cp $USER_IMAGE skills/data/source/smart-money/{archive_date}/image/portfolio_{YYYY-MM-DD}_{HHMMSS}.jpg
+```
+
+**反例（不这样做）**：
+- 加 `_unknown` 后缀（user 反馈「为什么是 xxxx_unknown.jpg」，多此一举）
+- 在文件名里猜 product_code（OCR 才有真值）
+- 给每张图编业务语义名（portfolio_xxx / trade_xxx，pipeline 自己识别格式）
+
+**原因**：归档文件名只用于**追溯**和**人类快速定位**。Pipeline 自己识别 portfolio/trade 格式、自动检测 product_code（从图内表头），不依赖文件名。命名简洁、可排序、不臆断就够了。
+
+多张并发归档：用 `${TS}` 自增避免冲突（`cp ... portfolio_${TS}.jpg; TS=$((TS+1))`）。
+
+### 行为规范 — pipeline 出问题时主动排查（2026-06-26 用户明确要求）
+
+pipeline 失败 / partial_success / pending 异常 / provider 全挂时，agent **不只汇报失败**，要主动分析：
+
+**正确流程（两阶段，不要合并）**：
+
+1. **阶段 1：临时处理（等用户确认后再做）**
+   - 失败的图要不要重跑？顺序还是并发？要不要跳过？要不要手动入库？
+   - agent **先停手**，给临时方案选项，等用户决定
+   - 用户确认后再执行（执行后必验证）
+
+2. **阶段 2：复盘分析 + 长期修复方案（等用户确认后再做）**
+   - 临时处理完后，回头分析根因（不只是「这次为什么失败」，而是「pipeline 哪里有缺陷 / 哪里可以优化」）
+   - 给出长期修复方案（修改哪个文件 / 哪一行 / 改成什么 / 风险）
+   - agent **先停手**，等用户决定是否执行
+
+**反例（不这样做）**：
+- 把临时处理和长期方案合并成一个汇报，等于强迫用户一次性决定两件事
+- 看到失败立刻自己改代码 / 改配置 / 重跑（跳过阶段 1 等确认）
+- 临时处理完不进入阶段 2，只说「好了」就结束
+- 把失败归咎于外部不可控（配额、网络），不排查代码
+
+**典型排查路径**：
+- ZAI MCP 启动报 `Z_AI_API_KEY environment variable is required` → 实际根因**通常不是 env 继承 bug**，是**裸跑 Python 进程（terminal background task / cron）没从 profile .env 自动加载**。SKILL.md line 774 那个 fix 是另一回事（PATH/HOME 缺失）。**正解**：在 pipeline 入口和 zai_provider `__init__` self-load `.env`。详见 `references/image-failure-postmortem.md`。
+- 并发 npx 失败 → 先看是否 minimax 本身就 partial 失败（`unknown` 空错），再追 zai fallback 链
+- 单图 OCR 内容错误 → 检查 prompt / 字段映射 / normalize
+- MongoDB unique key 冲突 → 检查 `(position_date, product_code, asset_wind_code)` 是否与已有行冲突
+
+**诊断原则**：看到错误先复现 + 跑「裸 env 状态探测」**再下结论**，不要直接套用既有 pitfall 段。下结论前必跑：
+```python
+# 模拟「裸跑」场景
+unset Z_AI_API_KEY && PYTHONPATH=skills/data/data-pipeline/scripts .venv/bin/python -c "
+import os
+print('Z_AI_API_KEY:', 'SET' if os.environ.get('Z_AI_API_KEY') else 'MISSING')
+from providers.zai_provider import ZAIVisionProvider
+ZAIVisionProvider()  # 触发 self-load
+print('after instance:', 'SET' if os.environ.get('Z_AI_API_KEY') else 'MISSING')
+"
+```
+
+### Pitfall — `providers.health_check` 函数是 coroutine（2026-06-26 实战）
+
+`check_minimax_cli()` 和 `check_zai_mcp()` 都是 async 函数。直接 `print(check_minimax_cli())` 会得到 `<coroutine ...>` + RuntimeWarning，不是 True/False。
+
+**正确用法**：
+
+```python
+import asyncio
+from providers.health_check import check_minimax_cli, check_zai_mcp
+
+async def main():
+    print(await check_minimax_cli())  # True / False
+    print(await check_zai_mcp())
+
+asyncio.run(main())
+```
+
+### Pitfall — ZAI fallback 链路从未真正工作过（2026-06-26 修复）
+
+`zai_provider._pick_image_tool` 之前用启发式（`name 包含 "image"`），从 `@z_ai/mcp-server` v0.1.2 暴露的 8 个 tool 里**第一个匹配**到的是 `ui_to_artifact`（要求必填 `output_type`，provider 没传 → MCP server 报 missing required argument）。Fallback 每次都失败，只是 minimax 主路径一直通所以没人发现。
+
+**修复**（已在 `zai_provider.py` line 431-453）：`_pick_image_tool` 改为显式 allowlist，**优先 `extract_text_from_screenshot` → `analyze_image` → 启发式 fallback**。这两个 tool 的 params 都是 `{image_source, prompt}`（最小可用集），适合持仓截图 OCR。
+
+### Pitfall — `.env` 不会被自动注入到 terminal background 进程（2026-06-26 修复）
+
+profile 的 `~/.hermes/profiles/yquant/.env` 里设了 `Z_AI_API_KEY`，但 `terminal(background=true)` 启的 `.venv/bin/python` 子进程 `os.environ` 拿不到 — Hermes gateway 只给**它自己启动的**子进程注入 env，不传给外部 shell 启的进程。结果：zai MCP server 启动时 `Z_AI_API_KEY environment variable is required`。
+
+**修复**（已在 `run_unified_image_pipeline.py` 入口 + `zai_provider.py` `__init__` self-load `.env`）：用 `python-dotenv` 的 `load_dotenv(path, override=False)`，幂等不覆盖已设值。Hermes 启的进程因 `Z_AI_API_KEY` 已设直接 skip；裸跑进程会加载 .env。
+
+**症状 → 排查**：
+- 失败日志里有 `Z_AI_API_KEY environment variable is required`
+- **不是** SKILL.md line 774 那个 PATH/HOME 继承 bug（已修）
+- **是** .env 没加载，参考本条修复
+
+### Pitfall — `_unknown` 文件名后缀是 agent 画蛇添足（2026-06-26 用户纠正）
+
+agent 曾经自作主张把归档图片命名为 `portfolio_{ts}_unknown.jpg`，理由是「避免猜测 product_code」。用户反馈「为什么是 xxxx_unknown.jpg」— 这是越权，pipeline 自己识别格式和 product_code，文件名只需可排序可追溯。
+
+**正确命名**：`portfolio_{YYYY-MM-DD}_{HHMMSS}.jpg`。多张并发归档用 `${TS}` 自增避免冲突。详见上文「行为规范 — 归档文件命名约定」段。
+
+### Pitfall — Agent 不要用通用 vision 工具替 OCR（2026-06-26 用户纠正）
+
+用户发图后，agent 曾用 `vision_analyze` / `mcp_Z_AI_Vision_MCP_analyze_image` 直接读图给用户描述 — 既浪费 vision 配额，又绕开 pipeline 的标准 OCR → normalize → validate → MongoDB 流程。
+
+**正确做法**：agent 不读图，立即归档 + 启 pipeline。读图是 pipeline 的活。详见「行为规范 — 发图后 agent 不要 over-engineer」段。
+
+### Pitfall — `--date` 参数已从 `run_unified_image_pipeline.py` 接口删除（2026-06-26 改造）
+
+`run_unified_image_pipeline.py` **不再接受 `--date` 参数**。改造前它是个 no-op 死字段（`argparse` 接收、`MiniMaxImageExtractor.__init__` 存下、provider 链路全程不读），agent 传错日期静默无效。改造后直接 argparse 报错（`unrecognized arguments: --date ...`），杜绝误传。
+
+**接口层变化**：
+- `argparse.add_argument("--date", ...)` 已删除
+- `run_unified_image_pipeline.run_pipeline()` 的 `date_str` 参数已删除
+- 内部透传链全清：`MiniMaxImageExtractor.__init__` / `VisionProvider` / `VisionProviderRouter` / `MiniMaxVisionProvider` / `ZAIVisionProvider` 都不再有 `date_str` 字段
+- `smart_money_watcher.process_image()` 调用处同步删除 `date_str=date_str` 参数
+
+**业务日期的最终来源**（与 `--date` 无关）：
+
+| 字段 | 来源 |
+|---|---|
+| `portfolio_position.position_date` | OCR 解析的 `截止日期` 列（`normalize_position` 用 `day.get("date")`） |
+| `portfolio_nav.nav_date` | 同上（`normalize_nav` 用 `day.get("date")`） |
+| `portfolio_trade.trade_date` | OCR 解析的 `日期` / `截止日期` 列 |
+| 归档目录 `source/smart-money/{date}/image/` | `folder_date = datetime.now()`，**永远用系统日期** |
+
+**用户明确原则**（2026-06-26 反馈）："能否就不传呀，因为传错比不传更危险"。这条原则写进 skill 是为了让新会话**不要**再"贴 SKILL.md 历史示例 → 顺手加 `--date`"。
+
+**正确做法（2026-06-26 new default）**：
+
+```bash
+cd /home/pascal/workspace/yquant-investment && \
+  PYTHONPATH=/home/pascal/workspace/yquant-investment \
+  .venv/bin/python \
+  skills/data/data-pipeline/scripts/run_unified_image_pipeline.py \
+  --image "$DST"        # 唯一必传参数
+```
+
+**反例（不这样做）**：
+- 按旧版 SKILL.md 示例抄 `--date <业务日期>` → argparse error，pipeline 起不来
+- 担心 OCR 识别错日期，agent 凭印象传 `--date` 兜底 → 接口已删，argparse 报错，且传错比不传更危险
+- 同一批图混了多业务日期，agent 强写一个日期 → 历史已证明此路是错的
+
+**OCR 识别错的日期**（少见但可能发生）通过 `audit_pending_unmigrated.py` 或 `update_position_date` 工具修正，**不要**在 agent 层用 `--date` 替 OCR 兜底。
+
+### Pitfall — pending 行入库用 `--name-mapping` 不要先改 CSV（2026-06-26 实战）
+
+场景：OCR 读到「广晟有色」，主数据是「中稀有色」（公司改名），想用主数据名入库。
+
+**正确做法**：
+
+```bash
+.venv/bin/python skills/data/data-pipeline/scripts/load_pending_confirmed.py \
+  --csv "...pending.csv" \
+  --name-mapping '{"600259.SH": "中稀有色"}' \
+  --confirm-all
+```
+
+**反例**：手动编辑 CSV 改 asset_name 字段再 `confirm-all` — 丢失 OCR 原始痕迹，且需要重跑 audit。
 
 ### 图片 Vision 策略（关键 Pitfall — 两层问题）
 
@@ -770,6 +971,8 @@ mcp_servers:
 ```
 
 > `Z_AI_VISION_MODEL` 是 `@z_ai/mcp-server` 的 env 变量（见源码 `build/core/environment.js` L108），默认 `glm-4.6v`。设置 `glm-4v-flash` 可加速简单图片，但复杂表格 OCR 仍建议 `glm-4.6v`（准确率更高）。
+>
+> `glm-5.2` 不是这个 MCP server 的 vision model；它用于 Hermes `zai` provider 的 chat/compression/fallback。`glm-5.2` Coding Plan endpoint 需要显式使用 OpenAI Chat Completion URL `https://open.bigmodel.cn/api/coding/paas/v4`，不要误用 Anthropic Messages URL `https://open.bigmodel.cn/api/anthropic` 或普通 `/api/paas/v4`。详见 `references/zai-glm-endpoints.md`。
 
 **关键 Pitfall — ZAI MCP 子进程环境变量继承（2026-06-26 发现并修复）**：
 
@@ -789,6 +992,16 @@ return StdioServerParameters(command=command, args=args, env=merged)
 
 Router 用 `asyncio.wait_for(provider.describe(), timeout=fallback_timeout_seconds + 30)`。原配置 `fallback_timeout_seconds=90`（有效超时 120s），但 glm-4.6v 复杂表格 OCR 需要 ~103s。首次实测时 MCP server 正常启动、API 请求发出，但 120s 后被 SIGTERM 杀掉。调到 `240`（有效超时 270s）后稳定通过。
 
+**Z.AI MCP tool 优先级（2026-06-26 修复）**：
+
+`_pick_image_tool` 之前用纯启发式（name 含 "image"）会选到 `ui_to_artifact`，需要 `output_type` 参数 provider 没法填，导致 fallback 必然失败。修复后**显式白名单**：
+
+1. `extract_text_from_screenshot`（纯 OCR，参数最少）
+2. `analyze_image`（通用兜底）
+3. 启发式回退
+
+详见 `references/zai-mcp-tools.md`。
+
 **不要**为图片入库写自定义脚本或手动连接 MongoDB。正确做法只需一条命令：
 
 ```bash
@@ -796,7 +1009,7 @@ cd /home/pascal/workspace/yquant-investment && \
   PYTHONPATH=/home/pascal/workspace/yquant-investment \
   .venv/bin/python \
   skills/data/data-pipeline/scripts/run_unified_image_pipeline.py \
-  --image /path/to/image.jpg --date 2026-06-22
+  --image /path/to/image.jpg
 ```
 
 待确认行补录命令（同样需要根目录 venv）：
@@ -948,7 +1161,7 @@ python3 skills/data/data-pipeline/scripts/load_pending_confirmed.py \
 | `pending_review` | ❌ 拦截 | ✅ 入库 |
 | `missing_master` | ❌ 拦截 | ✅ 入库 |
 | `resolved` / `confirmed` | ✅ 自动入库 | ✅ 入库 |
-| 空或其他 | ✅ 自动入库 | ✅ 入库 |
+| 空或其他 | ✅ 自动入库 | ✅ 自动入库 |
 
 **两次调用场景**（可选）：如果用户只确认了部分行，可以分步操作：
 ```bash

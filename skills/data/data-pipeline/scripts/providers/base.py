@@ -112,13 +112,11 @@ class VisionProvider(ABC):
         self,
         *,
         output_dir: Path | str | None = None,
-        date_str: str | None = None,
         **kwargs: Any,
     ) -> None:
-        # Providers may accept output_dir / date_str for debug writes.
+        # Providers may accept output_dir for debug writes.
         # Default to harmless no-op so minimal mocks don't have to wire them.
         self.output_dir = Path(output_dir) if output_dir else None
-        self.date_str = date_str
         self._init_kwargs = kwargs
 
     @abstractmethod

@@ -7,7 +7,7 @@ and delegates the actual VLM call to ``VisionProviderRouter``.
 
 Public surface (unchanged from pre-refactor):
     - source_type: str  -> "image_minimax"
-    - __init__(output_dir, date_str)  : debug write dir + audit date
+    - __init__(output_dir)  : debug write dir
     - extract(source, **kwargs) -> list[dict]
     - validate_source(source) -> bool
 
@@ -49,14 +49,12 @@ class MiniMaxImageExtractor(BaseExtractor):
     def __init__(
         self,
         output_dir: str = None,
-        date_str: str = None,
         *,
         router_config: RouterConfig | None = None,
     ):
         """
         Args:
             output_dir: Directory for debug JSONs (pic_*_vision_*.json).
-            date_str: Date string (YYYY-MM-DD) for OCR context.
             router_config: Optional override for the provider chain. When
                 ``None`` the router reads ``~/.hermes/profiles/yquant/config.yaml``
                 (block ``ocr_providers``); when that is also missing the
@@ -71,7 +69,6 @@ class MiniMaxImageExtractor(BaseExtractor):
                 / "smart-money"
             )
         self.output_dir = Path(output_dir)
-        self.date_str = date_str  # e.g. "2026-05-10"
         self.debug_dir = self.output_dir
         self.debug_dir.mkdir(parents=True, exist_ok=True)
         self._router_config_override = router_config
@@ -157,7 +154,6 @@ class MiniMaxImageExtractor(BaseExtractor):
         return VisionProviderRouter(
             config=config,
             output_dir=self.output_dir,
-            date_str=self.date_str,
         )
 
     # -- Router-level failure audit (SPEC-03-006 F-012 / Review M1) ---

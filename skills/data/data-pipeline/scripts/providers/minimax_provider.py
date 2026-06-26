@@ -49,12 +49,11 @@ class MiniMaxVisionProvider(VisionProvider):
         self,
         *,
         output_dir: Path | str | None = None,
-        date_str: str | None = None,
         timeout_seconds: int = 120,
         max_attempts: int = 3,
         **kwargs: Any,
     ) -> None:
-        super().__init__(output_dir=output_dir, date_str=date_str, **kwargs)
+        super().__init__(output_dir=output_dir, **kwargs)
         self.timeout_seconds = timeout_seconds
         self.max_attempts = max_attempts
         self.debug_dir = self.output_dir  # may be None

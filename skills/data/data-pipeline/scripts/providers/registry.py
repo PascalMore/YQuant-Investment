@@ -34,22 +34,21 @@ def unregister_provider(name: str) -> None:
     """Remove a provider from the registry (used in tests / hot reload)."""
     _REGISTRY.pop(name, None)
 
-
 def get_provider(
     name: str,
     *,
     output_dir: Any = None,
-    date_str: str | None = None,
     **kwargs: Any,
 ) -> VisionProvider:
-    """Instantiate a registered provider by name.
+    """
+    Instantiate a registered provider by name.
 
     Raises:
         KeyError: if name is not registered.
     """
     if name not in _REGISTRY:
         raise KeyError(f"unknown provider '{name}'; registered={sorted(_REGISTRY)}")
-    return _REGISTRY[name](output_dir=output_dir, date_str=date_str, **kwargs)
+    return _REGISTRY[name](output_dir=output_dir, **kwargs)
 
 
 def list_providers() -> list[str]:

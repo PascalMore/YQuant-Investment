@@ -33,18 +33,18 @@ from validators.portfolio_validator import (
 from loaders.mongodb_loader import PortfolioMongoLoader
 
 
-def save_excel(df: pd.DataFrame, date_str: str, source_root: Path, base_name: str) -> Path:
+def save_excel(df: pd.DataFrame, folder_date: str, source_root: Path, base_name: str) -> Path:
     """
-    保存 Excel 到 source/smart-money/{date}/image/。
+    保存 Excel 到 source/smart-money/{folder_date}/image/。
     文件名格式：{base_name}.xlsx
 
     Args:
         df: DataFrame to save
-        date_str: Date string (YYYY-MM-DD)
+        folder_date: System date when image was received (YYYY-MM-DD)
         source_root: Root directory (source/smart-money)
         base_name: Base filename without extension
     """
-    image_dir = source_root / date_str / "image"
+    image_dir = source_root / folder_date / "image"
     image_dir.mkdir(parents=True, exist_ok=True)
 
     excel_path = image_dir / f"{base_name}.xlsx"
@@ -74,20 +74,20 @@ def save_excel(df: pd.DataFrame, date_str: str, source_root: Path, base_name: st
     return excel_path
 
 
-def archive_image(image_path: Path, date_str: str, source_root: Path) -> Path:
+def archive_image(image_path: Path, folder_date: str, source_root: Path) -> Path:
     """
-    归档原始图片到 source/smart-money/{date}/image/。
+    归档原始图片到 source/smart-money/{folder_date}/image/。
     生成带秒级精度的新文件名（避免同一分钟内重名）。
 
     Args:
         image_path: Original image path
-        date_str: Date string (YYYY-MM-DD)
+        folder_date: System date when image was received (YYYY-MM-DD)
         source_root: Root directory
 
     Returns:
         New archived image path
     """
-    image_dir = source_root / date_str / "image"
+    image_dir = source_root / folder_date / "image"
     image_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -105,8 +105,8 @@ def archive_image(image_path: Path, date_str: str, source_root: Path) -> Path:
 
 async def run_pipeline(
     image_path: str,
-    date_str: str,
     source_root: Path,
+    folder_date: str = None,
     dry_run: bool = False,
 ) -> dict:
     """
@@ -114,18 +114,24 @@ async def run_pipeline(
 
     Args:
         image_path: Path to the image file
-        date_str: Date string (YYYY-MM-DD)
         source_root: Root directory for source data
+        folder_date: System date when image was received (used for folder path). Defaults to today.
         dry_run: If True, only run OCR and save Excel, skip MongoDB
+
+    Note: MongoDB business date (position_date / nav_date) is read from OCR's
+    "截止日期" column. There is no --date argument.
     """
+    if folder_date is None:
+        folder_date = datetime.now().strftime("%Y-%m-%d")
+
     image_path = Path(image_path)
     if not image_path.exists():
         raise FileNotFoundError(f"Image not found: {image_path}")
 
     # Step 1: MiniMax OCR Image → DataFrame
     print(f"[Step1] 开始 OCR: {image_path}")
-    output_dir = source_root / date_str / "image"
-    extractor = MiniMaxImageExtractor(output_dir=str(output_dir), date_str=date_str)
+    output_dir = source_root / folder_date / "image"
+    extractor = MiniMaxImageExtractor(output_dir=str(output_dir))
     records = await extractor.extract(str(image_path))
 
     if not records:
@@ -136,9 +142,9 @@ async def run_pipeline(
     print(f"[Step1] OCR 完成: {len(df)} rows")
 
     # Step 1b: 归档原始图片 + 保存 Excel
-    archived_image = archive_image(image_path, date_str, source_root)
+    archived_image = archive_image(image_path, folder_date, source_root)
     base_name = archived_image.stem  # portfolio_YYYYMMDD_HHMMSS
-    excel_path = save_excel(df, date_str, source_root, base_name)
+    excel_path = save_excel(df, folder_date, source_root, base_name)
     print(f"[Step1] 图片归档 → {archived_image}")
     print(f"[Step1] Excel 保存 → {excel_path} ({len(df)} rows)")
 
@@ -205,17 +211,19 @@ async def run_pipeline(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Image Portfolio Pipeline")
+    parser = argparse.ArgumentParser(
+        description="Image Portfolio Pipeline. Business date is detected from image via OCR."
+    )
     parser.add_argument("-i", "--image", required=True, help="图片路径")
-    parser.add_argument("-d", "--date", required=True, help="日期，如 2026-05-09")
     parser.add_argument("--dry-run", action="store_true", help="仅 OCR 并保存 Excel，不写入 MongoDB")
+    parser.add_argument("--version", action="version", version="0.1.0")
     args = parser.parse_args()
 
     # source_root: 向上两级到 workspace-yquant/skills/data，然后拼接 source/smart-money
     source_root = Path(__file__).resolve().parents[2] / "source" / "smart-money"
 
     import asyncio
-    result = asyncio.run(run_pipeline(args.image, args.date, source_root, dry_run=args.dry_run))
+    result = asyncio.run(run_pipeline(args.image, source_root, dry_run=args.dry_run))
     print(f"\n✅ 完成：{result}")
 
 
