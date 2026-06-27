@@ -1,3 +1,8 @@
+---
+name: portfolio
+description: "YQuant 组合管理模块：用于资产配置优化、组合构建、再平衡、绩效归因与组合分析。"
+---
+
 # Portfolio Management Module
 
 组合管理模块。

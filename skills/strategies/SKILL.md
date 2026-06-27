@@ -1,3 +1,8 @@
+---
+name: strategies
+description: "YQuant 量化策略研发与回测模块：用于策略设计实现、历史回测、过拟合检测与实盘部署支持。"
+---
+
 # Strategies Module
 
 量化策略研发与回测模块。

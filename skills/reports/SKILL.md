@@ -1,3 +1,8 @@
+---
+name: reports
+description: "YQuant 复盘报告模块：用于日周月季报告生成、可视化 Dashboard、多格式输出与推送服务。"
+---
+
 # Reports Module
 
 复盘报告模块。

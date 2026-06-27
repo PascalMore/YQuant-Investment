@@ -1,3 +1,8 @@
+---
+name: risk
+description: "YQuant 风险管控模块：用于 VaR/CVaR、压力测试、实时风险监控、风险归因与限额管理。"
+---
+
 # Risk Management Module
 
 风险管控模块。
