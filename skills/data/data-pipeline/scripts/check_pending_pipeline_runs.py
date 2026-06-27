@@ -198,7 +198,24 @@ def main() -> int:
 
     archive_jpgs = sorted(archive_hashes.values(), key=lambda p: parse_jpg_ts(p.name) or 0)
 
+    # Pass 1: 精确时间戳匹配优先（jpg_ts == product_ts）
+    # 避免贪心窗口匹配把后到的 jpg 的产物抢走
+    exact_matched: set[str] = set()
     for jpg in archive_jpgs:
+        jpg_ts = parse_jpg_ts(jpg.name)
+        if jpg_ts is None:
+            continue
+        for kind, times in [("xlsx", xlsx_times), ("pending", pending_times), ("vision", vision_times)]:
+            if jpg_ts in times and times[jpg_ts]:
+                p = times[jpg_ts].pop(0)
+                per_jpg_outcome[jpg.name] = {"ran": True, "via": [kind], "products": [p.name], "cross_date": False}
+                exact_matched.add(jpg.name)
+                break
+
+    # Pass 2: 窗口贪心匹配（仅处理 Pass 1 未匹配的 jpg）
+    for jpg in archive_jpgs:
+        if jpg.name in exact_matched:
+            continue
         jpg_ts = parse_jpg_ts(jpg.name)
         if jpg_ts is None:
             per_jpg_outcome[jpg.name] = {"ran": False, "via": "no_ts", "products": []}

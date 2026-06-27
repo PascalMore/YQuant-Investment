@@ -58,7 +58,54 @@ ls "$ARCHIVE_DIR"/*vision_error*.json | wc -l
 
 ### Step 4: 辅助脚本
 
-`scripts/check_pending_pipeline_runs.py` 输出决策矩阵（hash 匹配 × xlsx 痕迹）。
+`scripts/check_pending_pipeline_runs.py` 输出决策矩阵（hash 匹配 × xlsx 痕迹 × 跨日期 hash）。
+
+**2026-06-27 晚间重大修复**：脚本从"启发式 80% 阈值"改为"逐张 jpg 时间戳窗口 + 跨日期 hash 查找"。修复前报"73 张未跑"（误判），修复后报"8 跑过 + 39 跨日期重复 + 28 真实未跑"。
+
+### Step 5: 跨日期 hash 查找（关键补充）
+
+**场景**：归档目录里有 N 张图没 pipeline 产物，但用户说"不会有这么多没跑"。根因是**其他日期的图被复制到了今天**（飞书重复推送 / agent 归档时未去重 / watcher 跨日处理）。
+
+```bash
+# 把今天 archive 的 jpg hash 与所有其他日期目录比对
+python3 -c "
+import hashlib
+from pathlib import Path
+SM = Path('skills/data/source/smart-money')
+today = '2026-06-27'
+# 其他日期的 hash
+other = set()
+for d in SM.iterdir():
+    if not d.is_dir() or d.name == today: continue
+    img = d / 'image'
+    if not img.exists(): continue
+    for j in img.glob('*.jpg'):
+        other.add(hashlib.md5(j.read_bytes()).hexdigest())
+# 今天的 hash
+arch = SM / today / 'image'
+overlap = 0
+for j in arch.glob('*.jpg'):
+    h = hashlib.md5(j.read_bytes()).hexdigest()
+    if h in other:
+        overlap += 1
+print(f'跨日期重复: {overlap} 张')
+"
+```
+
+### `check_pending_pipeline_runs.py` 时间戳解析的坑（2026-06-27 实战）
+
+Pipeline 文件命名有 4 种格式，HHMMSS 提取各有坑：
+
+| 文件类型 | 命名示例 | HHMMSS 位置 | 坑 |
+|---|---|---|---|
+| jpg（归档） | `portfolio_2026-06-27_201808.jpg` | 末尾 `_HHMMSS` | 末尾 6 位就是 HHMMSS，不要剥 `_NN`（jpg 没有） |
+| jpg（归档） | `portfolio_20260627_201808.jpg` | 同上 | 同上，兼容 YYYYMMDD 和 YYYY-MM-DD |
+| xlsx（产物） | `portfolio_20260627_201858.xlsx` | `_YYYYMMDD_HHMMSS.xlsx` 的 HHMMSS | 不能用 `_(\d{6})` 贪婪匹配（会抓到 `202606` = YYYYMMDD 前 6 位） |
+| xlsx（_NN） | `portfolio_20260627_201858_01.xlsx` | HHMMSS 在 `_NN` 之前 | `re.sub(r"(_pending|_\d+)$", "")` 会**误剥 HHMMSS**（6 位也是 `\d+`）→ 必须先验证剥后剩 6 位才是 HHMMSS |
+| pending csv | `portfolio_20260627_201944_pending.csv` | `_pending` 之前 | 先剥 `_pending` 再取末尾 6 位 |
+| vision_raw | `pic_20260627_035246_vision_raw.json` | `_vision_raw` 之前 | 先剥 `_vision_(raw|error|retry)` 再取末尾 6 位 |
+
+**HHMMSS 整数差 ≠ 秒差**：`201858 - 201810 = 48` 是 48 秒（不是 48 分钟）。必须用 `hhmmss_to_seconds()` 转成当日秒数再算差值。
 
 ## 三件事必须分清
 

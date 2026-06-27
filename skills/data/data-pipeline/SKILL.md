@@ -1147,6 +1147,20 @@ ls /home/pascal/workspace/yquant-investment/skills/data/source/smart-money/$(dat
 
 ### P6c. image_cache 状态歧义 — 飞书会保留旧图（2026-06-27 实战）
 
+**（2026-06-27 晚间补充）跨日期图片重复是"未跑 pipeline"误判的头号根因**
+
+用户指出"不会有这么多没跑的"，排查发现 6/27 archive 目录里 78 张 unique hash 中 **42 张与 6/26 完全相同**（hash 匹配）。这些图是 6/26 已跑过 pipeline 的，被飞书推送 / agent 归档时复制到了 6/27 目录，6/27 目录里自然没有 pipeline 产物（xlsx/pending/vision_raw）。
+
+**症状**：`check_pending_pipeline_runs.py` 报"N 张未跑"，实际大部分是其他日期已跑过的副本。
+
+**正确诊断方法**：跨日期 hash 查找 — 把当前日期目录的 jpg hash 与所有其他日期目录的 jpg hash 比对，重叠的算"已跑过（跨日期重复）"。
+
+**`check_pending_pipeline_runs.py` 已内置跨日期 hash 查找**（2026-06-27 commit `66100f3`）：对每张 jpg，如果 hash 在其他日期目录出现过，标记为 `via=["cross_date"]`。
+
+**清理建议**：确认跨日期重复后，删除当前日期目录中的冗余副本（减少后续 pipeline 冗余 OCR 成本）。
+
+**反例**：看到"70 张未跑"直接启 70 个 pipeline → 浪费 OCR 配额，因为 39 张是 6/26 已入库的副本。
+
 **症状**：`/home/pascal/.hermes/profiles/yquant/image_cache/` 里有 72 张图，**其中多数是前几天/几小时前的旧图残留**。新发的 18 张图只是其中一部分（按 mtime 在 09:46~09:47 区间）。如果 agent 用 `ls -1 *.jpg | wc -l` 当"今天用户发了多少张"的依据，**会得到错的数量**（72 而不是 18）。
 
 **正确做法**：
