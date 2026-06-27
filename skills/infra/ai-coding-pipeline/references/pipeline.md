@@ -1,16 +1,16 @@
-# YQuant AI Coding 流水线参考
+# AI Coding 流水线参考（YQuant / 应龙共享）
 
 ## 阶段总览
 
 | 阶段 | 角色 | Hermes assignee profile | 产出 | 是否允许改代码 |
 |---|---|---|---|---|
-| 1 Intake | YQuant | `yquant` | `00-intake.md` 或简短需求澄清摘要 | 否 |
+| 1 Intake | Orchestrator | `yquant` 或 `yingyong` | `00-intake.md` 或简短需求澄清摘要 | 否 |
 | 2 RFC/SPEC | YQuant-Codex-Principal | `yquantprincipal` | RFC 更新、`docs/spec/*.md` 或 `02-spec.md` | 通常否 |
 | 3 Design | YQuant-Codex-Principal | `yquantprincipal` | `docs/design/*.md`、`03-design.md`、`04-implementation-plan.md` | 否 |
 | 4 Implement | YQuant-Developer-Engineer | `yquantdeveloper` | 代码变更、实现记录 | 是 |
 | 5 Verify | YQuant-Test-Engineer | `yquanttester` | 测试、`05-test-report.md` | 仅测试/夹具 |
 | 6 Review | YQuant-Reviewer-Principal | `yquantreviewer` | `06-review.md` 或审查意见 | 否 |
-| 7 Closeout | YQuant | `yquant` | `07-closeout.md`、面向用户的交付摘要 | 否 |
+| 7 Closeout | Orchestrator | 与 Intake 相同 | `07-closeout.md`、面向用户的交付摘要 | 否 |
 
 > 查看每个 Agent 当前真实的主模型、fallback 链、compression 配置：
 > ```bash
@@ -48,7 +48,7 @@ data/tasks/templates/ai-coding-pipeline-run.md
 
 用户明确要求 AI Coding Pipeline、RFC/SPEC/Design/Implement/Verify/Review/Closeout、先设计后实现、独立测试或独立审查时，直接进入完整流水线。
 
-任务满足以下条件之一但用户未显式要求时，YQuant 先向用户确认是否走完整流水线：
+任务满足以下条件之一但用户未显式要求时，orchestrator 先向用户确认是否走完整流水线：
 
 - 新增核心功能。
 - 对现有功能做非平凡改进、优化、重构、升级。
@@ -71,10 +71,10 @@ data/tasks/templates/ai-coding-pipeline-run.md
 轻量流程固定为：
 
 ```text
-YQuant Intake
+Orchestrator Intake
 -> YQuant-Developer-Engineer Implement
 -> YQuant-Test-Engineer Verify
--> YQuant Closeout
+-> Orchestrator Closeout
 ```
 
 轻量流程可以不创建任务目录，但必须保留最小 Verify，并在 Closeout 中说明验证结果或无法验证的原因。
@@ -117,7 +117,7 @@ YQuant Intake
 - 输出：按严重程度排序的审查意见。
 - 通过条件：无阻塞问题；残余风险已明确说明。
 - 退回条件：实现偏离 SPEC、关键测试缺口、安全/可靠性/交易/风控问题。
-- 边界：高严重度或阻塞问题必须退回 Implement；低严重度问题由 YQuant 判断是否继续 Closeout。
+- 边界：高严重度或阻塞问题必须退回 Implement；低严重度问题由 orchestrator 判断是否继续 Closeout。
 
 ### Closeout
 - 输入：实现结果、验证结果、审查结论。
@@ -130,12 +130,13 @@ YQuant Intake
 - 代码实现：Kanban `assignee="yquantdeveloper"`
 - 测试验证：Kanban `assignee="yquanttester"`
 - 独立审查：Kanban `assignee="yquantreviewer"`
-- Intake 和 Closeout：`YQuant` 主 profile 自己完成
+- Intake 和 Closeout：当前 orchestrator（`yquant` 或 `yingyong`）完成
 
 ## Hermes Kanban 执行规则
 
 - 正式流水线阶段必须用 `kanban_create` 创建任务，而不是 `delegate_task`。
-- 每个任务必须设置 `workspace_kind="dir"` 和 `workspace_path="/home/pascal/workspace/yquant-investment"`。
+- Intake 根据 orchestrator 解析 `PIPELINE_WORKSPACE`：`yquant` 对应 `/home/pascal/workspace/yquant-investment`，`yingyong` 对应 `/home/pascal/workspace/yq-yinglong`。
+- 每个任务必须设置 `workspace_kind="dir"` 和解析后的绝对 `workspace_path=PIPELINE_WORKSPACE`。
 - 有前置阶段时必须在创建子任务时设置 `parents=[...]`，不要只在正文里写“等待某任务完成”。
 - 创建后必须记录返回的 task id；没有 task id 就视为没有真实委派。
 - 如果 gateway 没有运行，ready task 不会自动执行；先启动或恢复 Hermes gateway。

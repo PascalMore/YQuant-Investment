@@ -1,6 +1,6 @@
 # Hermes Kanban 编排规则
 
-YQuant AI Coding Pipeline 在 Hermes 中使用 Kanban profile worker，而不是 OpenClaw `agentId` 或 Hermes `delegate_task`。
+AI Coding Pipeline 在 Hermes 中使用 Kanban profile worker，而不是 OpenClaw `agentId` 或 Hermes `delegate_task`。
 
 ## 配置来源
 
@@ -10,13 +10,7 @@ AI Coding Pipeline 的源目录是：
 /home/pascal/workspace/yquant-investment/skills/infra/ai-coding-pipeline/
 ```
 
-Hermes profile 下的目录：
-
-```text
-~/.hermes/profiles/<profile>/skills/infra/yquant-ai-coding-pipeline/
-```
-
-只是运行态安装副本。修改流水线规则、参考文档、脚本或模板时，必须先改项目源目录，再同步到各 profile。不要直接把长期变更只留在 `~/.hermes/profiles/`，否则迁移到新 Hermes 机器时会丢失。
+Hermes profile 下不得保留本技能副本。`yquant` 和各 worker 通过 YQuant 项目 external skills 目录加载；`yingyong` 的 `skills.external_dirs` 直接引用上述 canonical skill 目录。修改流水线规则时只改这一份源文件。
 
 例外：模型、fallback、toolsets、credential pool 等 profile 运行参数仍以 `~/.hermes/profiles/<profile>/config.yaml` 为准。
 
@@ -31,9 +25,19 @@ Hermes profile 下的目录：
 - prompt 中写“你是 yquantprincipal”只是语义提示，不会切换 profile。
 - 适合短推理和并行阅读，不适合 RFC/SPEC/Design/Implement/Verify/Review 这种角色化流水线。
 
+## 项目上下文
+
+创建第一个任务前由 orchestrator 固定 `PIPELINE_WORKSPACE`：
+
+- `yquant` → `/home/pascal/workspace/yquant-investment`
+- `yingyong` → `/home/pascal/workspace/yq-yinglong`
+
+后续所有任务必须复用同一绝对路径。Worker 使用任务传入的 workspace，不能根据
+`yquantprincipal` 等 worker profile 名反推项目。
+
 ## 正式委派方式
 
-YQuant 必须通过 `kanban_create` 创建任务：
+Orchestrator 必须通过 `kanban_create` 创建任务：
 
 ```python
 kanban_create(
@@ -41,7 +45,7 @@ kanban_create(
     assignee="yquantprincipal",
     body="<完整任务上下文、交付物、验收标准>",
     workspace_kind="dir",
-    workspace_path="/home/pascal/workspace/yquant-investment",
+    workspace_path=PIPELINE_WORKSPACE,
     skills=["yquant-ai-coding-pipeline"],
 )
 ```
@@ -55,7 +59,7 @@ design = kanban_create(
     body="<基于 RFC/SPEC 输出 DESIGN>",
     parents=[spec_task_id],
     workspace_kind="dir",
-    workspace_path="/home/pascal/workspace/yquant-investment",
+    workspace_path=PIPELINE_WORKSPACE,
     skills=["yquant-ai-coding-pipeline"],
 )
 ```
@@ -112,10 +116,10 @@ T2 Verify    -> yquanttester, parents=[T1]
 
 ## 运行态要求
 
-- `yquant` profile 必须启用 `kanban` toolset。
+- 当前 orchestrator（`yquant` 或 `yingyong`）必须启用 `kanban` toolset。
 - Hermes gateway 必须运行，dispatcher 才会自动 pick up ready task。
 - 目标 profile 必须存在于 `~/.hermes/profiles/`。
-- 被分派的 worker 会自动加载 `kanban-worker`；YQuant 自定义 pipeline skill 应安装到需要理解流水线的 profile。
+- 被分派的 worker 会自动加载 `kanban-worker`；本 pipeline skill 始终从 canonical source 加载，不安装 profile 副本。
 
 ## 验证方式
 

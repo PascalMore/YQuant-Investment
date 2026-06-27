@@ -9,11 +9,11 @@
 >
 > 升级模型时只改 `config.yaml`，本 skill 不需要同步。
 
-## YQuant
+## Orchestrator（YQuant / 应龙）
 
 负责 Intake、编排和 Closeout。
 
-Hermes profile：`yquant`。
+Hermes profile：`yquant` 或 `yingyong`。Intake 必须先按共享技能规则解析并固定目标项目目录。
 
 必须提供：
 - 用户目标

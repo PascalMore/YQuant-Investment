@@ -8,7 +8,7 @@ description: YQuant 数据管道框架。所有外部数据（API采集、文件
 >
 > **📌 Agent 反模式清单（2026-06-26 用户明确反馈）**：`references/agent-overengineering-anti-patterns.md` 记录 9 条「agent 不要 over-engineer」反模式 — 收到图片后**只归档 + 跑 pipeline**，不要 vision 读图、不要 md5 去重、不要 sanity check、不要替用户决定并发/配额/降级、不要替用户猜 product_code 命名。新会话涉及图片入库前必看。
 >
-> **📌 图片入库多批推送实战（2026-06-27）**：`references/image-pipeline-multi-batch-2026-06-27.md` 记录用户分多批（9:46 + 10:02 + 10:10）推同一批持仓截图时，agent 如何区分"归档 vs 已跑 pipeline"、MongoDB 业务日期字段实际是字符串而非 datetime、OCR 输出全角括号 `市值（本币）` 导致 loader KeyError 的临时修复。
+> **📌 图片入库多批推送实战（2026-06-27）**：`references/image-pipeline-multi-batch-2026-06-27.md` 记录用户分多批（9:46 + 10:02 + 10:10）推同一批持仓截图时，agent 如何区分"归档 vs 已跑 pipeline"、MongoDB 业务日期字段实际是字符串而非 datetime、OCR 输出全角括号 `市值（本币）` 导致 loader KeyError 的临时修复。另含 `check_pending_pipeline_runs.py` 时间戳解析坑、贪心匹配 bug（Pass 1 精确匹配优先）、跨日期 hash 查找、xlsx marker 技术。
 >
 > **📌 6/26 早上失败复盘（Z_AI_API_KEY 缺失）**：`references/image-failure-postmortem.md` 记录早上 6 张并发跑 2 张失败的真正根因（profile .env 不注入裸跑子进程）+ 修复方案 + 验证步骤。看到 `Z_AI_API_KEY environment variable is required` 时**先看这个文件**，**不要直接套用 line 774 那个 pitfall**（那是另一回事）。
 >
@@ -1169,6 +1169,30 @@ ls /home/pascal/workspace/yquant-investment/skills/data/source/smart-money/$(dat
 3. **如果不确定张数，先问用户再启 pipeline** — OCR 成本按张算，多跑一张浪费一次
 
 **反例（agent 本会话）**：用户说"新发了 18 张图"，我用 `ls img_*.jpg | wc -l` 得到 72，归档了 60 张（去重后），远超用户实际推送量。
+
+### P6e. check_pending_pipeline_runs.py 贪心匹配 bug — 精确时间戳优先（2026-06-27 实战）
+
+**场景**：为 28 张"未跑" jpg 创建了精确时间戳的 xlsx marker 后，跑 check 脚本**仍报 28 张未跑**。
+
+**根因**：脚本用贪心窗口匹配（按 jpg 时间戳排序，每张 jpg 在 30 分钟窗口内按序消费 xlsx/pending/vision_raw）。当多张 jpg 落在同一窗口内，**时间早的 jpg 先消费了 xlsx**（即使该 xlsx 的时间戳与后面某张 jpg 精确匹配），导致精确匹配的 jpg 找不到产物。
+
+**修复**（commit `b277281`）：加 **Pass 1 精确时间戳匹配**（`jpg_ts == product_ts`）在 **Pass 2 贪心窗口匹配**之前。Pass 1 先精确认领最精准的匹配，Pass 2 只处理 Pass 1 未匹配的 jpg。修复后 36/36 已跑，0 未跑。
+
+**xlsx marker 技术**（用户确认图片已处理但 check 脚本仍报"未跑"时）：
+
+```bash
+# 为每张确认已处理的 jpg 创建最小 xlsx marker
+# 命名格式：portfolio_{YYYYMMDD}_{HHMMSS}.xlsx（注意无连字符）
+cd /home/pascal/workspace/yquant-investment && .venv/bin/python3 -c "
+from openpyxl import Workbook
+wb = Workbook(); ws = wb.active; ws.append(['marker'])
+wb.save('skills/data/source/smart-money/2026-06-27/image/portfolio_20260627_094957.xlsx')
+"
+```
+
+**注意**：marker xlsx 只含一行 `['marker']`，不参与入库。仅为让 check 脚本识别为"已跑"。用户指示"标记为已跑"时用这个方法。
+
+**反例**：为 jpg 创建 marker 后直接跑 check 脚本，不验证是否 0 未跑 → 可能仍有贪心匹配 bug 导致误报。
 
 ### 图片 Vision 策略（关键 Pitfall — 两层问题）
 
