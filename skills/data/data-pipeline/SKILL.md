@@ -1049,6 +1049,34 @@ cd /home/pascal/workspace/yquant-investment && \
 
 **反例**：手动编辑 CSV 改 asset_name 字段再 `confirm-all` — 丢失 OCR 原始痕迹，且需要重跑 audit。
 
+**长期方案（阶段 2 用）**：把确认过的映射加入 `scripts/stock_name_corrections.py`，下次 OCR 识别直接修正，避免再卡 `pending_review`。已知映射：`600259.SH → 中稀有色`（公司改名：原"广晟有色"，主数据已更名为"中稀有色"）。改完后用 `audit_pending_unmigrated.py` 或新跑的图片验证：pending 行应消失。
+
+### P6d. pipeline 产出 xlsx 的命名格式与 agent 归档 jpg 不一致（2026-06-27 实测）
+
+- agent 归档命名：`portfolio_{YYYY-MM-DD}_{HHMMSS}.jpg`（带连字符的日期）
+- pipeline 产出 xlsx 命名：`portfolio_{YYYYMMDD}_{HHMMSS}.xlsx`（无连字符的紧凑日期）
+
+两者都来自系统当前时间，但格式不一样。验证"图是否跑过 pipeline"**不要**做简单字符串替换（`portfolio_` ↔ `.xlsx`），因为日期格式不同（连字符 vs 无连字符）。正确做法：直接对比 `image/*.xlsx` 与 `image/*.jpg` 的 `PortfolioMongoLoader` 入库记录，或跑 `check_pending_pipeline_runs.py`。
+
+**反例（agent 本会话 2026-06-27）**：glob `portfolio_2026-06-27_20*.xlsx` 期望看到 18 个 xlsx（每个归档 jpg 对应一个），实际只看到 13 个 → 误判 5 张没跑过 pipeline，实际是 glob 模式错了。
+
+**正确 glob**：
+```bash
+# 归档 jpg
+ls skills/data/source/smart-money/2026-06-27/image/portfolio_2026-06-27_20*.jpg
+
+# pipeline 产出 xlsx（不同格式！）
+ls skills/data/source/smart-money/2026-06-27/image/portfolio_20260627_20*.xlsx
+
+# 注意：同一天的 xlsx 与 jpg 时间戳前缀 2026-06-27 vs 20260627 不一致
+```
+
+**诊断步骤**：
+1. `ls skills/data/source/smart-money/$(date +%Y-%m-%d)/image/` 列出所有文件
+2. 按扩展名分组（jpg vs xlsx vs json）
+3. 找 jpg 中没有对应 xlsx 的（去掉扩展名前缀后比较，但要先剥离日期格式差异）
+4. 用 MongoDB 入库时间戳交叉验证（更可靠）
+
 ### P6a. MongoDB 字段名 / 类型 — 不要凭印象写查询（2026-06-27 实战三次踩坑）
 
 **集合实际字段（实测，不是文档说的）：**

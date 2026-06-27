@@ -174,7 +174,23 @@ def main() -> int:
         if ts is not None:
             vision_times[ts].append(v)
 
-    # 4) 对每张 jpg 判定（按命名时间戳 + 贪心分配）
+    # 4) 跨日期 hash 查找：jpg hash 是否在其他日期目录已有 pipeline 产物
+    cross_date_hashes: dict[str, list[str]] = {}  # hash -> [other_date names]
+    other_dirs = sorted([d for d in sm.iterdir() if d.is_dir() and d.name != date])
+    for d in other_dirs:
+        other_image = d / "image"
+        if not other_image.exists():
+            continue
+        # 只需要看该目录有没有 xlsx/pending（有产物 = 跑过）
+        has_products = bool(list(other_image.glob("*.xlsx")) or
+                           list((d / "review_pending").glob("*_pending.csv")) if (d / "review_pending").exists() else False)
+        for j in other_image.glob("*.jpg"):
+            h = md5(j)
+            if h not in cross_date_hashes:
+                cross_date_hashes[h] = []
+            cross_date_hashes[h].append(d.name)
+
+    # 5) 对每张 jpg 判定（按命名时间戳 + 贪心分配）
     sorted_product_ts = sorted(set(list(xlsx_times.keys()) + list(pending_times.keys()) + list(vision_times.keys())))
 
     per_jpg_outcome: dict[str, dict] = {}  # jpg_basename -> {ran, via, products[]}
@@ -203,12 +219,18 @@ def main() -> int:
                     via.append(kind)
                     break  # 一张 jpg 一次只匹配一个产物
         if ran:
-            per_jpg_outcome[jpg.name] = {"ran": True, "via": via, "products": ran}
+            per_jpg_outcome[jpg.name] = {"ran": True, "via": via, "products": ran, "cross_date": False}
         else:
-            per_jpg_outcome[jpg.name] = {"ran": False, "via": None, "products": []}
+            # 查跨日期：hash 在其他日期目录出现过 = 已跑过
+            h = md5(jpg)
+            if h in cross_date_hashes:
+                per_jpg_outcome[jpg.name] = {"ran": True, "via": ["cross_date"], "products": [], "cross_date": cross_date_hashes[h]}
+            else:
+                per_jpg_outcome[jpg.name] = {"ran": False, "via": None, "products": [], "cross_date": False}
 
     # 5) 汇总
     ran_count = sum(1 for v in per_jpg_outcome.values() if v["ran"])
+    cross_date_count = sum(1 for v in per_jpg_outcome.values() if v.get("cross_date"))
     not_ran = [k for k, v in per_jpg_outcome.items() if not v["ran"]]
 
     in_cache_and_archive = cache_hashes.keys() & archive_hashes.keys()
@@ -223,6 +245,7 @@ def main() -> int:
         "pending_count": len(pending_files),
         "vision_raw_count": len(vision_files),
         "ran_count": ran_count,
+        "cross_date_count": cross_date_count,
         "not_ran_count": len(not_ran),
         "in_cache_and_archive": len(in_cache_and_archive),
         "archive_only": len(archive_only),
@@ -247,7 +270,8 @@ def main() -> int:
     print(f"📂 archive \\ cache: {len(archive_only)} 张 (cache 已清)")
     print(f"🆕 cache \\ archive: {len(cache_only)} 张 (飞书新推未归档)")
     print()
-    print(f"✅ 跑过 pipeline: {ran_count} / {len(per_jpg_outcome)} 张")
+    print(f"✅ 跑过 pipeline: {ran_count} / {len(per_jpg_outcome)} 张" +
+          (f"（其中 {cross_date_count} 张跨日期重复）" if cross_date_count else ""))
     print(f"❌ 未跑 pipeline: {len(not_ran)} 张")
     if not_ran:
         print()
