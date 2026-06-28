@@ -3,58 +3,92 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${YQUANT_WORKSPACE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
-LOG_DIR="$REPO_DIR/logs/system/auto-push"
+YINGLONG_DIR="${YQUANT_YINGLONG_DIR:-$HOME/workspace/yq-yinglong}"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M')
 
-mkdir -p "$LOG_DIR"
-cd "$REPO_DIR"
+# ─────────────────────────────────────────────────────
+# push_repo: push a repo and all its submodules
+#   $1 = repo path
+#   $2 = prefix (yquant / yinglong)
+# ─────────────────────────────────────────────────────
+push_repo() {
+    local repo_path="$1"
+    local prefix="$2"
+    local log_dir="$repo_path/logs/system/auto-push"
+    local log_file="$log_dir/auto_push_$(date +%Y%m%d).log"
 
-echo "[$TIMESTAMP] Starting auto push" >> "$LOG_DIR/auto_push_$(date +%Y%m%d).log"
+    mkdir -p "$log_dir"
+    echo "[$TIMESTAMP] Starting auto push ($prefix)" >> "$log_file"
 
-# Handle each submodule individually
-for submod in skills/apps/TradingAgents-CN skills/research/daily_stock_analysis; do
-    if [ ! -d "$submod" ]; then
-        continue
+    cd "$repo_path"
+
+    # ── Submodules (auto-detect from .gitmodules) ──
+    if [ -f "$repo_path/.gitmodules" ]; then
+        while IFS= read -r submod; do
+            [ -z "$submod" ] && continue
+            [ ! -d "$repo_path/$submod" ] && continue
+
+            cd "$repo_path/$submod"
+
+            # Ensure we're on a real branch, not detached HEAD
+            if ! git symbolic-ref --quiet HEAD >/dev/null 2>&1; then
+                git checkout main 2>/dev/null || true
+            fi
+            BRANCH=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo "main")
+
+            git fetch origin
+            git pull --ff origin "$BRANCH" 2>/dev/null || true
+
+            git add -A
+            if git diff --cached --quiet; then
+                echo "[$TIMESTAMP] $prefix/$submod: no working tree changes" >> "$log_file"
+            else
+                git commit -m "Auto commit sub ($prefix): $TIMESTAMP"
+            fi
+
+            if [ "$(git rev-list --count origin/"$BRANCH"..HEAD 2>/dev/null || echo 0)" -gt 0 ]; then
+                git push origin "$BRANCH"
+                echo "[$TIMESTAMP] $prefix/$submod: pushed to $BRANCH" >> "$log_file"
+            else
+                echo "[$TIMESTAMP] $prefix/$submod: up to date" >> "$log_file"
+            fi
+        done < <(git config -f "$repo_path/.gitmodules" --get-regexp '\.path$' | awk '{print $2}')
     fi
 
-    cd "$REPO_DIR/$submod"
+    # ── Main repo ──
+    cd "$repo_path"
+    git submodule update --init --recursive 2>/dev/null || true
 
-    # Ensure we're on main branch, not detached HEAD
-    if ! git symbolic-ref --quiet HEAD >/dev/null 2>&1; then
-        git checkout main
-    fi
+    # Detect branch (default main)
+    MAIN_BRANCH=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo "main")
 
-    BRANCH=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo "main")
-
-    # Fetch and pull latest first
-    git fetch origin
-    git pull --ff origin "$BRANCH" 2>/dev/null || true
-
-    # Check if there are local changes to commit
-    if git diff origin/"$BRANCH" --quiet; then
-        echo "[$TIMESTAMP] $submod: up to date with remote" >> "$LOG_DIR/auto_push_$(date +%Y%m%d).log"
+    git add -A
+    if git diff --cached --quiet; then
+        echo "[$TIMESTAMP] No working tree changes ($prefix)" >> "$log_file"
     else
-        git add -A
-        git commit -m "Auto commit sub: $TIMESTAMP"
-        git push origin "$BRANCH"
-        echo "[$TIMESTAMP] $submod: pushed to $BRANCH" >> "$LOG_DIR/auto_push_$(date +%Y%m%d).log"
+        git commit -m "Auto commit ($prefix): $TIMESTAMP"
     fi
-done
 
-# Back to main repo
-cd "$REPO_DIR"
+    if [ "$(git rev-list --count origin/"$MAIN_BRANCH"..HEAD 2>/dev/null || echo 0)" -gt 0 ]; then
+        git push origin "$MAIN_BRANCH"
+        echo "[$TIMESTAMP] Pushed to GitHub ($prefix) [$MAIN_BRANCH]" >> "$log_file"
+    else
+        echo "[$TIMESTAMP] Up to date with remote ($prefix) [$MAIN_BRANCH]" >> "$log_file"
+    fi
 
-# Update submodule pointers if changed
-git submodule update --init --recursive
+    echo "[$TIMESTAMP] Completed ($prefix)" >> "$log_file"
+}
 
-# Commit main repo if it has changes
-git add -A
-if git diff --cached --quiet; then
-    echo "[$TIMESTAMP] No changes to commit" >> "$LOG_DIR/auto_push_$(date +%Y%m%d).log"
+# ── yquant-investment ──
+push_repo "$REPO_DIR" "yquant"
+
+# ── yinglong (skip silently if absent) ──
+if [ -d "$YINGLONG_DIR/.git" ]; then
+    push_repo "$YINGLONG_DIR" "yinglong"
 else
-    git commit -m "Auto commit: $TIMESTAMP"
-    git push origin main
-    echo "[$TIMESTAMP] Pushed to GitHub" >> "$LOG_DIR/auto_push_$(date +%Y%m%d).log"
+    YQ_LOG="$REPO_DIR/logs/system/auto-push"
+    mkdir -p "$YQ_LOG"
+    echo "[$TIMESTAMP] Yinglong not found at $YINGLONG_DIR, skipped" >> "$YQ_LOG/auto_push_$(date +%Y%m%d).log"
 fi
 
-echo "[$TIMESTAMP] Auto push completed" >> "$LOG_DIR/auto_push_$(date +%Y%m%d).log"
+echo "[$TIMESTAMP] All done" >> "$REPO_DIR/logs/system/auto-push/auto_push_$(date +%Y%m%d).log"
