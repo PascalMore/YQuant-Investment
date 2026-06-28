@@ -4,7 +4,7 @@
 
 | 阶段 | 角色 | Hermes assignee profile | 产出 | 是否允许改代码 |
 |---|---|---|---|---|
-| 1 Intake | Orchestrator | `yquant` 或 `yingyong` | `00-intake.md` 或简短需求澄清摘要 | 否 |
+| 1 Intake | Orchestrator | `yquant` 或 `yinglong` | `00-intake.md` 或简短需求澄清摘要 | 否 |
 | 2 RFC/SPEC | YQuant-Codex-Principal | `yquantprincipal` | RFC 更新、`docs/spec/*.md` 或 `02-spec.md` | 通常否 |
 | 3 Design | YQuant-Codex-Principal | `yquantprincipal` | `docs/design/*.md`、`03-design.md`、`04-implementation-plan.md` | 否 |
 | 4 Implement | YQuant-Developer-Engineer | `yquantdeveloper` | 代码变更、实现记录 | 是 |
@@ -130,12 +130,12 @@ Orchestrator Intake
 - 代码实现：Kanban `assignee="yquantdeveloper"`
 - 测试验证：Kanban `assignee="yquanttester"`
 - 独立审查：Kanban `assignee="yquantreviewer"`
-- Intake 和 Closeout：当前 orchestrator（`yquant` 或 `yingyong`）完成
+- Intake 和 Closeout：当前 orchestrator（`yquant` 或 `yinglong`）完成
 
 ## Hermes Kanban 执行规则
 
 - 正式流水线阶段必须用 `kanban_create` 创建任务，而不是 `delegate_task`。
-- Intake 根据 orchestrator 解析 `PIPELINE_WORKSPACE`：`yquant` 对应 `/home/pascal/workspace/yquant-investment`，`yingyong` 对应 `/home/pascal/workspace/yq-yinglong`。
+- Intake 根据 orchestrator 解析 `PIPELINE_WORKSPACE`：`yquant` 对应 `/home/pascal/workspace/yquant-investment`，`yinglong` 对应 `/home/pascal/workspace/yq-yinglong`。
 - 每个任务必须设置 `workspace_kind="dir"` 和解析后的绝对 `workspace_path=PIPELINE_WORKSPACE`。
 - 有前置阶段时必须在创建子任务时设置 `parents=[...]`，不要只在正文里写“等待某任务完成”。
 - 创建后必须记录返回的 task id；没有 task id 就视为没有真实委派。

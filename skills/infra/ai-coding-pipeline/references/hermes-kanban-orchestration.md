@@ -10,7 +10,7 @@ AI Coding Pipeline 的源目录是：
 /home/pascal/workspace/yquant-investment/skills/infra/ai-coding-pipeline/
 ```
 
-Hermes profile 下不得保留本技能副本。`yquant` 和各 worker 通过 YQuant 项目 external skills 目录加载；`yingyong` 的 `skills.external_dirs` 直接引用上述 canonical skill 目录。修改流水线规则时只改这一份源文件。
+Hermes profile 下不得保留本技能副本。`yquant` 和各 worker 通过 YQuant 项目 external skills 目录加载；`yinglong` 的 `skills.external_dirs` 直接引用上述 canonical skill 目录。修改流水线规则时只改这一份源文件。
 
 例外：模型、fallback、toolsets、credential pool 等 profile 运行参数仍以 `~/.hermes/profiles/<profile>/config.yaml` 为准。
 
@@ -30,7 +30,7 @@ Hermes profile 下不得保留本技能副本。`yquant` 和各 worker 通过 YQ
 创建第一个任务前由 orchestrator 固定 `PIPELINE_WORKSPACE`：
 
 - `yquant` → `/home/pascal/workspace/yquant-investment`
-- `yingyong` → `/home/pascal/workspace/yq-yinglong`
+- `yinglong` → `/home/pascal/workspace/yq-yinglong`
 
 后续所有任务必须复用同一绝对路径。Worker 使用任务传入的 workspace，不能根据
 `yquantprincipal` 等 worker profile 名反推项目。
@@ -116,7 +116,7 @@ T2 Verify    -> yquanttester, parents=[T1]
 
 ## 运行态要求
 
-- 当前 orchestrator（`yquant` 或 `yingyong`）必须启用 `kanban` toolset。
+- 当前 orchestrator（`yquant` 或 `yinglong`）必须启用 `kanban` toolset。
 - Hermes gateway 必须运行，dispatcher 才会自动 pick up ready task。
 - 目标 profile 必须存在于 `~/.hermes/profiles/`。
 - 被分派的 worker 会自动加载 `kanban-worker`；本 pipeline skill 始终从 canonical source 加载，不安装 profile 副本。
