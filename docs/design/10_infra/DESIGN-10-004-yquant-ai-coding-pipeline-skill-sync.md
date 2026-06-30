@@ -7,7 +7,8 @@
 | 状态 | Accepted |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-06-29 |
-| 最后更新 | 2026-06-29 |
+| 最后更新 | 2026-06-30 |
+| 版本号 | V1.2 |
 | 来源 RFC | RFC-10-004-yquant-ai-coding-pipeline-skill-sync |
 | 来源 SPEC | SPEC-10-004-yquant-ai-coding-pipeline-skill-sync |
 | 目标模块 | 10_infra / Hermes Kanban Pipeline |
@@ -17,7 +18,7 @@
 
 本设计将 RFC-10-004 §12（Quick Flow 流程模式）与 SPEC-10-004 §13（Quick Flow 可执行契约）落为可执行的实现设计。核心目标：
 
-1. 定义 Quick Flow 4 个 Kanban task 的精确时序、依赖和 body 模板。
+1. 定义 Quick Flow 在 Intake 阶段一次性预创建 4 个 Kanban task 的精确时序、依赖和 body 模板。
 2. 设计 Closeout 自审清单（≥11 项），替代完整流程的 Reviewer 角色。
 3. 标注 orchestrator 侧改动点：SKILL.md、references/pipeline.md、MEMORY.md 的具体落点。
 4. 标注 P-1~P-11 pitfalls 在 Quick Flow 中的适用性矩阵。
@@ -64,7 +65,14 @@ Quick Flow 的核心取舍：去掉独立的 Design task（合并到 T1）和 Re
 orchestrator Intake
     │
     │  判定触发 Quick Flow（RFC-10-004 §12.3-§12.4）
-    │  创建 T1（RFC/SPEC/Design，assignee=yquantprincipal）
+    │  t=0 → Intake: kanban_create T1/T2/T3/T4 (4 张全链)
+    │
+    │    T1: status=ready, parents=[]
+    │    T2: status=todo,  parents=[T1]
+    │    T3: status=todo,  parents=[T1,T2]（最低 [T2]）
+    │    T4: status=todo,  parents=[T1,T2,T3]（最低 [T3]）
+    │
+    │  后续衔接交给 Kanban DB 状态机：task_links + recompute_ready + dispatch_once
     ▼
 ┌─────────────────────────────────────────────┐
 │ T1: RFC/SPEC/Design (yquantprincipal)        │
@@ -78,7 +86,7 @@ orchestrator Intake
 │ 门禁：orchestrator 校验三份文档存在 +        │
 │       引用关系正确 + 章节结构完整             │
 └─────────────┬───────────────────────────────┘
-              │ parents=[T1]
+              │ T1 done → recompute_ready promotes T2
               ▼
 ┌─────────────────────────────────────────────┐
 │ T2: Implement (yquantdeveloper)              │
@@ -88,7 +96,7 @@ orchestrator Intake
 │                                              │
 │ 门禁：代码编译/语法通过 + 测试通过           │
 └─────────────┬───────────────────────────────┘
-              │ parents=[T2]
+              │ T2 done → recompute_ready promotes T3
               ▼
 ┌─────────────────────────────────────────────┐
 │ T3: Verify (yquanttester)                    │
@@ -98,7 +106,7 @@ orchestrator Intake
 │                                              │
 │ 门禁：所有验收标准通过                       │
 └─────────────┬───────────────────────────────┘
-              │ parents=[T3]
+              │ T3 done → recompute_ready promotes T4
               ▼
 ┌─────────────────────────────────────────────┐
 │ T4: Closeout (orchestrator)                  │
@@ -109,6 +117,10 @@ orchestrator Intake
 │ 门禁：自审清单 ≥11 项全部通过                │
 └─────────────────────────────────────────────┘
 ```
+
+设计决策：T2/T3/T4 必须在 t=0 就存在于 Kanban DB 中，以 `todo` + parent links 表示不可运行状态。禁止把“创建下一阶段 task”作为 T1/T2/T3 完成通知的回调动作；通知只能用于汇报和人工观察，不承担状态机职责。
+
+本时序图落实 RFC-10-004 §12.6 的任务链创建时机，并细化 SPEC-10-004 §13.1 / §13.10 的衔接机制契约。
 
 ### 3.2 T1 Task Body 模板
 
@@ -124,6 +136,9 @@ orchestrator Intake
 - 流程模式：Quick Flow（5 阶段，去掉独立 Review）
 - T1 产出：RFC + SPEC + Design 三份独立文档（本 task）
 - 后续阶段：T2 Implement → T3 Verify → T4 Closeout
+- 衔接机制：Intake 阶段已一次性预创建 T2/T3/T4；本 task 完成后由 Kanban DB 自动 promote 后续阶段
+- 预创建 task id：T2=[task_id]，T3=[task_id]，T4=[task_id]
+- 禁止事项：不得要求 orchestrator 在 T1 done 后临时创建 T2
 
 ## 允许修改的文件
 
@@ -178,6 +193,12 @@ orchestrator Intake
 
 按 SPEC 与 Design 实现代码变更。本任务属于 Quick Flow（T2 Implement 阶段）。
 
+## Quick Flow 预创建声明
+
+- 本 task 已在 Intake 阶段预创建，parents=[T1]
+- 本 task 由 T1 done 后 Kanban DB 自动 promote+spawn
+- 禁止依赖 orchestrator 在 T1 done 后临时创建本 task
+
 ## 来源文档
 
 - RFC：[完整路径]
@@ -228,6 +249,12 @@ orchestrator Intake
 
 独立验证 T2 实现的正确性和一致性。本任务属于 Quick Flow（T3 Verify 阶段）。
 
+## Quick Flow 预创建声明
+
+- 本 task 已在 Intake 阶段预创建，parents=[T1,T2]（最低 parents=[T2]）
+- 本 task 由 T2 done 后 Kanban DB 自动 promote+spawn
+- 禁止依赖 orchestrator 在 T2 done 后临时创建本 task
+
 ## 来源文档
 
 - SPEC：[完整路径]
@@ -277,21 +304,23 @@ T4 Closeout 由 orchestrator 执行。由于 Quick Flow 无独立 Reviewer，orc
 
 | # | 检查项 | 检查方法 |
 |---|---|---|
-| 1 | SPEC 契约与实际实现一致 | 对比 SPEC §3/§4 与 git diff |
-| 2 | 文件改动清单符合 Design §3.1 预期 | `git diff --stat` 对比 Design |
-| 3 | 验收标准（RFC §9 + SPEC §10）全部通过 | T3 测试报告复核 |
-| 4 | 风险应对（RFC §7）已验证或降级可接受 | 逐条复核 RFC §7 风险表 |
-| 5 | 代码风格和项目约定遵守 | 抽查 2-3 个变更文件 |
-| 6 | 测试覆盖满足 Design §5 要求 | T3 测试报告覆盖率核对 |
-| 7 | 无遗漏的边缘情况或异常降级路径 | 抽样检查 edge case |
-| 8 | 三方依赖无新增/升级，或已记录 | `git diff` 依赖文件 |
-| 9 | 文档引用关系正确（RFC → SPEC → Design → 实现） | 交叉引用 grep |
-| 10 | Git diff 范围在产品边界内，不包含无关改动 | `git diff --stat` + 人工复核 |
-| 11 | worker 日志无异常（fallback、crash、timeout） | 检查 `~/.hermes/profiles/*/logs/agent.log` |
-| 12 | 未修改禁止清单中的文件 | `git diff --name-only` 交叉检查 |
-| 13 | 未修改文档模板 | `git diff docs/*/00_*template*` |
+| 1 | Quick Flow T1-T4 在 Intake 阶段一次性预创建 | `kanban_show` / task thread / created_at 复核 |
+| 2 | T2/T3/T4 parent links 存在且指向正确上游 | Kanban `parents` / `task_links` 复核 |
+| 3 | SPEC 契约与实际实现一致 | 对比 SPEC §3/§4 与 git diff |
+| 4 | 文件改动清单符合 Design §3.1 预期 | `git diff --stat` 对比 Design |
+| 5 | 验收标准（RFC §9 + SPEC §10）全部通过 | T3 测试报告复核 |
+| 6 | 风险应对（RFC §7）已验证或降级可接受 | 逐条复核 RFC §7 风险表 |
+| 7 | 代码风格和项目约定遵守 | 抽查 2-3 个变更文件 |
+| 8 | 测试覆盖满足 Design §5 要求 | T3 测试报告覆盖率核对 |
+| 9 | 无遗漏的边缘情况或异常降级路径 | 抽样检查 edge case |
+| 10 | 三方依赖无新增/升级，或已记录 | `git diff` 依赖文件 |
+| 11 | 文档引用关系正确（RFC → SPEC → Design → 实现） | 交叉引用 grep |
+| 12 | Git diff 范围在产品边界内，不包含无关改动 | `git diff --stat` + 人工复核 |
+| 13 | worker 日志无异常（fallback、crash、timeout） | 检查 `~/.hermes/profiles/*/logs/agent.log` |
+| 14 | 未修改禁止清单中的文件 | `git diff --name-only` 交叉检查 |
+| 15 | 未修改文档模板 | `git diff docs/*/00_*template*` |
 
-若 #1-#13 全部 ✅ → closeout 完成。若发现 Major/High 问题 → 退回 T2，不 closeout。Minor 问题 → orchestrator 直接修，closeout 记录。
+若 #1-#15 全部 ✅ → closeout 完成。若发现 Major/High 问题 → 退回 T2，不 closeout。Minor 问题 → orchestrator 直接修，closeout 记录。若 #1/#2 未通过但本次运行已通过人工补救完成，允许 closeout，但必须记录为流程缺陷并禁止作为标准 Quick Flow 样例复用。
 
 ### 3.6 Orchestrator 改动点
 
@@ -301,8 +330,19 @@ T4 Closeout 由 orchestrator 执行。由于 Quick Flow 无独立 Reviewer，orc
 
 - 显式触发词："走 Quick Flow"、"按快捷流程"、"5 阶段快速"。
 - 自动触发规则：中风险 + 明确需求 + 改动范围 3-8 文件 + 非核心数据/风控。
-- Quick Flow Kanban 创建规则：4 task 依赖链（RFC/SPEC/Design 合并为 1 task）。
+- Quick Flow Kanban 创建规则：Intake 阶段一次性创建 4 task 依赖链（RFC/SPEC/Design 合并为 1 task），T1 ready，T2/T3/T4 todo，后续由 dispatcher 自动 promote+spawn。
 - Closeout 自审清单引用：指向 DESIGN-10-004 §3.5。
+
+##### Intake 阶段一次性创建 4 task
+
+orchestrator 在判定 Quick Flow 后必须在同一个 Intake 动作中创建：
+
+1. T1 RFC/SPEC/Design：`assignee=yquantprincipal`，无 parents，立即可运行。
+2. T2 Implement：`assignee=yquantdeveloper`，`parents=[T1]`。
+3. T3 Verify：`assignee=yquanttester`，`parents=[T1,T2]`（最低 `[T2]`）。
+4. T4 Closeout：`assignee=<orchestrator>`，`parents=[T1,T2,T3]`（最低 `[T3]`）。
+
+T1 body 必须写入 T2/T3/T4 task id；T2/T3/T4 body 必须声明自己是 Intake 预创建 task。禁止等待 T1/T2/T3 done 通知后再创建下一张 task。
 
 不修改章节：
 - 完整流程和轻量流程的定义保持不变。
@@ -348,8 +388,9 @@ T4 Closeout 由 orchestrator 执行。由于 Quick Flow 无独立 Reviewer，orc
 | P-9 | 中途变更骨架/命名规范 | ✅ 完全适用 | orchestrator 负责 comment + 兜底 |
 | P-10 | 凭据/环境文件遮蔽 | ✅ 完全适用 | 涉及凭据的实现需真实 smoke test |
 | P-11 | 端到端 smoke test 数据合理性 | ✅ 完全适用 | T3 Verify 必须抽查输出业务合理性 |
+| P-12 | Quick Flow orchestrator 串行创建风险 | ✅ 已通过预创建消除 | Intake 一次性预创建 T1-T4，避免 watcher/session 断链 |
 
-所有 P-1~P-11 在 Quick Flow 中继续适用，无例外。
+所有 P-1~P-12 在 Quick Flow 中继续适用，无例外。P-12 的核心含义是：Quick Flow 不得把“下一阶段 task 是否存在”依赖于 orchestrator 主 session、gateway watcher 或进程通知；这些组件只能影响可观测性，不能影响依赖链完整性。
 
 ### 3.8 与完整流程的降级/升级路径
 
@@ -445,3 +486,9 @@ N/A（无代码变更，仅文档和 skill 内容修改）。
 - `skills/infra/ai-coding-pipeline/references/pipeline.md`
 - `skills/infra/ai-coding-pipeline/references/document-layers.md`
 - `skills/infra/ai-coding-pipeline/references/agent-handoff.md`
+
+## 9. 版本修订说明
+
+- 当前版本：V1.2
+- 修订日期：2026-06-30
+- 修订摘要：Quick Flow 衔接机制由 orchestrator 串行创建后续 task 改为 Intake 一次性预创建 T1-T4；§3.1 时序图、§3.2-§3.5 body/自审模板、§3.6 orchestrator 改动点和 §3.7 P-12 兼容性矩阵已同步修订。

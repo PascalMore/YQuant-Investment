@@ -74,7 +74,19 @@ T2 Design    -> yquantprincipal, parents=[T1]
 T3 Implement -> yquantdeveloper, parents=[T2]
 T4 Verify    -> yquanttester, parents=[T3]
 T5 Review    -> yquantreviewer, parents=[T4]
+T6 Closeout  -> <orchestrator>, parents=[T5]
 ```
+
+Quick Flow（5 阶段 4 task）：
+
+```text
+T1 RFC/SPEC/Design -> yquantprincipal                parents=[]
+T2 Implement       -> yquantdeveloper, parents=[T1]
+T3 Verify          -> yquanttester,    parents=[T1, T2]
+T4 Closeout        -> <orchestrator>,  parents=[T1, T2, T3]
+```
+
+Quick Flow 的 T1/T2/T3/T4 必须在 Intake 阶段**一次性预创建**（V1.2 Q-LINK-001）：T1 立即 `ready`、T2/T3/T4 `todo` + parent links，后续由 Kanban DB `recompute_ready` + dispatcher 自动衔接。禁止在前序任务 done 后才临时创建下一张 task（Q-LINK-005/006）。
 
 轻量流程：
 
@@ -84,6 +96,8 @@ T2 Verify    -> yquanttester, parents=[T1]
 ```
 
 ## 任务正文模板
+
+通用模板：
 
 ```text
 阶段：<RFC/SPEC | Design | Implement | Verify | Review>
@@ -113,6 +127,136 @@ T2 Verify    -> yquanttester, parents=[T1]
 - 使用中文
 - 完成后调用 kanban_complete，阻塞时调用 kanban_block
 ```
+
+Quick Flow 任务正文**必须**额外包含 `## 衔接机制声明` 段：
+
+```text
+衔接机制声明：
+- 流程模式：Quick Flow（5 阶段 4 task）
+- 本 task 在 Intake 阶段一次性预创建，[ready|todo]，parents=[...]
+- 后续衔接由 Kanban DB 状态机（task_links + recompute_ready + dispatch_once）自动完成
+- 禁止依赖 orchestrator 在前序任务 done 后临时创建本 task
+- 预创建关联 task id：
+  - T1 = <task_id>
+  - T2 = <task_id>
+  - T3 = <task_id>
+  - T4 = <task_id>
+```
+
+T1 body 必须显式列出 T2/T3/T4 task id；T2/T3/T4 body 必须显式声明自己是 Intake 预创建 task 并指向 T1 文档路径。
+
+### Quick Flow Intake 一次性创建示例
+
+> ⚠️ **常见错误**：下面第 1 版草稿曾在 T1 body 里引用 `t2_id/t3_id/t4_id`、在 T2 body 里引用 `t1_id`——变量未定义就引用，会在 Python 运行时炸出 `NameError`，或更阴险地在动态拼接时产生 NaN/空字符串。正确策略是**两阶段创建**：(a) 创建 T1 占位 + T2/T3/T4 一次性预创建，(b) 用 `kanban_comment` 把 T2/T3/T4 id 回填到 T1 的可见处。
+
+```python
+# Intake 阶段一次性预创建 4 张 task (5 阶段 4 task 全链)
+PIPELINE_WORKSPACE = "/home/pascal/workspace/yquant-investment"
+
+# === Phase 1: 创建 T1 占位（不知道下游 id，先用占位字符串）===
+PLACEHOLDER = "<filled in phase 2 after T2/T3/T4 created>"
+
+t1 = kanban_create(
+    title="T1 RFC/SPEC/Design: <short task name>",
+    assignee="yquantprincipal",
+    body=(
+        "## 流程模式\n本任务走 Quick Flow（5 阶段 4 task）。\n\n"
+        "## 衔接机制声明\n"
+        f"- T2 task id: {PLACEHOLDER}\n"
+        f"- T3 task id: {PLACEHOLDER}\n"
+        f"- T4 task id: {PLACEHOLDER}\n"
+        "- 本 task 完成后由 dispatcher 自动 promote T2。\n\n"
+        "## 用户目标 / 范围 / 交付物 / 验收标准（同通用模板）"
+    ),
+    workspace_kind="dir",
+    workspace_path=PIPELINE_WORKSPACE,
+)
+t1_id = t1.id  # 保存本任务的 id（Python 内变量，供 Kanban 内部使用）
+
+# === Phase 2: 一次性预创建 T2/T3/T4，引用 t1_id 作为 parent ===
+t2_id = kanban_create(
+    title="T2 Implement: <short task name>",
+    assignee="yquantdeveloper",
+    body=(
+        "## 流程模式\nQuick Flow T2 Implement。\n\n"
+        "## 衔接机制声明\n"
+        "- 本 task 在 Intake 阶段预创建，parents=[T1]\n"
+        "- 由 T1 done 后 Kanban DB 状态机自动 promote\n"
+        "- 禁止依赖 orchestrator 在 T1 done 后临时创建本 task\n\n"
+        "## 来源文档 / 允许修改 / 禁止事项 / 验收标准（同通用模板）"
+    ),
+    parents=[t1_id],
+    workspace_kind="dir",
+    workspace_path=PIPELINE_WORKSPACE,
+).id
+
+t3_id = kanban_create(
+    title="T3 Verify: <short task name>",
+    assignee="yquanttester",
+    body=(
+        "## 流程模式\nQuick Flow T3 Verify。\n\n"
+        "## 衔接机制声明\n"
+        "- 本 task 在 Intake 阶段预创建，parents=[T1, T2]\n"
+        "- 由 T2 done 后 Kanban DB 状态机自动 promote\n"
+        "- 禁止依赖 orchestrator 在 T1/T2 done 后临时创建本 task\n\n"
+    ),
+    parents=[t1_id, t2_id],
+    workspace_kind="dir",
+    workspace_path=PIPELINE_WORKSPACE,
+).id
+
+t4_id = kanban_create(
+    title="T4 Closeout: <short task name>",
+    assignee="<orchestrator>",
+    body=(
+        "## 流程模式\nQuick Flow T4 Closeout。\n\n"
+        "## 衔接机制声明\n"
+        "- 本 task 在 Intake 阶段预创建，parents=[T1, T2, T3]\n"
+        "- 由 T3 done 后 Kanban DB 状态机自动 promote\n"
+        "- 执行 DESIGN-10-004 §3.5 15 项自审清单\n\n"
+    ),
+    parents=[t1_id, t2_id, t3_id],
+    workspace_kind="dir",
+    workspace_path=PIPELINE_WORKSPACE,
+).id
+
+# === Phase 3: 回填 T1 的衔接机制声明（task body 是 readonly，所以用 comment 通道）===
+kanban_comment(
+    task_id=t1_id,
+    body=(
+        f"## Intake 回填：4 task 全链创建完成\n\n"
+        f"- T1 (RFC/SPEC/Design): {t1_id}\n"
+        f"- T2 (Implement): {t2_id}\n"
+        f"- T3 (Verify): {t3_id}\n"
+        f"- T4 (Closeout): {t4_id}\n\n"
+        f"T1 body 的占位字符串将由 Reviewer/Verify 阶段从本 comment 读取。"
+    ),
+)
+```
+
+**关键差异**：
+
+- ❌ 错误：直接 `f"- T2 task id: {t2_id}"` 在 `t1` 创建之前 → 变量未定义，运行时炸
+- ✅ 正确：先创建 T1 占位（body 写 `PLACEHOLDER`），再创建 T2/T3/T4，最后用 `kanban_comment` 通道回填 id
+
+**Q-LINK-001~006 一致性保证**：
+
+- Q-LINK-001 (4 tasks 一次性预创建)：phase 1+2 是同一个 `kanban_create` 调用的相邻语句，没有任何"等 X done 后再 create Y"的间隙。
+- Q-LINK-003 (T2/T3/T4 todo + parents)：phase 2 创建时 parent 已存在（`t1_id` 等 Python 内变量），parent links 在 DB 端就是合法的。
+- Q-LINK-005 (no late_create)：4 个 task 的 `created_at` 都由一次性调用产生，**不会**发生在前序 done 之后才创建的 late_create。
+- 不会"重复创建 T1"——因为 phase 1 只调一次 `kanban_create` 赋给 `t1` + `t1_id`，phase 2 用 `t1_id` 作为 parent（不会再调 `kanban_create`）。
+
+**API 调用约定**：Hermes Kanban 工具/示例一致返回带 `"task_id"` 键的 dict，所以读 id 用：
+
+```python
+t1_id = t1["task_id"]                  # 已创建的 task 对象
+t2_id = kanban_create(...).id          # 短路访问 .id（项目内封装）
+t2_id = kanban_create(...)["task_id"]  # 或显式 key
+```
+
+**两种写法等价**——按项目内既有封装偏好任选其一；不要再写"phase 4 最后再调一次创建 T1"之类的反模式。
+
+> **关键约束**：四个 `kanban_create` 必须在同一个 Intake 动作内完成（允许的例外：先创建 T2/T3/T4 拿到 id，再创建 T1 并把 id 填进 body）。T2/T3/T4 通过 `parents` 保持 `todo` 状态，由 dispatcher 自动 promote。任何在前序 done 后才创建下一张 task 的行为都是 V1.2 Q-LINK-005 禁止的。
 
 ## 运行态要求
 

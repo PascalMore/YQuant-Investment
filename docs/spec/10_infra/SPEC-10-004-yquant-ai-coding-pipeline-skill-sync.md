@@ -7,8 +7,8 @@
 | 状态 | Accepted |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-06-27 |
-| 最后更新 | 2026-06-29 |
-| 版本号 | V1.1 |
+| 最后更新 | 2026-06-30 |
+| 版本号 | V1.2 |
 | 来源 RFC | RFC-10-004-yquant-ai-coding-pipeline-skill-sync |
 | 目标模块 | infra / Hermes Kanban Pipeline |
 | 适配 Agent | YQuant-Developer-Engineer, YQuant-Test-Engineer, YQuant-Reviewer-Principal |
@@ -259,6 +259,17 @@ T3 Verify             assignee=yquanttester      parents=[T2]
 T4 Closeout           assignee=<orchestrator>    parents=[T3]
 ```
 
+创建时序：Quick Flow 的 T1/T2/T3/T4 必须在 Intake 阶段一次性创建并写入 Kanban DB：
+
+| Task | 初始状态 | 创建时机 | parents | 衔接机制 |
+|---|---|---|---|---|
+| T1 RFC/SPEC/Design | `ready` | Intake 当下 | `[]` | dispatcher 立即 claim/spawn |
+| T2 Implement | `todo` | 与 T1 同一轮 Intake | `[T1]` | T1 done 后由 `recompute_ready` 自动 promote |
+| T3 Verify | `todo` | 与 T1 同一轮 Intake | `[T1, T2]`（最低 `[T2]`） | T2 done 后由 DB 状态机自动 promote |
+| T4 Closeout | `todo` | 与 T1 同一轮 Intake | `[T1, T2, T3]`（最低 `[T3]`） | T3 done 后由 DB 状态机自动 promote |
+
+禁止模式：不得在 T1 done 后才创建 T2、T2 done 后才创建 T3、T3 done 后才创建 T4。该串行创建模式把流程正确性绑定到 orchestrator 主 session 活性和通知进程，已在 2026-06-30 yinglong Quick Flow 运行中导致 5h44m 断链。
+
 三份文档的产出顺序与文件命名契约：
 
 | 文档 | 路径模板 | 示例 |
@@ -274,6 +285,8 @@ T4 Closeout           assignee=<orchestrator>    parents=[T3]
 T1（RFC/SPEC/Design，assignee=yquantprincipal）的 body 必须包含：
 
 - 用户目标和流程模式声明："本任务走 Quick Flow（5 阶段：Intake → RFC/SPEC/Design → Implement → Verify → Closeout）"。
+- Intake 阶段已完成 T2/T3/T4 task id 预创建，本 task 完成后由 dispatcher 自动 promote+spawn 后续阶段；不得要求 orchestrator 临时创建下一阶段。
+- 预创建任务 ID 清单：`T2=<task_id>`、`T3=<task_id>`、`T4=<task_id>`（由 orchestrator 在 body 中填入）。
 - 允许修改的文件范围精确列表。
 - 禁止修改的文件范围精确列表。
 - 三层文档的精确目标路径（至少给出完整路径示例）。
@@ -286,6 +299,7 @@ T1（RFC/SPEC/Design，assignee=yquantprincipal）的 body 必须包含：
 T2（Implement，assignee=yquantdeveloper）的 body 必须包含：
 
 - 来源 RFC/SPEC/Design 的精确文件路径引用。
+- Quick Flow 预创建声明：本 task 已在 Intake 阶段预创建，`parents=[T1]`；不得依赖 orchestrator 在 T1 done 后临时创建。
 - 允许修改的代码文件范围。
 - 禁止修改的代码文件范围。
 - 实现约束（来自 SPEC §11 与 Design §7）。
@@ -298,6 +312,7 @@ T2（Implement，assignee=yquantdeveloper）的 body 必须包含：
 T3（Verify，assignee=yquanttester）的 body 必须包含：
 
 - 来源 SPEC 的精确文件路径引用。
+- Quick Flow 预创建声明：本 task 已在 Intake 阶段预创建，`parents=[T1,T2]` 或最低 `parents=[T2]`；不得依赖 orchestrator 在 T2 done 后临时创建。
 - 验收标准矩阵（来自 SPEC §10）。
 - 测试命令与断言列表。
 - 端到端 smoke test 具体步骤（含数据合理性抽样检查）。
@@ -307,6 +322,7 @@ T3（Verify，assignee=yquanttester）的 body 必须包含：
 
 T4 Closeout 由 orchestrator 执行，必须完成：
 
+- 衔接机制核查：确认 T1/T2/T3/T4 均在 Intake 阶段预创建，且 `task_links` 中存在 T2/T3/T4 的 parent 依赖。
 - Closeout 自审清单（RFC-10-004 §12.7，≥11 项逐一核查）。
 - 变更总结（1-3 句）。
 - 残余风险与后续事项。
@@ -325,6 +341,7 @@ T4 Closeout 由 orchestrator 执行，必须完成：
 | Q-A-005 | Closeout 自审清单 ≥11 项全部通过 | orchestrator 逐项核查并记录 | T4 |
 | Q-A-006 | 文件改动范围在 Design 预期内 | `git diff --stat` 对比 Design §3.1 | T4 |
 | Q-A-007 | 未修改禁止清单中的文件 | `git diff --name-only` 交叉检查 | T4 |
+| Q-A-008 | T1-T4 在 Intake 阶段一次性预创建且 parent links 存在 | Kanban task/comment/thread + `task_links` 复核 | T4 |
 
 ### 13.7 与 RFC-10-004 §12 的对应关系
 
@@ -336,6 +353,7 @@ T4 Closeout 由 orchestrator 执行，必须完成：
 | §12.6 Kanban 任务链 | 本 SPEC §13.1 |
 | §12.7 Closeout 自审清单 | 本 SPEC §13.5（操作化） |
 | §12.8 风险与降级 | 本 SPEC §13.5 退回策略 |
+| §12.8 orchestrator 串行创建风险 | 本 SPEC §13.10 衔接机制契约 |
 
 ### 13.8 与完整流程 SPEC 的兼容性
 
@@ -353,10 +371,33 @@ T4 Closeout 由 orchestrator 执行，必须完成：
   - P-10（凭据/环境文件遮蔽）✅
   - P-11（端到端 smoke test 数据合理性）✅
 - P-7（编排层越界改模板）在 Quick Flow 中同样禁止。
+- P-12（Quick Flow orchestrator 串行创建风险）在 V1.2 中通过 Intake 一次性预创建 T1-T4 消除。
 
 ### 13.9 实现约束（Quick Flow 专用）
 
 - T1 task body 必须显式声明"本任务走 Quick Flow"和流程模式定义。
+- orchestrator 必须在 Intake 阶段一次性 `kanban_create` T1/T2/T3/T4，T2/T3/T4 通过 `parents` 保持 `todo`，由 dispatcher 自动 promote。
 - T1 产出的 DESIGN 文档必须包含自审清单（≥11 项），T4 Closeout 必须逐项执行。
 - orchestrator 不得在 Quick Flow 中自动跳过 Verify 阶段。
 - 若 Quick Flow 中途发现风险等级被低估，orchestrator 可升级为完整流程（补开 Design 独立 task 或 Review task）。
+
+### 13.10 衔接机制契约
+
+Quick Flow 的阶段衔接必须满足以下契约：
+
+| 编号 | 契约 | 必须 / 禁止 | 验证方式 |
+|---|---|---|---|
+| Q-LINK-001 | Intake 一次性创建 T1/T2/T3/T4 | 必须 | `kanban_show` / task thread 中可见 4 个 task id |
+| Q-LINK-002 | T1 初始可调度 | 必须 | T1 status=`ready` 或已被 claim 为 `running` |
+| Q-LINK-003 | T2/T3/T4 初始不可调度 | 必须 | T2/T3/T4 status=`todo` 且存在 parent links |
+| Q-LINK-004 | 后续 promote 由 Kanban DB 状态机完成 | 必须 | 前序 done 后无需新建 task，只发生 `todo→ready→running` 状态变化 |
+| Q-LINK-005 | 前序 done 后临时创建下一张 task | 禁止 | 若 task created_at 晚于 parent completed_at，Closeout 记录流程缺陷 |
+| Q-LINK-006 | orchestrator 主 session / watcher 是唯一衔接机制 | 禁止 | 任何通知丢失不得导致“下一张 task 不存在” |
+
+该契约与 RFC-10-004 §12.6 对齐，并由 DESIGN-10-004 §3.1 的时序图落地。Light Flow 不强制同步修订为四 task 链，但 Implement→Verify 也应优先使用 parent link 预创建，以降低同类断链风险。
+
+## 14. 版本修订说明
+
+- 当前版本：V1.2
+- 修订日期：2026-06-30
+- 修订摘要：Quick Flow 衔接机制由 orchestrator 串行创建后续 task 改为 Intake 一次性预创建 T1-T4，并新增 Q-LINK 衔接机制契约，要求 T2/T3/T4 以 parent links 预创建为 `todo` 后自动 promote。

@@ -101,3 +101,27 @@
 - T2: `t_e20d7bd9`
 - T3: `t_5ac8129d`
 - T4: (待 T3 done 后派)
+
+---
+
+## 修订追记：2026-06-30 Quick Flow V1.2 衔接机制改造
+
+> 本段为 V1.2 改造追记，**不动上方原文**（保留 2026-06-29 实施快照用于历史复盘）。
+
+**改造触发**：RFC-10-004 V1.2 / SPEC-10-004 V1.2 / DESIGN-10-004 V1.2 三份文档（任务 `t_7e9b1263`）将 Quick Flow 衔接机制从"orchestrator 串行创建后续 task"改为"Intake 一次性预创建 T1-T4"。新机制下：
+
+1. **Intake 阶段一次性创建 4 张 task**：T1 `ready`、T2/T3/T4 `todo` + parent links。同步落地到 `skills/infra/ai-coding-pipeline/SKILL.md` 的"## 编排顺序：Quick Flow"链路图与 `references/pipeline.md` 的"Quick Flow Kanban 任务链 + Quick Flow 衔接机制（Q-LINK 契约）"。
+2. **衔接契约（Q-LINK-001~006）**：必填 6 条契约由 SPEC-10-004 §13.10 提供，本节 6 条全数落到 `pipeline.md`。其中 Q-LINK-005/006 直接针对原机制（串行创建 + watcher 唯一衔接）的两个风险点。
+3. **task body 模板增量**：T1/T2/T3/T4 必须包含 `## 衔接机制声明` 段，`references/hermes-kanban-orchestration.md` 已提供通用模板 + Quick Flow 额外段 + Intake 一次性 `kanban_create` 示例。
+4. **P-12 新增**：DESIGN-10-004 §3.7 兼容性矩阵新增 P-12 行（Quick Flow 衔接风险），`MEMORY.md` 在 "Quick Flow 决策规则" 段补"P-12 监督信号"段，记录任务 `created_at` vs parent `completed_at` 检查。
+5. **同源化**：Quick Flow 与 Full Flow 共享同一套 Kanban 衔接机制（`recompute_ready` + `dispatch_once`），Quick Flow 仅在阶段数上比 Full Flow 少（去 Design 独立 task + Review 独立 task），衔接状态机完全一致。
+6. **SKILL.md 主动推进规则注释**：原 §355-360 "主动推进规则"段保留（仍用于 Full Flow T6 Closeout + 异常应急调度），新增注释说明 V1.2 起 Quick Flow 日常主进度推进不再依赖该规则。
+
+**T2 Implement 任务**（`t_6b9bf0d9`）：本任务对应本次改造的同步落地，已按 RFC/SPEC/Design V1.2 完成 6 个文件的最小范围修改（详见 T2 handoff）。
+
+**相关 Kanban Task IDs（V1.2 阶段）**：
+
+- T1 RFC/SPEC/Design V1.2：`t_7e9b1263`
+- T2 Implement（本次）：`t_6b9bf0d9`
+- T3 Verify：TBD（由 dispatcher 在 T2 done 后自动 promote）
+- T4 Closeout：TBD（由 dispatcher 在 T3 done 后自动 promote）

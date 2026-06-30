@@ -7,8 +7,8 @@
 | 状态 | 已采纳（Accepted） |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-06-27 |
-| 最后更新 | 2026-06-29 |
-| 版本号 | V1.1 |
+| 最后更新 | 2026-06-30 |
+| 版本号 | V1.2 |
 | 所属模块 | 10_infra（基础设施 / Hermes Kanban Pipeline） |
 | 依赖 RFC | RFC-10-003-infra-architecture |
 | 替代 RFC | 无 |
@@ -21,6 +21,7 @@
 |---|---|---|---|
 | V1.0 | 2026-06-27 | 初始创建，定义 AI Coding Pipeline skill canonical source、运行态副本保留策略与 worker 副本删除策略 | YQuant-Codex-Principal |
 | V1.1 | 2026-06-29 | 新增 §12 扩展：Quick Flow 5 阶段流程模式（Intake → RFC/SPEC/Design → Implement → Verify → Closeout） | YQuant-Codex-Principal |
+| V1.2 | 2026-06-30 | Quick Flow 衔接机制由 orchestrator 串行创建改为 Intake 一次性预创建 T1-T4，与 Full Flow 同源 | YQuant-Codex-Principal |
 
 ## 1. 执行摘要
 
@@ -315,6 +316,19 @@ T3 Verify             assignee=yquanttester      parents=[T2]
 T4 Closeout           assignee=<orchestrator>    parents=[T3]
 ```
 
+任务链创建时机：Quick Flow 的 4 张 Kanban task 必须在 Intake 阶段由 orchestrator 一次性预创建，而不是在前序任务 done 后临时串行创建下一张。创建结果必须满足：
+
+- T1 当下进入 `ready`，由 dispatcher 立即 claim/spawn。
+- T2/T3/T4 在同一次 Intake 编排中以 `todo` 状态入库。
+- T2 必须设置 `parents=[T1]`。
+- T3 必须设置 `parents=[T1, T2]` 或至少 `parents=[T2]`；推荐包含完整上游链以便审计。
+- T4 必须设置 `parents=[T1, T2, T3]` 或至少 `parents=[T3]`；推荐包含完整上游链以便 Closeout 读取完整前置产出。
+- 后续衔接依赖 Hermes Kanban DB 状态机（`task_links` + `recompute_ready` + `dispatch_once`）自动 promote+spawn，不依赖 orchestrator 主 session 持续存活。
+
+该规则来自 2026-06-30 yinglong Quick Flow 5h44m 卡死事件：当 Quick Flow 由 orchestrator 在每个阶段完成后临时创建下一张 task 时，任何 watcher 静默死亡、主 session 中断或通知丢失都会让链路停在“前序 done 但后序 task 尚不存在”的不可恢复状态。一次性预创建把衔接责任下沉到 Kanban DB 状态机，与完整流程同源。
+
+可执行契约见 SPEC-10-004 §13.1 / §13.10；实现时序图见 DESIGN-10-004 §3.1。
+
 对比完整流程：
 
 ```
@@ -326,11 +340,13 @@ T5 Review             assignee=yquantreviewer    parents=[T4]
 T6 Closeout           assignee=<orchestrator>    parents=[T5]
 ```
 
-关键差异：RFC/SPEC/Design 合并为 1 个 Kanban task，去掉了独立的 Design task 和 Review task，节省 2 个 Kanban task。
+关键差异：RFC/SPEC/Design 合并为 1 个 Kanban task，去掉了独立的 Design task 和 Review task，节省 2 个 Kanban task；但 Quick Flow 与完整流程一样，必须在 Intake 阶段一次性创建完整依赖链，不能把“创建下一阶段 task”交给进程层主动推进。
 
 ### 12.7 Closeout 自审清单（替代 Reviewer）
 
 由于 Quick Flow 无独立 Reviewer，orchestrator 在 Closeout 阶段必须执行自审清单（详见 DESIGN-10-004 §3.6），至少覆盖以下方面：
+
+衔接机制自审：Closeout 首先检查本次 Quick Flow 是否在 Intake 阶段一次性预创建 T1-T4，并确认 T2/T3/T4 的 parent links 均存在。若发现 T2/T3/T4 是在前序 done 后才临时创建，必须记录为流程缺陷；若该缺陷导致阶段延迟或断链，应补充复盘并禁止将该运行作为 Quick Flow 标准样例。
 
 - SPEC 契约与实际实现是否一致。
 - 文件改动清单是否符合 Design 预期。
@@ -351,6 +367,9 @@ T6 Closeout           assignee=<orchestrator>    parents=[T5]
 | Closeout 自审不充分，遗漏 Review 级别问题 | 中 | 中 | 自审清单 ≥10 项 + orchestrator 必须执行 | 发现遗漏后补开 Review task |
 | Quick Flow 误用于高风险场景 | 低 | 高 | Intake 阶段触发条件硬性检查（§12.3-§12.4） | orchestrator 可在任意阶段升级为完整流程 |
 | 三层文档质量因合并 task 而下降 | 中 | 中 | SPEC-10-004 Quick Flow 契约明确三层独立 + 结构完整 | T2 Implement 发现文档不足时退回 T1 |
+| orchestrator 串行创建后续 task 导致断链 | 中 | 高 | Intake 一次性预创建 T1-T4，依赖 DB 状态机自动 promote | 若已发生断链，立即补建缺失 task 并记录 P-12 复盘 |
+
+轻量流程（Light Flow）结构上 task 数更少、无三层文档阶段，串行创建风险低一个数量级；但其 Implement→Verify 衔接也应优先采用预创建 parent link，而不是依赖进程层持续在线。
 
 ## 13. 参考资料
 
@@ -359,3 +378,9 @@ T6 Closeout           assignee=<orchestrator>    parents=[T5]
 - `skills/infra/ai-coding-pipeline/references/document-layers.md`
 - `skills/infra/ai-coding-pipeline/references/spec-from-rfc.md`
 - Hermes Kanban worker lifecycle guidance
+
+## 14. 版本修订说明
+
+- 当前版本：V1.2
+- 修订日期：2026-06-30
+- 修订摘要：Quick Flow 衔接机制由 orchestrator 串行创建后续 task 改为 Intake 一次性预创建 T1-T4，并通过 Kanban DB parent links 与 dispatcher 自动 promote 机制衔接，与 Full Flow 同源。
