@@ -1161,6 +1161,32 @@ cd /home/pascal/workspace/yquant-investment && \
 
 **反例**：手动编辑 CSV 改 asset_name 字段再 `confirm-all` — 丢失 OCR 原始痕迹，且需要重跑 audit。
 
+#### P6a. `--name-mapping` 只能改 `asset_name`，不能改 `wind_code`（2026-06-30 实战）
+
+**场景**：OCR 把 `688008.SH` 误读成 `688808.SH`（中间一个 `0` 被读成 `8`）。`pending_review` 会标"OCR名称与Wind代码对应主数据名称不兼容"。但即使你 `--name-mapping '{"688808.SH": "澜起科技"}'`，**MongoDB 里写入的 `wind_code` 仍是 `688008.SH`**——这是错的，因为 wind_code 是数据 join 的唯一键。
+
+**正确处理 — 分两步**：
+
+```bash
+# 步骤 1：先 sed 改 CSV 里的 wind_code（保留审计痕迹）
+sed -i 's/688008\.SH,联讯仪器/688808.SH,联讯仪器/' \
+  /home/.../review_pending/portfolio_*_pending.csv
+
+# 步骤 2：用 --name-mapping 覆盖资产名称 + --confirm-all 放行
+.venv/bin/python skills/data/data-pipeline/scripts/load_pending_confirmed.py \
+  --csv "...pending.csv" \
+  --name-mapping '{"688808.SH": "联讯仪器"}' \
+  --confirm-all
+```
+
+**审计要求**：sed 改 CSV 字段必须记录在 `/tmp/pending_csv_audit_<date>.md`，注明：修改行 / 字段名 / 旧值 / 新值 / 原因（用户原话）。
+
+**长期修复**：把这次确认的映射加入 `scripts/stock_name_corrections.py`，下次 OCR 再误读会直接走 corrector 不进 pending。已知 wind_code 误读：
+
+- `688008.SH ↔ 688808.SH`（OCR 把 `0` 读成 `8`）→ 2026-06-30 用户确认映射到「联讯仪器（688808.SH）」
+- `000725.SZ` 全角 `京东方Ａ` vs 半角 `京东方A`（已写 corrector）
+- `601211.SH` 公司改名后主数据叫「XD国泰海」，OCR 读旧名「国泰君安」→ `--name-mapping` 覆盖
+
 **长期方案（阶段 2 用）**：把确认过的映射加入 `scripts/stock_name_corrections.py`，下次 OCR 识别直接修正，避免再卡 `pending_review`。已知映射：
 - `600259.SH → 中稀有色`（公司改名：原"广晟有色"，主数据已更名为"中稀有色"）
 - `000725.SZ → 京东方Ａ`（OCR 把全角 Ａ 读成半角 A，2026-06-29 实测）
