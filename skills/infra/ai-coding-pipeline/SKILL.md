@@ -298,7 +298,7 @@ T1/T2/T3 任意阶段，orchestrator 若发现：
 | T2 代码改动超出 Design §3.1 预期文件清单 | 实现者越界 | 退回 T2 缩小范围 |
 | T3 Verify 漏掉数据合理性抽样（业务字段错配、fixture 全空） | P-11 未落实 | 退回 T3 补跑端到端 smoke |
 | T4 Closeout 自审清单某项标注 ❌ 但仍 continue | 自审被敷衍 | 不允许 closeout，补完再 T4 |
-| T2/T3 完成后状态变 `blocked` 而非 `done` | P-5 worker 误 block | 直接 unblock（见 P-5 修复路径） |
+| T2/T3 完成后状态变 `blocked` 而非 `done` | P-5 worker 误 block（最常见：`残余风险待确认` ≠ block 理由） | **判定 P-5 决策树**：验收 PASS 但有残余风险 → 直接 `done` + 风险进 `summary`/`metadata.residual_risks`。仅 FAIL 才 block。orchestrator 发现误 block 立刻 `kanban_unblock` + 必要时手动 `kanban_complete` 标 done |
 
 P-1~P-13 pitfalls **在 Quick Flow 中全部继续适用**（DESIGN-10-004 §3.7 兼容性矩阵，含 V1.2 新增的 P-12 orchestrator 串行调度风险 + 2026-07-01 新增的 P-1c worker profile `external_dirs` 必须覆盖目标项目 skills 目录），无例外。
 
@@ -374,6 +374,15 @@ Orchestrator 在以下任一信号出现时，**必须立即**派下一阶段任
 - ❌ "T2 done 了，要不要我派 T3？"（应直接派）
 - ❌ "等您确认"（仅在 REVISE/高风险时等）
 - ❌ "我先等您问"（违反主动推进）
+
+**worker 误 block 的主动补救**（2026-07-06 新增，与 P-5 联动）：orchestrator 必须监控 T1-T4 task 的 `status='blocked'` 事件。**任何 `blocked` reason 出现以下特征时，立刻按 P-5 决策树判定**：
+- "等 T4 启动 + 人类确认是否接受 XXX 限制" → **典型误 block**，残余风险属于 done 的 summary
+- "残余 High 风险待拍板" → **典型误 block**，除非风险**真正阻断后续阶段**
+- "建议 yquantprincipal/yquantreviewer 介入" → **越权**，worker 不应替 Reviewer 预告
+
+**补救 SOP**：发现误 block 立刻执行 `kanban_unblock(task_id)` + 必要时 `kanban_complete(summary=..., metadata={residual_risks: [...]})` 手动标 done，并在 Closeout 报告里记录事件。
+
+**预防**：编排层派 task 时，**显式在 body 顶部写明 P-5 完成判定**（见 P-5 决策树 § task body 应有的明确指令 段），让 worker 无歧义。
 
 ### 不同 REVISE 严重度的处理方式
 
@@ -684,6 +693,8 @@ kanban_create(
 
 **观察**（2026-06-27 实战）：T3' 修复完后 worker blocked 26 分钟无人 unblock，T4' 一直 `todo`，用户问"为什么慢"才暴露问题。
 
+**观察**（2026-07-06 实测，yinglong V1.2 T3）：yquanttester worker 跑完 T3 验证（单测 43/43 + e2e 3 命令 exit 0 + 数据 7/7 PASS + 性能 3 项达标 + 向后兼容 PASS），**仍用 `review-required:` blocked**，reason 写"等 T4 启动 + 人类确认是否接受 V1.2 fixture 限制 + 残余 High 风险是否阻塞上线"。**等用户拍板 4 天未动，T4 永远不会被 dispatcher 自动 promote**。**这是 P-5 错误行为的教科书级反例**：worker 把"残余风险已知 + 不阻塞后续"误判为"必须 human 拍板"。
+
 **修复**（worker 行为约束）：
 
 1. **worker 完成后应直接 `kanban_complete(..., summary=...)` 并 `status="done"`，不要 `review-required:` 标记 blocked**。**Reviewer 阶段本身就是独立 review**——不需要 worker 替 reviewer 预告。
@@ -700,6 +711,38 @@ kanban_create(
 - T1-T5 状态全部 `done`？
 - 没有遗留 `blocked` / `running` 但无 heartbeat 的孤儿任务？
 - 如果有，立刻 unblock 或归档。
+
+#### block vs done 决策树（worker 行为约束，2026-07-06 新增）
+
+**核心问题**：worker 跑完验证后，应选 `done` 还是 `blocked`？判定标准：
+
+| 完成情况 | 状态选择 | 理由 |
+|---|---|---|
+| 验收标准 PASS + 残余风险已知但不阻塞 + 无 Reviewer 子任务 | **`done`** | dispatcher 自动 promote 下一阶段；残余风险写进 `summary` 或 `metadata.residual_risks` |
+| 验收标准 FAIL（测试不通过 / 数据错配 / 代码未跑通） | **`blocked`** | 真正阻塞，需 orchestrator 介入修复 |
+| 高风险变更需 human 拍板（生产 schema / 凭据 / 跨产品影响） | **`blocked`** | 需人类判断才放行 |
+| 已创建 Reviewer 子任务并 `parents` 串联 | **`blocked`** | worker 预告 Reviewer 介入是合法的 |
+| **残余 High 风险待 human 拍板**（如真实 e2e 凭证缺失、依赖未验证） | **`done` + 写进 `residual_risks`** | **不构成 block 理由**！除非这个风险**阻断后续阶段** |
+| 验收 PASS 但 worker 自己"觉得"需要确认 | **`done`** | worker 替 Reviewer 预告是越权 |
+
+**P-5 黄金法则**：
+
+> **PASS = done（残余风险进 summary/metadata）；FAIL = blocked（写明失败原因 + 哪条验收不达标）。** 两类结果之间不存在中间态。如果 worker 觉得有"需要确认的事"，写进 `summary` 的 "已交付但需确认项" 段，让 Reviewer 阶段或人类在 Closeout 时统一处理。
+
+**判定流程**（worker 写 `kanban_complete` 前的自检）：
+1. 跑一遍 task body 列出的验收标准 → 全 PASS？
+2. 如果全 PASS → 残余风险是"已知但不阻塞"还是"真正阻塞后续"？
+3. 已知不阻塞 → `done` + 风险进 `summary`
+4. 真正阻塞 → `blocked` + 写明阻塞原因 + 哪条验收待补
+5. 验收 FAIL → `blocked` + 写明哪条 FAIL + 期望值 vs 实际值
+
+**task body 应有的明确指令**（orchestrator 派卡时建议写入）：
+```
+完成后状态选择：
+- 验收标准全 PASS → kanban_complete(status="done", summary=..., metadata={residual_risks: [...]})
+- 任何验收 FAIL → kanban_complete(status="blocked", reason="<哪条 FAIL + 期望 vs 实际>")
+- 不要因"残余风险待确认"使用 blocked——残余风险属于 done 的 summary/metadata
+```
 
 **与 P-2 的关系**：worker 也会因 dispatcher 透明 fallback 跑错模型而 hidden 失败，状态可能误标 `done`。P-5 关注**状态机正确**；P-2 关注**完成的内容质量**。两者都需要监控。
 

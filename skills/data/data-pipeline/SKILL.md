@@ -8,6 +8,8 @@ description: YQuant 数据管道框架。所有外部数据（API采集、文件
 >
 > **📌 Image Pipeline 实战笔记**：`references/image-pipeline-workflow.md` 记录 Smart Money 图片入库的完整实操流程、3 个日期概念辨析、孤儿 CSV 现象、NAV 字段名坑（`aum` 不是 `scale`）、`--date` 已删除等本会话踩过的坑。新会话涉及图片入库前先看这个文件。
 >
+> **📌 `--confirm-all` 副作用 & pending 处理新坑（2026-07-06）**：`references/pending-confirm-all-pitfalls-2026-07-06.md` — P10 `--confirm-all` 把 CSV 所有待确认行一并放行（含 missing_master）；P11 `--name-mapping` 给 missing_master 会写"幽灵记录"；P12 入库前先查 MongoDB；P13 wind_code 错误修复必须 sed 改 CSV + 删 DB 旧记录；P14 `stock_basic_info` 字段名是 `full_symbol` 不是 `code`。新会话涉及 pending CSV 处理前必看。
+>
 > **📌 Agent 反模式清单（2026-06-26 用户明确反馈）**：`references/agent-overengineering-anti-patterns.md` 记录 9 条「agent 不要 over-engineer」反模式 — 收到图片后**只归档 + 跑 pipeline**，不要 vision 读图、不要 md5 去重、不要 sanity check、不要替用户决定并发/配额/降级、不要替用户猜 product_code 命名。新会话涉及图片入库前必看。
 >
 > **📌 图片入库多批推送实战（2026-06-27）**：`references/image-pipeline-multi-batch-2026-06-27.md` 记录用户分多批（9:46 + 10:02 + 10:10）推同一批持仓截图时，agent 如何区分"归档 vs 已跑 pipeline"、MongoDB 业务日期字段实际是字符串而非 datetime、OCR 输出全角括号 `市值（本币）` 导致 loader KeyError 的临时修复。另含 `check_pending_pipeline_runs.py` 时间戳解析坑、贪心匹配 bug（Pass 1 精确匹配优先）、跨日期 hash 查找、xlsx marker 技术。
