@@ -8,7 +8,11 @@ description: YQuant 数据管道框架。所有外部数据（API采集、文件
 >
 > **📌 Image Pipeline 实战笔记**：`references/image-pipeline-workflow.md` 记录 Smart Money 图片入库的完整实操流程、3 个日期概念辨析、孤儿 CSV 现象、NAV 字段名坑（`aum` 不是 `scale`）、`--date` 已删除等本会话踩过的坑。新会话涉及图片入库前先看这个文件。
 >
-> **📌 `--confirm-all` 副作用 & pending 处理新坑（2026-07-06）**：`references/pending-confirm-all-pitfalls-2026-07-06.md` — P10 `--confirm-all` 把 CSV 所有待确认行一并放行（含 missing_master）；P11 `--name-mapping` 给 missing_master 会写"幽灵记录"；P12 入库前先查 MongoDB；P13 wind_code 错误修复必须 sed 改 CSV + 删 DB 旧记录；P14 `stock_basic_info` 字段名是 `full_symbol` 不是 `code`。新会话涉及 pending CSV 处理前必看。
+> **📌 `--confirm-all` 副作用 & pending 处理新坑（2026-07-06 + 2026-07-07）**：`references/pending-confirm-all-pitfalls-2026-07-06.md` — P10 `--confirm-all` 把 CSV 所有待确认行一并放行（含 missing_master）；P11 `--name-mapping` 给 missing_master 会写"幽灵记录"；P12 入库前先查 MongoDB；P13 wind_code 错误修复必须 sed 改 CSV + 删 DB 旧记录；P14 `stock_basic_info` 字段名是 `full_symbol` 不是 `code`；P15 OCR trade 数据 product_code 截断（`SM003`→`SM03`）必须直接 MongoDB `update_many`，无 pending CSV 路径；P16 `status='skip'` 在 `--confirm-all` 下脚本忽略，必须 `delete_many` + sed 改 wind_code；P17（07-07）幽灵记录产生的根因是 P11+P16 叠加 — 真要跳过某行不要寄希望于 status 字段，直接 delete。**新会话涉及 pending CSV 处理前必看**。
+>
+> **📌 `--confirm-all` 续坑 & trade / skip 状态新坑（2026-07-07）**：`references/pending-confirm-all-extended-pitfalls-2026-07-07.md` — P15-P17 完整展开（含 MongoDB `update_many` 修正 trade product_code 代码、`sed -i '/key/d'` 物理删除 CSV、`delete_many` + 重新入库标准三步流程），与 P10-P14 是连续系列文档。
+>
+> **📌 全角/半角 unicode 字符漂移（2026-07-07 修复）**：`references/fullwidth-halfwidth-unicode-normalization.md` — `normalize_name_for_match` 缺 NFKC 归一化导致 `Ａ`(U+FF21) vs `A`(U+0041) 永远不相等，京东方A 类全角字符反复卡 pending_review。修复点：`scripts/transformers/a_share_name_corrector.py` 的 `normalize_name_for_match()` 在 `.upper()` 之前先 `unicodedata.normalize("NFKC", value)`。新会话涉及 OCR/字符归一化时必看。
 >
 > **📌 Agent 反模式清单（2026-06-26 用户明确反馈）**：`references/agent-overengineering-anti-patterns.md` 记录 9 条「agent 不要 over-engineer」反模式 — 收到图片后**只归档 + 跑 pipeline**，不要 vision 读图、不要 md5 去重、不要 sanity check、不要替用户决定并发/配额/降级、不要替用户猜 product_code 命名。新会话涉及图片入库前必看。
 >

@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import re
 import sys
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +45,10 @@ def normalize_name_for_match(name: Any) -> str:
     value = str(name or "").strip()
     if not value or value.lower() in {"nan", "none"}:
         return ""
+    # NFKC normalization: fullwidth ASCII (e.g. Ａ U+FF21) → ASCII (A U+0041).
+    # Without this, OCR reads of half-width A vs master-data full-width Ａ
+    # never match (2026-07-07 root cause: 京东方A pending_review repeatedly).
+    value = unicodedata.normalize("NFKC", value)
     value = _NOISE_CHARS_RE.sub("", value.upper())
     value = _CORPORATE_ACTION_PREFIX_RE.sub("", value)
     return value
