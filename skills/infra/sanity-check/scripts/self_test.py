@@ -5,7 +5,7 @@ Runs with stdlib only (pathlib, subprocess, tempfile, decimal, datetime).
 Does not connect to real MongoDB; does not send external messages.
 
 Usage:
-    python3 skills/quality/sanity-check/scripts/self_test.py
+    python3 skills/infra/sanity-check/scripts/self_test.py
 
 Success prints "sanity-check self-test: PASS" and exits 0.
 Failure raises AssertionError / SanityCheckError and exits non-zero.

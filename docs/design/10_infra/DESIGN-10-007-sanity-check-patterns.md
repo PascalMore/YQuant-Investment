@@ -10,12 +10,12 @@
 | 最后更新 | 2026-07-08 |
 | 来源 RFC | RFC-10-007-sanity-check-patterns |
 | 来源 SPEC | SPEC-10-007-sanity-check-patterns |
-| 目标模块 | `skills/quality/sanity-check/` |
+| 目标模块 | `skills/infra/sanity-check/` |
 | Quick Flow | T1=`t_a4539961`; T2=`t_46c017a3`; T3=`t_649d0695`; T4=`t_bfcef8a4` |
 
 ## 1. 设计摘要
 
-本 Design 将 RFC/SPEC-10-007 落为 T2 Developer 可直接执行的最小实现方案。T2 的目标不是修复历史业务代码，而是在 `skills/quality/sanity-check/` 新增一个可加载、可自测、可复制模板的 Hermes skill。
+本 Design 将 RFC/SPEC-10-007 落为 T2 Developer 可直接执行的最小实现方案。T2 的目标不是修复历史业务代码，而是在 `skills/infra/sanity-check/` 新增一个可加载、可自测、可复制模板的 Hermes skill。
 
 核心设计原则：
 
@@ -49,11 +49,11 @@ P1 反例：
 
 T2 Implement 只允许新增以下 5 个 skill 文件；不得修改历史业务代码。
 
-1. `skills/quality/sanity-check/SKILL.md`
-2. `skills/quality/sanity-check/references/templates.md`
-3. `skills/quality/sanity-check/references/fail-fast-vs-warn.md`
-4. `skills/quality/sanity-check/references/examples.md`
-5. `skills/quality/sanity-check/scripts/self_test.py`
+1. `skills/infra/sanity-check/SKILL.md`
+2. `skills/infra/sanity-check/references/templates.md`
+3. `skills/infra/sanity-check/references/fail-fast-vs-warn.md`
+4. `skills/infra/sanity-check/references/examples.md`
+5. `skills/infra/sanity-check/scripts/self_test.py`
 
 T1 已创建的文档文件：
 
@@ -221,13 +221,13 @@ if __name__ == "__main__":
 
 T2 推荐顺序：
 
-1. 创建目录：`skills/quality/sanity-check/{references,scripts}`。
+1. 创建目录：`skills/infra/sanity-check/{references,scripts}`。
 2. 写 `SKILL.md`，先保证 Hermes skill metadata 可解析。
 3. 写 `references/templates.md`，从 SPEC §5 搬运并整理 6 个模板。
 4. 写 `references/fail-fast-vs-warn.md`。
 5. 写 `references/examples.md`，录入 3 条 P0 + 2 条 P1。
 6. 写 `scripts/self_test.py`。
-7. 运行 `python3 skills/quality/sanity-check/scripts/self_test.py`。
+7. 运行 `python3 skills/infra/sanity-check/scripts/self_test.py`。
 8. 可选运行 `hermes -p yquantdeveloper chat --skills sanity-check -q '只回复 OK'` 验证 skill loader；如果环境不允许，至少用文件存在 + self_test 替代。
 
 ## 6. 验证计划
@@ -236,15 +236,15 @@ T2 自检：
 
 ```bash
 cd /home/pascal/workspace/yquant-investment
-python3 skills/quality/sanity-check/scripts/self_test.py
+python3 skills/infra/sanity-check/scripts/self_test.py
 python3 - <<'PY'
 from pathlib import Path
 required = [
-  'skills/quality/sanity-check/SKILL.md',
-  'skills/quality/sanity-check/references/templates.md',
-  'skills/quality/sanity-check/references/fail-fast-vs-warn.md',
-  'skills/quality/sanity-check/references/examples.md',
-  'skills/quality/sanity-check/scripts/self_test.py',
+  'skills/infra/sanity-check/SKILL.md',
+  'skills/infra/sanity-check/references/templates.md',
+  'skills/infra/sanity-check/references/fail-fast-vs-warn.md',
+  'skills/infra/sanity-check/references/examples.md',
+  'skills/infra/sanity-check/scripts/self_test.py',
 ]
 for p in required:
     assert Path(p).exists(), p
@@ -265,7 +265,7 @@ T3 Verify 必须：
 因为 T2 只新增 isolated skill 文件，回滚方式简单：
 
 ```bash
-rm -rf skills/quality/sanity-check
+rm -rf skills/infra/sanity-check
 ```
 
 若 T2 意外修改历史业务代码，Reviewer / Closeout 应要求回滚越界 diff，只保留本 Design §3 文件清单内的新增文件。
@@ -290,14 +290,14 @@ T2 完成时 summary / metadata 应包含：
 ```json
 {
   "changed_files": [
-    "skills/quality/sanity-check/SKILL.md",
-    "skills/quality/sanity-check/references/templates.md",
-    "skills/quality/sanity-check/references/fail-fast-vs-warn.md",
-    "skills/quality/sanity-check/references/examples.md",
-    "skills/quality/sanity-check/scripts/self_test.py"
+    "skills/infra/sanity-check/SKILL.md",
+    "skills/infra/sanity-check/references/templates.md",
+    "skills/infra/sanity-check/references/fail-fast-vs-warn.md",
+    "skills/infra/sanity-check/references/examples.md",
+    "skills/infra/sanity-check/scripts/self_test.py"
   ],
   "tests": {
-    "self_test": "python3 skills/quality/sanity-check/scripts/self_test.py"
+    "self_test": "python3 skills/infra/sanity-check/scripts/self_test.py"
   },
   "scope_guard": "historical business code not modified"
 }
@@ -313,7 +313,7 @@ T2 完成时 summary / metadata 应包含：
 | 6 个模板完整 | 读取 `templates.md`，确认 6 个模板名、代码块和错误消息格式 |
 | Fail-fast vs warn 决策表 | 读取 `references/fail-fast-vs-warn.md` |
 | 至少 3 条 P0 反例 | 读取 `references/examples.md`，确认 EX-P0-001/002/003 |
-| self_test 通过 | `python3 skills/quality/sanity-check/scripts/self_test.py` exit 0 |
+| self_test 通过 | `python3 skills/infra/sanity-check/scripts/self_test.py` exit 0 |
 | 无越界修改 | `git diff --name-only` 只包含 Design §3 允许文件 + T1 文档 |
 
 ## 11. 残余风险

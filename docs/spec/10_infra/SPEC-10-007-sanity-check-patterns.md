@@ -15,7 +15,7 @@
 
 ## 1. 需求摘要
 
-本 SPEC 将 RFC-10-007 的 sanity check 标准模式落为可执行、可测试的 skill 契约。目标是在 `skills/quality/sanity-check/` 新增一个可复用 skill，沉淀 6 个常用模板、fail-fast vs warn 决策表和真实反例目录。
+本 SPEC 将 RFC-10-007 的 sanity check 标准模式落为可执行、可测试的 skill 契约。目标是在 `skills/infra/sanity-check/` 新增一个可复用 skill，沉淀 6 个常用模板、fail-fast vs warn 决策表和真实反例目录。
 
 本 SPEC 的直接消费者是 T2 Developer。T2 不需要重新扫描仓库即可实现 skill；所有必须行为、文件路径、模板接口和验收标准均在本文件定义。
 
@@ -23,11 +23,11 @@
 
 ### 2.1 In Scope
 
-- 新增 `skills/quality/sanity-check/SKILL.md`。
-- 新增 `skills/quality/sanity-check/references/templates.md`，包含 6 个模板的完整 Python 示例。
-- 新增 `skills/quality/sanity-check/references/fail-fast-vs-warn.md`，包含选择准则与决策表。
-- 新增 `skills/quality/sanity-check/references/examples.md`，包含真实反例目录，至少 3 条 P0。
-- 新增 `skills/quality/sanity-check/scripts/self_test.py`，对模板核心函数做标准库级 smoke test。
+- 新增 `skills/infra/sanity-check/SKILL.md`。
+- 新增 `skills/infra/sanity-check/references/templates.md`，包含 6 个模板的完整 Python 示例。
+- 新增 `skills/infra/sanity-check/references/fail-fast-vs-warn.md`，包含选择准则与决策表。
+- 新增 `skills/infra/sanity-check/references/examples.md`，包含真实反例目录，至少 3 条 P0。
+- 新增 `skills/infra/sanity-check/scripts/self_test.py`，对模板核心函数做标准库级 smoke test。
 - 不新增第三方依赖。
 
 ### 2.2 Out of Scope
@@ -42,7 +42,7 @@
 T2 必须创建以下结构：
 
 ```text
-skills/quality/sanity-check/
+skills/infra/sanity-check/
 ├── SKILL.md
 ├── references/
 │   ├── templates.md
@@ -406,7 +406,7 @@ def mongo_connection_check(boundary: MongoBoundary, *, connection_string: str | 
 `self_test.py` 必须：
 
 - 仅使用 Python 标准库。
-- 可直接运行：`python3 skills/quality/sanity-check/scripts/self_test.py`。
+- 可直接运行：`python3 skills/infra/sanity-check/scripts/self_test.py`。
 - 至少覆盖：
   - unknown interface arg fail-fast；
   - missing read file fail-fast；
@@ -425,7 +425,7 @@ T2 完成后必须满足：
 - [ ] `templates.md` 包含本 SPEC 六个模板的完整代码，且模板名完全一致。
 - [ ] `fail-fast-vs-warn.md` 包含 §4 决策表等价内容。
 - [ ] `examples.md` 至少包含 3 条 P0 反例，带文件:行号。
-- [ ] `python3 skills/quality/sanity-check/scripts/self_test.py` exit 0。
+- [ ] `python3 skills/infra/sanity-check/scripts/self_test.py` exit 0。
 - [ ] 不修改历史业务代码，不新增依赖，不连接真实 MongoDB，不发送外部消息。
 
 ## 9. 残余风险
