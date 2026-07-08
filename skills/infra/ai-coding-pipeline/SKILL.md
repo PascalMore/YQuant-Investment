@@ -9,6 +9,19 @@ description: "用于 YQuant 或应龙项目非平凡工程任务的七阶段 AI 
 
 除非用户明确要求走流水线，否则普通问答、极小拼写修正、只读查询不需要触发本 skill。
 
+## 配套 skill：sanity-check
+
+T2/T3 worker 在写以下代码时，应当额外加载 `sanity-check` skill（`skills/infra/sanity-check/`）以复用 6 个标准模板：
+
+- CLI 参数 / argparse 新参数 → `interface_arg_check`
+- 文件 / 目录读写路径 → `file_existence_check`
+- 字符串 → 数值 / 布尔 / 日期转换 → `type_coercion_check`
+- `position_date` / `nav_date` / `trade_date` 等 YYYY-MM-DD 字段 → `date_format_check`
+- 升级 / auto-push / 仓库操作前置条件 → `git_state_check`
+- MongoDB 连接 / database / collection 边界 → `mongo_connection_check`
+
+sanity-check 关注的是「数据流入业务逻辑之前的最后一道闸门」。它与本文档的「P-1~P-13 Pitfalls」**正交**——P-* 描述的是流水线机制坑（worker crash、fallback 透明、parent link 断链等），不会被吸收或替代。两套指引并行生效，需要同时遵守。
+
 ## Hermes 执行模型
 
 本流水线在 Hermes 中使用 **Kanban profile worker** 执行。
