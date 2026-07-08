@@ -1,0 +1,13 @@
+# Pascal fork private patches tracked by YQuant Hermes upgrade tooling.
+# Schema owner: docs/spec/10_infra/SPEC-10-006-hermes-upgrade-script-v2.md
+schema_version: 2
+patches:
+  - id: feishu-markdown-table
+    title: "fix(feishu): render markdown tables via interactive card"
+    commit: "4d3a9661c"
+    branch: "fix/feishu-table-card"
+    upstream_pr: null
+    upstream_merged: false
+    file_globs:
+      - "plugins/platforms/feishu/adapter.py"
+    notes: "interactive card 替代 plain text 降级；升级后需核对 upstream 是否已接纳同等修复。"

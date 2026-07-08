@@ -60,6 +60,11 @@ class UpgradeConfig:
     yes: bool
     verbose: bool
     hermes_bin: Path = Path(DEFAULT_HERMES_BIN)
+    # V2 增量字段（DESIGN-10-006 §3.2 / SPEC-10-006 §4.2）：
+    # 默认值与 V1.0 行为完全等价。
+    branch: str = "main"
+    preserve_features: bool = False
+    patches_manifest: Optional[Path] = None
 
 
 @dataclass
@@ -91,6 +96,43 @@ class GitPlan:
     merge_mode: str  # already-up-to-date | ff-only | merge
     local_commits_need_protection: bool
     diverged: bool = False
+
+
+# ---------------------------------------------------------------------------
+# V2 patch manifest 数据结构（DESIGN-10-006 §3.2 / SPEC-10-006 §4.4）
+# ---------------------------------------------------------------------------
+
+
+# V2 默认 schema_version；V1 schema_version=1 仍可读。
+PATCH_MANIFEST_SCHEMA_VERSION_CURRENT = 2
+
+
+@dataclass(frozen=True)
+class PatchEntry:
+    id: str
+    title: str
+    commit: str
+    branch: str
+    upstream_pr: Optional[str]
+    upstream_merged: bool
+    file_globs: list
+    notes: str = ""
+
+
+@dataclass
+class PatchesManifest:
+    schema_version: int
+    patches: list  # list[PatchEntry]
+
+
+@dataclass
+class PatchStatus:
+    id: str
+    upstream_merged_manifest: bool
+    upstream_contains_commit: bool
+    upstream_contains_patch_id: bool
+    status: str  # merged | possibly-merged | pending | unknown
+    reason: str
 
 
 # ---------------------------------------------------------------------------
@@ -264,6 +306,426 @@ def _record_command(manifest: Optional[list], result: CommandResult, verbose: bo
 
 
 # ---------------------------------------------------------------------------
+# V2 patch manifest 读取与核对（DESIGN-10-006 §3.6-§3.7 / SPEC-10-006 §5.3）
+# ---------------------------------------------------------------------------
+
+
+def _load_yaml_subset(path: Path) -> dict:
+    """读取 YAML，优先用 optional PyYAML，不可用时用受控 stdlib fallback。
+
+    fallback 只支持 Pascal fork 私有 patch manifest 的最小子集：
+      - 顶层 schema_version (int / 数字字符串)
+      - 顶层 patches (list)
+      - 每个 patch 的 id/title/commit/branch/upstream_pr/upstream_merged/file_globs/notes
+    解析失败返回空 dict，由调用方以 warning 处理。
+    """
+    text = path.read_text(encoding="utf-8")
+    try:
+        import yaml  # type: ignore  # optional, no new dependency
+        try:
+            data = yaml.safe_load(text) or {}
+            if not isinstance(data, dict):
+                return {}
+            return data
+        except Exception:
+            pass  # fallback below
+    except Exception:
+        pass
+    # stdlib fallback —— 只解析本 manifest 实际使用的子集。
+    return _parse_simple_patches_yaml(text)
+
+
+def _parse_simple_patches_yaml(text: str) -> dict:
+    """受限 YAML 子集 parser，只支持本项目 manifest 中出现的结构。
+
+    限制：
+      - 2 层嵌套：顶层 key + patches list 项（每个 item 是 mapping）
+      - list item 下允许 1 层子列表（file_globs 等）
+      - 字符串值支持双引号/无引号；空值 = null
+      - 不支持 multiline / anchors / 3 层及以上嵌套
+    解析失败返回空 dict。
+    """
+    out: dict = {}
+
+    def _strip_val(v: str):
+        v = v.strip()
+        if not v:
+            return None
+        if (v.startswith('"') and v.endswith('"')) or (
+            v.startswith("'") and v.endswith("'")
+        ):
+            return v[1:-1]
+        if v.lower() in ("true", "yes"):
+            return True
+        if v.lower() in ("false", "no"):
+            return False
+        if v.lower() in ("null", "~"):
+            return None
+        return v
+
+    # 状态机：
+    #   "top"           —— 顶层；等待 top-level key
+    #   ("list", key,
+    #     indent,        —— 当前 list 项 "key:" 的缩进（决定子列表起点缩进）
+    #     items)         —— 已收集的 list 项（dict 列表）
+    # 在 list 状态下：
+    #   - 同缩进的 "- key: value" → 新 list item（新 dict，先写入第一个 key）
+    #   - 同缩进的 "- value" → 父级 key 的子列表元素（需先找到父 key）
+    #   - 父缩进的 "key: value" → 写入当前最后一个 dict item
+    #   - 父缩进的 "key:" (空值) → 准备进入子列表，下一个 "- value" 归属这个 key
+    state = "top"
+    list_key = None
+    list_indent = 0
+    items: list = []
+    cur_item: Optional[dict] = None
+    cur_child_key: Optional[str] = None
+    cur_child_indent = 0
+
+    def _flush_list():
+        nonlocal list_key, list_indent, items, cur_item, cur_child_key, cur_child_indent
+        if list_key is not None:
+            out[list_key] = items
+        list_key = None
+        list_indent = 0
+        items = []
+        cur_item = None
+        cur_child_key = None
+        cur_child_indent = 0
+
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip()
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip())
+        stripped = line.strip()
+
+        if state == "top":
+            if indent == 0 and ":" in stripped:
+                key, _, val = stripped.partition(":")
+                key = key.strip()
+                val = val.strip()
+                if val == "":
+                    # 可能进入 list（由下一行是否 "- " 决定）
+                    out[key] = None
+                    state = "expect_list"
+                    list_key = key
+                    list_indent = 0
+                    items = []
+                    cur_item = None
+                    cur_child_key = None
+                else:
+                    out[key] = _strip_val(val)
+        elif state == "expect_list":
+            # 紧跟 "key:" 的下一行；如果是 "- "，进入 list
+            if stripped.startswith("- "):
+                state = "in_list"
+                # 新 list item
+                item_inline = stripped[2:].strip()
+                cur_item = {}
+                if ":" in item_inline:
+                    k, _, v = item_inline.partition(":")
+                    cur_item[k.strip()] = _strip_val(v)
+                # else: 形如 "- value" 的 list item 顶层 entry（manifest 不支持）
+                list_indent = indent
+                cur_child_key = None
+                cur_child_indent = 0
+                items.append(cur_item)
+            elif indent == 0 and ":" in stripped:
+                # list 没起来；回到 top
+                _flush_list()
+                state = "top"
+                key, _, val = stripped.partition(":")
+                key = key.strip()
+                val = val.strip()
+                if val == "":
+                    out[key] = None
+                    state = "expect_list"
+                else:
+                    out[key] = _strip_val(val)
+        elif state == "in_list":
+            if indent == 0:
+                # 新顶层 key —— 收尾当前 list
+                _flush_list()
+                state = "top"
+                key, _, val = stripped.partition(":")
+                key = key.strip()
+                val = val.strip()
+                if val == "":
+                    out[key] = None
+                    state = "expect_list"
+                else:
+                    out[key] = _strip_val(val)
+            elif stripped.startswith("- "):
+                # 子列表元素 vs 新 list item，靠 indent 判断
+                # 新 list item 的 indent == list_indent；子列表元素 indent > list_indent
+                if indent == list_indent and cur_child_key is None:
+                    # 同 indent 再次 "- "，说明上一项已结束；新 list item
+                    item_inline = stripped[2:].strip()
+                    cur_item = {}
+                    if ":" in item_inline:
+                        k, _, v = item_inline.partition(":")
+                        cur_item[k.strip()] = _strip_val(v)
+                    cur_child_key = None
+                    cur_child_indent = 0
+                    items.append(cur_item)
+                elif cur_item is not None and cur_child_key is not None:
+                    # 子列表元素：归属 cur_child_key 列表
+                    value = stripped[2:].strip()
+                    existing = cur_item.get(cur_child_key)
+                    if isinstance(existing, list):
+                        existing.append(_strip_val(value))
+                    elif existing is None:
+                        cur_item[cur_child_key] = [_strip_val(value)]
+                    else:
+                        # 已有非 list 值，合并成 list
+                        cur_item[cur_child_key] = [existing, _strip_val(value)]
+                else:
+                    # 既没有当前 item 也没有 child key —— 忽略
+                    continue
+            elif ":" in stripped:
+                key, _, val = stripped.partition(":")
+                key = key.strip()
+                val = val.strip()
+                if val == "":
+                    # 空值：进入子列表模式
+                    cur_child_key = key
+                    cur_child_indent = indent
+                    if cur_item is not None:
+                        cur_item[key] = None
+                else:
+                    # 写入当前 item
+                    if cur_item is not None:
+                        cur_item[key] = _strip_val(val)
+                        cur_child_key = None
+
+    _flush_list()
+
+    if "patches" in out and not isinstance(out["patches"], list):
+        out["patches"] = []
+    if "patches" not in out:
+        out["patches"] = []
+    return out
+
+
+def load_patches_manifest(path: Path):
+    """从 path 读取 patches manifest。
+
+    返回 PatchesManifest；解析失败抛 ValueError，由调用方用 safe wrapper 处理。
+    """
+    raw = _load_yaml_subset(path)
+    if not raw:
+        raise ValueError("patches manifest 解析为空或失败")
+    schema_raw = raw.get("schema_version", 1)
+    try:
+        schema = int(schema_raw)
+    except (TypeError, ValueError):
+        schema = 1
+    entries = []
+    for item in (raw.get("patches") or []):
+        if not isinstance(item, dict):
+            continue
+        globs = item.get("file_globs") or []
+        if isinstance(globs, str):
+            globs = [globs]
+        elif not isinstance(globs, list):
+            globs = []
+        try:
+            entry = PatchEntry(
+                id=str(item.get("id") or "").strip(),
+                title=str(item.get("title") or "").strip(),
+                commit=str(item.get("commit") or "").strip(),
+                branch=str(item.get("branch") or "").strip(),
+                upstream_pr=item.get("upstream_pr"),
+                upstream_merged=bool(item.get("upstream_merged")),
+                file_globs=[str(g) for g in globs],
+                notes=str(item.get("notes") or ""),
+            )
+        except Exception as exc:
+            # field-level failure → skip this entry with warning
+            log_warn(f"patches manifest: 跳过非法条目 ({exc})")
+            continue
+        if not entry.id:
+            continue
+        entries.append(entry)
+    return PatchesManifest(schema_version=schema, patches=entries)
+
+
+def load_patches_manifest_safe(path):
+    """safe wrapper：缺失/解析失败返回 None + warning。"""
+    if path is None:
+        return None
+    if not path.exists():
+        log_warn(f"patches manifest 不存在，跳过核对: {path}")
+        return None
+    try:
+        return load_patches_manifest(path)
+    except Exception as exc:
+        log_warn(f"patches manifest 解析失败，跳过核对 ({exc.__class__.__name__}: {exc})")
+        return None
+
+
+def verify_patches_against_upstream(repo: Path, manifest_obj, upstream_ref: str,
+                                    *, cmd_manifest=None, verbose: bool = False):
+    """对每个 patch 做 best-effort upstream 包含性核对。
+
+    判定规则（SPEC-10-006 §4.4）：
+      - manifest 已标 upstream_merged → status='merged'
+      - commit 在 upstream 可达 → status='merged'
+      - 其他情况 best-effort（pending/unknown）
+
+    本函数不修改 manifest 文件；只读取。失败不抛异常。
+    """
+    cmd_log = cmd_manifest if cmd_manifest is not None else []
+    results = []
+    for p in manifest_obj.patches:
+        merged_manifest = bool(p.upstream_merged)
+        contains_commit = False
+        # commit reachability 检查 — 命令失败时当作 unknown
+        if p.commit:
+            r = git(
+                ["merge-base", "--is-ancestor", p.commit, upstream_ref],
+                repo=repo, manifest=cmd_log, verbose=verbose,
+            )
+            contains_commit = (r.exit_code == 0)
+
+        if merged_manifest:
+            status = "merged"
+            reason = "manifest 已标 upstream_merged=true（脚本不复核）"
+        elif contains_commit:
+            status = "merged"
+            reason = f"commit {p.commit} 在 {upstream_ref} 可达"
+        else:
+            # patch-id / file diff 留为后续增强；T2 先输出 pending。
+            status = "pending"
+            reason = (
+                f"commit {p.commit} 未在 {upstream_ref} 可达；"
+                "patch-id/file-diff 核对为后续增强，当前不判定"
+            )
+
+        # best-effort: 若 file_globs 在当前 repo 不存在任何一项，给 status 加 weak hint
+        # 但不替换主 status，避免虚报 merged。
+        if p.file_globs:
+            missing = []
+            for glob in p.file_globs:
+                rr = git(
+                    ["ls-files", "--error-unmatch", "--", glob],
+                    repo=repo, manifest=cmd_log, verbose=verbose,
+                )
+                if rr.exit_code != 0:
+                    missing.append(glob)
+            if missing and not merged_manifest and not contains_commit:
+                # 在不破坏主 status 的前提下，附 file_globs 缺失信息进 reason
+                reason += f"；file_globs 不可读: {missing}"
+
+        results.append(PatchStatus(
+            id=p.id,
+            upstream_merged_manifest=merged_manifest,
+            upstream_contains_commit=contains_commit,
+            upstream_contains_patch_id=False,
+            status=status,
+            reason=reason,
+        ))
+    return results
+
+
+def print_patch_statuses(statuses) -> None:
+    """输出补丁核对报告（stdout）。"""
+    if not statuses:
+        print("[patches] 无条目可核对")
+        return
+    for s in statuses:
+        mark = "✓" if s.status == "merged" else (
+            "~" if s.status == "possibly-merged" else "?"
+        )
+        print(f"  [{mark}] {s.id}: {s.status} — {s.reason}")
+
+
+def run_patch_manifest_check_if_requested(config: UpgradeConfig, manifest: dict,
+                                          upstream_ref: str) -> None:
+    """如果 config.patches_manifest 提供，则做核对并把结果写入 manifest['patch_statuses']。
+
+    不修改 patches manifest 文件本身（SPEC-10-006 §5.3-#5）。
+    """
+    pm = load_patches_manifest_safe(config.patches_manifest)
+    if not pm:
+        manifest["patch_statuses"] = []
+        manifest["patches_check_status"] = "skipped"
+        return
+    statuses = verify_patches_against_upstream(
+        config.repo, pm, upstream_ref,
+        cmd_manifest=manifest.setdefault("commands", []),
+        verbose=config.verbose,
+    )
+    # 序列化为 dict；不依赖 dataclasses.asdict 以减少依赖。
+    manifest["patch_statuses"] = [
+        {
+            "id": s.id,
+            "upstream_merged_manifest": s.upstream_merged_manifest,
+            "upstream_contains_commit": s.upstream_contains_commit,
+            "upstream_contains_patch_id": s.upstream_contains_patch_id,
+            "status": s.status,
+            "reason": s.reason,
+        }
+        for s in statuses
+    ]
+    manifest["patches_check_status"] = "ok"
+    print_patch_statuses(statuses)
+
+
+def preserve_feature_branch_if_requested(config: UpgradeConfig, state: RepoState,
+                                        manifest: dict) -> None:
+    """S0.5（仅在 --preserve-features 启用时执行）。
+
+    行为契约（DESIGN-10-006 §3.5 / SPEC-10-006 §5.2）：
+      - detached HEAD → warning + 跳过
+      - origin 缺失 → warning + 跳过
+      - dry-run → 输出计划，但不实际 push
+      - real-run → `git push -u origin <branch>`；失败 warning + next steps，不做 destructive 操作
+
+    不得 force push。当前 branch = main 时也允许执行（Pascal 自己决定是否重复 push）。
+    """
+    if not config.preserve_features:
+        return
+    branch = state.branch or ""
+    if not branch:
+        log_warn("--preserve-features: detached HEAD，跳过 feature branch push。")
+        manifest["preserve_features_status"] = "skipped-detached-head"
+        manifest["preserve_features_branch"] = None
+        return
+
+    # 检查 origin remote 是否存在（best-effort）
+    r_remote = git(["remote", "get-url", "origin"], repo=config.repo,
+                   manifest=manifest.setdefault("commands", []),
+                   verbose=config.verbose)
+    if r_remote.exit_code != 0:
+        log_warn("--preserve-features: 缺少 origin remote，跳过 feature push。")
+        manifest["preserve_features_status"] = "skipped-missing-origin"
+        manifest["preserve_features_branch"] = branch
+        return
+
+    manifest["preserve_features_branch"] = branch
+
+    if config.dry_run:
+        print(f"  [S0.5 dry-run] 将执行: git -C {config.repo} push -u origin {branch}")
+        manifest["preserve_features_status"] = "planned-dry-run"
+        return
+
+    log_info(f"--preserve-features: push 当前 branch '{branch}' 到 origin ...",
+             config)
+    r = git(["push", "-u", "origin", branch], repo=config.repo,
+            manifest=manifest.setdefault("commands", []),
+            verbose=config.verbose, timeout=120)
+    if r.exit_code == 0:
+        manifest["preserve_features_status"] = "ok"
+        log_ok(f"feature branch '{branch}' 已 push 到 origin。")
+    else:
+        # 不做 destructive 操作；记录 next steps
+        log_warn(f"--preserve-features: git push -u origin {branch} 失败，继续但请人工确认。")
+        manifest["preserve_features_status"] = "warn-push-failed"
+        manifest["preserve_features_error"] = redact(r.stderr)[:300]
+
+
+# ---------------------------------------------------------------------------
 # Git helpers
 # ---------------------------------------------------------------------------
 
@@ -412,12 +874,16 @@ def inspect_repo(config: UpgradeConfig, manifest: dict) -> RepoState:
 
     branch = git_out(["branch", "--show-current"], repo=repo, manifest=cmd_log,
                      verbose=config.verbose)
-    if branch != "main":
+    # V2 §3.4：允许通过 config.branch 覆盖默认 main-only 检查。
+    allowed_branch = config.branch
+    if branch != allowed_branch:
         raise UpgradeError(
             "inspect",
-            f"当前分支为 '{branch}'，本脚本只支持在 'main' 分支执行。",
-            next_steps=["如需支持非 main 分支，需 Principal 扩展 --branch 参数。",
-                        f"切到 main: git -C {repo} checkout main"],
+            f"当前分支为 '{branch}'，本次允许分支为 '{allowed_branch}'。",
+            next_steps=[
+                f"如需在当前分支执行检查: --branch {branch}",
+                f"如需默认升级，先 git -C {repo} checkout {allowed_branch}",
+            ],
         )
 
     pre_head = git_out(["rev-parse", "HEAD"], repo=repo, manifest=cmd_log,
@@ -1075,14 +1541,22 @@ def push_origin_if_enabled(config: UpgradeConfig, manifest: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
-def print_dry_run(config: UpgradeConfig, state: RepoState) -> int:
-    """输出完整 dry-run 计划，不执行任何修改。"""
+def print_dry_run(config: UpgradeConfig, state: RepoState, *,
+                  patch_statuses=None) -> int:
+    """输出完整 dry-run 计划，不执行任何修改。
+
+    V2 增量（DESIGN-10-006 §3.9 / SPEC-10-006 §5.4）：
+      - 当前 branch 与 --branch 是否匹配
+      - --preserve-features / --patches-manifest 计划信息
+    """
     sep = "=" * 60
     print(sep)
-    print("DRY-RUN 模式：以下为计划，不会修改 repo/venv/gateway/origin。")
+    print("DRY-RUN 模式：以下为计划，不会修改 repo/venv/gateway/origin、patch manifest。")
     print(sep)
     print(f"  repo:           {state.repo}")
     print(f"  branch:         {state.branch}")
+    print(f"  branch allowed: {config.branch}  "
+          f"({'match' if state.branch == config.branch else 'MISMATCH'})")
     print(f"  pre_head:       {state.pre_head}")
     print(f"  origin_url:     {redact(state.origin_url)}")
     print(f"  upstream_url:   {redact(state.upstream_url)}")
@@ -1097,6 +1571,22 @@ def print_dry_run(config: UpgradeConfig, state: RepoState) -> int:
     print(f"  local-only commits: {len(state.local_only_commits)}")
     for c in state.local_only_commits[:10]:
         print(f"    - {c}")
+    # V2 信息
+    print(f"  preserve_features: {'enabled' if config.preserve_features else 'disabled'}")
+    if config.preserve_features:
+        print(f"  S0.5 计划: git push -u origin {state.branch or '<detached>'}  (dry-run only)")
+    if config.patches_manifest is not None:
+        print(f"  patches_manifest:   {config.patches_manifest}")
+        if patch_statuses is None:
+            print("    -> 未在本调用中提供 patch_statuses；运行 upgrade 后可见")
+        else:
+            for ps in patch_statuses:
+                mark = "✓" if ps.get("status") == "merged" else (
+                    "~" if ps.get("status") == "possibly-merged" else "?"
+                )
+                print(f"    [{mark}] {ps.get('id')}: {ps.get('status')} — {ps.get('reason')}")
+    else:
+        print("  patches_manifest:   disabled")
 
     # attempt to resolve target if already locally available (no network fetch)
     target_sha = None
@@ -1107,6 +1597,7 @@ def print_dry_run(config: UpgradeConfig, state: RepoState) -> int:
 
     print()
     print("  [计划步骤]")
+    print(f"  0.5 (若 --preserve-features) git push -u origin {state.branch or '<detached>'}  (dry-run only; not executed)")
     print(f"  1. 创建 zip 备份     -> {backup_zip_path(config.backup_dir)}")
     print(f"  2. 写入 manifest     -> {manifest_path(config.backup_dir)}")
     if state.dirty_files:
@@ -1126,6 +1617,8 @@ def print_dry_run(config: UpgradeConfig, state: RepoState) -> int:
     else:
         print(f"  5. resolve target   -> (需 fetch 后解析; ref={config.version_ref})")
         print(f"     => merge_mode: unknown-before-fetch")
+    if config.patches_manifest is not None:
+        print(f"  6.5 (若 --patches-manifest) patch manifest check -> best-effort upstream containment report")
     print(f"  6. install          -> uv pip install -e '.[all]' (fallback pip)")
     print(f"  7. verify           -> hermes --version / import / gateway status")
     if config.restart:
@@ -1139,7 +1632,7 @@ def print_dry_run(config: UpgradeConfig, state: RepoState) -> int:
         print(f"  9. push origin      -> SKIPPED (--no-push)")
 
     print()
-    print("  声明: dry-run 未修改 repo、venv、gateway、origin。")
+    print("  声明: dry-run 未修改 repo、venv、gateway、origin、patch manifest。")
     print(sep)
     return 0
 
@@ -1161,6 +1654,12 @@ def upgrade(config: UpgradeConfig) -> int:
         log_info(f"repo OK: {state.branch} @ {state.pre_head[:12]}, "
                  f"dirty={len(state.dirty_files)}, local_only={len(state.local_only_commits)}",
                  config)
+
+        # S0.5 preserve_feature_branch (V2 增量 — 仅 --preserve-features 启用时执行)
+        preserve_feature_branch_if_requested(config, state, manifest)
+        # 注意：dry-run 不写 manifest（保持 V1.0 no-mutation 契约）。
+        if not config.dry_run:
+            write_manifest(manifest, mpath)
 
         # dry-run short-circuit
         if config.dry_run:
@@ -1218,6 +1717,16 @@ def upgrade(config: UpgradeConfig) -> int:
             apply_merge(config, plan, manifest)
         else:
             manifest["merge_mode"] = "already-up-to-date"
+        write_manifest(manifest, mpath)
+
+        # S6.5 patch manifest check (V2 增量 — 仅在 --patches-manifest 提供时执行)
+        if config.patches_manifest is not None:
+            log_info("S6.5 patch manifest upstream check...", config)
+            run_patch_manifest_check_if_requested(
+                config, manifest, config.version_ref)
+        else:
+            manifest["patch_statuses"] = []
+            manifest["patches_check_status"] = "disabled"
         write_manifest(manifest, mpath)
 
         # S7 install + verify
@@ -1416,7 +1925,7 @@ def rollback_from_manifest(config: UpgradeConfig) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="upgrade_hermes_agent.py",
-        description="Hermes Agent 自动升级脚本（RFC-10-005 / DESIGN-10-005）。",
+        description="Hermes Agent 自动升级脚本（RFC-10-005 / DESIGN-10-006 / SPEC-10-006）。",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "示例:\n"
@@ -1426,6 +1935,10 @@ def build_parser() -> argparse.ArgumentParser:
             "    python3 upgrade_hermes_agent.py --no-restart --no-push\n"
             "  指定版本:\n"
             "    python3 upgrade_hermes_agent.py --version v2026.6.19 --no-restart --no-push\n"
+            "  在非 main 分支（如 fix/feishu-table-card）执行检查:\n"
+            "    python3 upgrade_hermes_agent.py --dry-run --branch fix/feishu-table-card --no-restart --no-push\n"
+            "  保护 feature branch + patch manifest check:\n"
+            "    python3 upgrade_hermes_agent.py --dry-run --preserve-features --patches-manifest data/hermes_patches.yaml --no-restart --no-push\n"
             "  回滚:\n"
             "    python3 upgrade_hermes_agent.py --rollback /tmp/hermes-upgrade-*.json --yes\n"
         ),
@@ -1434,6 +1947,12 @@ def build_parser() -> argparse.ArgumentParser:
                    help=f"Hermes Agent 源码 repo 路径 (默认: {DEFAULT_REPO})")
     p.add_argument("--version", type=str, default=DEFAULT_VERSION_REF,
                    help=f"目标 git ref: tag/branch/remote ref/SHA (默认: {DEFAULT_VERSION_REF})")
+    p.add_argument("--branch", type=str, default="main",
+                   help="V2: 允许执行 inspect/upgrade 的当前 git 分支 (默认: main)")
+    p.add_argument("--preserve-features", action="store_true",
+                   help="V2: 升级前 best-effort push 当前 feature branch 到 origin 以保护本地 commit")
+    p.add_argument("--patches-manifest", type=Path, default=None,
+                   help="V2: Pascal fork 私有 patch 清单路径，例如 data/hermes_patches.yaml")
     p.add_argument("--dry-run", action="store_true",
                    help="只输出计划，不修改 repo/venv/gateway/origin")
     p.add_argument("--no-restart", action="store_true",
@@ -1466,6 +1985,9 @@ def config_from_args(args: argparse.Namespace) -> UpgradeConfig:
         rollback_manifest=args.rollback,
         yes=args.yes,
         verbose=args.verbose,
+        branch=getattr(args, "branch", "main"),
+        preserve_features=getattr(args, "preserve_features", False),
+        patches_manifest=getattr(args, "patches_manifest", None),
     )
 
 
@@ -1479,6 +2001,13 @@ def validate_args(args: argparse.Namespace) -> Optional[int]:
             conflicts.append("--no-restart")
         if args.no_push:
             conflicts.append("--no-push")
+        if getattr(args, "preserve_features", False):
+            conflicts.append("--preserve-features")
+        if getattr(args, "patches_manifest", None) is not None:
+            conflicts.append("--patches-manifest")
+        branch_val = getattr(args, "branch", "main")
+        if branch_val != "main":
+            conflicts.append("--branch (non-default)")
         if conflicts:
             log_err(f"--rollback 模式不接受以下参数: {', '.join(conflicts)}")
             log_err("rollback 模式只接受: --repo, --backup-dir, --dry-run, --yes, --verbose")
