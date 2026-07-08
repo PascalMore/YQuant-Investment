@@ -382,16 +382,42 @@ def parse_gitmodules(project_root: Path) -> list[tuple[str, Path]]:
 # ---------------------------------------------------------------------------
 
 
+def normalize_remote_branch(ref: str, *, remote: str = "origin") -> Optional[str]:
+    """Normalize git remote branch refs to a local branch name.
+
+    Examples:
+      - refs/remotes/origin/main -> main
+      - origin/main -> main
+      - main -> main
+      - refs/remotes/origin/feature/x -> feature/x
+
+    `git symbolic-ref --short refs/remotes/origin/HEAD` returns `origin/main`,
+    not `refs/remotes/origin/main`.  Fetching upstream with the un-normalized
+    value would run `git fetch upstream origin/main`, which fails because
+    upstream has `main`, not `origin/main`.
+    """
+    ref = (ref or "").strip()
+    if not ref:
+        return None
+    full_prefix = f"refs/remotes/{remote}/"
+    short_prefix = f"{remote}/"
+    if ref.startswith(full_prefix):
+        ref = ref[len(full_prefix):]
+    elif ref.startswith(short_prefix):
+        ref = ref[len(short_prefix):]
+    if not ref or ref == "HEAD" or ref.endswith("/HEAD"):
+        return None
+    return ref
+
+
 def parse_origin_head(submodule_path: Path) -> Optional[str]:
-    """git symbolic-ref refs/remotes/origin/HEAD -> branch name.
+    """git symbolic-ref refs/remotes/origin/HEAD -> local branch name.
     失败 -> None (fallback 'main').
     """
     r = run_cmd(["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
                 cwd=str(submodule_path))
     if r.exit_code == 0 and r.stdout.strip():
-        ref = r.stdout.strip()
-        # refs/remotes/origin/main -> main
-        return ref.replace("refs/remotes/origin/", "")
+        return normalize_remote_branch(r.stdout.strip(), remote="origin")
     return None
 
 

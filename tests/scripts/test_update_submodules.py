@@ -177,6 +177,23 @@ class TestParseGitmodules:
 
 
 class TestHeuristicDiscovery:
+    def test_normalize_remote_branch(self, us):
+        assert us.normalize_remote_branch("origin/main") == "main"
+        assert us.normalize_remote_branch("refs/remotes/origin/main") == "main"
+        assert us.normalize_remote_branch("origin/feature/x") == "feature/x"
+        assert us.normalize_remote_branch("main") == "main"
+        assert us.normalize_remote_branch("origin/HEAD") is None
+
+    def test_parse_origin_head_strips_short_remote_prefix(self, us, tmp_path):
+        sub_path = tmp_path / "repo"
+        sub_path.mkdir()
+        with patch.object(us, "run_cmd") as mock_run:
+            mock_run.return_value = us.CommandResult(
+                cmd=[], cwd=str(sub_path), exit_code=0,
+                stdout="origin/main\n", stderr=""
+            )
+            assert us.parse_origin_head(sub_path) == "main"
+
     def test_venv_and_pip_detected(self, us, tmp_path):
         project = _make_project(tmp_path, [("sub1", "sub1", True)])
         sub_path = project / "sub1"
