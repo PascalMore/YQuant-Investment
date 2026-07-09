@@ -29,7 +29,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-__version__ = "1.0.0"
+__version__ = "2.1.0"
 
 OPTIN_FILENAME = ".update_submodules.yaml"
 OPTIN_SCHEMA_VERSION = 1
@@ -421,6 +421,67 @@ def parse_origin_head(submodule_path: Path) -> Optional[str]:
     return None
 
 
+def _detect_upstream_default_branch(submodule_path: Path) -> Optional[str]:
+    """Best-effort discovery of the upstream repo's default branch.
+
+    Resolution order:
+      1. `git symbolic-ref --short refs/remotes/upstream/HEAD` (set when
+         `git remote set-head upstream --auto` has been run).
+      2. `git remote show upstream` -> "HEAD branch: <name>".
+      3. probe `upstream/main` then `upstream/develop` then `upstream/master`
+         (whichever exists locally).
+
+    Returns a normalized local branch name, or None when nothing matches.
+    Used by :func:`discover_submodule` to avoid hard-fallback ``branch="main"``
+    for upstreams whose default is `develop` (e.g. TradingAgents-CN).
+    """
+    # 1. cached upstream/HEAD symbolic ref
+    r = run_cmd(["git", "symbolic-ref", "--short",
+                 "refs/remotes/upstream/HEAD"],
+                cwd=str(submodule_path))
+    if r.exit_code == 0 and r.stdout.strip():
+        ref = normalize_remote_branch(r.stdout.strip(), remote="upstream")
+        if ref:
+            return ref
+    # 2. `git remote show upstream`
+    r = run_cmd(["git", "remote", "show", "upstream"],
+                cwd=str(submodule_path))
+    if r.exit_code == 0:
+        for line in r.stdout.splitlines():
+            line = line.strip()
+            if line.lower().startswith("head branch:"):
+                name = line.split(":", 1)[1].strip()
+                if name:
+                    return name
+    # 3. probe common defaults
+    for candidate in ("main", "develop", "master"):
+        r = run_cmd(["git", "rev-parse", "--verify", "--quiet",
+                     f"upstream/{candidate}"],
+                    cwd=str(submodule_path))
+        if r.exit_code == 0:
+            return candidate
+    return None
+
+
+def _discover_branch(submodule_path: Path, *, optin_branch: Optional[str]) -> str:
+    """Resolve the local-branch knob in priority order:
+
+      1. opt-in YAML ``branch:``
+      2. upstream default branch (HEAD / main / develop / master probe)
+      3. origin HEAD (via ``parse_origin_head``)
+      4. literal ``"main"``
+    """
+    if optin_branch:
+        return optin_branch
+    detected = _detect_upstream_default_branch(submodule_path)
+    if detected:
+        return detected
+    origin_branch = parse_origin_head(submodule_path)
+    if origin_branch:
+        return origin_branch
+    return "main"
+
+
 def list_remotes(submodule_path: Path) -> list[str]:
     """Return list of remote names."""
     r = run_cmd(["git", "remote"], cwd=str(submodule_path))
@@ -471,8 +532,9 @@ def discover_submodule(name: str, path: Path, project_root: Path) -> SubmoduleCo
     else:
         upstream = None
 
-    # branch
-    branch = parse_origin_head(abs_path) or "main"
+    # branch: opt-in override 看 add_healpts; 其他走 _discover_branch() P2 补丁
+    # opt-in 加载在 process_submodule() 里走 merge_override, 这里启发式探测不带 override.
+    branch = _discover_branch(abs_path, optin_branch=None)
 
     # venv
     venv = Path(".venv") if (abs_path / ".venv").exists() else None
@@ -719,6 +781,31 @@ def _parse_rev_count(stdout: str) -> tuple[int, int]:
     return 0, 0
 
 
+_CONFLICT_STATUS_PREFIXES = ("UU", "AA", "DD", "AU", "UA", "DU", "UD")
+
+
+def _collect_conflict_files(status_porcelain: str) -> list[str]:
+    """Extract file paths that show up in conflict under ``git status --porcelain``.
+
+    Returns paths in stable order; duplicates removed.  Empty list when no
+    conflict markers are present.  P-15 — the audit log shows up to 8 entries
+    so users don't have to grep manually.
+    """
+    seen: set[str] = set()
+    out: list[str] = []
+    for line in status_porcelain.splitlines():
+        if len(line) < 4:
+            continue
+        prefix = line[:2]
+        if prefix not in _CONFLICT_STATUS_PREFIXES:
+            continue
+        path = line[3:].strip()
+        if path not in seen:
+            seen.add(path)
+            out.append(path)
+    return out
+
+
 def phase_merge(state: SubmoduleState, *, dry_run: bool) -> PhaseResult:
     """Phase 2: merge upstream/<branch>."""
     cfg = state.config
@@ -741,18 +828,23 @@ def phase_merge(state: SubmoduleState, *, dry_run: bool) -> PhaseResult:
                     cwd=str(state.abs_path))
     dur = time.time() - t0
     if r.exit_code != 0:
-        # conflict detection
+        # conflict detection (P-15: also collect file list for the audit)
         status = run_cmd(["git", "status", "--porcelain"],
                          cwd=str(state.abs_path))
-        has_conflict = any(
-            line.startswith(("UU", "AA", "DD", "AU", "UA", "DU", "UD"))
-            for line in status.stdout.splitlines()
-        )
-        if has_conflict:
+        conflict_files = _collect_conflict_files(status.stdout)
+        if conflict_files:
             run_cmd(["git", "merge", "--abort"], cwd=str(state.abs_path))
-            return _make_fail("merge",
-                              "merge 冲突, 已 git merge --abort; "
-                              "手动解决后用 --resume-after-merge",
+            # show at most 8 files in audit, summarize the rest
+            shown = conflict_files[:8]
+            extra = len(conflict_files) - len(shown)
+            file_list = ", ".join(shown)
+            if extra > 0:
+                file_list += f" (+{extra} more)"
+            detail = (
+                f"merge 冲突 ({len(conflict_files)} files): {file_list}  | "
+                "已 git merge --abort; 手动解决后用 --resume-after-merge"
+            )
+            return _make_fail("merge", detail,
                               exit_code=r.exit_code, duration=dur)
         return _make_fail("merge", f"merge 失败: {redact(r.stderr)[:300]}",
                           exit_code=r.exit_code, duration=dur)
@@ -761,7 +853,15 @@ def phase_merge(state: SubmoduleState, *, dry_run: bool) -> PhaseResult:
 
 
 def phase_install(state: SubmoduleState, *, dry_run: bool) -> PhaseResult:
-    """Phase 3: pip install."""
+    """Phase 3: pip install.
+
+    On failure (exit_code != 0) the stderr is classified by
+    :func:`classify_pip_failure` so the audit log can attribute the failure
+    to one of: missing_dependency / platform_incompatible / network_error /
+    resolution_conflict / source_build_error / other.  This is P-6 — the
+    longbridge 4.x incident showed that a generic "pip install error" line
+    gives no actionable hint.
+    """
     cfg = state.config
     if cfg.venv is None or cfg.pip_install_cmd is None:
         return _make_skip("install", "venv 或 pip_install 缺失, skip")
@@ -774,14 +874,111 @@ def phase_install(state: SubmoduleState, *, dry_run: bool) -> PhaseResult:
     t0 = time.time()
     r = run_cmd(cmd, cwd=str(state.abs_path))
     dur = time.time() - t0
-    if r.exit_code != 0:
-        return _make_fail("install", f"pip install 失败: {redact(r.stderr)[:300]}",
-                          exit_code=r.exit_code, duration=dur)
-    return _make_pass("install", "pip install OK", exit_code=0, duration=dur)
+    if r.exit_code == 0:
+        return _make_pass("install", "pip install OK", exit_code=0, duration=dur)
+    classification, sample = classify_pip_failure(r.stderr or r.stdout)
+    detail = (
+        f"pip install 失败 ({classification}): {redact(sample)[:240]}"
+        f"  | hint: {_PIP_HINTS.get(classification, '')}"
+    )
+    return _make_fail("install", detail, exit_code=r.exit_code, duration=dur)
+
+
+# P-6: pip error classification ------------------------------------------------
+# Pattern order matters — first match wins.
+
+_PIP_ERROR_PATTERNS: list[tuple[str, re.Pattern]] = [
+    ("platform_incompatible", re.compile(
+        r"none of the wheel's tags .* are compatible|"
+        r"is not a supported wheel on this platform|"
+        r"no matching distribution found for .* from .*linux|manylinux_"
+    )),
+    ("missing_dependency", re.compile(
+        r"No matching distribution found for .+|"
+        r"Could not find a version that satisfies the requirement|"
+        r"ERROR: Ignored the following yanked versions"
+    )),
+    ("resolution_conflict", re.compile(
+        r"ResolutionImpossible|Requirements conflict|"
+        r"ResolutionTooDeep|conflict in dependencies"
+    )),
+    ("network_error", re.compile(
+        r"Could not fetch URL|"
+        r"NewConnectionError|"
+        r"could not connect to|"
+        r"Temporary failure in name resolution"
+    )),
+    ("source_build_error", re.compile(
+        r"feature `\w+` is required|"
+        r"metadata-generation-failed|"
+        r"BackendUnavailable|"
+        r"cargo: error|"
+        r"Microsoft Visual C\+\+"
+    )),
+]
+
+_PIP_HINTS = {
+    "missing_dependency": "包名/版本约束在 PyPI 上无匹配。检查 requirements.txt 平台 marker 或与上游 release notes。",
+    "platform_incompatible": "wheel 与系统不匹配 (glibc / arch)。WSL/Ubuntu 升级 longbridge 等 manylinux_2_39 包需要 glibc>=2.39 或 Docker base image。",
+    "resolution_conflict": "依赖冲突: 两个包对同一依赖要求不同版本。考虑 upgrade 全部依赖或用 pip-compile。",
+    "network_error": "网络问题: PyPI 不可达 / 镜像不通 / 代理。检查 PIP_INDEX_URL / 镜像 / 网络。",
+    "source_build_error": "源码构建失败: 依赖 Rust/C++ 工具链。pip 默认会无 wheel 时回源构建。",
+    "other": "未识别原因, 看 stderr 全文。"
+}
+
+
+def classify_pip_failure(text: str) -> tuple[str, str]:
+    """Classify a pip / maturin failure into one of the canonical buckets.
+
+    Returns (classification, representative_sample_line).  The sample is the
+    full last non-empty line that triggered the match — useful for putting
+    concrete guidance into the audit log.
+    """
+    if not text:
+        return ("other", "")
+    # look at last 60 lines so wheels and yanked warnings don't shadow real
+    # cause lines that come later.
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    head = "\n".join(lines[-60:])
+    for name, pat in _PIP_ERROR_PATTERNS:
+        m = pat.search(head)
+        if m:
+            # pick the first matching sample line as the "smoking gun"
+            for ln in lines:
+                if pat.search(ln):
+                    return (name, ln.strip())
+            return (name, m.group(0))
+    return ("other", lines[-1] if lines else "")
+
+
+def _wait_for_active_state(service: str, *, timeout_s: float = 15.0,
+                           poll_s: float = 0.5) -> tuple[bool, str]:
+    """Block until ``systemctl --user is-active <service>`` reports active.
+
+    Returns ``(ok, detail)``.  ``ok`` is True only when the unit reached
+    "active" within ``timeout_s``.  P-7/P-13 — we saw daily-stock-analysis
+    service restart succeed while FastAPI was still trying to bind 8888; the
+    extra wait surfaces this transient race so the audit log can flag it.
+    """
+    deadline = time.time() + timeout_s
+    last_status = ""
+    while time.time() < deadline:
+        r = run_cmd(["systemctl", "--user", "is-active", service])
+        last_status = (r.stdout or r.stderr or "").strip()
+        if r.exit_code == 0 and last_status == "active":
+            return True, f"active after probe {last_status}"
+        time.sleep(poll_s)
+    return False, f"timed out (last={last_status or 'unknown'} after {timeout_s:.1f}s)"
 
 
 def phase_restart(state: SubmoduleState, *, dry_run: bool) -> PhaseResult:
-    """Phase 4: restart + health_check (opt-in cmd 时)."""
+    """Phase 4: restart + active wait + health_check (opt-in cmd 时).
+
+    After ``systemctl restart`` returns 0 we proactively wait for the unit
+    to enter ``active`` state (P-7/P-13).  An early "restart OK" return code
+    used to mask bind races that surfaced seconds later — see the
+    longbridge/daily_stock_analysis incident write-up.
+    """
     cfg = state.config
     if cfg.systemd_service is None:
         return _make_skip("restart", "systemd_service 缺失, skip")
@@ -792,6 +989,7 @@ def phase_restart(state: SubmoduleState, *, dry_run: bool) -> PhaseResult:
             detail += f"\n[dry-run] sh -c '{cfg.health_check}'"
         else:
             detail += "\nhealth_check: SKIP (None)"
+        detail += "\n[dry-run] wait_for_active: timeout=15s poll=0.5s"
         return _make_pass("restart", detail)
     t0 = time.time()
     r = run_cmd(restart_cmd, cwd=str(state.abs_path))
@@ -800,19 +998,32 @@ def phase_restart(state: SubmoduleState, *, dry_run: bool) -> PhaseResult:
         return _make_fail("restart",
                           f"systemctl restart 失败: {redact(r.stderr)[:300]}",
                           exit_code=r.exit_code, duration=dur)
+    # P-7/P-13: wait for unit to actually become active before reporting PASS
+    ok, wait_detail = _wait_for_active_state(cfg.systemd_service)
+    if not ok:
+        dur_w = time.time() - t0
+        return _make_fail(
+            "restart",
+            f"systemctl restart 返回 0 但 service 未进入 active: {wait_detail}",
+            exit_code=0, duration=dur_w,
+        )
     # health_check (V2.0: None = skip)
     if cfg.health_check is None:
-        return _make_pass("restart", "restart OK, health_check SKIP (None)",
-                          exit_code=0, duration=dur)
+        dur_w = time.time() - t0
+        return _make_pass("restart",
+                          f"restart + wait_for_active OK ({wait_detail}), "
+                          f"health_check SKIP (None)",
+                          exit_code=0, duration=dur_w)
     # health_check is opt-in shell cmd
-    time.sleep(5)
+    time.sleep(2)
     hc = run_cmd(["sh", "-c", cfg.health_check], cwd=str(state.abs_path))
     dur2 = time.time() - t0
     if hc.exit_code != 0:
         return _make_fail("restart",
                           f"health check 失败: {redact(hc.stderr)[:300]}",
                           exit_code=hc.exit_code, duration=dur2)
-    return _make_pass("restart", "restart + health_check OK",
+    return _make_pass("restart",
+                      f"restart + wait_for_active + health_check OK ({wait_detail})",
                       exit_code=0, duration=dur2)
 
 
@@ -856,6 +1067,10 @@ def process_submodule(name: str, path: Path, project_root: Path, *,
     override = load_optin_override(abs_path)
     if override:
         cfg = merge_override(cfg, override)
+    # P2补丁: 如果 opt-in 提供了 branch, 但启发式另算了一个 (上游默认分支探测), 以 opt-in 为准.
+    # merge_override 已经会用 opt-in branch, 这里仅防御 opt-in 未指定 branch 但 cfg.branch 是 fallback "main" 的情形.
+    if cfg.branch == "main" and override and "branch" in override:
+        cfg = _replace_config(cfg, {"branch": override["branch"]}, cfg.config_source)
 
     # dirty worktree check
     if dry_run or force_dirty:

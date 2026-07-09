@@ -458,7 +458,12 @@ class TestInstallFail:
 
 class TestHealthCheck:
     def test_health_check_none_skips(self, us, tmp_path):
-        """UT-012: health_check=None 时 Phase 4 跳过 health check."""
+        """UT-012: health_check=None 时 Phase 4 跳过 health check.
+
+        P-7/P-13: phase_restart now also waits for ``systemctl --user is-active``
+        to report "active".  The mock below returns "active" so the wait
+        passes and the restart phase reports PASS.
+        """
         project = _make_project(tmp_path, [("sub1", "sub1", True)])
         cfg = us.discover_submodule("sub1", Path("sub1"), project)
         assert cfg.health_check is None  # V2.0 default
@@ -469,15 +474,23 @@ class TestHealthCheck:
         # mock systemd_service to trigger restart phase
         state.config = us._replace_config(cfg, {"systemd_service": "test.service"},
                                           cfg.config_source)
-        with patch.object(us, "run_cmd") as mock_run:
-            mock_run.return_value = us.CommandResult(
-                cmd=[], cwd=None, exit_code=0, stdout="", stderr="")
+        def mock_run(cmd, **kwargs):
+            if "is-active" in cmd:
+                return us.CommandResult(cmd=cmd, cwd=None, exit_code=0,
+                                        stdout="active\n", stderr="")
+            return us.CommandResult(cmd=cmd, cwd=None, exit_code=0,
+                                     stdout="", stderr="")
+        with patch.object(us, "run_cmd", side_effect=mock_run):
             pr = us.phase_restart(state, dry_run=False)
         assert pr.status == "pass"
         assert "SKIP" in pr.detail or "skip" in pr.detail.lower()
 
     def test_health_check_fail_aborts_push(self, us, tmp_path):
-        """UT-011: health_check FAIL aborts push."""
+        """UT-011: health_check FAIL aborts push.
+
+        Same is-active mock as above so we exercise the full happy path
+        before hitting the shell-failing health_check.
+        """
         project = _make_project(tmp_path, [("sub2", "sub2", True)])
         cfg = us.discover_submodule("sub2", Path("sub2"), project)
         # set health_check to a cmd
@@ -495,15 +508,68 @@ class TestHealthCheck:
             if "restart" in cmd:
                 return us.CommandResult(cmd=cmd, cwd=None, exit_code=0,
                                         stdout="", stderr="")
+            if "is-active" in cmd:
+                return us.CommandResult(cmd=cmd, cwd=None, exit_code=0,
+                                        stdout="active\n", stderr="")
             if "sh" in cmd and "-c" in cmd:
                 return us.CommandResult(cmd=cmd, cwd=None, exit_code=1,
                                         stdout="", stderr="connection refused")
             return us.CommandResult(cmd=cmd, cwd=None, exit_code=0,
-                                    stdout="", stderr="")
+                                     stdout="", stderr="")
         with patch.object(us, "run_cmd", side_effect=mock_run):
             pr = us.phase_restart(state, dry_run=False)
         assert pr.status == "fail"
         assert "health" in pr.detail.lower()
+
+    def test_wait_for_active_fails_when_inactive(self, us, tmp_path):
+        """P-7: when restart returns 0 but unit never enters active within
+        the wait window, phase_restart must surface that as FAIL rather than
+        silently pass.
+        """
+        project = _make_project(tmp_path, [("sub3", "sub3", True)])
+        cfg = us.discover_submodule("sub3", Path("sub3"), project)
+        cfg2 = us._replace_config(cfg, {"systemd_service": "stuck.service"},
+                                  cfg.config_source)
+        state = us.SubmoduleState(
+            config=cfg2, abs_path=(project / "sub3").resolve(),
+            pre_head="abc", behind=0, ahead=0, upstream_ref="upstream/main",
+        )
+        import time as _t
+        original_sleep = us.time.sleep
+        try:
+            # patch sleep so the wait window passes instantly
+            us.time.sleep = lambda *_a, **_kw: None
+            def mock_run(cmd, **kwargs):
+                if "restart" in cmd:
+                    return us.CommandResult(cmd=cmd, cwd=None, exit_code=0,
+                                             stdout="", stderr="")
+                if "is-active" in cmd:
+                    return us.CommandResult(cmd=cmd, cwd=None, exit_code=3,
+                                             stdout="", stderr="inactive")
+                return us.CommandResult(cmd=cmd, cwd=None, exit_code=0,
+                                         stdout="", stderr="")
+            with patch.object(us, "run_cmd", side_effect=mock_run):
+                pr = us.phase_restart(state, dry_run=False)
+        finally:
+            us.time.sleep = original_sleep
+        assert pr.status == "fail"
+        assert "active" in pr.detail.lower()
+
+    def test_wait_for_active_zero_timeout(self, us):
+        """P-7: timeout_s=0 means 'skip wait' semantics still produce a
+        deterministic, non-blocking poll.
+        """
+        with patch.object(us, "time") as mock_time:
+            mock_time.time.side_effect = [100.0, 100.0, 100.0]
+            def mock_run(cmd, **kwargs):
+                return us.CommandResult(cmd=cmd, cwd=None, exit_code=0,
+                                         stdout="active\n", stderr="")
+            with patch.object(us, "run_cmd", side_effect=mock_run):
+                ok, detail = us._wait_for_active_state("anything",
+                                                         timeout_s=0.01,
+                                                         poll_s=0.0)
+        assert ok is True
+        assert "active" in detail.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -638,6 +704,214 @@ class TestProcessSubmodule:
         fetch_phase = [p for p in result.phases if p.phase == "fetch"][0]
         assert fetch_phase.status == "fail"
         assert "upstream" in fetch_phase.detail
+
+
+# -------------------------------------------------------------------
+# P-2: upstream default branch detection
+# -------------------------------------------------------------------
+
+
+class TestUpstreamDefaultBranch:
+    def test_detect_via_remote_show(self, us, tmp_path):
+        """upstream/main in `git remote show upstream` -> branch=main."""
+        sub_path = tmp_path / "repo"
+        sub_path.mkdir()
+
+        def mock_run(cmd, **kwargs):
+            if "symbolic-ref" in cmd:
+                return us.CommandResult(cmd=cmd, cwd=None, exit_code=1,
+                                         stdout="", stderr="")
+            if cmd[:3] == ["git", "remote", "show"]:
+                return us.CommandResult(cmd=cmd, cwd=None, exit_code=0,
+                                         stdout="  HEAD branch: main\n"
+                                                "  Remote branches: foo\n",
+                                         stderr="")
+            if cmd[:3] == ["git", "rev-parse", "--verify"]:
+                return us.CommandResult(cmd=cmd, cwd=None, exit_code=0,
+                                         stdout="abc", stderr="")
+            return us.CommandResult(cmd=cmd, cwd=None, exit_code=1,
+                                    stdout="", stderr="")
+        with patch.object(us, "run_cmd", side_effect=mock_run):
+            branch = us._detect_upstream_default_branch(sub_path)
+        assert branch == "main"
+
+    def test_detect_falls_back_to_probe(self, us, tmp_path):
+        """When HEAD branch isn't set but upstream/develop ref exists, return develop."""
+        sub_path = tmp_path / "repo"
+        sub_path.mkdir()
+
+        def mock_run(cmd, **kwargs):
+            if "symbolic-ref" in cmd:
+                return us.CommandResult(cmd=cmd, cwd=None, exit_code=1,
+                                         stdout="", stderr="")
+            if cmd[:3] == ["git", "remote", "show"]:
+                return us.CommandResult(cmd=cmd, cwd=None, exit_code=0,
+                                         stdout="  Remote branches:\n",
+                                         stderr="")
+            if cmd[:3] == ["git", "rev-parse", "--verify"]:
+                if "upstream/develop" in cmd:
+                    return us.CommandResult(cmd=cmd, cwd=None, exit_code=0,
+                                             stdout="abc", stderr="")
+                return us.CommandResult(cmd=cmd, cwd=None, exit_code=1,
+                                         stdout="", stderr="")
+            return us.CommandResult(cmd=cmd, cwd=None, exit_code=1,
+                                    stdout="", stderr="")
+        with patch.object(us, "run_cmd", side_effect=mock_run):
+            branch = us._detect_upstream_default_branch(sub_path)
+        assert branch == "develop"
+
+    def test_detect_returns_none_when_nothing(self, us, tmp_path):
+        sub_path = tmp_path / "repo"
+        sub_path.mkdir()
+        with patch.object(us, "run_cmd") as mock_run:
+            mock_run.return_value = us.CommandResult(
+                cmd=[], cwd=None, exit_code=1, stdout="", stderr="")
+            assert us._detect_upstream_default_branch(sub_path) is None
+
+    def test_discover_branch_priority(self, us, tmp_path):
+        """opt-in > upstream > origin > 'main'."""
+        sub_path = tmp_path / "repo"
+        sub_path.mkdir()
+        with patch.object(us, "_detect_upstream_default_branch",
+                          return_value="detect-A") as m_upstream:
+            with patch.object(us, "parse_origin_head",
+                              return_value="origin-B") as m_origin:
+                assert us._discover_branch(sub_path, optin_branch=None) == "detect-A"
+                assert us._discover_branch(sub_path, optin_branch="optin-C") == "optin-C"
+                m_upstream.return_value = None
+                assert us._discover_branch(sub_path, optin_branch=None) == "origin-B"
+                m_origin.return_value = None
+                assert us._discover_branch(sub_path, optin_branch=None) == "main"
+                m_upstream.assert_called()
+                m_origin.assert_called()
+
+
+# -------------------------------------------------------------------
+# P-6: pip failure classification
+# -------------------------------------------------------------------
+
+
+class TestPipFailureClassification:
+    def test_classify_platform_incompatible_glibc_hint(self, us):
+        stderr = (
+            "  Skipping link: none of the wheel's tags (cp312-cp312-manylinux_2_39_x86_64) "
+            "are compatible (Requires-Python: >=3.8)\n"
+            "ERROR: No matching distribution found for longbridge==4.2.0\n"
+        )
+        kind, sample = us.classify_pip_failure(stderr)
+        assert kind == "platform_incompatible"
+        assert "manylinux" in sample
+
+    def test_classify_missing_dependency(self, us):
+        stderr = "ERROR: Could not find a version that satisfies the requirement foo==99.99\n"
+        kind, sample = us.classify_pip_failure(stderr)
+        assert kind == "missing_dependency"
+        assert "foo==99.99" in sample
+
+    def test_classify_source_build_error(self, us):
+        stderr = (
+            "      feature `edition2024` is required\n"
+            "      The package requires the Cargo feature called `edition2024`\n"
+        )
+        kind, _ = us.classify_pip_failure(stderr)
+        assert kind == "source_build_error"
+
+    def test_classify_network_error(self, us):
+        stderr = "Could not fetch URL https://pypi.org/simple/foo/: NewConnectionError\n"
+        kind, _ = us.classify_pip_failure(stderr)
+        assert kind == "network_error"
+
+    def test_classify_resolution_conflict(self, us):
+        stderr = "ResolutionImpossible: for some-package\n"
+        kind, _ = us.classify_pip_failure(stderr)
+        assert kind == "resolution_conflict"
+
+    def test_classify_other(self, us):
+        stderr = "Weird unrelated error message\n"
+        kind, _ = us.classify_pip_failure(stderr)
+        assert kind == "other"
+
+    def test_classify_empty(self, us):
+        assert us.classify_pip_failure("") == ("other", "")
+
+    def test_install_phase_failure_uses_classification(self, us, tmp_path):
+        """phase_install FAIL detail should include the classification bucket
+        and the hint, so the audit log is immediately actionable.
+        """
+        project = _make_project(tmp_path, [("ip", "ip", True)])
+        cfg = us.discover_submodule("ip", Path("ip"), project)
+        state = us.SubmoduleState(
+            config=cfg, abs_path=(project / "ip").resolve(),
+            pre_head="abc", behind=0, ahead=0, upstream_ref="upstream/main",
+        )
+        stderr = "ERROR: Could not find a version that satisfies the requirement foo==99\n"
+        with patch.object(us, "run_cmd") as mock_run:
+            mock_run.return_value = us.CommandResult(
+                cmd=[], cwd=None, exit_code=1,
+                stdout="", stderr=stderr,
+            )
+            pr = us.phase_install(state, dry_run=False)
+        assert pr.status == "fail"
+        assert "(missing_dependency)" in pr.detail
+        assert "hint" in pr.detail.lower()
+
+
+# -------------------------------------------------------------------
+# P-15: conflict file list
+# -------------------------------------------------------------------
+
+
+class TestConflictFiles:
+    def test_collect_conflict_files_basic(self, us):
+        status = (
+            "UU\tsrc/market_analyzer.py\n"
+            "AA\tdocs/full-guide.md\n"
+            " M\tother.py\n"
+            "??\tnew_file\n"
+            "UD\t.env.example\n"
+        )
+        files = us._collect_conflict_files(status)
+        assert files == ["src/market_analyzer.py",
+                          "docs/full-guide.md", ".env.example"]
+
+    def test_collect_conflict_files_empty(self, us):
+        assert us._collect_conflict_files("") == []
+        assert us._collect_conflict_files(" M\tsrc/foo.py\n") == []
+
+    def test_conflict_files_dedupe(self, us):
+        status = "UU\tsrc/market_analyzer.py\nUU\tsrc/market_analyzer.py\n"
+        files = us._collect_conflict_files(status)
+        assert files == ["src/market_analyzer.py"]
+
+    def test_merge_conflict_lists_files_in_detail(self, us, tmp_path):
+        """phase_merge FAIL detail must include the file list (P-15)."""
+        project = _make_project(tmp_path, [("cf", "cf", True)])
+        cfg = us.discover_submodule("cf", Path("cf"), project)
+        state = us.SubmoduleState(
+            config=cfg, abs_path=(project / "cf").resolve(),
+            pre_head="abc", behind=1, ahead=1, upstream_ref="upstream/main",
+        )
+        def mock_run(cmd, **kwargs):
+            if "merge" in cmd and "--abort" not in cmd:
+                return us.CommandResult(cmd=cmd, cwd=None, exit_code=1,
+                                         stdout="", stderr="CONFLICT")
+            if "status" in cmd and "--porcelain" in cmd:
+                return us.CommandResult(
+                    cmd=cmd, cwd=None, exit_code=0,
+                    stdout=("UU\tsrc/market_analyzer.py\n"
+                            "AA\tdocs/full-guide.md\n"),
+                    stderr="")
+            if "--abort" in cmd:
+                return us.CommandResult(cmd=cmd, cwd=None, exit_code=0,
+                                         stdout="", stderr="")
+            return us.CommandResult(cmd=cmd, cwd=None, exit_code=0,
+                                     stdout="", stderr="")
+        with patch.object(us, "run_cmd", side_effect=mock_run):
+            pr = us.phase_merge(state, dry_run=False)
+        assert pr.status == "fail"
+        assert "src/market_analyzer.py" in pr.detail
+        assert "docs/full-guide.md" in pr.detail
+        assert "2 files" in pr.detail
 
 
 # ---------------------------------------------------------------------------
