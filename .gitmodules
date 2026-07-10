@@ -1,6 +1,7 @@
 [submodule "skills/research/daily_stock_analysis"]
 	path = skills/research/daily_stock_analysis
-	url = https://github.com/PascalMore/daily_stock_analysis.git
+	url = git@github.com:PascalMore/daily_stock_analysis.git
+	branch = main
 [submodule "skills/apps/TradingAgents-CN"]
 	path = skills/apps/TradingAgents-CN
 	url = git@github.com:PascalMore/TradingAgents-CN.git
