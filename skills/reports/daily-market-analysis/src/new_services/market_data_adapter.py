@@ -1254,8 +1254,7 @@ class MarketDataAdapter:
         if tushare_token:
             try:
                 import tushare as ts
-                ts.set_token(tushare_token)
-                pro = ts.pro_api()
+                pro = ts.pro_api(tushare_token)
 
                 # 获取最近有数据的交易日（today可能是假日）
                 today_str = datetime.now().strftime('%Y%m%d')
