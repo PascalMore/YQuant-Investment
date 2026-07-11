@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>帝国系统 · 复盘 3/20 · DING_001</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg: #f4f1ec;
+  --surface: #ffffff;
+  --card: #ffffff;
+  --border: #e2ddd5;
+  --border-hi: #c9c2b8;
+  --text: #1a1a1a;
+  --sub: #6b6560;
+  --dim: #9e958c;
+  --accent: #2563eb;
+  --green: #16a34a;
+  --yellow: #ca8a04;
+  --red: #dc2626;
+  --cyan: #0891b2;
+  --purple: #7c3aed;
+  --orange: #ea580c;
+  --mono: 'DM Mono', monospace;
+  --sans: 'Noto Sans SC', system-ui, sans-serif;
+  --radius: 18px;
+  --gap: 14px;
+  --shadow: 0 1px 3px rgba(0,0,0,.06), 0 6px 20px rgba(0,0,0,.04);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.6; min-height: 100vh; }
+.wrap { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+/* HEADER */
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
+.header-left { display: flex; align-items: center; gap: 12px; }
+.header h1 { font-size: 18px; font-weight: 700; }
+.badge { font-size: 11px; font-family: var(--mono); color: var(--dim); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 3px 10px; }
+.badge.warn { background: #fefce8; border-color: #fef08a; color: var(--yellow); }
+.badge.ok { background: #ecfdf5; border-color: #a7f3d0; color: var(--green); }
+.ts { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+
+/* TABS */
+.tabs { display: flex; gap: 6px; margin-bottom: 18px; }
+.tab-btn { padding: 7px 18px; font-size: 12px; font-weight: 600; cursor: pointer; background: var(--surface); color: var(--sub); border: 1px solid var(--border); border-radius: 9px; font-family: var(--sans); transition: all .2s; }
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { background: var(--text); color: #fff; border-color: var(--text); }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+/* STATUS */
+.status-bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: var(--gap); padding: 12px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+.si { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+.si .lbl { color: var(--sub); }
+.si .val { font-weight: 600; font-family: var(--mono); }
+.si .val.l1 { color: var(--yellow); }
+.si .val.neg { color: var(--red); }
+.si .val.ok { color: var(--green); }
+.divider { width: 1px; height: 16px; background: var(--border); }
+.dot { width: 7px; height: 7px; border-radius: 50%; }
+.dot.g { background: var(--green); }
+.dot.y { background: var(--yellow); }
+.dot.r { background: var(--red); }
+
+/* GRID */
+.mosaic { display: grid; grid-template-columns: repeat(12, 1fr); grid-auto-rows: auto; gap: var(--gap); margin-bottom: var(--gap); }
+.tile { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); transition: box-shadow .25s, transform .15s; }
+.tile:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08), 0 12px 28px rgba(0,0,0,.06); transform: translateY(-1px); }
+.tile-header { display: flex; align-items: center; gap: 7px; margin-bottom: 14px; font-size: 11px; font-weight: 700; color: var(--sub); text-transform: uppercase; letter-spacing: 1.2px; }
+
+/* tile spans */
+.t-q0      { grid-column: span 12; }
+.t-market  { grid-column: span 6; }
+.t-holding { grid-column: span 6; }
+.t-decision{ grid-column: span 4; }
+.t-causal  { grid-column: span 8; }
+.t-fund    { grid-column: span 6; }
+.t-mistake { grid-column: span 6; }
+.t-lesson  { grid-column: span 6; }
+.t-premortem { grid-column: span 6; }
+/* weekly */
+.t-wthesis { grid-column: span 12; }
+.t-waudit  { grid-column: span 6; }
+.t-wmistake{ grid-column: span 6; }
+.t-wconv   { grid-column: span 5; }
+.t-wnext   { grid-column: span 4; }
+.t-wclient { grid-column: span 3; }
+.t-wsurprise{ grid-column: span 8; }
+.t-wtrans  { grid-column: span 4; }
+
+@media (max-width: 900px) {
+  .mosaic { grid-template-columns: 1fr 1fr; }
+  .tile { grid-column: span 2 !important; }
+}
+@media (max-width: 600px) {
+  .mosaic { grid-template-columns: 1fr; }
+  .tile { grid-column: span 1 !important; }
+}
+
+/* Q0 HERO */
+.q0-box { background: linear-gradient(135deg, #1e293b, #1e3a5f); border-radius: 14px; padding: 22px 26px; color: #fff; }
+.q0-label { font-size: 10px; font-weight: 700; letter-spacing: 2px; color: rgba(255,255,255,.45); margin-bottom: 10px; }
+.q0-text { font-size: 18px; font-weight: 700; line-height: 1.6; }
+.q0-meta { display: flex; gap: 16px; margin-top: 14px; }
+.q0-meta span { font-size: 11px; font-family: var(--mono); color: rgba(255,255,255,.5); }
+.q0-meta span b { color: rgba(255,255,255,.85); }
+
+/* MARKET SNAPSHOT */
+.index-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
+.idx-item { padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background: #faf8f5; }
+.idx-name { font-size: 11px; color: var(--dim); margin-bottom: 2px; }
+.idx-val { font-family: var(--mono); font-size: 15px; font-weight: 700; }
+.idx-chg { font-family: var(--mono); font-size: 12px; }
+.chg-neg { color: var(--red); }
+.chg-pos { color: var(--green); }
+.breadth-bar { display: flex; height: 20px; border-radius: 8px; overflow: hidden; margin-top: 8px; }
+.breadth-up { background: var(--green); display: flex; align-items: center; justify-content: flex-end; padding-right: 6px; font-size: 10px; font-weight: 700; color: #fff; }
+.breadth-dn { background: var(--red); display: flex; align-items: center; padding-left: 6px; font-size: 10px; font-weight: 700; color: #fff; }
+.breadth-label { display: flex; justify-content: space-between; font-size: 10px; color: var(--dim); font-family: var(--mono); margin-top: 3px; }
+.theme-row { display: flex; gap: 8px; align-items: flex-start; padding: 10px; border-radius: 10px; background: #faf8f5; border: 1px solid var(--border); margin-top: 8px; }
+.theme-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex-shrink: 0; margin-top: 5px; }
+.theme-name { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+.theme-detail { font-size: 11px; color: var(--sub); }
+
+/* HOLDINGS */
+.h-row { padding: 12px 14px; border-radius: 12px; margin-bottom: 8px; background: #faf8f5; border: 1px solid var(--border); }
+.h-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.h-name { font-weight: 700; font-size: 14px; }
+.h-code { font-size: 10px; color: var(--dim); font-family: var(--mono); }
+.h-pnl { font-family: var(--mono); font-weight: 700; font-size: 14px; }
+.h-bars { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.h-bar-item { }
+.h-bar-label { font-size: 10px; color: var(--dim); margin-bottom: 3px; display: flex; justify-content: space-between; }
+.h-track { height: 6px; background: #ebe6df; border-radius: 4px; overflow: hidden; }
+.h-fill { height: 100%; border-radius: 4px; transition: width .6s ease; }
+.h-meta { font-size: 10px; color: var(--dim); margin-top: 4px; font-family: var(--mono); }
+
+/* DECISION */
+.q-item { margin-bottom: 10px; padding: 10px 12px; border-radius: 10px; background: #faf8f5; border: 1px solid var(--border); }
+.q-label { font-size: 10px; color: var(--dim); font-weight: 700; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 4px; }
+.q-value { font-size: 13px; font-weight: 600; }
+.q-sub { font-size: 11px; color: var(--sub); margin-top: 2px; }
+.outcome-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px; }
+.outcome-cell { padding: 8px 10px; border-radius: 8px; font-size: 11px; text-align: center; border: 1px solid var(--border); }
+.outcome-cell.active { border-width: 2px; }
+.outcome-cell.win { background: #ecfdf5; border-color: #a7f3d0; color: var(--green); }
+.outcome-cell.loss { background: #fef2f2; border-color: #fecaca; color: var(--red); }
+
+/* CAUSAL */
+.chain { display: flex; flex-direction: column; gap: 2px; }
+.chain-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f0ece6; }
+.chain-row:last-child { border: none; }
+.chain-ticker { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--accent); min-width: 60px; padding-top: 1px; }
+.chain-steps { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 12px; }
+.chain-step { padding: 2px 8px; border-radius: 5px; background: #faf8f5; border: 1px solid var(--border); }
+.chain-arrow { color: var(--dim); font-size: 11px; }
+.chain-step.bad { background: #fef2f2; border-color: #fecaca; color: var(--red); }
+.insight-box { margin-top: 12px; padding: 12px 14px; background: linear-gradient(135deg, #eff6ff, #faf5ff); border: 1px solid #c7d2fe; border-radius: 12px; font-size: 12px; color: var(--sub); font-style: italic; }
+
+/* FUND FLOW */
+.ff-main { padding: 12px 14px; border-radius: 12px; background: #fef2f2; border: 1px solid #fecaca; margin-bottom: 10px; }
+.ff-title { font-weight: 700; font-size: 12px; color: var(--red); margin-bottom: 6px; }
+.ff-items { display: flex; flex-wrap: wrap; gap: 6px; }
+.ff-chip { padding: 4px 10px; border-radius: 7px; font-size: 11px; font-family: var(--mono); border: 1px solid var(--border); background: var(--surface); }
+.ff-chip.in { background: #ecfdf5; border-color: #a7f3d0; color: var(--green); }
+.ff-chip.out { background: #fef2f2; border-color: #fecaca; color: var(--red); }
+.ff-surprise { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: #fefce8; border: 1px solid #fef08a; font-size: 12px; }
+.ff-surprise strong { color: var(--yellow); }
+
+/* MISTAKE */
+.mistake-item { margin-bottom: 8px; }
+.mistake-layer { display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; border-radius: 9px; border: 1px solid var(--border); background: #faf8f5; }
+.ml-badge { font-size: 10px; font-weight: 700; font-family: var(--mono); padding: 1px 6px; border-radius: 4px; flex-shrink: 0; margin-top: 1px; }
+.ml-badge.l1 { background: #fef3c7; color: var(--yellow); }
+.ml-badge.l2 { background: #dbeafe; color: var(--accent); }
+.ml-text { font-size: 12px; color: var(--sub); }
+
+/* LESSON */
+.lesson-hero { padding: 20px; background: linear-gradient(135deg, #faf5ff, #eff6ff); border: 1px solid #e9d5ff; border-radius: 14px; margin-bottom: 10px; }
+.lesson-id { font-size: 11px; color: var(--purple); font-weight: 700; margin-bottom: 8px; }
+.lesson-text { font-size: 15px; font-weight: 600; line-height: 1.7; color: var(--text); }
+.lesson-tag { display: inline-block; margin-top: 10px; padding: 2px 10px; border-radius: 6px; font-size: 10px; font-weight: 700; background: #ede9fe; color: var(--purple); font-family: var(--mono); }
+.anchor-check { margin-top: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: #faf8f5; }
+.anchor-label { font-size: 10px; color: var(--dim); font-weight: 700; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 6px; }
+.anchor-text { font-size: 12px; color: var(--sub); }
+
+/* PREMORTEM */
+.premortem-box { padding: 14px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; margin-bottom: 10px; }
+.premortem-box .pm-icon { font-size: 24px; margin-bottom: 8px; }
+.premortem-text { font-size: 13px; font-weight: 600; color: #92400e; }
+.tomorrow-list li { font-size: 12px; color: var(--sub); padding: 5px 0; border-bottom: 1px solid #f0ece6; list-style: none; display: flex; gap: 6px; }
+.tomorrow-list li::before { content: "→"; color: var(--accent); font-family: var(--mono); }
+
+/* WEEKLY SECTION HEADER */
+.week-section-header { display: flex; align-items: center; gap: 10px; margin: 20px 0 12px; padding-bottom: 10px; border-bottom: 2px solid var(--border); }
+.week-section-header h2 { font-size: 16px; font-weight: 700; }
+.week-section-header .week-badge { font-size: 11px; font-family: var(--mono); padding: 3px 10px; border-radius: 6px; background: #dbeafe; color: var(--accent); border: 1px solid #bfdbfe; }
+
+/* WEEKLY THESIS */
+.wthesis-box { padding: 18px 22px; background: linear-gradient(135deg, #1e3a5f, #312e81); border-radius: 14px; color: #fff; }
+.wthesis-sublabel { font-size: 10px; letter-spacing: 2px; color: rgba(255,255,255,.4); font-weight: 700; margin-bottom: 8px; }
+.wthesis-text { font-size: 16px; font-weight: 700; line-height: 1.65; }
+.wthesis-meta { display: flex; gap: 18px; margin-top: 14px; font-size: 11px; font-family: var(--mono); color: rgba(255,255,255,.5); }
+
+/* AUDIT */
+.audit-row { display: grid; grid-template-columns: 60px 1fr; gap: 12px; margin-bottom: 8px; align-items: start; }
+.audit-tag { padding: 4px 0; font-size: 11px; font-weight: 700; font-family: var(--mono); }
+.audit-tag.right { color: var(--green); }
+.audit-tag.wrong { color: var(--red); }
+.audit-tag.miss { color: var(--yellow); }
+.audit-content { font-size: 12px; color: var(--sub); padding: 8px 12px; border-radius: 9px; border: 1px solid var(--border); background: #faf8f5; line-height: 1.6; }
+
+/* 4-LAYER MISTAKE */
+.layer4-item { display: grid; grid-template-columns: 80px 1fr; gap: 10px; align-items: flex-start; margin-bottom: 6px; }
+.layer4-badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 5px; font-family: var(--mono); text-align: center; }
+.layer4-badge.l1 { background: #fef3c7; color: var(--yellow); }
+.layer4-badge.l2 { background: #dbeafe; color: var(--accent); }
+.layer4-badge.l3 { background: #ede9fe; color: var(--purple); }
+.layer4-badge.l4 { background: #fce7f3; color: #db2777; }
+.layer4-text { font-size: 12px; color: var(--sub); padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border); background: #faf8f5; line-height: 1.5; }
+
+/* CONVICTION */
+.conv-row { display: grid; grid-template-columns: 1fr 80px 80px 100px; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; background: #faf8f5; border: 1px solid var(--border); margin-bottom: 6px; }
+.conv-ticker { font-weight: 700; font-family: var(--mono); font-size: 13px; }
+.conv-conf { font-size: 11px; text-align: center; padding: 3px 8px; border-radius: 6px; }
+.conv-conf.med { background: #fefce8; color: var(--yellow); }
+.conv-conf.low { background: #fef2f2; color: var(--red); }
+.conv-conf.high { background: #ecfdf5; color: var(--green); }
+.conv-pos { font-family: var(--mono); font-size: 12px; text-align: center; }
+.conv-match { font-size: 11px; color: var(--sub); }
+
+/* NEXT WEEK */
+.next-item { display: flex; gap: 8px; align-items: flex-start; padding: 7px 10px; border-radius: 8px; background: #faf8f5; border: 1px solid var(--border); margin-bottom: 5px; font-size: 12px; }
+.next-item .ni-icon { flex-shrink: 0; }
+.principle-box { padding: 14px; background: linear-gradient(135deg, #ecfdf5, #eff6ff); border: 1px solid #a7f3d0; border-radius: 12px; margin-top: 8px; }
+.principle-box .pb-label { font-size: 10px; font-weight: 700; color: var(--green); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+.principle-step { display: flex; gap: 8px; font-size: 12px; margin-bottom: 5px; }
+.principle-num { font-family: var(--mono); font-weight: 700; color: var(--accent); min-width: 18px; }
+
+/* CLIENT */
+.client-item { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: 9px; background: #faf8f5; border: 1px solid var(--border); margin-bottom: 6px; }
+.client-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+.client-item.warn { background: #fef2f2; border-color: #fecaca; }
+.client-text { font-size: 12px; color: var(--sub); }
+.client-text strong { color: var(--text); }
+.trans-box { padding: 14px; border-radius: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; font-size: 13px; line-height: 1.7; color: #166534; }
+.trans-label { font-size: 10px; font-weight: 700; color: var(--green); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+
+/* SURPRISE */
+.surprise-main { padding: 14px 16px; background: linear-gradient(135deg, #7c3aed18, #2563eb12); border: 1px solid #c4b5fd; border-radius: 12px; margin-bottom: 8px; }
+.surprise-rank { font-size: 10px; font-weight: 700; color: var(--purple); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.surprise-text { font-size: 13px; font-weight: 600; line-height: 1.6; }
+.surprise-mini { padding: 8px 12px; border-radius: 9px; background: #faf8f5; border: 1px solid var(--border); margin-bottom: 5px; font-size: 12px; color: var(--sub); }
+
+/* SENTIMENT */
+.sentiment-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.sent-box { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: #faf8f5; }
+.sent-label { font-size: 10px; color: var(--dim); margin-bottom: 4px; }
+.sent-val { font-family: var(--mono); font-size: 16px; font-weight: 700; }
+
+/* SCORE */
+.score-card { padding: 16px; background: linear-gradient(135deg, #fafafa, #f4f1ec); border: 1px solid var(--border); border-radius: 14px; text-align: center; }
+.score-big { font-family: var(--mono); font-size: 36px; font-weight: 700; color: var(--yellow); }
+.score-label { font-size: 12px; color: var(--sub); margin-top: 4px; }
+.score-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
+.score-item { padding: 8px; border-radius: 9px; background: var(--surface); border: 1px solid var(--border); text-align: center; }
+.score-item .si-grade { font-family: var(--mono); font-size: 15px; font-weight: 700; }
+.score-item .si-name { font-size: 10px; color: var(--dim); margin-top: 2px; }
+.quote-box { margin-top: 12px; padding: 12px 16px; background: var(--text); color: rgba(255,255,255,.8); border-radius: 10px; font-size: 12px; line-height: 1.7; font-style: italic; }
+.quote-box strong { color: #fff; }
+
+/* FOOTER */
+.footer { text-align: center; color: var(--dim); font-size: 10px; margin-top: 20px; padding: 10px 0; letter-spacing: .3px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <h1>📅 周复盘 · 3/20 周五</h1>
+    <span class="badge">DING_001</span>
+    <span class="badge warn">补填 3/22</span>
+    <span class="badge ok">V2.1.0</span>
+  </div>
+  <div class="ts">SESSION-20260322-002 · 2026-03-22 周日 · V6.5.1</div>
+</div>
+
+<!-- STATUS BAR -->
+<div class="status-bar">
+  <div class="si"><span class="dot y"></span><span class="lbl">Regime</span><span class="val l1">L1</span></div>
+  <div class="divider"></div>
+  <div class="si"><span class="lbl">Risk</span><span class="val">58.0</span></div>
+  <div class="divider"></div>
+  <div class="si"><span class="lbl">Cap</span><span class="val">16%</span></div>
+  <div class="divider"></div>
+  <div class="si"><span class="lbl">情绪/决策时</span><span class="val">2→3</span></div>
+  <div class="divider"></div>
+  <div class="si"><span class="lbl">现金</span><span class="val ok">92.1%</span></div>
+  <div class="divider"></div>
+  <div class="si"><span class="lbl">浮亏</span><span class="val neg">-¥32,400 (-0.23%)</span></div>
+  <div class="divider"></div>
+  <div class="si"><span class="lbl">连续复盘</span><span class="val" style="color:var(--red)">1日（首次）</span></div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('daily',this)">📋 周五日复盘</button>
+  <button class="tab-btn" onclick="switchTab('weekly',this)">📊 周复盘 (3/17-3/20)</button>
+  <button class="tab-btn" onclick="switchTab('score',this)">🏅 综合评分</button>
+</div>
+
+<!-- ══════════════════════════════════ TAB: DAILY ══════════════════════════════════ -->
+<div class="tab-pane active" id="tab-daily">
+<div class="mosaic">
+
+  <!-- Q0 HERO -->
+  <div class="tile t-q0">
+    <div class="tile-header">🗣️ Layer 0 · 付鹏一句话（不可跳过）</div>
+    <div class="q0-box">
+      <div class="q0-label">今天市场在交易什么</div>
+      <div class="q0-text">政策不动（LPR持平），能源安全与AI硬件景气并行：市场从单纯避险转向「电力/储能/锂电」+「光通信/CPO」两条线同时走强，但沪指失守4000点，散户普遍亏钱，只有少数赛道在赚钱。</div>
+      <div class="q0-meta">
+        <span>交易日 <b>2026-03-20 周五</b></span>
+        <span>成交额 <b>2.30万亿</b></span>
+        <span>Brent <b>~108-110美元</b></span>
+        <span>LPR <b>1Y 3.0% / 5Y 3.5% 持平</b></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MARKET SNAPSHOT -->
+  <div class="tile t-market">
+    <div class="tile-header">📈 市场快照</div>
+    <div class="index-grid">
+      <div class="idx-item">
+        <div class="idx-name">上证指数</div>
+        <div class="idx-val">3957.05</div>
+        <div class="idx-chg chg-neg">-1.24% ↓ 失守4000</div>
+      </div>
+      <div class="idx-item">
+        <div class="idx-name">创业板指</div>
+        <div class="idx-val">3352.10</div>
+        <div class="idx-chg chg-pos">+1.30% ↑ 表象欺骗</div>
+      </div>
+      <div class="idx-item">
+        <div class="idx-name">深证成指</div>
+        <div class="idx-val">13866.20</div>
+        <div class="idx-chg chg-neg">-0.25%</div>
+      </div>
+      <div class="idx-item">
+        <div class="idx-name">科创50</div>
+        <div class="idx-val">1318.31</div>
+        <div class="idx-chg chg-neg">-1.55%</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--dim);margin-bottom:5px">市场广度（涨/跌）</div>
+    <div class="breadth-bar">
+      <div class="breadth-up" style="width:12%">662</div>
+      <div class="breadth-dn" style="width:88%">4786↓ 微盘-3.71%</div>
+    </div>
+    <div class="breadth-label"><span>封板率55% / 跌停23家</span><span>成交2.30万亿(+8.3%)</span></div>
+    <div class="theme-row">
+      <div class="theme-dot"></div>
+      <div>
+        <div class="theme-name">主线①  新能源链</div>
+        <div class="theme-detail">光伏逆变器+7.22% · 电力设备主力净流入70.5亿 · 电池+40.9亿<br>触发：节能装备方案+高油价替代逻辑</div>
+      </div>
+    </div>
+    <div class="theme-row">
+      <div class="theme-dot" style="background:var(--cyan)"></div>
+      <div>
+        <div class="theme-name">主线②  光通信/CPO</div>
+        <div class="theme-detail">光模块+2.90% · 通信+1.44% · OFC大会+英特尔CPU涨价10%</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HOLDINGS -->
+  <div class="tile t-holding">
+    <div class="tile-header">📦 持仓状态（T0，3/20收盘）</div>
+    <div class="h-row">
+      <div class="h-top">
+        <div><div class="h-name">潍柴动力</div><div class="h-code">000338.SZ · 卫星仓 · Day3/15 · HOLD_REVIEW≈4/7</div></div>
+        <div class="h-pnl chg-neg">-1.85%<br><span style="font-size:10px;color:var(--dim)">累计-2.01%</span></div>
+      </div>
+      <div class="h-bars">
+        <div class="h-bar-item">
+          <div class="h-bar-label"><span>止损距</span><span style="color:var(--green);font-weight:700">6.12% ✓</span></div>
+          <div class="h-track"><div class="h-fill" style="width:60%;background:var(--green)"></div></div>
+          <div class="h-meta">成本23.84 → 现23.36 · 止损21.93</div>
+        </div>
+        <div class="h-bar-item">
+          <div class="h-bar-label"><span>仓位/风险资本</span><span>5.9%</span></div>
+          <div class="h-track"><div class="h-fill" style="width:49%;background:var(--accent)"></div></div>
+          <div class="h-meta">35,000股 · 市值¥81.8万</div>
+        </div>
+      </div>
+    </div>
+    <div class="h-row">
+      <div class="h-top">
+        <div><div class="h-name">金风科技</div><div class="h-code">002202.SZ · 卫星仓 · Day3/15 · HOLD_REVIEW≈4/7</div></div>
+        <div class="h-pnl chg-neg">-2.05%<br><span style="font-size:10px;color:var(--dim)">累计-3.44%</span></div>
+      </div>
+      <div class="h-bars">
+        <div class="h-bar-item">
+          <div class="h-bar-label"><span>止损距</span><span style="color:var(--yellow);font-weight:700">4.73% 🟡</span></div>
+          <div class="h-track"><div class="h-fill" style="width:40%;background:var(--yellow)"></div></div>
+          <div class="h-meta">成本30.24 → 现29.20 · 止损27.82</div>
+        </div>
+        <div class="h-bar-item">
+          <div class="h-bar-label"><span>仓位/风险资本</span><span>3.1%</span></div>
+          <div class="h-track"><div class="h-fill" style="width:26%;background:var(--accent)"></div></div>
+          <div class="h-meta">15,000股 · 市值¥43.8万</div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:8px 12px;border-radius:9px;background:#ecfdf5;border:1px solid #a7f3d0;font-size:11px;color:var(--green);margin-top:4px">
+      ✓ exit_contract全部安全 · 合计持仓8.99% → 上限16% · 剩余仓位空间7.01%
+    </div>
+  </div>
+
+  <!-- DECISION Q1-Q6 -->
+  <div class="tile t-decision">
+    <div class="tile-header">🧠 决策层 Q1-Q6</div>
+    <div class="q-item">
+      <div class="q-label">Q1 最大决策</div>
+      <div class="q-value">持有不动</div>
+      <div class="q-sub">原计划日内T，帝国系统风控阻止 + 低仓位意义不大</div>
+    </div>
+    <div class="q-item">
+      <div class="q-label">Q2 决策驱动</div>
+      <div class="q-value">分析判断</div>
+      <div class="q-sub">系统风控 + 自身判断（9%仓位做T收益有限）</div>
+    </div>
+    <div class="q-item">
+      <div class="q-label">Q3 决策质量 / Q4 情绪</div>
+      <div class="q-value">3/5 分 · 情绪 3/6</div>
+    </div>
+    <div class="q-item">
+      <div class="q-label">Q3b 结果象限</div>
+      <div class="outcome-grid">
+        <div class="outcome-cell loss active">④ 应得的输<br><small>持有两票</small></div>
+        <div class="outcome-cell win active">① 应得的赢<br><small>未追买港股</small></div>
+      </div>
+    </div>
+    <div class="q-item">
+      <div class="q-label">Q5 意外</div>
+      <div class="q-value" style="color:var(--red)">大意外</div>
+      <div class="q-sub">①创业板+1.3%但4784只跌 ②金风-2.05%跑输风电板块</div>
+    </div>
+  </div>
+
+  <!-- CAUSAL CHAIN -->
+  <div class="tile t-causal">
+    <div class="tile-header">🔗 因果链分析</div>
+    <div class="chain">
+      <div class="chain-row">
+        <div class="chain-ticker">潍柴链</div>
+        <div class="chain-steps">
+          <span class="chain-step bad">沪指失守4000</span>
+          <span class="chain-arrow">→</span>
+          <span class="chain-step">广度崩塌</span>
+          <span class="chain-arrow">→</span>
+          <span class="chain-step">主力收缩非主线</span>
+          <span class="chain-arrow">→</span>
+          <span class="chain-step bad">机械净流出403亿</span>
+          <span class="chain-arrow">→</span>
+          <span class="chain-step bad">潍柴-1.85%</span>
+        </div>
+      </div>
+      <div class="chain-row">
+        <div class="chain-ticker">金风链</div>
+        <div class="chain-steps">
+          <span class="chain-step bad">沪指失守4000</span>
+          <span class="chain-arrow">→</span>
+          <span class="chain-step">资金转向新能源</span>
+          <span class="chain-arrow">→</span>
+          <span class="chain-step bad">优先光伏/储能/锂电</span>
+          <span class="chain-arrow">→</span>
+          <span class="chain-step bad">风电掉队</span>
+          <span class="chain-arrow">→</span>
+          <span class="chain-step bad">金风-2.05%</span>
+        </div>
+      </div>
+    </div>
+    <div class="insight-box">
+      <strong>关键揭示：</strong>不是"被大盘无差别砸"，而是被市场的结构选择淘汰到非优先级区间。
+      预期偏差三层：①把"大方向正确"误当"持仓被资金选择"；②低估港股周五风险溢价；③把创业板+1.3%误读为"整体修复"而非"结构行情"。
+    </div>
+  </div>
+
+  <!-- FUND FLOW -->
+  <div class="tile t-fund">
+    <div class="tile-header">💸 资金流向（最反常）</div>
+    <div class="ff-main">
+      <div class="ff-title">🔴 A股主力：总撤退 + 局部抱团</div>
+      <div class="ff-items">
+        <span class="ff-chip out">总净流出 -2029亿</span>
+        <span class="ff-chip in">电力设备 +173亿</span>
+        <span class="ff-chip in">光伏设备 +72.8亿</span>
+        <span class="ff-chip in">通信设备 +54.4亿</span>
+        <span class="ff-chip in">电池 +40.9亿</span>
+      </div>
+    </div>
+    <div class="ff-surprise">
+      <strong>港股南向最反常：</strong>全天净卖出210.05亿港元，却逆势<br>
+      <span style="color:var(--green)">小米+24.6亿 · 阿里+20.4亿 · 腾讯+6.8亿</span><br>
+      <span style="font-size:11px">→ "撤指数·留龙头"的战术性结构调仓</span>
+    </div>
+    <div style="margin-top:8px;padding:8px 12px;border-radius:9px;background:#ecfdf5;border:1px solid #a7f3d0;font-size:11px">
+      <strong>最佳判断（虽未执行）：</strong>港股比亚迪H · 高油价→油转电最直接受益<br>
+      3/16-3/20区间 <span style="color:var(--green);font-weight:700">+7.29%</span>，穿越港股逆风
+    </div>
+  </div>
+
+  <!-- MISTAKE -->
+  <div class="tile t-mistake">
+    <div class="tile-header">⚠️ 错误分析</div>
+    <div class="mistake-item">
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--red)">框架错误：把"属于新能源大方向"等同于"被当日资金选中"</div>
+      <div class="mistake-layer">
+        <span class="ml-badge l1">行为层</span>
+        <span class="ml-text">未在上午盘中识别出新能源内部分化——风电/机械掉队信号</span>
+      </div>
+      <div class="mistake-layer" style="margin-top:5px">
+        <span class="ml-badge l2">系统层</span>
+        <span class="ml-text">缺乏"主线内部强弱快速识别"盘中快检机制（TODO-020）</span>
+      </div>
+    </div>
+    <div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:#faf8f5;border:1px solid var(--border)">
+      <div style="font-size:10px;color:var(--dim);font-weight:700;margin-bottom:6px">事前锚定 vs 实际（事后补填）</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px">
+        <div style="padding:6px 8px;background:#fef2f2;border-radius:7px;color:var(--sub)"><strong>预期：</strong>散户情绪不稳定，低开为主，新能源反弹不确定</div>
+        <div style="padding:6px 8px;background:#ecfdf5;border-radius:7px;color:var(--sub)"><strong>实际：</strong>新能源强但极度分化，广度极差，广度骗局成立</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LESSON -->
+  <div class="tile t-lesson">
+    <div class="tile-header">📖 教训 · 原则更新</div>
+    <div class="lesson-hero">
+      <div class="lesson-id">ES-20260320-001 · 永久教训 → LTM</div>
+      <div class="lesson-text">"方向对不够，必须选对当日资金验证的最强细分，否则方向对、结果错。"</div>
+      <span class="lesson-tag">→ 长期记忆</span><span class="lesson-tag" style="margin-left:4px;background:#fef3c7;color:var(--yellow)">框架错误</span>
+    </div>
+    <div style="font-size:11px;color:var(--dim);font-weight:700;margin:10px 0 6px;text-transform:uppercase;letter-spacing:.8px">散户情绪参考（T1）</div>
+    <div class="anchor-check">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div class="sent-box">
+          <div class="sent-label">华泰情绪指数</div>
+          <div class="sent-val" style="color:var(--red)">21.1%</div>
+        </div>
+        <div class="sent-box">
+          <div class="sent-label">中证500 VIX</div>
+          <div class="sent-val" style="color:var(--red)">34.19<br><span style="font-size:9px">91%分位</span></div>
+        </div>
+        <div class="sent-box">
+          <div class="sent-label">散户盈利比</div>
+          <div class="sent-val" style="color:var(--red)">21%</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--sub);margin-top:8px">周末：央行"坚定维护股市"+中东缓和信号 → 周一恐慌惯性仍在但极端踩踏概率偏低</div>
+    </div>
+  </div>
+
+  <!-- PRE-MORTEM -->
+  <div class="tile t-premortem">
+    <div class="tile-header">🔮 前瞻层</div>
+    <div class="premortem-box">
+      <div class="pm-icon">⚠️</div>
+      <div style="font-size:10px;color:#92400e;font-weight:700;text-transform:uppercase;margin-bottom:6px">Pre-mortem · 周一计划最可能失败原因</div>
+      <div class="premortem-text">机构赎回/止损盘周一延续释放——周五固收+出现近一年最大单日净赎回，主动权益连续8日净赎回，反弹不够T、回落足够亏</div>
+    </div>
+    <div style="font-size:11px;color:var(--dim);font-weight:700;margin-bottom:6px">周一盯什么</div>
+    <ul class="tomorrow-list">
+      <li>沪指能否回4000点且不是瞬时拉回</li>
+      <li>上涨家数能否回1500+（广度修复信号）</li>
+      <li>南向资金是否从-210亿恢复净流入（港股买入条件）</li>
+    </ul>
+    <div style="margin-top:10px;padding:8px 12px;background:#faf8f5;border-radius:9px;border:1px solid var(--border);font-size:11px">
+      <strong>宏观注记：</strong>Brent ~108-110美元（低于$120重算触发线）· DXY ~100 · LPR持平
+    </div>
+  </div>
+
+</div><!-- /mosaic daily -->
+</div><!-- /tab-daily -->
+
+<!-- ══════════════════════════════════ TAB: WEEKLY ══════════════════════════════════ -->
+<div class="tab-pane" id="tab-weekly">
+<div class="week-section-header">
+  <h2>📊 周复盘 · 建仓第1周</h2>
+  <span class="week-badge">2026-03-17 → 03-20</span>
+  <span class="badge">4个交易日</span>
+  <span class="badge warn">首周 · 基准周</span>
+</div>
+<div class="mosaic">
+
+  <!-- WEEK THESIS -->
+  <div class="tile t-wthesis">
+    <div class="tile-header">🌐 本周核心叙事</div>
+    <div class="wthesis-box">
+      <div class="wthesis-sublabel">周叙事 · 一句话</div>
+      <div class="wthesis-text">美伊冲突升级→油价抬升→全球滞胀→美联储降息预期下修；A股内部在「资源涨价/防御红利」与「AI算力/算电协同」之间反复轮动。<br><span style="color:rgba(255,255,255,.65)">外面打滞胀和能源安全，里面抢AI算力和绿电基础设施。</span></div>
+      <div class="wthesis-meta">
+        <span>浮亏 <b style="color:rgba(255,255,255,.85)">-¥32,400 (-0.23%)</b></span>
+        <span>建仓第1周</span>
+        <span>Brent +50% vs 冲突前</span>
+        <span>美联储2026年最多降息1次</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- DECISION AUDIT -->
+  <div class="tile t-waudit">
+    <div class="tile-header">⚖️ 本周决策审计</div>
+    <div class="audit-row">
+      <div class="audit-tag right">✅ 做对</div>
+      <div class="audit-content">周五未追买港股比亚迪H/信达生物——港股南向净流出210亿，恒科跌-2.48%，克制正确（应得的赢①）</div>
+    </div>
+    <div class="audit-row">
+      <div class="audit-tag wrong">❌ 做错</div>
+      <div class="audit-content">建仓后未识别极端分化日中主线内部强弱——持有机械+风电，两者均非3/20最强新能源细分（光伏/储能/光通信）</div>
+    </div>
+    <div class="audit-row">
+      <div class="audit-tag miss">🔍 漏掉</div>
+      <div class="audit-content">港股比亚迪H方向判断正确但未执行——3/16-3/20区间+7.29%，穿越港股逆风</div>
+    </div>
+    <div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:#faf8f5;border:1px solid var(--border)">
+      <div style="font-size:10px;color:var(--dim);margin-bottom:6px">主要拖累来源</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <span style="padding:4px 10px;border-radius:7px;background:#fef2f2;border:1px solid #fecaca;font-size:11px;color:var(--red)">潍柴 3/19 -6.19%（中东冲击峰值）</span>
+        <span style="padding:4px 10px;border-radius:7px;background:#fef2f2;border:1px solid #fecaca;font-size:11px;color:var(--red)">金风 3/17 -7.93%（极端杀跌日）</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4-LAYER MISTAKE -->
+  <div class="tile t-wmistake">
+    <div class="tile-header">🔬 四层错误深析</div>
+    <div class="layer4-item">
+      <span class="layer4-badge l1">行为层</span>
+      <div class="layer4-text">在极端分化市中持有机械+风电，两者均非最强新能源细分</div>
+    </div>
+    <div class="layer4-item">
+      <span class="layer4-badge l2">前提层</span>
+      <div class="layer4-text">建仓决策时未预设"极端分化日如何切换主线"的操作预案</div>
+    </div>
+    <div class="layer4-item">
+      <span class="layer4-badge l3">监督层</span>
+      <div class="layer4-text">无实时盘中主力资金流向监控工具，依赖事后复盘发现</div>
+    </div>
+    <div class="layer4-item">
+      <span class="layer4-badge l4">组织层</span>
+      <div class="layer4-text">缺乏"主线内部强弱排序"规则——知道方向不够，需要知道当天的"最强表达"（→TODO-020）</div>
+    </div>
+  </div>
+
+  <!-- CONVICTION ALIGNMENT -->
+  <div class="tile t-wconv">
+    <div class="tile-header">🎯 置信度 vs 仓位匹配</div>
+    <div class="conv-row" style="grid-template-columns:1fr 50px 60px 90px;font-size:11px;color:var(--dim);padding:4px 12px;">
+      <span>标的</span><span style="text-align:center">置信度</span><span style="text-align:center">仓位</span><span>匹配度</span>
+    </div>
+    <div class="conv-row">
+      <div>
+        <div class="conv-ticker">000338</div>
+        <div style="font-size:10px;color:var(--dim)">潍柴动力</div>
+      </div>
+      <div class="conv-conf med">Med</div>
+      <div class="conv-pos">5.9%</div>
+      <div class="conv-match">偏高 ↑<br><span style="font-size:10px">短期逻辑模糊</span></div>
+    </div>
+    <div class="conv-row">
+      <div>
+        <div class="conv-ticker">002202</div>
+        <div style="font-size:10px;color:var(--dim)">金风科技</div>
+      </div>
+      <div class="conv-conf low">Low</div>
+      <div class="conv-pos">3.1%</div>
+      <div class="conv-match">偏高 ↑<br><span style="font-size:10px">脉冲未延续</span></div>
+    </div>
+    <div style="margin-top:10px;padding:8px 12px;border-radius:9px;background:#faf8f5;border:1px solid var(--border);font-size:11px;color:var(--sub)">
+      两票置信度均不支撑当前仓位。下周HOLD_REVIEW（≈4/7）前需动态评估。
+    </div>
+  </div>
+
+  <!-- NEXT WEEK PLAN -->
+  <div class="tile t-wnext">
+    <div class="tile-header">📋 下周关注点</div>
+    <div class="next-item"><span class="ni-icon">🔴</span><span>Brent油价走势（>$120触发risk_score重算）</span></div>
+    <div class="next-item"><span class="ni-icon">🟠</span><span>市场广度能否持续回到1500+家</span></div>
+    <div class="next-item"><span class="ni-icon">🟠</span><span>宁德时代/阳光电源/中际旭创 SIP启动（DEC-008）</span></div>
+    <div class="principle-box">
+      <div class="pb-label">新增原则：极端分化日三步自检框架</div>
+      <div class="principle-step"><span class="principle-num">①</span><span>我持有的，是否当天被主力资金验证的最强分支？</span></div>
+      <div class="principle-step"><span class="principle-num">②</span><span>指数强，是否同时伴随市场广度修复（涨>1500）？</span></div>
+      <div class="principle-step"><span class="principle-num">③</span><span>新买入标的所在板块，主力资金是否净流入？</span></div>
+      <div style="margin-top:6px;font-size:11px;color:var(--sub)">任一"否" → 不操作，等广度确认。</div>
+    </div>
+  </div>
+
+  <!-- CLIENT CHECK -->
+  <div class="tile t-wclient">
+    <div class="tile-header">👤 客户体验4问</div>
+    <div class="client-item">
+      <div class="client-dot" style="background:var(--green)"></div>
+      <div class="client-text"><strong>节奏：</strong>首周，已发首份简报。</div>
+    </div>
+    <div class="client-item warn">
+      <div class="client-dot r" style="background:var(--red)"></div>
+      <div class="client-text"><strong>⚠️ 待跟进：</strong>丁女士要求周一"大量买入抄底"——情绪化指令，已登记client_risk_flag，下SESSION走FULL Pipeline，DEC-007截止3/24。</div>
+    </div>
+    <div class="client-item">
+      <div class="client-dot" style="background:var(--yellow)"></div>
+      <div class="client-text"><strong>情绪：</strong>偏急迫，生活开销较大，希望尽快盈利。</div>
+    </div>
+    <div class="client-item">
+      <div class="client-dot" style="background:var(--accent)"></div>
+      <div class="client-text"><strong>简报：</strong>第二份3/24前发出（DEC-011）。</div>
+    </div>
+  </div>
+
+  <!-- SURPRISE REVIEW -->
+  <div class="tile t-wsurprise">
+    <div class="tile-header">💥 本周Surprise汇总</div>
+    <div class="surprise-main">
+      <div class="surprise-rank">最大Surprise</div>
+      <div class="surprise-text">美伊冲突升级到直接打击能源基础设施——从"运输扰动"升级为"供给源头受扰"。改变了全球市场对通胀/降息/风险资产估值三者关系的判断，类1970s式供给冲击想象空间打开。</div>
+    </div>
+    <div class="surprise-mini">次要Surprise：阿里云/百度云同日涨价5%-34%——市场原本担心AI资本开支见顶，结果国内云侧明确涨价，算力需求逆预期验证。</div>
+    <div class="surprise-mini">盘面Surprise：创业板+1.30%但4784只股跌，指数与个股体验极度背离——广度骗局，全程未被识别。</div>
+    <div class="surprise-mini">意外识别延迟：金风3/18脉冲涨停（超大单49.97亿）被误读为持续趋势，3/19、3/20连续回落后方才回溯发现是事件驱动而非趋势延续。</div>
+  </div>
+
+  <!-- 翻译练习 -->
+  <div class="tile t-wtrans">
+    <div class="tile-header">🗣️ 客户语言翻译</div>
+    <div class="trans-label">本周最重要判断 · 客户语言版</div>
+    <div class="trans-box">上周市场受到中东冲突影响有所波动，我们的组合小幅浮亏约0.2%，属于正常范围。<br><br>我们手头还有大量现金，正在等待更好的时机逐步建仓，不会冒进。</div>
+    <div style="margin-top:8px;font-size:10px;color:var(--dim)">用于：第二份客户简报 · DEC-011 · 截止3/24</div>
+  </div>
+
+</div><!-- /mosaic weekly -->
+</div><!-- /tab-weekly -->
+
+<!-- ══════════════════════════════════ TAB: SCORE ══════════════════════════════════ -->
+<div class="tab-pane" id="tab-score">
+<div class="mosaic" style="margin-top:4px">
+
+  <div class="tile" style="grid-column:span 4">
+    <div class="tile-header">🏅 第一周综合评分（MTG_002 芒格）</div>
+    <div class="score-card">
+      <div class="score-big">C+</div>
+      <div class="score-label">综合评分 · 第1周 · 建仓周</div>
+      <div class="score-row">
+        <div class="score-item"><div class="si-grade" style="color:var(--yellow)">C+</div><div class="si-name">持仓管理</div></div>
+        <div class="score-item"><div class="si-grade" style="color:var(--yellow)">B-</div><div class="si-name">客户情绪</div></div>
+        <div class="score-item"><div class="si-grade" style="color:var(--green)">B</div><div class="si-name">风控纪律</div></div>
+        <div class="score-item"><div class="si-grade" style="color:var(--red)">C</div><div class="si-name">运营完整</div></div>
+      </div>
+      <div class="quote-box">"第一周最重要的不是你赚了多少，而是你没有做蠢事。这分对了。<strong>但下周开始，光'没做蠢事'不够了。</strong>" — 查理·芒格 · MTG_002</div>
+    </div>
+  </div>
+
+  <div class="tile" style="grid-column:span 4">
+    <div class="tile-header">📊 各维度说明</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="padding:10px 12px;border-radius:10px;background:#fafafa;border:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><strong>持仓管理</strong><span style="font-family:var(--mono);font-weight:700;color:var(--yellow)">C+</span></div>
+        <div style="font-size:12px;color:var(--sub)">止损安全（金风4.73%/潍柴6.12%），但主线识别偏慢，两票均非3/20最强新能源表达。建仓天数记录错误（误记为第19日，实为第3日）。</div>
+      </div>
+      <div style="padding:10px 12px;border-radius:10px;background:#fafafa;border:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><strong>客户情绪管理</strong><span style="font-family:var(--mono);font-weight:700;color:var(--yellow)">B-</span></div>
+        <div style="font-size:12px;color:var(--sub)">client_risk_flag已识别并登记，但赵丽芳+孙晓明的预期管理沟通尚未执行（DEC-007截止3/24）。</div>
+      </div>
+      <div style="padding:10px 12px;border-radius:10px;background:#fafafa;border:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><strong>风控纪律</strong><span style="font-family:var(--mono);font-weight:700;color:var(--green)">B</span></div>
+        <div style="font-size:12px;color:var(--sub)">未在情绪化环境下冲动操作，止损未被触发，未在港股逆风环境追买。克制正确。</div>
+      </div>
+      <div style="padding:10px 12px;border-radius:10px;background:#fafafa;border:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><strong>运营完整性</strong><span style="font-family:var(--mono);font-weight:700;color:var(--red)">C</span></div>
+        <div style="font-size:12px;color:var(--sub)">建仓5天零复盘（LF-001）、委员会周会延期一天（LF-002）、holding day记录错误（PATCH-20260322-HOLDDAY）。</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tile" style="grid-column:span 4">
+    <div class="tile-header">✅ 本SESSION已完成 · 🎯 下SESSION必做</div>
+    <div style="font-size:11px;color:var(--dim);font-weight:700;margin-bottom:8px;text-transform:uppercase">本SESSION完成</div>
+    <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px">
+      <div style="padding:6px 10px;border-radius:8px;background:#ecfdf5;border:1px solid #a7f3d0;font-size:12px">✅ TODO-007 首次日复盘完成（V2.1.0，L0.5+L2+Weekly）</div>
+      <div style="padding:6px 10px;border-radius:8px;background:#ecfdf5;border:1px solid #a7f3d0;font-size:12px">✅ MTG_002委员会召开（C+，DEC-007~011共5项决议）</div>
+      <div style="padding:6px 10px;border-radius:8px;background:#ecfdf5;border:1px solid #a7f3d0;font-size:12px">✅ LF-002修复（DIGEST永久区委员会周会状态，周六+周日双提醒）</div>
+      <div style="padding:6px 10px;border-radius:8px;background:#ecfdf5;border:1px solid #a7f3d0;font-size:12px">✅ 持仓天数全库修正（第3日/15日，HOLD_REVIEW≈4/7）</div>
+      <div style="padding:6px 10px;border-radius:8px;background:#ecfdf5;border:1px solid #a7f3d0;font-size:12px">✅ Alpha派情报3/21晚+3/22全球版注入</div>
+    </div>
+    <div style="font-size:11px;color:var(--dim);font-weight:700;margin-bottom:8px;text-transform:uppercase">下SESSION必做</div>
+    <div style="display:flex;flex-direction:column;gap:5px">
+      <div style="padding:6px 10px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;font-size:12px">🔴 DEC-007：新建仓SIP启动（若周一韩志远信号满足）</div>
+      <div style="padding:6px 10px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;font-size:12px">🔴 TODO-012：两票周一收盘价确认（第4日）</div>
+      <div style="padding:6px 10px;border-radius:8px;background:#fefce8;border:1px solid #fef08a;font-size:12px">🟠 DEC-011：第二份客户简报（截止3/24）</div>
+      <div style="padding:6px 10px;border-radius:8px;background:#fefce8;border:1px solid #fef08a;font-size:12px">🟠 两票falsifier复查（counter=4，OVERDUE）</div>
+    </div>
+  </div>
+
+</div>
+</div><!-- /tab-score -->
+
+<div class="footer">帝国系统复盘 V2.1.0 · RVW_DING001_20260320 · SESSION-20260322-002 · 补填日2026-03-22 · L2级治理文件</div>
+</div>
+
+<script>
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-pane').forEach(function(p) { p.classList.remove('active'); });
+  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById('tab-' + id).classList.add('active');
+  btn.classList.add('active');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>帝国系统 · MTG_002 · 2026-03-22</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg: #f4f1ec;
+  --surface: #ffffff;
+  --border: #e2ddd5;
+  --border-hi: #c9c2b8;
+  --text: #1a1a1a;
+  --sub: #6b6560;
+  --dim: #9e958c;
+  --accent: #2563eb;
+  --green: #16a34a;
+  --yellow: #ca8a04;
+  --red: #dc2626;
+  --cyan: #0891b2;
+  --purple: #7c3aed;
+  --mono: 'DM Mono', monospace;
+  --sans: 'Noto Sans SC', system-ui, sans-serif;
+  --radius: 16px;
+  --gap: 14px;
+  --shadow: 0 1px 3px rgba(0,0,0,.06), 0 6px 20px rgba(0,0,0,.04);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.6; }
+.wrap { max-width: 1380px; margin: 0 auto; padding: 24px; }
+
+/* HEADER */
+.header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
+.header-left h1 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+.header-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.badge { font-size: 11px; font-family: var(--mono); color: var(--dim); background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 2px 10px; }
+.badge.grade { background: #fefce8; border-color: #fde68a; color: var(--yellow); font-weight: 700; }
+.badge.ok { background: #ecfdf5; border-color: #a7f3d0; color: var(--green); }
+.badge.warn { background: #fef2f2; border-color: #fecaca; color: var(--red); }
+.ts { font-family: var(--mono); font-size: 11px; color: var(--dim); padding-top: 4px; }
+
+/* SCORE HERO */
+.score-hero { display: grid; grid-template-columns: 140px 1fr; gap: 20px; padding: 22px 26px; background: linear-gradient(135deg, #1e293b, #1e3a5f); border-radius: var(--radius); margin-bottom: var(--gap); color: #fff; }
+.score-big { font-family: var(--mono); font-size: 72px; font-weight: 700; color: #fbbf24; line-height: 1; padding-top: 8px; }
+.score-right { display: flex; flex-direction: column; justify-content: space-between; }
+.score-label { font-size: 12px; color: rgba(255,255,255,.45); letter-spacing: 1.5px; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
+.score-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }
+.score-cell { padding: 10px; background: rgba(255,255,255,.08); border-radius: 10px; text-align: center; }
+.score-cell .grade { font-family: var(--mono); font-size: 20px; font-weight: 700; }
+.score-cell .sname { font-size: 10px; color: rgba(255,255,255,.5); margin-top: 3px; }
+.score-cell .grade.cp { color: #fbbf24; }
+.score-cell .grade.bm { color: #fb923c; }
+.score-cell .grade.b  { color: #4ade80; }
+.score-cell .grade.c  { color: #f87171; }
+.munger-quote { font-size: 13px; font-style: italic; color: rgba(255,255,255,.7); line-height: 1.6; border-left: 3px solid rgba(255,255,255,.25); padding-left: 14px; }
+.munger-quote strong { color: #fff; }
+
+/* DECISIONS TABLE */
+.decisions { width: 100%; border-collapse: collapse; margin-bottom: var(--gap); font-size: 13px; }
+.decisions th { background: var(--text); color: #fff; padding: 10px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; text-align: left; }
+.decisions th:first-child { border-radius: 10px 0 0 0; }
+.decisions th:last-child { border-radius: 0 10px 0 0; }
+.decisions td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.decisions tr:last-child td { border-bottom: none; }
+.decisions tr:nth-child(even) td { background: #faf8f5; }
+.decisions tr:hover td { background: #f5f2ed; }
+.dec-id { font-family: var(--mono); font-weight: 700; color: var(--accent); font-size: 12px; white-space: nowrap; }
+.dec-owner { font-size: 11px; color: var(--sub); }
+.dec-due { font-family: var(--mono); font-size: 11px; white-space: nowrap; }
+.dec-due.urgent { color: var(--red); font-weight: 700; }
+.dec-due.normal { color: var(--yellow); }
+.dec-due.done { color: var(--green); }
+
+/* MOSAIC */
+.mosaic { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); margin-bottom: var(--gap); }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); transition: box-shadow .2s, transform .15s; }
+.tile:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08), 0 12px 28px rgba(0,0,0,.06); transform: translateY(-1px); }
+.t-full { grid-column: span 3; }
+.t-half { grid-column: span 1; }
+.t-two  { grid-column: span 2; }
+.tile-header { display: flex; align-items: center; gap: 7px; margin-bottom: 14px; font-size: 11px; font-weight: 700; color: var(--sub); text-transform: uppercase; letter-spacing: 1.2px; }
+
+@media (max-width: 900px) {
+  .mosaic { grid-template-columns: 1fr 1fr; }
+  .t-full { grid-column: span 2; }
+  .t-two { grid-column: span 2; }
+}
+@media (max-width: 580px) {
+  .mosaic { grid-template-columns: 1fr; }
+  .t-full,.t-two,.t-half { grid-column: span 1; }
+  .score-hero { grid-template-columns: 1fr; }
+}
+
+/* ATTENDEES */
+.attendee-section { margin-bottom: 12px; }
+.section-label { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+.people-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.person-chip { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--border); background: #faf8f5; font-size: 12px; }
+.person-chip.special { background: linear-gradient(135deg, #fef3c7, #fef9c3); border-color: #fde68a; }
+.person-chip .role { font-size: 10px; color: var(--dim); margin-left: 2px; }
+.invited-chip { display: flex; flex-direction: column; padding: 8px 12px; border-radius: 10px; border: 1px dashed var(--border-hi); background: #faf5ff; font-size: 12px; }
+.invited-chip .inv-name { font-weight: 700; color: var(--purple); }
+.invited-chip .inv-reason { font-size: 10px; color: var(--dim); margin-top: 2px; }
+
+/* HOLDING TABLE */
+.hold-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 12px; }
+.hold-table th { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+.hold-table td { padding: 10px 10px; border-bottom: 1px solid #f0ece6; vertical-align: middle; }
+.hold-table tr:last-child td { border: none; }
+.neg { color: var(--red); font-weight: 700; font-family: var(--mono); }
+.pos { color: var(--green); font-weight: 700; font-family: var(--mono); }
+.warn-val { color: var(--yellow); font-weight: 700; font-family: var(--mono); }
+.mono-sm { font-family: var(--mono); font-size: 11px; }
+
+/* HOLD_REVIEW CHECKLIST */
+.review-checklist { display: flex; flex-direction: column; gap: 7px; }
+.rc-item { display: grid; grid-template-columns: 20px 1fr; gap: 8px; align-items: flex-start; padding: 8px 12px; border-radius: 9px; background: #faf8f5; border: 1px solid var(--border); font-size: 12px; }
+.rc-num { font-family: var(--mono); font-weight: 700; color: var(--accent); font-size: 13px; }
+.rc-text { color: var(--sub); line-height: 1.5; }
+.rc-rule { margin-top: 10px; padding: 8px 12px; border-radius: 9px; background: #eff6ff; border: 1px solid #bfdbfe; font-size: 12px; color: var(--accent); }
+
+/* RISK */
+.risk-row { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--border); background: #faf8f5; margin-bottom: 6px; font-size: 12px; }
+.risk-row.warn { background: #fefce8; border-color: #fde68a; }
+.risk-row.ok { background: #ecfdf5; border-color: #a7f3d0; }
+
+/* OPINION BUBBLES */
+.op-bubble { margin-bottom: 10px; }
+.op-name { font-size: 11px; font-weight: 700; color: var(--accent); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+.op-name .role-tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: #dbeafe; color: var(--accent); font-weight: 600; }
+.op-name .guest-tag { background: #ede9fe; color: var(--purple); }
+.op-text { padding: 10px 12px; background: #faf8f5; border-radius: 0 10px 10px 10px; border: 1px solid var(--border); font-size: 12px; color: var(--sub); line-height: 1.6; }
+.op-text strong { color: var(--text); }
+.verdict-box { padding: 12px 16px; background: var(--text); color: #fff; border-radius: 12px; font-size: 13px; font-weight: 600; line-height: 1.6; margin-top: 8px; }
+.verdict-box .v-label { font-size: 10px; color: rgba(255,255,255,.4); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+
+/* BUILD PREVIEW */
+.build-tile { padding: 14px; border-radius: 12px; border: 1px solid var(--border); background: #faf8f5; margin-bottom: 8px; }
+.build-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.build-ticker { font-family: var(--mono); font-weight: 700; font-size: 15px; }
+.heat-badge { font-size: 11px; padding: 2px 8px; border-radius: 6px; font-weight: 700; }
+.heat-badge.hot { background: #fef2f2; color: var(--red); border: 1px solid #fecaca; }
+.heat-badge.warm { background: #fefce8; color: var(--yellow); border: 1px solid #fde68a; }
+.heat-badge.mild { background: #eff6ff; color: var(--accent); border: 1px solid #bfdbfe; }
+.build-meta { font-size: 11px; color: var(--sub); line-height: 1.6; }
+
+/* SIGNAL TRIGGERS */
+.signal-box { padding: 14px; border-radius: 12px; background: linear-gradient(135deg, #ecfdf5, #eff6ff); border: 1px solid #a7f3d0; margin-bottom: 10px; }
+.signal-label { font-size: 10px; font-weight: 700; color: var(--green); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+.signal-item { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 5px; font-size: 12px; }
+.signal-item .si-num { font-family: var(--mono); font-weight: 700; color: var(--accent); min-width: 16px; }
+
+/* PIPELINE */
+.pipeline-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.p-step { padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; border: 1px solid var(--border); background: var(--surface); }
+.p-step.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.p-step.gate { background: #fef2f2; color: var(--red); border-color: #fecaca; }
+.p-arrow { color: var(--dim); font-size: 14px; }
+
+/* CONSTRAINT */
+.constraint-row { display: grid; grid-template-columns: 110px 1fr; gap: 10px; margin-bottom: 6px; align-items: center; }
+.c-label { font-size: 11px; color: var(--dim); font-family: var(--mono); }
+.c-val { font-family: var(--mono); font-weight: 700; font-size: 13px; }
+.progress-bar { height: 8px; background: #ebe6df; border-radius: 4px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 4px; transition: width .5s; }
+
+/* FOOTER */
+.footer { text-align: center; color: var(--dim); font-size: 10px; margin-top: 20px; padding: 10px 0; letter-spacing: .3px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <h1>🏛️ 投资决策委员会 · 第002次会议</h1>
+    <div class="header-meta">
+      <span class="badge">MTG_002</span>
+      <span class="badge">2026-03-22（周日）</span>
+      <span class="badge">常规延期周会 + 临时议题</span>
+      <span class="badge warn">延期1天（LF-002已修复）</span>
+    </div>
+  </div>
+  <div class="ts">主席：查理·芒格 · SESSION-20260322-002 · L2级治理文件</div>
+</div>
+
+<!-- SCORE HERO -->
+<div class="score-hero">
+  <div class="score-big">C+</div>
+  <div class="score-right">
+    <div>
+      <div class="score-label">第一周综合评分</div>
+      <div class="score-grid">
+        <div class="score-cell"><div class="grade cp">C+</div><div class="sname">持仓管理</div></div>
+        <div class="score-cell"><div class="grade bm">B-</div><div class="sname">客户情绪</div></div>
+        <div class="score-cell"><div class="grade b">B</div><div class="sname">风控纪律</div></div>
+        <div class="score-cell"><div class="grade c">C</div><div class="sname">运营完整</div></div>
+      </div>
+    </div>
+    <div class="munger-quote">"第一周最重要的不是你赚了多少，而是你没有做蠢事。这分对了。<strong>但下周开始，光'没做蠢事'不够了。</strong>"<br>— 查理·芒格</div>
+  </div>
+</div>
+
+<!-- DECISIONS TABLE -->
+<div class="tile" style="margin-bottom:var(--gap)">
+  <div class="tile-header">📋 本次决议（DEC-007 → DEC-011）</div>
+  <table class="decisions">
+    <thead><tr>
+      <th>决议ID</th><th>核心内容</th><th>负责人</th><th>截止</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="dec-id">DEC-007</span></td>
+        <td><strong>丁女士建仓必须走FULL Pipeline</strong>——论证师SIP + 金豆裁决，不得因客户情绪压力跳过任何一步；赵丽芳+孙晓明本周预期管理沟通</td>
+        <td><span class="dec-owner">赵丽芳 / 孙晓明</span></td>
+        <td><span class="dec-due urgent">2026-03-24</span></td>
+      </tr>
+      <tr>
+        <td><span class="dec-id">DEC-008</span></td>
+        <td><strong>下周建仓预审框架</strong>——卫星仓、上限7%剩余仓位、韩志远入场信号触发条件、exit_contract（退出合约）全字段强制预填</td>
+        <td><span class="dec-owner">操作者 + 主端</span></td>
+        <td><span class="dec-due normal">随时触发</span></td>
+      </tr>
+      <tr>
+        <td><span class="dec-id">DEC-009</span></td>
+        <td><strong>LF-002修复</strong>——BOOTSTRAP_DIGEST（系统单文件状态恢复锚点）永久提醒区新增委员会周会检查：超7天→L3提醒，超10天→L2提醒，周六和周日均提醒</td>
+        <td><span class="dec-owner">林若兰 / 主端</span></td>
+        <td><span class="dec-due done">✅ 已执行</span></td>
+      </tr>
+      <tr>
+        <td><span class="dec-id">DEC-010</span></td>
+        <td><strong>HOLD_REVIEW（持仓到期复检）三项标准预设</strong>——两票卫星仓Day15（≈4/7）触发，届时复检三条件判断续期/降级/退出</td>
+        <td><span class="dec-owner">主端</span></td>
+        <td><span class="dec-due normal">2026-04-07</span></td>
+      </tr>
+      <tr>
+        <td><span class="dec-id">DEC-011</span></td>
+        <td><strong>第二份客户简报</strong>——赵丽芳起草，框架：①市场背景 ②组合小幅浮亏属正常 ③谨慎逐步加仓计划 ④一句安抚语</td>
+        <td><span class="dec-owner">赵丽芳</span></td>
+        <td><span class="dec-due urgent">2026-03-24</span></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- MOSAIC -->
+<div class="mosaic">
+
+  <!-- 出席人员 -->
+  <div class="tile t-full">
+    <div class="tile-header">👥 出席人员</div>
+    <div class="attendee-section">
+      <div class="section-label">常规委员（11人）</div>
+      <div class="people-grid">
+        <div class="person-chip special">查理·芒格<span class="role">主席</span></div>
+        <div class="person-chip">李俊豪<span class="role">基金经理</span></div>
+        <div class="person-chip">张海燕<span class="role">CIO</span></div>
+        <div class="person-chip">陈明哲<span class="role">宏观策略</span></div>
+        <div class="person-chip">陈思华<span class="role">风控总监</span></div>
+        <div class="person-chip">王明远<span class="role">合规官</span></div>
+        <div class="person-chip">黄志强<span class="role">律师</span></div>
+        <div class="person-chip">赵丽芳<span class="role">客户代表</span></div>
+        <div class="person-chip">孙晓明<span class="role">客服经理</span></div>
+        <div class="person-chip">林若兰<span class="role">COO</span></div>
+        <div class="person-chip">周伟<span class="role">统计专家</span></div>
+      </div>
+    </div>
+    <div class="attendee-section" style="margin-top:12px">
+      <div class="section-label">本次额外邀请（3人）— 基于本SESSION情报主线</div>
+      <div class="people-grid">
+        <div class="invited-chip">
+          <span class="inv-name">韩志远（EXP-012）</span>
+          <span class="inv-reason">A股实盘10年 · 拥挤度/主线识别 → 议题②③</span>
+        </div>
+        <div class="invited-chip">
+          <span class="inv-name">陈曦风格（EXP-023）</span>
+          <span class="inv-reason">私行客服 · 高净值情绪化指令处置 → 议题④-A</span>
+        </div>
+        <div class="invited-chip">
+          <span class="inv-name">Nassim Taleb风格（EXP-030）</span>
+          <span class="inv-reason">反脆弱/尾部风险 · 《黑天鹅》作者 → 议题④-A</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 议程①：持仓审视 -->
+  <div class="tile t-two">
+    <div class="tile-header">📦 议程② · 持仓状态审视（T0，3/20收盘）</div>
+    <table class="hold-table">
+      <thead><tr>
+        <th>标的</th><th>成本</th><th>现价</th><th>浮亏</th><th>止损价</th><th>距止损</th><th>持有天</th><th>HOLD_REVIEW</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>潍柴动力</strong><br><span class="mono-sm" style="color:var(--dim)">000338</span></td>
+          <td class="mono-sm">23.84</td>
+          <td class="mono-sm">23.36</td>
+          <td class="neg">-2.01%</td>
+          <td class="mono-sm">21.93</td>
+          <td class="pos">6.12% ✓</td>
+          <td class="mono-sm">第3日/15日</td>
+          <td class="mono-sm" style="color:var(--sub)">≈4/7</td>
+        </tr>
+        <tr>
+          <td><strong>金风科技</strong><br><span class="mono-sm" style="color:var(--dim)">002202</span></td>
+          <td class="mono-sm">30.24</td>
+          <td class="mono-sm">29.20</td>
+          <td class="neg">-3.44%</td>
+          <td class="mono-sm">27.82</td>
+          <td class="warn-val">4.73% 🟡</td>
+          <td class="mono-sm">第3日/15日</td>
+          <td class="mono-sm" style="color:var(--sub)">≈4/7</td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="padding:8px 12px;border-radius:9px;background:#fef2f2;border:1px solid #fecaca;font-size:12px;margin-bottom:10px">
+      <strong style="color:var(--red)">韩志远：</strong>金风止损距4.73%在当前市场不算安全垫——3/17金风单日跌7.9%，一天即可穿止损。3/18涨停是超大单驱动（49.97亿），此后连续两日回落，脉冲行情特征明显，缺乏持续资金支撑。
+    </div>
+    <div style="margin-top:4px">
+      <div style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">HOLD_REVIEW预设标准（DEC-010，≈4/7执行）</div>
+      <div class="review-checklist">
+        <div class="rc-item"><span class="rc-num">①</span><span class="rc-text">市场广度：上涨家数持续>1500家</span></div>
+        <div class="rc-item"><span class="rc-num">②</span><span class="rc-text">主线有效性：新能源/算电协同3/23-4/7持续获得主力净流入</span></div>
+        <div class="rc-item"><span class="rc-num">③</span><span class="rc-text">金风个股：风电设备指数转正，且金风不跑输细分板块均值</span></div>
+      </div>
+      <div class="rc-rule">三项全满→ CONTINUE（延期10日）· 一项以上不满→ DOWNGRADE讨论</div>
+    </div>
+  </div>
+
+  <!-- 风控状态 -->
+  <div class="tile t-half">
+    <div class="tile-header">🛡️ 议程③ · 风控状态确认</div>
+    <div class="constraint-row">
+      <span class="c-label">Regime</span>
+      <span class="c-val" style="color:var(--yellow)">L1（策略限制）</span>
+    </div>
+    <div class="constraint-row">
+      <span class="c-label">Risk Score</span>
+      <span class="c-val">58.0</span>
+    </div>
+    <div class="constraint-row">
+      <span class="c-label">Position Cap</span>
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><span class="c-val">16%</span><span style="color:var(--sub);font-family:var(--mono)">已用8.99%</span></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:56%;background:var(--yellow)"></div></div>
+      </div>
+    </div>
+    <div class="constraint-row">
+      <span class="c-label">剩余空间</span>
+      <span class="c-val" style="color:var(--green)">~7.01%（≈97.8万）</span>
+    </div>
+    <div class="constraint-row">
+      <span class="c-label">Crowding</span>
+      <span class="c-val" style="color:var(--red)">-1（数据缺失）</span>
+    </div>
+    <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+      <div class="risk-row warn">⚠️ <strong>Brent ~110美元</strong> · 距$120重算触发线尚有空间，本周持续监控</div>
+      <div class="risk-row warn">⚠️ <strong>固收+净赎回</strong> · 3/20出现近一年最大单日净赎回，周一延续压力</div>
+      <div class="risk-row ok">✓ <strong>两融余额</strong>约2.64万亿 · 周五净卖出~10亿，无系统性平仓风险</div>
+      <div class="risk-row ok">✓ <strong>中证500 VIX=34.19</strong>（91%分位）· 30日内技术修复概率高，非立即反转信号</div>
+    </div>
+  </div>
+
+  <!-- 议程④-A：丁女士建仓审议 -->
+  <div class="tile t-two">
+    <div class="tile-header">⚠️ 议程④-A · 丁女士"大量买入抄底"指令审议（核心）</div>
+    <div style="padding:10px 14px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;margin-bottom:12px;font-size:13px">
+      <strong style="color:var(--red)">原始指令：</strong>"希望周一大量买入，创造奇迹。"<br>
+      <span style="font-size:11px;color:var(--sub)">背景：生活开销较大，希望尽快产生收益。</span>
+    </div>
+    <div class="op-bubble">
+      <div class="op-name">陈曦 <span class="role-tag guest-tag">特邀 · 私行客服</span></div>
+      <div class="op-text">高净值客户补偿心理反应——散户大面积亏损(79%)、沪指失守4000点，激进操作冲动被现金流压力放大。<strong>在情绪峰值时满足她，会大幅提升心理收益锚点；后续一旦波动，失望会更强烈。</strong>管理预期比满足当下更重要。</div>
+    </div>
+    <div class="op-bubble">
+      <div class="op-name">Taleb <span class="role-tag guest-tag">特邀 · 反脆弱</span></div>
+      <div class="op-text">VIX=91%分位统计上接近情绪出清信号，逆向角度确是候选入场时机。<strong>但"大量买入"消灭凸性（optionality，保留反击子弹的能力）</strong>——一旦继续下跌，无子弹加仓，只能看着浮亏扩大。反脆弱做法：<strong>小规模试探+保留子弹+企稳后分批</strong>。不是不买，是不能"大量"买。</div>
+    </div>
+    <div class="op-bubble">
+      <div class="op-name">韩志远 <span class="role-tag guest-tag">特邀 · A股实盘</span></div>
+      <div class="op-text">最佳入场信号是"缩量止跌+广度修复"，目前均未确认。不是不买，是时机不到。</div>
+    </div>
+    <div class="verdict-box">
+      <div class="v-label">芒格裁决 → DEC-007</div>
+      可以入场，但必须走完整Pipeline——论证师SIP + 金豆裁决——<strong>不得因客户情绪压力跳过任何一步</strong>。赵丽芳+孙晓明本周内预期管理沟通必须执行。
+    </div>
+  </div>
+
+  <!-- 议程④-B：建仓方案预审 -->
+  <div class="tile t-half">
+    <div class="tile-header">📈 议程④-B · 下周建仓预审</div>
+    <div style="margin-bottom:10px">
+      <div style="font-size:11px;color:var(--dim);font-weight:700;text-transform:uppercase;margin-bottom:8px">优先候选方向（情报驱动）</div>
+      <div class="build-tile">
+        <div class="build-head"><span class="build-ticker">300750 宁德时代</span><span class="heat-badge hot">🔴 最强</span></div>
+        <div class="build-meta">钠电放量元年+动力+储能三重受益 · 4/1一季报催化 · 业绩验证最强</div>
+      </div>
+      <div class="build-tile">
+        <div class="build-head"><span class="build-ticker">300274 阳光电源</span><span class="heat-badge hot">🔴 最强</span></div>
+        <div class="build-meta">储能集成+算电协同 · 高油价强化替代逻辑 · PE=23.5倍可交易</div>
+      </div>
+      <div class="build-tile">
+        <div class="build-head"><span class="build-ticker">300308 中际旭创</span><span class="heat-badge warm">🟠 中强</span></div>
+        <div class="build-meta">光模块AI硬件确定性 · OFC+GTC双催化 · 谷歌洽谈液冷验证算力需求</div>
+      </div>
+    </div>
+    <div class="signal-box">
+      <div class="signal-label">韩志远入场信号触发条件（DEC-008强制执行）</div>
+      <div class="signal-item"><span class="si-num">①</span><span>开盘15分钟：沪指低开但未继续跌超1%</span></div>
+      <div class="signal-item"><span class="si-num">②</span><span>前30分钟：目标板块主力资金方向可读（净流入确认）</span></div>
+      <div style="margin-top:6px;font-size:11px;color:var(--sub)">两条件均满足→入场 · 任一未满足→等待次日</div>
+    </div>
+    <div style="margin-top:8px;padding:8px 12px;border-radius:9px;background:#fef2f2;border:1px solid #fecaca;font-size:11px">
+      <strong style="color:var(--red)">陈思华（风控）：</strong>exit_contract（退出合约）全部mandatory字段必须<strong>下单前</strong>填完，不允许"先买再填"。
+    </div>
+  </div>
+
+  <!-- Pipeline提示 -->
+  <div class="tile t-full">
+    <div class="tile-header">🔗 执行路径 · 任何新建仓必须完整走以下Pipeline</div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <div style="padding:8px 16px;border-radius:9px;background:#fef2f2;border:1px solid #fecaca;font-size:12px;font-weight:700;color:var(--red)">① 资金属性门禁<br><span style="font-size:10px;font-weight:400">principal_type声明</span></div>
+      <span style="color:var(--dim)">→</span>
+      <div style="padding:8px 16px;border-radius:9px;background:#eff6ff;border:1px solid #bfdbfe;font-size:12px;font-weight:700;color:var(--accent)">② 论证师SIP<br><span style="font-size:10px;font-weight:400">卫星仓≥4层</span></div>
+      <span style="color:var(--dim)">→</span>
+      <div style="padding:8px 16px;border-radius:9px;background:#eff6ff;border:1px solid #bfdbfe;font-size:12px;font-weight:700;color:var(--accent)">③ 破壁人尸检<br><span style="font-size:10px;font-weight:400">证伪清单</span></div>
+      <span style="color:var(--dim)">→</span>
+      <div style="padding:8px 16px;border-radius:9px;background:#eff6ff;border:1px solid #bfdbfe;font-size:12px;font-weight:700;color:var(--accent)">④ 金豆裁决<br><span style="font-size:10px;font-weight:400">动作裁决</span></div>
+      <span style="color:var(--dim)">→</span>
+      <div style="padding:8px 16px;border-radius:9px;background:#fef3c7;border:1px solid #fde68a;font-size:12px;font-weight:700;color:var(--yellow)">⑤ R11人类确认<br><span style="font-size:10px;font-weight:400">操作者显式回复</span></div>
+      <span style="color:var(--dim)">→</span>
+      <div style="padding:8px 16px;border-radius:9px;background:#ecfdf5;border:1px solid #a7f3d0;font-size:12px;font-weight:700;color:var(--green)">⑥ 史官归档<br><span style="font-size:10px;font-weight:400">G.1 + exit_contract</span></div>
+    </div>
+    <div style="margin-top:10px;padding:8px 14px;border-radius:9px;background:#faf8f5;border:1px solid var(--border);font-size:12px;color:var(--sub)">
+      仓位约束：卫星仓 · 单票≤12% risk_capital（≈167万）· 本次新增上限≈7%（97.8万）· 宏观cap=16% final_position_cap取min
+    </div>
+  </div>
+
+  <!-- 运营 -->
+  <div class="tile t-half">
+    <div class="tile-header">⚙️ 议程⑤ · 运营问题</div>
+    <div class="op-bubble">
+      <div class="op-name">林若兰 <span class="role-tag">COO</span></div>
+      <div class="op-text"><strong>LF-002修复方案（DEC-009 ✅）：</strong>BOOTSTRAP_DIGEST永久提醒区新增委员会周会状态检查。超7天→L3，超10天→L2。周六AND周日均提醒，操作者选择当天开，优先周日（情报更充分）。本SESSION已执行。</div>
+    </div>
+    <div class="op-bubble" style="margin-top:8px">
+      <div class="op-name">孙晓明 <span class="role-tag">客服</span></div>
+      <div class="op-text"><strong>第二份客户简报（DEC-011）：</strong>3/23-3/24发出。框架：①市场背景简述 ②小幅浮亏正常 ③谨慎逐步加仓不冒进 ④一句安抚语。赵丽芳明天起草。</div>
+    </div>
+  </div>
+
+  <!-- 下周计划 -->
+  <div class="tile t-half">
+    <div class="tile-header">📅 下周三大优先级</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="padding:12px 14px;border-radius:11px;background:#fef2f2;border:1px solid #fecaca">
+        <div style="font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;margin-bottom:6px">🔴 周一 · 必做</div>
+        <div style="font-size:12px;color:var(--sub);line-height:1.6">两票价格更新（第4日）· HOLD_REVIEW预检 · 入场信号判断（开盘15分钟观察）</div>
+      </div>
+      <div style="padding:12px 14px;border-radius:11px;background:#fefce8;border:1px solid #fde68a">
+        <div style="font-size:10px;font-weight:700;color:var(--yellow);text-transform:uppercase;margin-bottom:6px">🟠 周一-周三</div>
+        <div style="font-size:12px;color:var(--sub);line-height:1.6">丁女士预期沟通（DEC-007）· 新建仓SIP启动（若信号满足 · DEC-008）</div>
+      </div>
+      <div style="padding:12px 14px;border-radius:11px;background:#faf8f5;border:1px solid var(--border)">
+        <div style="font-size:10px;font-weight:700;color:var(--sub);text-transform:uppercase;margin-bottom:6px">🔵 本周内</div>
+        <div style="font-size:12px;color:var(--sub);line-height:1.6">第二份客户简报（3/24）· DEC-003盘前checklist草稿 · Brent持续监控（>$120重算）</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 遗留决议 -->
+  <div class="tile t-full">
+    <div class="tile-header">📌 遗留决议跟进状态（MTG_001）</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+      <div style="padding:10px 14px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;font-size:12px">
+        <div style="font-weight:700;color:var(--red);margin-bottom:4px">DEC-001 ⏳ 未完成</div>
+        <div style="color:var(--sub)">全权委托协议书面签署<br>截止：下次见面（合规硬要求，不可无限期悬置）</div>
+      </div>
+      <div style="padding:10px 14px;border-radius:10px;background:#fefce8;border:1px solid #fde68a;font-size:12px">
+        <div style="font-weight:700;color:var(--yellow);margin-bottom:4px">DEC-002 ⏳ 进行中</div>
+        <div style="color:var(--sub)">运营SOP落地<br>截止：2026-03-28（本周仍有时间）</div>
+      </div>
+      <div style="padding:10px 14px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;font-size:12px">
+        <div style="font-weight:700;color:var(--red);margin-bottom:4px">DEC-003 🔴 紧急</div>
+        <div style="color:var(--sub)">盘前风控checklist草稿<br>芒格：今天必须出草稿，不接受再延期</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /mosaic -->
+
+<div class="footer">投资决策委员会纪要 MTG_002 · 2026-03-22 · SESSION-20260322-002 · L2级治理文件 · CLAUDE_MAIN</div>
+</div>
+<script>
+// progress bars animate on load
+window.addEventListener('load', function() {
+  document.querySelectorAll('.progress-fill').forEach(function(el) {
+    var w = el.style.width;
+    el.style.width = '0';
+    setTimeout(function() { el.style.width = w; }, 100);
+  });
+});
+</script>
+</body>
+</html>

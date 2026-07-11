@@ -1,0 +1,506 @@
+```html
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>巨星科技（002444.SZ）投资决策与路径推演 | 深度研究</title>
+<style>
+/* ============================================================
+Deep Stock Research — V5.0 Theme (extracted from 投研决策输出模板体系 V5.0)
+用于4个HTML研究报告的统一样式
+============================================================ */
+
+:root{
+--ink:#162033;
+--muted:#64748b;
+--line:#d8dee9;
+--paper:#ffffff;
+--bg:#f5f7fb;
+--blue:#173b73;
+--blue2:#2458a4;
+--red:#b42318;
+--orange:#b54708;
+--green:#067647;
+--purple:#6941c6;
+--soft-blue:#eef4ff;
+--soft-red:#fff1f0;
+--soft-green:#ecfdf3;
+--soft-orange:#fff7ed;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+margin:0;
+background:var(--bg);
+color:var(--ink);
+font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",Arial,sans-serif;
+line-height:1.66;
+font-size:15.5px;
+}
+.container{
+max-width:1180px;
+margin:0 auto;
+padding:26px 22px 64px;
+}
+.hero{
+background:linear-gradient(135deg,#064e3b,#047857 62%,#0f766e);
+color:white;
+border-radius:20px;
+padding:34px 38px;
+box-shadow:0 16px 40px rgba(15,35,75,.22);
+margin-bottom:18px;
+}
+.hero h1{margin:0 0 8px;font-size:32px;letter-spacing:.2px}
+.hero p{margin:7px 0;color:#e6eefc}
+.version-badge{
+display:inline-block;
+background:rgba(255,255,255,.16);
+border:1px solid rgba(255,255,255,.35);
+color:white;
+padding:4px 10px;
+border-radius:999px;
+font-weight:700;
+margin-bottom:12px;
+}
+.topnav{
+position:sticky;
+top:0;
+z-index:20;
+background:rgba(255,255,255,.94);
+backdrop-filter:blur(12px);
+border:1px solid var(--line);
+border-radius:14px;
+padding:8px;
+display:flex;
+flex-wrap:wrap;
+gap:6px;
+margin:16px 0 22px;
+box-shadow:0 8px 22px rgba(15,23,42,.07);
+}
+.topnav a{
+text-decoration:none;
+color:var(--blue);
+border:1px solid transparent;
+border-radius:10px;
+padding:6px 9px;
+font-size:13px;
+font-weight:650;
+}
+.topnav a:hover,.topnav a.active{background:var(--soft-blue);border-color:#bfd7ff}
+.card{
+background:var(--paper);
+border:1px solid var(--line);
+border-radius:18px;
+padding:24px 26px;
+margin:18px 0;
+box-shadow:0 8px 24px rgba(15,23,42,.045);
+}
+h2{
+color:var(--blue);
+margin:8px 0 14px;
+padding-bottom:8px;
+border-bottom:2px solid #e6eefc;
+font-size:24px;
+}
+h3{color:var(--blue);margin-top:1.5em;margin-bottom:0.5em;}
+table{
+width:100%;
+border-collapse:separate;
+border-spacing:0;
+margin:12px 0 18px;
+border:1px solid var(--line);
+border-radius:12px;
+background:white;
+}
+th,td{padding:10px 11px;vertical-align:top;border-right:1px solid var(--line);border-bottom:1px solid var(--line);text-align:left;}
+th:last-child,td:last-child{border-right:none}
+tr:last-child td{border-bottom:none}
+th{background:var(--soft-blue);color:var(--blue);font-weight:800;text-align:left}
+tbody tr:nth-child(even) td{background:#fbfdff}
+.callout{border-left:5px solid var(--blue2);background:var(--soft-blue);padding:12px 14px;border-radius:12px;margin:12px 0 16px}
+.callout.warning{border-left-color:var(--red);background:var(--soft-red)}
+.callout.success{border-left-color:var(--green);background:var(--soft-green)}
+.callout.orange{border-left-color:var(--orange);background:var(--soft-orange)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.small-card{border:1px solid var(--line);border-radius:14px;padding:15px;background:white}
+.footer{margin-top:28px;color:#667085;font-size:13px;text-align:center}
+strong{color:var(--blue)}
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="hero">
+  <div>
+    <span class="version-badge">深度研究 V2</span>
+    <span class="version-badge">A股主板</span>
+    <span class="version-badge">2026-06-06</span>
+  </div>
+  <h1>巨星科技（002444.SZ）投资决策与路径推演</h1>
+  <p>周期定位 · 预期差矩阵 · 四层概率 · 路径概率树 · 动态仓位</p>
+</header>
+
+<nav class="topnav">
+  <a href="01_基本面全景.html">01 基本面全景</a>
+  <a href="02_逻辑攻防与死亡审计.html">02 逻辑攻防</a>
+  <a href="03_投资决策与路径推演.html" class="active">03 决策与推演</a>
+  <a href="04_买卖点与执行框架.html">04 买卖点</a>
+</nav>
+
+<!-- ===== 章节：周期阶段定位 ===== -->
+<section class="card">
+  <h2>一、周期阶段定位</h2>
+  <p>综合基本面、估值、资金和情绪等多个维度，判断公司当前所处的周期位置，是做出正确决策的前提。</p>
+  <table>
+    <thead>
+      <tr>
+        <th>维度</th>
+        <th>当前状态</th>
+        <th>判断依据</th>
+        <th>风险提示</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>基本面周期</strong></td>
+        <td>从底部回升初期</td>
+        <td>2025年营收同比微降<strong>-0.87%</strong>，但2026年Q1已重回<strong>+3.18%</strong>的增长轨道；归母净利润则持续正增长，2025年和2026Q1分别增长<strong>8.95%</strong>和<strong>11.87%</strong>，显示盈利拐点已确立 [source:272]。</td>
+        <td>宏观经济复苏力度若不及预期，可能导致基本面回升过程出现反复。</td>
+      </tr>
+      <tr>
+        <td><strong>盈利预期周期</strong></td>
+        <td>预期处于上行通道</td>
+        <td>市场一致预期2026年归母净利润增长<strong>20.6%</strong>，2027年继续增长<strong>18.8%</strong>，显示分析师对未来两年盈利能力持续改善持乐观态度 [source:272]。</td>
+        <td>较高的市场预期意味着公司需要持续兑现业绩才能支撑股价，业绩不达预期的负反馈会更强。</td>
+      </tr>
+      <tr>
+        <td><strong>估值周期</strong></td>
+        <td>估值修复空间存在</td>
+        <td>当前PE(TTM)为<strong>14.75倍</strong>，显著低于全球电动工具龙头创科实业的<strong>22.95倍</strong> [source:272, 330]。对应2026年预期PE仅<strong>12.5倍</strong>，处于历史估值区间中偏低位置 [source:272]。</td>
+        <td>如果新业务（电动工具、AI基建）的成长逻辑无法被市场认可，估值可能长期被压制在传统制造业的水平。</td>
+      </tr>
+      <tr>
+        <td><strong>资金面</strong></td>
+        <td>中性偏弱</td>
+        <td>近期数据显示北向资金及部分主动偏股型公募基金对公司持仓有所下降，边际买入力量不强。</td>
+        <td>若缺乏强催化剂，存量资金的流出可能对股价形成持续压制。</td>
+      </tr>
+      <tr>
+        <td><strong>情绪阶段</strong></td>
+        <td>情绪未过热</td>
+        <td>市场对公司的关注度中等，机构调研频率和媒体报道热度均未达到高点，市场情绪相对理性。</td>
+        <td>情绪的“冷”也意味着短期内可能缺乏足够的动能来推动股价大幅上涨，需要等待基本面或事件催化剂。</td>
+      </tr>
+      <tr>
+        <td><strong>A/H结构</strong></td>
+        <td>不适用</td>
+        <td>公司仅在A股上市。</td>
+        <td>-</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===== 章节：市场预期差矩阵 ===== -->
+<section class="card">
+  <h2>二、市场预期差矩阵</h2>
+  <p>识别我们的判断与市场共识之间的差异，是获取超额收益的关键来源。</p>
+  <table>
+    <thead>
+      <tr>
+        <th>变量</th>
+        <th>市场当前预期</th>
+        <th>我的判断</th>
+        <th>差异方向</th>
+        <th>验证时间/数据</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>2026年营收增速</strong></td>
+        <td><strong>+16.1%</strong> [source:272]</td>
+        <td>有望达到或略超预期（16-18%），补库周期与新业务增量或强于预期。</td>
+        <td>↗ 偏积极</td>
+        <td>2026年Q2/Q3财报；家得宝/劳氏库存数据。</td>
+      </tr>
+      <tr>
+        <td><strong>2026年净利润增速</strong></td>
+        <td><strong>+20.6%</strong> [source:272]</td>
+        <td>大概率达成。高毛利业务占比提升带来的经营杠杆弹性可能超出市场预期。</td>
+        <td>↗ 偏积极</td>
+        <td>2026年Q2/Q3财报中的毛利率和费用率。</td>
+      </tr>
+      <tr>
+        <td><strong>毛利率</strong></td>
+        <td>维持在<strong>32%-33%</strong>区间 [source:307, 311]</td>
+        <td>有持续上行潜力，电动工具和OBM业务占比提升将结构性优化毛利率水平。</td>
+        <td>↑ 积极</td>
+        <td>未来各季度财报。</td>
+      </tr>
+      <tr>
+        <td><strong>电动工具增速</strong></td>
+        <td>维持<strong>20%+</strong>的高增长 [source:307]</td>
+        <td>市场已预期到高增长，但可能低估了其盈利能力的改善速度和对整体利润的贡献。</td>
+        <td>↗ 偏积极 (结构性)</td>
+        <td>2026年中报/年报分部数据。</td>
+      </tr>
+      <tr>
+        <td><strong>AI基建贡献</strong></td>
+        <td>市场认知不足，尚未充分定价</td>
+        <td>这是最大的潜在预期差。管理层指引市场翻倍增长 [source:283]，一旦订单落地，将是纯粹的业绩和估值增量。</td>
+        <td>↑↑ 强积极</td>
+        <td>2026年H2重大合同公告；工业工具业务收入增速。</td>
+      </tr>
+      <tr>
+        <td><strong>估值倍数 (PE)</strong></td>
+        <td>交易在<strong>12-15倍</strong>的远期PE [source:272, 284]</td>
+        <td>若AI基建逻辑被验证，公司成长属性增强，估值中枢有望向<strong>18-20倍</strong>靠拢。</td>
+        <td>↑ 积极</td>
+        <td>市场对催化剂事件的反应。</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="callout success">
+    <strong>结论：当前投资巨星科技，主要赚的是“预期修正”和“估值修复”的钱。</strong> 即市场逐步认识并定价AI基建这一全新增长点（预期修正），并因此给予公司更高的成长性估值（估值修复），而稳健的基本面复苏则提供了坚实的安全垫。
+  </div>
+</section>
+
+<!-- ===== 章节：四层概率校准 ===== -->
+<section class="card">
+  <h2>三、四层概率校准</h2>
+  <p>通过对比历史基率和市场隐含概率，校准主观判断，避免过度自信或保守。</p>
+  <table>
+    <thead>
+      <tr>
+        <th>情景</th>
+        <th>历史基率概率</th>
+        <th>市场隐含概率</th>
+        <th>主观研究概率</th>
+        <th>最终决策概率</th>
+        <th>差异解释</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>乐观情景</strong><br><small>业绩超预期，AI订单落地，估值大幅提升</small></td>
+        <td>~30-40%<br><small>(传统制造龙头二次成长成功率)</small></td>
+        <td>~10-15%<br><small>(当前估值隐含的长期增长)</small></td>
+        <td><strong>25%</strong></td>
+        <td>(由决策者填写)</td>
+        <td>主观概率低于历史基率，主要因为电动工具市场竞争激烈，对“成功”的定义更为严格。</td>
+      </tr>
+      <tr>
+        <td><strong>基准情景</strong><br><small>业绩符合预期，宏观温和复苏，股价稳步上行</small></td>
+        <td>~40-50%</td>
+        <td>~60-70%</td>
+        <td><strong>40%</strong></td>
+        <td>(由决策者填写)</td>
+        <td>主观概率低于市场隐含，认为市场对宏观复苏的平顺性可能过于乐观。</td>
+      </tr>
+      <tr>
+        <td><strong>谨慎情景</strong><br><small>业绩不及预期，补库乏力，股价区间震荡或小幅下跌</small></td>
+        <td>~15-20%</td>
+        <td>~15-20%</td>
+        <td><strong>25%</strong></td>
+        <td>(由决策者填写)</td>
+        <td>主观概率高于市场隐含，主要担忧Q1疲弱的现金流 [source:313] 可能是下游需求不佳的信号。</td>
+      </tr>
+      <tr>
+        <td><strong>悲观/尾部</strong><br><small>宏观恶化，贸易摩擦加剧，业绩估值双杀</small></td>
+        <td>~5%</td>
+        <td>&lt;5%</td>
+        <td><strong>10%</strong></td>
+        <td>(由决策者填写)</td>
+        <td>地缘政治和全球宏观不确定性增加，尾部风险概率应适度提高。</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===== 章节：路径概率树 ===== -->
+<section class="card">
+  <h2>四、路径概率树</h2>
+  <p>基于不同情景的概率，推演未来6个月股价可能的演进路径及其对应的投资动作。</p>
+  <table>
+    <thead>
+      <tr>
+        <th>路径</th>
+        <th>概率</th>
+        <th>1个月走势</th>
+        <th>3个月走势</th>
+        <th>6个月走势</th>
+        <th>关键驱动</th>
+        <th>组合动作</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>A. 趋势延续</strong></td>
+        <td>35%</td>
+        <td>↑ (突破35元)</td>
+        <td>↑↑ (站稳40元)</td>
+        <td>↑↑↑ (迈向45-50元)</td>
+        <td>Q2/Q3业绩超预期；美联储明确降息；AI基建大额订单公告。</td>
+        <td><strong>加仓</strong></td>
+      </tr>
+      <tr>
+        <td><strong>B. 盘整震荡</strong></td>
+        <td>45%</td>
+        <td>↔ (28-35元)</td>
+        <td>↔ (28-35元)</td>
+        <td>↔ (30-38元)</td>
+        <td>业绩符合预期；宏观数据无惊喜也无惊吓；等待催化剂。</td>
+        <td><strong>持有/观察</strong></td>
+      </tr>
+      <tr>
+        <td><strong>C. 预期落空</strong></td>
+        <td>15%</td>
+        <td>↓ (跌破30元)</td>
+        <td>↓↓ (考验28元)</td>
+        <td>↓↓ (下探至25-28元)</td>
+        <td>Q2业绩不及预期或现金流持续恶化；美国地产数据再度走弱。</td>
+        <td><strong>减仓/止损</strong></td>
+      </tr>
+      <tr>
+        <td><strong>D. 黑天鹅</strong></td>
+        <td>5%</td>
+        <td>↓↓ (急跌)</td>
+        <td>↓↓↓ (跌破25元)</td>
+        <td>↓↓↓ (持续探底)</td>
+        <td>中美贸易关系严重恶化，关税大幅提升；全球经济衰退。</td>
+        <td><strong>清仓</strong></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===== 章节：路径切换信号 ===== -->
+<section class="card">
+  <h2>五、路径切换信号</h2>
+  <p>明确从一种路径切换到另一种路径的触发条件，是实现动态调整、避免重大亏损的核心。</p>
+  <table>
+    <thead>
+      <tr>
+        <th>从路径 X → 路径 Y</th>
+        <th>触发信号</th>
+        <th>数据来源</th>
+        <th>观察频率</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>从 B (盘整) → A (向上)</strong></td>
+        <td>1. 单季营收增速 > 8% 且毛利率环比提升。<br>2. 获得单笔超过5000万美元的AI基建相关订单。<br>3. 家得宝/劳氏财报明确上调全年指引并提及强劲补库。</td>
+        <td>公司财报；公司公告；下游渠道商财报。</td>
+        <td>季度 / 不定期</td>
+      </tr>
+      <tr>
+        <td><strong>从 B (盘整) → C (向下)</strong></td>
+        <td>1. 单季营收增速 < 3% 或净利润出现负增长。<br>2. 经营现金流连续两个季度显著低于净利润（比值<0.5）。<br>3. 美国成屋销售数据连续3个月环比下滑。</td>
+        <td>公司财报；美国经济数据。</td>
+        <td>季度 / 每月</td>
+      </tr>
+      <tr>
+        <td><strong>从 C (向下) → D (黑天鹅)</strong></td>
+        <td>1. 美国宣布对中国/东南亚工具类产品加征10%以上关税。<br>2. 美联储意外加息或释放极度鹰派信号。</td>
+        <td>新闻/政府公告；美联储会议。</td>
+        <td>不定期</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===== 章节：动态仓位管理 ===== -->
+<section class="card">
+  <h2>六、动态仓位管理</h2>
+  <p>根据预设的路径和信号，制定清晰的仓位调整计划。</p>
+  <table>
+    <thead>
+      <tr>
+        <th>路径</th>
+        <th>当前仓位</th>
+        <th>目标仓位</th>
+        <th>资金来源/去向</th>
+        <th>执行条件</th>
+        <th>最大损失预算 (单票)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>A. 趋势延续</strong></td>
+        <td>标准仓位</td>
+        <td>超配 (1.5倍标准仓位)</td>
+        <td>现金 / 减持其他低确定性标的</td>
+        <td>路径A的向上触发信号出现</td>
+        <td>从加仓点回撤10%</td>
+      </tr>
+      <tr>
+        <td><strong>B. 盘整震荡</strong></td>
+        <td>试探/标准仓位</td>
+        <td>维持不变</td>
+        <td>-</td>
+        <td>无明确路径切换信号，业绩符合预期</td>
+        <td>从建仓点回撤15%</td>
+      </tr>
+      <tr>
+        <td><strong>C. 预期落空</strong></td>
+        <td>标准仓位</td>
+        <td>半仓 / 清仓</td>
+        <td>资金转为现金或配置防御性资产</td>
+        <td>路径C的向下触发信号出现</td>
+        <td>-</td>
+      </tr>
+      <tr>
+        <td><strong>D. 黑天鹅</strong></td>
+        <td>任何仓位</td>
+        <td>清仓</td>
+        <td>资金转为现金</td>
+        <td>路径D的黑天鹅信号出现</td>
+        <td>-</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===== 章节：后悔分析 ===== -->
+<section class="card">
+  <h2>七、后悔分析</h2>
+  <p>投资决策的核心是在不确定性中做出选择，提前思考并量化不同选择的“后悔成本”，有助于做出更理性的决策。</p>
+  <p>
+    当前决策面临两种后悔可能：
+    <ol>
+      <li><strong>持有后下跌的后悔：</strong> 如果现在以<strong>31.67元</strong>的价格买入，而市场走向了路径C或D，股价可能跌至<strong>25元</strong>以下，意味着单票将承受超过<strong>21%</strong>的亏损。这是“做错了”的直接金钱损失。</li>
+      <li><strong>错过后上涨的后悔：</strong> 如果现在选择不买，而市场走向了路径A，股价可能在6-12个月内上涨至<strong>45元</strong>以上，对应超过<strong>40%</strong>的涨幅。这是“没做到”的机会成本损失。</li>
+    </ol>
+  </p>
+  <div class="callout orange">
+    <strong>后悔最小化策略：</strong> 鉴于潜在上行空间（>40%）显著大于常规下行风险（~21%），且极端黑天鹅事件概率较低，完全空仓的“错过后悔”成本可能高于持仓的“亏损后悔”。因此，<strong>最优策略是采用“非对称仓位”</strong>：即建立一个标准或试探性的初始仓位，使得即使发生路径C的亏损，对组合的整体冲击也在可接受范围内；同时，保留充足的后备资金，在路径A的右侧信号确认后，有能力果断加仓，以完整捕捉核心上涨行情。这一策略旨在确保不错过核心机会，同时严格控制初始风险暴露。
+  </div>
+</section>
+
+<!-- ===== 页脚 ===== -->
+<div class="footer">
+  巨星科技 深度研究报告｜生成日期：2026-06-06｜帝国 deep-stock-research V2
+</div>
+
+</div>
+
+<!-- 
+STAGE3_SUMMARY:
+### 核心结论摘要
+
+**周期定位**：综合判断，巨星科技当前处于**基本面和盈利预期的回升初期**，估值具备修复空间，但面临中性偏弱的资金面和尚未过热的市场情绪，整体处于一个“万事俱备，只待催化”的阶段。
+
+**核心预期差**：当前投资逻辑的核心博弈点在于市场对**AI基建新业务的预期差**。市场普遍认可其手工具业务的稳健性和电动工具的成长性，但对于AI数据中心建设带来的电力工具和算力柜等增量需求，尚未进行充分认知和定价。管理层“市场翻倍增长”的指引[source:283]一旦通过订单验证，将成为驱动公司业绩和估值双升的最强变量。
+
+**基准情景与目标价**：我们的基准情景（40%概率）是：美国经济温和复苏，下游补库周期平稳进行，电动工具业务稳健增长，AI基建业务在2026年下半年开始贡献可观收入。在此情景下，公司盈利能力将持续提升，支撑估值中枢从当前的14.75倍PE向15-18倍修复。基于2026年一致预期EPS 2.53元[source:272]，**基准情景下的6-12个月合理目标价区间为38-45元**。
+
+**最可能路径与策略**：短期（未来3个月）最可能的路径（45%概率）是**盘整震荡**。在Q2财报和美联储降息信号明确前，市场可能维持观望，股价在28-35元区间波动。因此，最优策略是采取**非对称仓位**，即建立初始仓位以避免踏空，同时保留加仓灵活性，等待向上切换信号的出现。
+
+**认错/止损条件**：投资逻辑的核心支撑是“周期复苏+新业务成长”。如果出现以下情况，则逻辑被破坏，应考虑减仓或退出：1）**连续两个季度营收增速低于3%且经营现金流持续为负**，表明周期复苏被证伪；2）**至2026年底，AI基建业务仍未披露任何实质性大额订单**，表明新增长故事无法兑现。
+-->
+</body>
+</html>
+```

@@ -1,0 +1,461 @@
+```html
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>巨星科技（002444.SZ）买卖点与执行框架 | 深度研究</title>
+<style>
+/* ============================================================
+Deep Stock Research — V5.0 Theme (extracted from 投研决策输出模板体系 V5.0)
+用于4个HTML研究报告的统一样式
+============================================================ */
+
+:root{
+--ink:#162033;
+--muted:#64748b;
+--line:#d8dee9;
+--paper:#ffffff;
+--bg:#f5f7fb;
+--blue:#173b73;
+--blue2:#2458a4;
+--red:#b42318;
+--orange:#b54708;
+--green:#067647;
+--purple:#6941c6;
+--soft-blue:#eef4ff;
+--soft-red:#fff1f0;
+--soft-green:#ecfdf3;
+--soft-orange:#fff7ed;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+margin:0;
+background:var(--bg);
+color:var(--ink);
+font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",Arial,sans-serif;
+line-height:1.66;
+font-size:15.5px;
+}
+.container{
+max-width:1180px;
+margin:0 auto;
+padding:26px 22px 64px;
+}
+.hero{
+background:linear-gradient(135deg,#064e3b,#047857 62%,#0f766e);
+color:white;
+border-radius:20px;
+padding:34px 38px;
+box-shadow:0 16px 40px rgba(15,35,75,.22);
+margin-bottom:18px;
+}
+.hero h1{margin:0 0 8px;font-size:32px;letter-spacing:.2px}
+.hero p{margin:7px 0;color:#e6eefc}
+.version-badge{
+display:inline-block;
+background:rgba(255,255,255,.16);
+border:1px solid rgba(255,255,255,.35);
+color:white;
+padding:4px 10px;
+border-radius:999px;
+font-weight:700;
+margin-bottom:12px;
+}
+.topnav{
+position:sticky;
+top:0;
+z-index:20;
+background:rgba(255,255,255,.94);
+backdrop-filter:blur(12px);
+border:1px solid var(--line);
+border-radius:14px;
+padding:8px;
+display:flex;
+flex-wrap:wrap;
+gap:6px;
+margin:16px 0 22px;
+box-shadow:0 8px 22px rgba(15,23,42,.07);
+}
+.topnav a{
+text-decoration:none;
+color:var(--blue);
+border:1px solid transparent;
+border-radius:10px;
+padding:6px 9px;
+font-size:13px;
+font-weight:650;
+}
+.topnav a:hover,.topnav a.active{background:var(--soft-blue);border-color:#bfd7ff}
+.card{
+background:var(--paper);
+border:1px solid var(--line);
+border-radius:18px;
+padding:24px 26px;
+margin:18px 0;
+box-shadow:0 8px 24px rgba(15,23,42,.045);
+}
+h2{
+color:var(--blue);
+margin:8px 0 14px;
+padding-bottom:8px;
+border-bottom:2px solid #e6eefc;
+font-size:24px;
+}
+h3{color:var(--blue);margin-top:1.5em;margin-bottom:0.5em;}
+table{
+width:100%;
+border-collapse:separate;
+border-spacing:0;
+margin:12px 0 18px;
+border:1px solid var(--line);
+border-radius:12px;
+background:white;
+}
+th,td{padding:10px 11px;vertical-align:top;border-right:1px solid var(--line);border-bottom:1px solid var(--line);text-align:left;}
+th:last-child,td:last-child{border-right:none}
+tr:last-child td{border-bottom:none}
+th{background:var(--soft-blue);color:var(--blue);font-weight:800;text-align:left}
+tbody tr:nth-child(even) td{background:#fbfdff}
+.callout{border-left:5px solid var(--blue2);background:var(--soft-blue);padding:12px 14px;border-radius:12px;margin:12px 0 16px}
+.callout.warning{border-left-color:var(--red);background:var(--soft-red)}
+.callout.success{border-left-color:var(--green);background:var(--soft-green)}
+.callout.orange{border-left-color:var(--orange);background:var(--soft-orange)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.small-card{border:1px solid var(--line);border-radius:14px;padding:15px;background:white}
+.footer{margin-top:28px;color:#667085;font-size:13px;text-align:center}
+strong{color:var(--blue)}
+.devil{border:2px solid #f4b4ad;background:linear-gradient(180deg,#fff7f6,#fff);border-radius:18px;padding:20px 22px;margin:20px 0;}
+.devil h2, .devil h3{color:#b42318}
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="hero">
+  <div>
+    <span class="version-badge">深度研究 V2</span>
+    <span class="version-badge">A股主板</span>
+    <span class="version-badge">2026-06-06</span>
+  </div>
+  <h1>巨星科技（002444.SZ）买卖点与执行框架</h1>
+  <p>估值锚定 · 价格区间 · 分批计划 · 四类止损 · 预期收益 · 复盘锚点</p>
+</header>
+
+<nav class="topnav">
+  <a href="01_基本面全景.html">01 基本面全景</a>
+  <a href="02_逻辑攻防与死亡审计.html">02 逻辑攻防</a>
+  <a href="03_投资决策与路径推演.html">03 决策与推演</a>
+  <a href="04_买卖点与执行框架.html" class="active">04 买卖点</a>
+</nav>
+
+<!-- ===== 章节：估值锚定 ===== -->
+<section class="card">
+  <h2>一、估值锚定</h2>
+  <p>通过多种估值方法交叉验证，确定公司的合理价值中枢，作为买卖决策的基准锚。</p>
+  <table>
+    <thead>
+      <tr>
+        <th>估值方法</th>
+        <th>估值结果</th>
+        <th>对应价格 (元)</th>
+        <th>权重</th>
+        <th>使用条件</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>PE相对估值</strong></td>
+        <td>参考全球龙头创科实业PE(TTM) <strong>22.95x</strong> [source:330]，给予一定折价，合理PE区间为<strong>15-18倍</strong>。</td>
+        <td><strong>38 - 46</strong></td>
+        <td>40%</td>
+        <td>适用于业务模式相对稳定、盈利可预测性强的公司。需市场认可其成长性。</td>
+      </tr>
+      <tr>
+        <td><strong>DCF/分部估值</strong></td>
+        <td>手工具业务(稳健)按<strong>15x PE</strong>，电动工具业务(成长)按<strong>20x PE</strong>，AI基建业务给予期权价值。</td>
+        <td><strong>40 - 45</strong></td>
+        <td>30%</td>
+        <td>适用于业务结构多元、不同业务增长和风险属性差异大的公司。</td>
+      </tr>
+      <tr>
+        <td><strong>历史分位/周期估值</strong></td>
+        <td>当前PE(TTM) <strong>14.75x</strong> [source:272] 处于近3年偏低区间，历史估值中枢约为<strong>16-18倍</strong>。</td>
+        <td><strong>40 - 46</strong></td>
+        <td>20%</td>
+        <td>适用于周期性行业，假设估值会向历史中枢回归。前提是公司基本面未发生永久性恶化。</td>
+      </tr>
+      <tr>
+        <td><strong>一致预期锚定</strong></td>
+        <td>2026E EPS <strong>2.53元</strong> x 15倍PE = <strong>~38元</strong><br>2027E EPS <strong>3.01元</strong> x 15倍PE = <strong>~45元</strong> [source:272]</td>
+        <td><strong>38 - 45</strong></td>
+        <td>10%</td>
+        <td>反映市场当前共识，作为短期交易的参考锚点。</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="callout success">
+    <strong>加权合理估值中枢：约40元。</strong> 综合来看，公司当前股价<strong>31.67元</strong> [source:272] 较合理价值中枢存在约<strong>26%</strong>的折价空间。
+  </div>
+</section>
+
+<!-- ===== 章节：5档价格区间 ===== -->
+<section class="card">
+  <h2>二、5档价格区间</h2>
+  <p>基于估值中枢，设定不同价格区间的操作策略，形成纪律化的执行框架。</p>
+  <table>
+    <thead>
+      <tr>
+        <th>区间</th>
+        <th>价格范围 (元)</th>
+        <th>操作</th>
+        <th>必须同时满足的前置条件</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>深度低估</strong></td>
+        <td>&lt; 28</td>
+        <td>大举加仓</td>
+        <td>基本面未出现恶化，下跌主要由市场情绪或流动性驱动。</td>
+      </tr>
+      <tr>
+        <td><strong>合理偏低</strong></td>
+        <td>28 - 32</td>
+        <td>试探建仓 / 核心建仓</td>
+        <td><strong>当前所处区间</strong>。基本面符合预期，无重大利空。</td>
+      </tr>
+      <tr>
+        <td><strong>合理区间</strong></td>
+        <td>32 - 38</td>
+        <td>持有</td>
+        <td>等待业绩兑现或催化剂出现，验证成长逻辑。</td>
+      </tr>
+      <tr>
+        <td><strong>合理偏高</strong></td>
+        <td>38 - 45</td>
+        <td>逐步减仓 / 持有</td>
+        <td>股价已反映大部分乐观预期，安全边际降低。</td>
+      </tr>
+      <tr>
+        <td><strong>显著高估</strong></td>
+        <td>&gt; 45</td>
+        <td>清仓</td>
+        <td>出现泡沫化迹象，或有更优的投资机会。</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="callout warning">
+    <strong>注意：深度低估 ≠ 自动重仓。</strong> 价格便宜可能是多种负面因素的反映，包括但不限于：盈利预期下修、公司治理折价、流动性折价或行业竞争格局的永久性恶化。在低估区间加仓前，必须重新审视基本面，确认核心投资逻辑未被破坏。
+  </div>
+</section>
+
+<!-- ===== 章节：分批买入计划 ===== -->
+<section class="card">
+  <h2>三、分批买入计划</h2>
+  <p>为应对市场波动，制定分批建仓计划，以平滑成本并验证判断。</p>
+  <table>
+    <thead>
+      <tr>
+        <th>批次</th>
+        <th>触发价格/条件 (元)</th>
+        <th>买入仓位 (占总计划)</th>
+        <th>累计仓位</th>
+        <th>间隔/确认条件</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>试探仓</strong></td>
+        <td>32 - 33</td>
+        <td>30%</td>
+        <td>30%</td>
+        <td>立即可建，作为观察仓位。</td>
+      </tr>
+      <tr>
+        <td><strong>核心仓</strong></td>
+        <td>28 - 30</td>
+        <td>40%</td>
+        <td>70%</td>
+        <td>等待2026年Q2财报验证基本面趋势，或市场出现非理性恐慌性抛售时介入。</td>
+      </tr>
+      <tr>
+        <td><strong>加码仓</strong></td>
+        <td>25 - 27</td>
+        <td>30%</td>
+        <td>100%</td>
+        <td>出现重大错杀或黑天鹅事件，且判断公司长期价值未受损时动用。</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===== 章节：四类止损 ===== -->
+<section class="card">
+  <h2>四、四类止损</h2>
+  <p>预设清晰的退出条件，是控制风险、保护本金的关键纪律。</p>
+  <table>
+    <thead>
+      <tr>
+        <th>止损类型</th>
+        <th>触发条件</th>
+        <th>执行动作</th>
+        <th>备注</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>价格止损</strong></td>
+        <td>股价从最近一次加仓点回撤超过<strong>15%</strong>，或有效跌破<strong>25元</strong>的关键技术支撑位。</td>
+        <td>减仓一半或清仓</td>
+        <td>纯粹基于价格行为，防止亏损无限扩大。</td>
+      </tr>
+      <tr>
+        <td><strong>逻辑止损</strong></td>
+        <td>1. 连续两个季度营收增速低于<strong>3%</strong>且经营现金流为负 [source:313]。<br>2. 至2026年底，AI基建业务仍未披露任何实质性大额订单。</td>
+        <td>清仓</td>
+        <td>核心投资逻辑被证伪，必须无条件退出。</td>
+      </tr>
+      <tr>
+        <td><strong>时间止损</strong></td>
+        <td>首次建仓后<strong>6个月</strong>内，股价表现持续弱于市场和同业，且未出现任何积极催化剂。</td>
+        <td>减仓或清仓</td>
+        <td>资金有时间成本，避免陷入价值陷阱。</td>
+      </tr>
+      <tr>
+        <td><strong>机会成本止损</strong></td>
+        <td>组合中出现预期收益/风险比显著更优的新投资标的。</td>
+        <td>减仓或换仓</td>
+        <td>动态优化组合配置，追求整体收益最大化。</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===== 章节：预期收益分布 ===== -->
+<section class="card">
+  <h2>五、预期收益分布</h2>
+  <p>结合情景分析，量化不同路径下的潜在收益与概率，形成完整的决策期望值视图。</p>
+  <table>
+    <thead>
+      <tr>
+        <th>收益区间</th>
+        <th>概率</th>
+        <th>对应情景</th>
+        <th>持有期</th>
+        <th>动作</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>&gt; +50%</td>
+        <td>15%</td>
+        <td><strong>乐观路径：</strong>AI订单超预期落地 + 美联储降息 + 业绩持续超预期。</td>
+        <td>6-12个月</td>
+        <td>持有 / 加仓</td>
+      </tr>
+      <tr>
+        <td>+20% ~ +50%</td>
+        <td>35%</td>
+        <td><strong>基准路径：</strong>业绩符合预期，估值向中枢<strong>40元</strong>修复。</td>
+        <td>6-12个月</td>
+        <td>持有</td>
+      </tr>
+      <tr>
+        <td>+5% ~ +20%</td>
+        <td>25%</td>
+        <td><strong>谨慎路径：</strong>业绩略超预期，但宏观复苏缓慢，估值修复有限。</td>
+        <td>3-6个月</td>
+        <td>观察</td>
+      </tr>
+      <tr>
+        <td>-5% ~ +5%</td>
+        <td>15%</td>
+        <td><strong>盘整路径：</strong>基本面无亮点，市场情绪平淡，股价区间震荡。</td>
+        <td>3-6个月</td>
+        <td>持有 / 减仓</td>
+      </tr>
+      <tr>
+        <td>-5% ~ -20%</td>
+        <td>8%</td>
+        <td><strong>预期落空路径：</strong>Q2/Q3业绩不及预期，补库被证伪。</td>
+        <td>1-3个月</td>
+        <td>减仓</td>
+      </tr>
+      <tr>
+        <td>&lt; -20%</td>
+        <td>2%</td>
+        <td><strong>黑天鹅路径：</strong>宏观经济衰退或重大贸易摩擦。</td>
+        <td>1-3个月</td>
+        <td>清仓</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===== 章节：组合适配 ===== -->
+<section class="card">
+  <h2>六、组合适配</h2>
+  <p>如需组合适配分析，请提供当前持仓、基准和风险预算信息。</p>
+</section>
+
+<!-- ===== 章节：复盘锚点 ===== -->
+<section class="card">
+  <h2>七、复盘锚点</h2>
+  <p>设定明确的复盘检查点和信号，确保投资逻辑与时俱进，避免路径依赖。</p>
+  <ul>
+    <li><strong>强制复盘日期：</strong> <strong>2026年9月30日</strong>。此时2026年中报和三季度经营情况均已明朗，是验证全年业绩和核心逻辑的关键节点。</li>
+    <li><strong>论点证伪信号：</strong>
+      <ul>
+        <li><strong>周期复苏证伪：</strong> 2026年Q2/Q3财报显示，营收增速连续低于<strong>3%</strong> 或 经营现金流/净利润的比值连续低于<strong>0.5</strong> [source:313]。</li>
+        <li><strong>新增长证伪：</strong> AI基建业务在2026年下半年无任何订单或合作进展的实质性披露。</li>
+      </ul>
+    </li>
+    <li><strong>概率漂移阈值：</strong> 当通过跟踪关键变量，我们对“乐观情景”的主观概率判断从当前的25%下降超过<strong>15个百分点</strong>（即低于10%）时，必须立即启动全面复盘，重新评估投资决策。</li>
+  </ul>
+</section>
+
+<!-- ===== 章节：魔鬼代言人终审 ===== -->
+<section class="devil">
+  <h2>八、魔鬼代言人终审</h2>
+  <p>在执行前，以最挑剔的视角对整个执行框架进行最后一次压力测试。</p>
+  <ul>
+    <li><strong>估值锚定是否受到锚定效应影响？</strong>
+      <p>当前估值锚定在<strong>15-18倍PE</strong>，这实质上是介于传统手工具龙头（约12-15倍）和成长性电动工具龙头（>20倍）之间的折中。这存在风险：如果市场最终不认可其成长性，我们可能锚定在了过高的估值上。反之，如果转型极其成功，这个锚又可能过于保守。</p>
+    </li>
+    <li><strong>分批计划是否考虑了流动性约束？</strong>
+      <p>公司近一个月日均成交额约4亿元，流动性尚可。但若需在短期内完成大额建仓（如数亿元），仍可能对股价产生<strong>1-2%</strong>的冲击成本。分批计划有助于缓解此问题，但大资金建仓时仍需关注盘口流动性。</p>
+    </li>
+    <li><strong>止损条件是否足够具体可执行？</strong>
+      <p>逻辑止损条件（营收增速<3%，现金流<净利润50%）是清晰且可量化的，具备高执行性。价格止损和时间止损则需要严格的纪律来克服人性弱点。关键在于将这些条件预设在交易系统中，避免临时决策的情绪干扰。</p>
+    </li>
+    <li><strong>对手盘视角：在我想买的价位，谁在卖？为什么？</strong>
+      <p>近期数据显示，北向资金和部分公募基金存在边际减持。他们的卖出理由可能包括：1) 获利了结，股价自低点已有一定涨幅；2) 担忧美国宏观经济复苏的不确定性，降低周期性敞口；3) 对公司能否在电动工具领域成功破局持怀疑态度，认为当前估值已合理反映了手工具业务的价值。理解对手盘的逻辑，有助于我们更客观地评估自身的判断优势所在。</p>
+    </li>
+  </ul>
+</section>
+
+<!-- ===== 页脚 ===== -->
+<div class="footer">
+  巨星科技 深度研究报告｜生成日期：2026-06-06｜帝国 deep-stock-research V2
+</div>
+
+</div>
+<!-- STAGE4_SUMMARY: 
+### 核心结论摘要
+
+**估值中枢与当前位置**：通过PE相对估值、分部估值和历史分位等多种方法交叉验证，巨星科技的合理估值中枢约为**40元/股**。相对于当前**31.67元**的股价，存在约**26%**的潜在上涨空间，安全边际较为充足。
+
+**5档价格区间与核心操作区**：我们将股价划分为五个操作区间。当前股价（28-32元）处于“**合理偏低**”区间，是进行**试探性或核心建仓**的理想区域。当股价进入“深度低估”区（<28元）且基本面未恶化时，应视为大举加仓的机会。而当股价进入“合理偏高”区（38-45元）时，则应逐步减仓锁定利润。
+
+**分批买入计划**：建议采用三步走的建仓策略：1）在**32-33元**附近建立**30%**的试探仓；2）待2026年Q2财报验证或市场恐慌时，在**28-30元**加仓**40%**构建核心仓位；3）保留**30%**的后备仓位，用于应对**25-27元**的重大错杀机会。
+
+**最严止损条件**：风险控制的核心是逻辑止损。一旦出现以下任一情况，意味着核心投资逻辑被破坏，应无条件清仓：1）**连续两个季度营收增速低于3%且经营现金流持续为负**，这标志着周期复苏逻辑证伪；2）**至2026年底，AI基建业务仍未披露任何实质性大额订单**，这标志着新增长故事无法兑现。
+
+**复盘锚点**：设定**2026年9月30日**（Q3财报后）为强制复盘日，届时将全面重新评估投资逻辑。日常跟踪中，若营收增速或现金流指标触及预警线，或对乐观情景的概率判断下降超过15个百分点，也需立即启动复盘。
+-->
+</body>
+</html>
+```
