@@ -21,6 +21,40 @@
 
 根据 Pascal 后续确认，unified_data 新增持久化集合统一使用 MongoDB `03_data_ud_*` 前缀；DSA 既有 SQLite 仅作为只读 legacy source adapter，不作为 unified_data 新增持久化后端。实现阶段不得新增 SQLite 存储路径。
 
+## 0.1 Phase 1A 契约澄清（2026-07-13）
+
+Phase 1A（TA-CN read-only adapter）的精确契约如下，Implement/Verify/Review 阶段以此为准：
+
+**Phase 1A TA-CN MongoDB 只读集合（8 个，不含 DSA SQLite）：**
+
+| # | 集合 | Canonical Object | Adapter 方法 | Service 入口 | Client API |
+|---|---|---|---|---|---|
+| 1 | `stock_basic_info` | `StockInfo` | `get_stock_info()` / `get_stock_list()` | `metadata_service.get_stock_list()` / `.get_stock_info()` | `get_stock_list()` / `get_stock_info()` |
+| 2 | `market_quotes` | `RealtimeQuote` | `get_realtime_quotes()` | `market_data_service.get_realtime_quote()` | `get_realtime_quote()` |
+| 3 | `stock_daily_quotes` | `DailyBar` | `get_daily_bars()` | `market_data_service.get_kline_daily()` | `get_kline_daily()` |
+| 4 | `stock_financial_data` | `FinancialStatement` | `get_financials()` | `fundamental_service.get_income_statement()` / `.get_balance_sheet()` / `.get_cash_flow()` | `get_income_statement()` / `get_balance_sheet()` / `get_cash_flow()` |
+| 5 | `stock_news` | `NewsItem` | `get_news()` | `event_service.get_news()` | `get_news()` |
+| 6 | `index_basic_info` | `IndexInfo` | `get_index_info()` / `get_index_list()` | `metadata_service.get_index_list()` / `.get_index_info()` | `get_index_list()` / `get_index_info()` |
+| 7 | `index_daily_quotes` | `IndexDailyBar` | `get_index_daily_bars()` | `market_data_service.get_index_daily()` / `sector_service.get_sector_index_bars()` | `get_index_daily()` / `get_sector_index_bars()` |
+| 8 | `stock_sector_info` | `SectorClassification` | `get_stock_sector_info()` / `get_stocks_by_sector()` | `sector_service.get_stock_sector()` / `.get_stocks_by_sector()` | `get_stock_sector()` / `get_stocks_by_sector()` |
+
+**Phase 1A 明确不做：**
+- 外部 API 调用（Tushare / AKShare provider）→ Phase 1B
+- `CacheManager` / `FreshnessPolicy` → Phase 1B
+- DSA SQLite adapter → Phase 1B
+- MongoDB 写入或新增集合（Phase 1A adapter 只读，不写任何集合）
+- `task_center` 集成 → Phase 5
+- stock framework profile/model 集成 → Phase 6
+- `force_refresh` / `provider` 参数（无缓存层、无外部 provider，参数接受但忽略）
+
+**Phase 1A 输入/输出契约：**
+- 所有 Client API 输入：`SecurityId`（Phase 0 已实现）+ 可选 `limit` / `start_date` / `end_date` / `classify_system` / `period`
+- 所有 Client API 输出：`DataResult`（Phase 0 已实现），`data` 字段为对应 Canonical Object 或其列表
+- 空结果：`DataResult.success(data=None/[])` → `freshness="empty"`, `provider="empty"`
+- TA-CN MongoDB 不可用：`DataResult.error(...)` → `freshness="empty"`, `provider="error"`, `source_trace=["ta_cn_adapter(error: ...)"]`
+- `source_trace`：单 provider 成功为 `["ta_cn_adapter(ok)"]`，失败为 `["ta_cn_adapter(error: ...)"]`
+- `freshness`：Phase 1A 固定为 `"delayed"`（非缓存、非实时），由 Phase 1B FreshnessPolicy 覆盖
+
 ## 1. 需求摘要
 
 本 SPEC 将 RFC-03-007 中描述的"全局统一数据访问层"落到具体接口签名、数据契约、模块结构和测试矩阵。核心交付物：
@@ -256,16 +290,18 @@ class DataProvider(ABC):
 |---|---|
 | `market_data.kline_daily` | 日线 K 线 |
 | `market_data.kline_weekly` | 周线 K 线 |
-| `market_data.realtime_quote` | 实时行情快照 |
+| `market_data.realtime_quote` | 实时行情快照（读 `market_quotes` 集合） |
 | `financial.income_statement` | 利润表 |
 | `financial.balance_sheet` | 资产负债表 |
 | `financial.cash_flow` | 现金流量表 |
 | `valuation.daily_basic` | 每日估值指标（PE/PB/PS） |
 | `calendar.trading_days` | 交易日历 |
 | `calendar.is_trading_day` | 判断是否交易日 |
-| `metadata.stock_list` | 股票列表 |
+| `metadata.stock_list` | 股票列表（读 `stock_basic_info`） |
+| `metadata.index_list` | 指数列表（读 TA-CN `index_basic_info`） |
 | `metadata.industry_members` | 行业成分股 |
 | `metadata.index_members` | 指数成分股 |
+| `news.stock_news` | 个股新闻（读 `stock_news` 集合） |
 
 ### 4.5 ProviderRegistry
 
@@ -350,7 +386,9 @@ class FreshnessPolicy:
 
 ## 5. 查询入口 API
 
-消费方通过统一入口函数访问数据。以下为 MVP 阶段暴露的公共 API：
+消费方通过统一入口函数访问数据。以下为 MVP 阶段暴露的公共 API。
+
+**Phase 1A 范围标注**：标注 `[1A]` 的方法必须在 Phase 1A 由 TA-CN read-only adapter 实现；标注 `[1B+]` 的方法在 Phase 1B 引入外部 provider + cache 后可用。Phase 1A 不实现 `force_refresh`（无缓存层）和 `provider` 参数（无外部 provider）。
 
 ```python
 # skills/data/unified_data/api.py（伪代码，具体路径由 Design 决定）
@@ -358,45 +396,74 @@ class FreshnessPolicy:
 from .models import SecurityId, DataResult
 
 # 行情域
-def get_kline_daily(
+def get_kline_daily(  # [1A] 读 stock_daily_quotes
     security_id: SecurityId,
     start_date: str | None = None,
     end_date: str | None = None,
     limit: int = 120,
     adjust: str = "qfq",            # qfq/hfq/none
-    provider: str | None = None,
-    force_refresh: bool = False,
+    provider: str | None = None,    # [1B+]
+    force_refresh: bool = False,    # [1B+]
+) -> DataResult: ...
+
+def get_realtime_quote(  # [1A] 读 market_quotes
+    security_id: SecurityId,
 ) -> DataResult: ...
 
 # 财务域
-def get_income_statement(
+def get_income_statement(  # [1A] 读 stock_financial_data
     security_id: SecurityId,
     period: str | None = None,      # 如 "2025Q4"
-    provider: str | None = None,
+    provider: str | None = None,    # [1B+]
 ) -> DataResult: ...
 
-def get_balance_sheet(...) -> DataResult: ...
-def get_cash_flow(...) -> DataResult: ...
+def get_balance_sheet(...) -> DataResult: ...   # [1A]
+def get_cash_flow(...) -> DataResult: ...       # [1A]
 
 # 估值域
-def get_daily_basic(
+def get_daily_basic(  # [1B+] 读 stock_basic_info 部分字段 + Tushare daily_basic
     security_id: SecurityId,
     date: str | None = None,
     provider: str | None = None,
 ) -> DataResult: ...
 
 # 日历域
-def get_trading_days(
+def get_trading_days(  # [1B+] 需要 Tushare/AKShare 或 exchange_calendar
     market: Market,
     start_date: str,
     end_date: str,
 ) -> DataResult: ...
 
-def is_trading_day(market: Market, date: str) -> bool: ...
+def is_trading_day(market: Market, date: str) -> bool: ...  # [1B+]
 
 # 元数据域
-def get_stock_list(market: Market) -> DataResult: ...
-def get_index_members(index_id: SecurityId) -> DataResult: ...
+def get_stock_list(market: Market) -> DataResult: ...           # [1A] 读 stock_basic_info
+def get_stock_info(security_id: SecurityId) -> DataResult: ...  # [1A] 读 stock_basic_info
+def get_index_list(market: Market) -> DataResult: ...           # [1A] 读 index_basic_info
+def get_index_info(index_id: SecurityId) -> DataResult: ...     # [1A] 读 index_basic_info
+def get_index_members(index_id: SecurityId) -> DataResult: ...  # [1B+] 需要外部数据源
+
+# 指数/板块域（读 TA-CN index_basic_info / index_daily_quotes / stock_sector_info）
+def get_index_daily(  # [1A] 读 index_daily_quotes
+    index_id: SecurityId,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    limit: int = 120,
+) -> DataResult: ...
+def get_sector_index_bars(  # [1A] 读 index_daily_quotes（申万行业指数）
+    sector_code: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    limit: int = 120,
+) -> DataResult: ...
+def get_stock_sector(security_id: SecurityId, classify_system: str | None = None) -> DataResult: ...  # [1A] 读 stock_sector_info
+def get_stocks_by_sector(sector_code: str, classify_system: str | None = None) -> DataResult: ...      # [1A] 读 stock_sector_info
+
+# 新闻域
+def get_news(  # [1A] 读 stock_news
+    security_id: SecurityId,
+    limit: int = 20,
+) -> DataResult: ...
 ```
 
 ---
@@ -409,7 +476,7 @@ def get_index_members(index_id: SecurityId) -> DataResult: ...
 |---|---|
 | name | `"tushare"` |
 | markets | `{CN}` |
-| capabilities | `market_data.kline_daily`, `market_data.realtime_quote`, `financial.income_statement`, `financial.balance_sheet`, `financial.cash_flow`, `valuation.daily_basic`, `calendar.trading_days`, `calendar.is_trading_day`, `metadata.stock_list`, `metadata.index_members` |
+| capabilities | `market_data.kline_daily`, `market_data.realtime_quote`, `financial.income_statement`, `financial.balance_sheet`, `financial.cash_flow`, `valuation.daily_basic`, `calendar.trading_days`, `calendar.is_trading_day`, `metadata.stock_list`, `metadata.index_list`, `metadata.index_members`, `news.stock_news` |
 | token 来源 | `.env` → `TUSHARE_TOKEN` |
 | is_available | token 存在且非空 |
 | fetch 限流 | 遵守 Tushare 频率限制（每分钟 N 次），内置 rate limiter |
@@ -420,7 +487,7 @@ def get_index_members(index_id: SecurityId) -> DataResult: ...
 |---|---|
 | name | `"akshare"` |
 | markets | `{CN}` |
-| capabilities | `market_data.kline_daily`, `market_data.realtime_quote`, `financial.income_statement`, `financial.balance_sheet`, `financial.cash_flow`, `valuation.daily_basic`, `calendar.trading_days`, `metadata.stock_list`, `metadata.index_members` |
+| capabilities | `market_data.kline_daily`, `market_data.realtime_quote`, `financial.income_statement`, `financial.balance_sheet`, `financial.cash_flow`, `valuation.daily_basic`, `calendar.trading_days`, `metadata.stock_list`, `metadata.index_list`, `metadata.index_members`, `news.stock_news` |
 | 依赖 | `akshare` Python 包 |
 | is_available | akshare 可 import |
 | fetch 限流 | 内置简单延迟（如 0.5s/次），防封禁 |
@@ -438,7 +505,9 @@ fallback_chains:
   "calendar.trading_days": ["tushare", "akshare"]
   "calendar.is_trading_day": ["tushare", "akshare"]
   "metadata.stock_list": ["tushare", "akshare"]
+  "metadata.index_list": ["tushare", "akshare"]
   "metadata.index_members": ["tushare", "akshare"]
+  "news.stock_news": ["tushare", "akshare"]
 ```
 
 ---

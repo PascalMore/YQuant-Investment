@@ -1,39 +1,43 @@
-"""unified_data — YQuant Unified Data Layer (Phase 0 skeleton).
+"""unified_data — YQuant Unified Data Layer (Phase 0 skeleton + Phase 1A).
 
-This package defines the *core abstractions* for the unified data layer
-specified in RFC-03-007 / SPEC-03-007 / DESIGN-03-007. Phase 0 ships only
-the skeleton: no provider adapters, no MongoDB persistence, no external
-API calls. Subsequent phases (Phase 1+) will add real providers.
+Phase 0 ships the core abstractions: ``SecurityId``, ``DataResult``,
+``DataProvider``, ``ProviderRegistry``, ``DataRouter``,
+``UnifiedDataClient`` and ``UnifiedDataConfig``.
 
-Public surface (Phase 0):
+Phase 1A (DESIGN-03-007 §Phase 1A) adds the TA-CN MongoDB read-only
+adapter (``TA_CNMongoAdapter``), eight canonical domain objects under
+``skills.data.unified_data.models.domain``, five domain services
+under ``skills.data.unified_data.services``, and 14 convenience entry
+methods on :class:`UnifiedDataClient`. The TA-CN adapter is read-only:
+it never ``insert``/``update``/``delete`` documents and never creates
+collections or indexes.
 
-    SecurityId        -- immutable cross-market security identifier
-    Market            -- enumeration of supported markets
-    DataResult        -- standard data return value with metadata
-    DataProvider      -- abstract base class for data sources
-    Capability        -- value object describing a provider capability
-    ProviderRegistry  -- in-memory registry of providers
-    DataRouter        -- routes a query through a fallback chain
-    UnifiedDataClient -- consumer-facing facade
-    UnifiedDataConfig -- minimal configuration dataclass
+Public surface
+--------------
 
-Exceptions (see ``exceptions`` module):
+Phase 0 (unchanged):
+    SecurityId, Market, DataResult, Capability, FreshnessLabel,
+    DataProvider, ProviderRegistry, DataRouter, UnifiedDataClient,
+    UnifiedDataConfig
 
-    UnifiedDataError          -- base class
-    InvalidSecurityIdError    -- bad market / symbol input
-    UnsupportedCapabilityError-- provider lacks capability
-    ProviderUnavailableError  -- provider cannot serve the request
-    ProviderError             -- provider raised an internal error
-    AllProvidersFailedError   -- every provider in the chain failed
+Phase 1A additions:
+    TA_CNMongoAdapter (adapters package)
+    MarketDataService, FundamentalService, SectorService, EventService,
+    MetadataService (services package)
+    DailyBar, IndexDailyBar, RealtimeQuote, FinancialStatement,
+    NewsItem, SectorClassification, StockInfo, IndexInfo (canonical
+    domain objects)
+
+13 (Phase 0) + 1 (TA_CNMongoAdapter) + 5 (services) + 8 (canonical
+domain objects) + 1 (FreshnessLabel stays) = same exported set plus
+the new Phase 1A symbols.
 
 Phase 0 scope intentionally excludes:
-    * MongoDB cache (CacheManager)
-    * FreshnessPolicy / TTL logic
-    * Real provider adapters (Tushare / AKShare / ...)
-    * Audit / quality scoring
-    * Production persistence
-
-Anything beyond the abstractions listed above belongs to a later phase.
+    * MongoDB cache (CacheManager) — Phase 1B
+    * FreshnessPolicy / TTL logic — Phase 1B
+    * Real provider adapters (Tushare / AKShare / ...) — Phase 1B
+    * Audit / quality scoring — Phase 2
+    * Production persistence (Phase 1A adapter is read-only)
 """
 
 from .exceptions import (
@@ -51,9 +55,27 @@ from .models import (
     Market,
     SecurityId,
 )
+from .models.domain import (
+    DailyBar,
+    FinancialStatement,
+    IndexDailyBar,
+    IndexInfo,
+    NewsItem,
+    RealtimeQuote,
+    SectorClassification,
+    StockInfo,
+)
 from .provider import DataProvider
 from .registry import ProviderRegistry
 from .router import DataRouter
+from .adapters import TA_CNMongoAdapter
+from .services import (
+    EventService,
+    FundamentalService,
+    MarketDataService,
+    MetadataService,
+    SectorService,
+)
 from .client import UnifiedDataClient
 from .config import UnifiedDataConfig
 
@@ -77,4 +99,21 @@ __all__ = [
     "DataRouter",
     "UnifiedDataClient",
     "UnifiedDataConfig",
+    # adapters (Phase 1A)
+    "TA_CNMongoAdapter",
+    # services (Phase 1A)
+    "MarketDataService",
+    "FundamentalService",
+    "SectorService",
+    "EventService",
+    "MetadataService",
+    # canonical domain objects (Phase 1A)
+    "DailyBar",
+    "IndexDailyBar",
+    "RealtimeQuote",
+    "FinancialStatement",
+    "NewsItem",
+    "SectorClassification",
+    "StockInfo",
+    "IndexInfo",
 ]

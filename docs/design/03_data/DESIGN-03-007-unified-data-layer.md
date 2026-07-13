@@ -21,7 +21,7 @@
 ### 1.1 设计目标
 
 1. **完整设计**：覆盖 unified_data 整体架构、数据域、schema adapter、provider、cache、quality、persistence、task_center 接口、stock framework 接口。
-2. **分阶段实现**：设计一次到位，但实现拆为 7 个 Phase，每 Phase 有独立范围、产物、验收标准和风险。
+2. **分阶段实现**：设计一次到位，但实现拆为 Phase 0-7，共 8 个编号阶段；其中 Phase 0 为骨架，Phase 1-7 为业务能力阶段（Phase 1 进一步细分为 1A/1B/1C 三个子阶段）。每 Phase / 子阶段有独立范围、产物、验收标准和风险。
 3. **优先复用现有 schema**：TA-CN 核心集合（stock_basic_info / stock_daily_quotes / stock_financial_data / stock_news / index_daily_quotes / stock_sector_info）直接复用，不新建替代表。
 4. **代码层 canonical，数据库层 adapter-first**：定义 canonical domain object / dataclass / pydantic model，但数据库读写通过 adapter 走现有集合。
 5. **DSA 强项数据允许持久化**：sector / sentiment / capital_flow / dragon_tiger / chip_distribution 等 DSA 强项数据纳入新集合规划，按字段级设计 + 索引建议给出完整 schema；所有 unified_data 新增持久化集合均使用 MongoDB，不使用 SQLite。
@@ -280,7 +280,11 @@ skills/data/unified_data/
 
 ### 5.1 强复用 / 不重建（Phase 1）
 
-这些集合通过 **adapter 只读** 方式复用，不在 unified_data 中定义新的写入路径。Pascal 已确认 `index_daily_quotes` 与 `stock_sector_info` 也应纳入强复用层，因此强复用集合由 7 个扩展为 9 个。
+这些集合通过 **adapter 只读** 方式复用，不在 unified_data 中定义新的写入路径。Pascal 已确认 `index_daily_quotes` 与 `stock_sector_info` 也应纳入强复用层。强复用集合的精确口径如下：
+
+- **TA-CN MongoDB 只读集合：8 个**（Phase 1A 全覆盖）：`stock_basic_info` / `market_quotes` / `stock_daily_quotes` / `stock_financial_data` / `stock_news` / `index_basic_info` / `index_daily_quotes` / `stock_sector_info`。
+- **DSA SQLite 只读：1 个**（Phase 1B 才接入）：`StockDaily`（兜底数据源）。
+- 合计 §5.1 表格 9 行，但 Phase 1A 仅覆盖前 8 个 TA-CN MongoDB 集合；DSA `StockDaily` 属 Phase 1B。
 
 | 集合名 | 复用方式 | Adapter 类 | 写入方 | unified_data 读路径 |
 |---|---|---|---|---|
@@ -1470,8 +1474,15 @@ class UnifiedDataClient:
     def get_stock_list(self, market) -> DataResult: ...
     def get_stock_info(self, security_id) -> DataResult: ...
     def get_index_list(self, market) -> DataResult: ...
+    def get_index_info(self, index_id) -> DataResult: ...
     def get_index_members(self, index_id) -> DataResult: ...
     def get_industry_members(self, industry_code) -> DataResult: ...
+
+    # === 指数/板块域（读 TA-CN index_basic_info / index_daily_quotes / stock_sector_info）===
+    def get_index_daily(self, index_id, start_date=None, end_date=None, limit=120) -> DataResult: ...
+    def get_sector_index_bars(self, sector_code, start_date=None, end_date=None, limit=120) -> DataResult: ...
+    def get_stock_sector(self, security_id, classify_system=None) -> DataResult: ...
+    def get_stocks_by_sector(self, sector_code, classify_system=None) -> DataResult: ...
 
     # === 新闻域 ===
     def get_news(self, security_id, limit=20) -> DataResult: ...
@@ -1528,35 +1539,586 @@ class UnifiedDataClient:
 
 ---
 
-### Phase 1：核心读取 Adapter + Provider（预计 3-5 天）
+### Phase 1：核心读取 Adapter + Provider（预计 4-7 天）
+
+Phase 1 是读优先统一访问层的落地阶段，细分为 1A / 1B / 1C 三个子阶段，严格顺序依赖：
+**1A → 1B → 1C**。1A 只做 TA-CN 只读 adapter + 服务层，不引入外部 provider 和缓存，确保最小
+可验证骨架先行；1B 在此基础上补齐外部 provider、缓存、新鲜度；1C 完善测试与端到端验收。
+
+---
+
+#### Phase 1A：TA-CN read-only adapter for core A-share + index/sector data（预计 2-3 天）
 
 **范围**：
-- TA-CN MongoDB adapter（读 `stock_basic_info` / `stock_daily_quotes` / `stock_financial_data` / `stock_news`）
-- DSA SQLite adapter（读 `StockDaily`）
-- `TushareProvider` + `AKShareProvider` 实现
-- `ProviderRegistry` + `DataRouter` 基础版
-- `CacheManager` + `FreshnessPolicy` 基础版
-- `UnifiedDataClient` 基础 API（行情/财务/估值/日历/元数据/新闻域）
-- 所有 canonical domain objects
+- TA-CN MongoDB adapter（只读，覆盖 §5.1 强复用层全部 8 个 TA-CN MongoDB 集合）：
+  - `stock_basic_info`
+  - `market_quotes`（实时行情快照，只读 adapter 映射为 `RealtimeQuote` canonical）
+  - `stock_daily_quotes`
+  - `stock_financial_data`
+  - `stock_news`
+  - `index_basic_info`
+  - `index_daily_quotes`
+  - `stock_sector_info`
+- canonical domain objects 对应落地：`StockInfo` / `DailyBar` / `FinancialStatement` / `NewsItem` /
+  `IndexInfo` / `IndexDailyBar` / `SectorClassification` / `RealtimeQuote`
+- domain services 骨架（方法签名 + TA-CN adapter 调用，暂不接 provider / cache）：
+  - `metadata_service`：`get_stock_list()` / `get_stock_info()` / `get_index_list()` / `get_index_info()` / `get_index_members()` / `get_industry_members()`
+  - `market_data_service`：`get_kline_daily()` / `get_realtime_quote()` / `get_index_daily()`
+  - `fundamental_service`：`get_income_statement()` / `get_balance_sheet()` / `get_cash_flow()`
+  - `sector_service`：`get_stock_sector()` / `get_stocks_by_sector()` / `get_sector_index_bars()`
+  - `event_service`：`get_news()`
+- `UnifiedDataClient` facade：行情 / 财务 / 估值 / 日历 / 元数据 / 新闻 / 指数 / 板块域入口
+
+**Phase 1A 明确不做（留待 Phase 1B/1C 或后续 Phase）**：
+- 外部 API 调用（Tushare / AKShare provider 的实时 fetch）— Phase 1B
+- `CacheManager` / `FreshnessPolicy` — Phase 1B
+- MongoDB 写入或新增集合（Phase 1A adapter 只读，不写任何集合）
+- DSA SQLite adapter — Phase 1B（作为兜底数据源）
+- `task_center` 集成 — Phase 5
+- stock framework profile/model 集成 — Phase 6
 
 **产物**：
-- `skills/data/unified_data/adapters/` 3 个文件
-- `skills/data/unified_data/providers/` 4 个文件（含 ta_cn_adapter、dsa_adapter）
-- `skills/data/unified_data/router/` 2 个文件
-- `skills/data/unified_data/cache/` 2 个文件
-- `skills/data/unified_data/services/` 6 个文件（market_data, fundamental, valuation, calendar, metadata, event）
-- `skills/data/unified_data/client.py`
-- `skills/data/unified_data/models/domain/` 12 个文件
+- `skills/data/unified_data/adapters/ta_cn_mongo_adapter.py`
+- `skills/data/unified_data/models/domain/` 全部 canonical object 文件（market_data / financial / valuation / sector / news / calendar / metadata）
+- `skills/data/unified_data/services/` 5 个服务文件
+- `skills/data/unified_data/client.py`（1A 基础版，只接 TA-CN adapter）
 
 **验收标准**：
-- 通过 UnifiedDataClient 获取 A 股日线行情（DataResult 包含正确的 provider/freshness/source_trace）
-- Tushare → AKShare fallback 链验证通过
-- 缓存命中时返回 cached 标签
+- 通过 `UnifiedDataClient.get_kline_daily(SecurityId("CN","600519"))` 获取 A 股日线行情，DataResult 包含正确 provider/freshness/source_trace
+- 通过 `UnifiedDataClient.get_index_daily()` 读取 `index_daily_quotes`，返回 `IndexDailyBar` canonical
+- 通过 `UnifiedDataClient.get_stock_sector()` / `get_stocks_by_sector()` 读取 `stock_sector_info`，返回 `SectorClassification` canonical
 - SecurityId 多种格式输入均可正确转换
-- 不修改 TA-CN/DSA 代码
-- 单元测试覆盖率 ≥ 60%
+- 不修改 TA-CN / DSA / Argus / portfolio 任何代码
+- 不新增 MongoDB 集合，不写入任何集合
+- 单元测试覆盖率 ≥ 60%（TA-CN adapter 映射 + canonical object 转换）
 
-**风险**：中（Tushare token 配额、MongoDB 连接、TA-CN 数据可用性）
+**风险**：低-中（MongoDB 连接、TA-CN 数据可用性）
+**是否需要 Verify/Review**：是
+
+---
+
+### Phase 1A 详细设计（T2 交付物 — 供 T3 实现蓝本）
+
+> 以下为 Phase 1A 落地到 T3 实现者所需的精确文件清单、接口签名、字段映射、异常/空值转换、服务→adapter 调用矩阵和测试策略。
+> 事实来源：T1 `t_6b116199` final_collection_scope（8 个 TA-CN MongoDB 只读集合）。
+
+#### 1A.1 精确文件清单
+
+Phase 1A 新建/修改文件按目录分组（目录级 + 文件级）：
+
+```
+skills/data/unified_data/
+├── __init__.py                        [修改] 导出 Phase 1A 公共符号（见 1A.9）
+├── client.py                          [修改] 扩展 Phase 0 facade：新增 14 个客户端入口方法
+│
+├── adapters/
+│   ├── __init__.py                    [新建] 导出 TA_CNMongoAdapter
+│   └── ta_cn_mongo_adapter.py         [新建] TA-CN 只读 MongoDB adapter（核心）
+│
+├── models/
+│   └── domain/
+│       ├── __init__.py                [新建] 导出全部 Phase 1A canonical objects
+│       ├── market_data.py             [新建] RealtimeQuote / DailyBar / IndexDailyBar
+│       ├── financial.py               [新建] FinancialStatement
+│       ├── news.py                    [新建] NewsItem
+│       ├── sector.py                  [新建] SectorClassification
+│       └── metadata.py                [新建] StockInfo / IndexInfo
+│
+└── services/
+    ├── __init__.py                    [新建] 导出 5 个服务
+    ├── market_data_service.py         [新建] get_kline_daily / get_realtime_quote / get_index_daily
+    ├── fundamental_service.py         [新建] get_income_statement / get_balance_sheet / get_cash_flow
+    ├── sector_service.py              [新建] get_stock_sector / get_stocks_by_sector / get_sector_index_bars
+    ├── event_service.py               [新建] get_news
+    └── metadata_service.py            [新建] get_stock_list / get_stock_info / get_index_list / get_index_info
+
+tests/data/unified_data/
+├── test_ta_cn_mongo_adapter.py        [新建] adapter 字段映射 + 空数据 + 异常
+├── test_domain_objects.py             [新建] 8 个 canonical object 构造与边界
+├── test_services.py                   [新建] 5 个服务（mock adapter）
+├── test_client_phase1a.py             [新建] UnifiedDataClient 1A 入口
+└── fixtures/
+    ├── __init__.py                    [新建]
+    └── ta_cn_mock_docs.py             [新建] 8 集合典型 MongoDB 文档 fixture
+```
+
+**明确标注不创建（Phase 1B+ 或明确禁止）：**
+- `providers/` — Phase 1A 不创建 provider 目录，无 `ta_cn_adapter.py` provider（Phase 1B 创建 `TA-CNAdapterProvider`）
+- `cache/` — Phase 1A 不创建 cache 目录
+- `dsa_sqlite_adapter.py` — Phase 1B
+- `portfolio_adapter.py` — Phase 2
+- `config/` 下 YAML — Phase 1B
+- `tasks/` 目录 — Phase 5
+
+#### 1A.2 TA_CNMongoAdapter 详细设计
+
+**连接注入边界：**
+- `TA_CNMongoAdapter` 不自行创建 MongoDB client（pymongo `MongoClient` 或 motor `AsyncIOMotorDatabase`）。
+- 构造函数接受一个已初始化的 `db` 句柄（`pymongo.database.Database`），由调用方（`UnifiedDataClient` 工厂或测试 fixture）注入。
+- 适配 motor async（生产）与 pymongo sync（测试 fixture）的差异：adapter 暴露**同步接口**签名，内部统一调用 `db[collection].find()/find_one()`；若注入的是 motor async 句柄，由上层在 Phase 1B 统一处理 async 包装。Phase 1A 实现与测试均使用 pymongo sync 句柄，保证 fixture 可用 `mongomock` 或内存 dict 替身。
+- **adapter 绝不在构造或读取时自动执行 `create_index`、`create_collection` 或任何写入操作。**
+
+**集合查询接口（8 个方法，与 T1 final_collection_scope 1:1）：**
+
+```python
+from __future__ import annotations
+from typing import Any
+from datetime import datetime
+
+class TA_CNMongoAdapter:
+    """TA-CN MongoDB 只读 adapter。
+
+    覆盖 8 个 TA-CN 生产集合，只做 find/find_one，不做写入。
+    所有方法返回 list[dict] 或 dict（原始 MongoDB 文档），不做 canonical 映射
+    （映射在 domain service 层完成）。返回 None 或空列表表示无数据。
+    """
+
+    DATABASE_NAME = "tradingagents"
+
+    def __init__(self, db: Any) -> None:
+        """注入已初始化的 pymongo Database 句柄。不做连接、不建索引。"""
+        self._db = db
+
+    # ── stock_basic_info ──────────────────────────────────────
+    def get_stock_info(self, symbol: str, market: str = "CN") -> dict | None:
+        """按 symbol 查询单只股票基础信息。返回原始文档或 None。"""
+
+    def get_stock_list(self, market: str = "CN", status: str = "L",
+                       limit: int = 0) -> list[dict]:
+        """查询股票列表。status='L' 仅上市。limit=0 表示不限。"""
+
+    # ── market_quotes ─────────────────────────────────────────
+    def get_realtime_quotes(self, symbol: str) -> dict | None:
+        """查询单只股票实时行情快照。返回原始文档或 None。"""
+
+    # ── stock_daily_quotes ────────────────────────────────────
+    def get_daily_bars(self, symbol: str, start_date: str | None = None,
+                       end_date: str | None = None, limit: int = 120) -> list[dict]:
+        """查询日线行情。start/end 格式 'YYYY-MM-DD'。按 trade_date 降序，limit 条。"""
+
+    # ── stock_financial_data ──────────────────────────────────
+    def get_financials(self, symbol: str, report_period: str | None = None) -> dict | None:
+        """查询财务数据。report_period 格式 'YYYYMMDD'。返回原始文档或 None。"""
+
+    # ── stock_news ────────────────────────────────────────────
+    def get_news(self, symbol: str, limit: int = 20) -> list[dict]:
+        """查询个股新闻。按 publish_time 降序。"""
+
+    # ── index_basic_info ──────────────────────────────────────
+    def get_index_info(self, symbol: str) -> dict | None:
+        """查询单个指数基础信息。"""
+
+    def get_index_list(self, market: str = "CN") -> list[dict]:
+        """查询指数列表。"""
+
+    # ── index_daily_quotes ────────────────────────────────────
+    def get_index_daily_bars(self, symbol: str | None = None,
+                             sector_code: str | None = None,
+                             start_date: str | None = None,
+                             end_date: str | None = None,
+                             limit: int = 120) -> list[dict]:
+        """查询指数日线。支持按 symbol（大盘指数）或 sector_code（申万行业指数）查询。"""
+
+    # ── stock_sector_info ─────────────────────────────────────
+    def get_stock_sector_info(self, full_symbol: str,
+                              classify_system: str | None = None) -> list[dict]:
+        """查询个股行业分类。classify_system 默认 'SW'。"""
+
+    def get_stocks_by_sector(self, l1_code: str,
+                             classify_system: str = "SW") -> list[dict]:
+        """查询某申万一级行业下的全部个股。"""
+```
+
+**字段映射规则（8 集合 × canonical object）：**
+
+映射在 domain service 层完成，不在 adapter 层。adapter 返回原始 MongoDB 文档（dict），service 层用 canonical object 的 `from_ta_cn_doc()` 类方法映射。
+
+| 集合 | Canonical Object | from_ta_cn_doc() 映射要点 |
+|---|---|---|
+| `stock_basic_info` | `StockInfo` | `symbol`→symbol；`full_symbol`→full_symbol；`name`→name；`industry`→industry；`area`→area；`total_mv`→total_mv；`circ_mv`→circ_mv；`pe`/`pe_ttm`/`pb`/`pb_mrq`/`roe`→同名字段；`list_date`→list_date；`status`→status；`market_info`→market_info（透传 dict） |
+| `market_quotes` | `RealtimeQuote` | `symbol`→symbol；`current_price`（或 `close`）→current_price；`change`→change；`change_percent`（或 `pct_chg`）→change_percent；`open`/`high`/`low`/`pre_close`/`volume`/`amount`→同名字段；`update_time`（或 `updated_at`/`timestamp`）→update_time |
+| `stock_daily_quotes` | `DailyBar` | `symbol`→symbol；`trade_date`→trade_date；`open`/`high`/`low`/`close`/`pre_close`/`change`/`pct_chg`/`vol`→`volume`/`amount`/`turnover_rate`/`volume_ratio`→同名字段。注意：TA-CN 字段名可能为 `vol` 而非 `volume`，映射时 fallback：`doc.get('volume', doc.get('vol'))` |
+| `stock_financial_data` | `FinancialStatement` | 外层 `symbol`/`report_period`/`report_type`；财务科目在 `raw_data` 嵌套字典内的 `income_statement`/`balance_sheet`/`cashflow_statement` 列表中，按 `end_date` 降序取最新。`statement_type` 由 service 方法决定（income/balance/cashflow）。科目字段直接透传为 `items: dict[str,float]` |
+| `stock_news` | `NewsItem` | `symbol`→symbol；`title`→title；`content`→content；`source`→source；`publish_time`→publish_time；`sentiment`→sentiment；`category`→category；`importance`→importance；`url`→url |
+| `index_basic_info` | `IndexInfo` | `symbol`→symbol；`full_symbol`→full_symbol；`name`→name；`fullname`→fullname；`market`→market；`publisher`→publisher；`category`→category |
+| `index_daily_quotes` | `IndexDailyBar` | `sector_code`（或 `code`/`symbol`）→symbol；`trade_date`→trade_date；`open`/`high`/`low`/`close`/`pct_chg`/`volume`（或 `vol`）/`amount`→同名字段；`source`→data_source |
+| `stock_sector_info` | `SectorClassification` | `full_symbol`→full_symbol；`classify_system`→classify_system；`l1_code`/`l1_name`/`l2_code`/`l2_name`/`l3_code`/`l3_name`→同名字段；`datasource`→datasource；`update_at`→update_at |
+
+**日期输入格式：**
+- 所有日期参数统一接受 `'YYYY-MM-DD'` 字符串（如 `'2026-07-13'`）。
+- adapter 内部查询 MongoDB 时，将 `'YYYY-MM-DD'` 转为 `'YYYYMMDD'` 格式匹配 TA-CN 集合中 `trade_date` 字段的存储格式（TA-CN 存储为 `'20260713'` 字符串）。
+- `report_period` 参数接受 `'YYYYMMDD'`（如 `'20251231'`），与 TA-CN `stock_financial_data.report_period` 存储格式一致。
+
+**字符串字段格式：**
+- TA-CN 集合中日期字段（`trade_date`、`report_period`、`publish_time`、`list_date`）存储为字符串（`'YYYYMMDD'` 或 ISO datetime），不做 Python `date`/`datetime` 类型转换，直接透传为 `str`，由 canonical object 保留为 `str` 字段。
+
+**排序 / limit：**
+- `stock_daily_quotes`：按 `trade_date` 降序（最新在前），`limit` 条。
+- `index_daily_quotes`：按 `trade_date` 降序，`limit` 条。
+- `stock_news`：按 `publish_time` 降序，`limit` 条。
+- `stock_basic_info` 列表：按 `symbol` 升序，`limit` 条。
+- 其他单文档查询不排序。
+
+**空数据 / 连接不可用 / 映射错误的转换规则：**
+
+| 场景 | adapter 行为 | service → DataResult |
+|---|---|---|
+| 查询返回空列表 / None | 返回 `[]` 或 `None` | `DataResult.success(data=None/[])` → `freshness='empty'`, `provider='empty'` |
+| MongoDB 连接异常（`ConnectionFailure` / `ServerSelectionTimeoutError`） | 不捕获，向上抛出 | service 捕获，返回 `DataResult.error(...)` → `freshness='empty'`, `provider='error'`, `source_trace=['ta_cn_adapter(error: ...)]']` |
+| 文档字段缺失（`KeyError` / `None`） | adapter 不抛异常（使用 `doc.get(field)`），canonical `from_ta_cn_doc()` 用 `None` 填充 | 正常 `DataResult.success()`，字段为 `None` |
+| 映射逻辑异常（`ValueError` / `TypeError`） | `from_ta_cn_doc()` 抛出 | service 捕获，返回 `DataResult.error(...)` |
+
+#### 1A.3 Canonical Domain Object 边界
+
+Phase 1A 新建 8 个 canonical dataclass，均位于 `models/domain/`：
+
+```python
+# models/domain/market_data.py
+@dataclass
+class RealtimeQuote:
+    symbol: str
+    current_price: float | None
+    change: float | None = None
+    change_percent: float | None = None
+    open: float | None = None
+    high: float | None = None
+    low: float | None = None
+    pre_close: float | None = None
+    volume: float | None = None
+    amount: float | None = None
+    update_time: str | None = None
+
+@dataclass
+class DailyBar:
+    symbol: str
+    trade_date: str              # 'YYYY-MM-DD'
+    open: float | None = None
+    high: float | None = None
+    low: float | None = None
+    close: float | None = None
+    pre_close: float | None = None
+    change: float | None = None
+    pct_chg: float | None = None
+    volume: float | None = None
+    amount: float | None = None
+    turnover_rate: float | None = None
+    volume_ratio: float | None = None
+
+    @classmethod
+    def from_ta_cn_doc(cls, doc: dict) -> "DailyBar":
+        """从 stock_daily_quotes 文档映射。宽松：doc.get(field) 不抛 KeyError。"""
+
+@dataclass
+class IndexDailyBar:
+    symbol: str
+    trade_date: str
+    open: float | None = None
+    high: float | None = None
+    low: float | None = None
+    close: float | None = None
+    pct_chg: float | None = None
+    volume: float | None = None
+    amount: float | None = None
+    data_source: str = ""
+
+    @classmethod
+    def from_ta_cn_doc(cls, doc: dict) -> "IndexDailyBar": ...
+```
+
+```python
+# models/domain/metadata.py
+@dataclass
+class StockInfo:
+    symbol: str
+    full_symbol: str
+    name: str
+    industry: str | None = None
+    area: str | None = None
+    total_mv: float | None = None
+    circ_mv: float | None = None
+    pe: float | None = None
+    pe_ttm: float | None = None
+    pb: float | None = None
+    pb_mrq: float | None = None
+    roe: float | None = None
+    list_date: str | None = None
+    status: str | None = None
+
+    @classmethod
+    def from_ta_cn_doc(cls, doc: dict) -> "StockInfo": ...
+
+@dataclass
+class IndexInfo:
+    symbol: str
+    full_symbol: str
+    name: str
+    fullname: str | None = None
+    market: str | None = None
+    publisher: str | None = None
+    category: str | None = None
+
+    @classmethod
+    def from_ta_cn_doc(cls, doc: dict) -> "IndexInfo": ...
+```
+
+```python
+# models/domain/financial.py
+@dataclass
+class FinancialStatement:
+    symbol: str
+    report_period: str           # 'YYYYMMDD'
+    statement_type: str          # 'income' / 'balance' / 'cashflow'
+    items: dict[str, float]      # 科目名 → 金额
+    currency: str = "CNY"
+
+    @classmethod
+    def from_ta_cn_doc(cls, doc: dict, statement_type: str) -> "FinancialStatement":
+        """从 stock_financial_data 文档映射。doc['raw_data'][statement_type+'_statement']
+        是按 end_date 排序的列表，取最新一期。"""
+```
+
+```python
+# models/domain/news.py
+@dataclass
+class NewsItem:
+    symbol: str | None
+    title: str
+    content: str | None = None
+    source: str | None = None
+    publish_time: str | None = None
+    sentiment: str | None = None
+    category: str | None = None
+    importance: str | None = None
+    url: str | None = None
+
+    @classmethod
+    def from_ta_cn_doc(cls, doc: dict) -> "NewsItem": ...
+```
+
+```python
+# models/domain/sector.py
+@dataclass
+class SectorClassification:
+    full_symbol: str
+    classify_system: str
+    l1_code: str
+    l1_name: str
+    l2_code: str | None = None
+    l2_name: str | None = None
+    l3_code: str | None = None
+    l3_name: str | None = None
+    datasource: str = "tushare"
+    update_at: str | None = None
+
+    @classmethod
+    def from_ta_cn_doc(cls, doc: dict) -> "SectorClassification": ...
+```
+
+**DataResult 封装（与 Phase 0 契约 100% 兼容）：**
+
+```python
+# 在 service 层统一封装
+def _wrap_success(self, data, security_id, domain, operation):
+    return DataResult.success(
+        data=data,
+        security_id=security_id,
+        domain=domain,
+        operation=operation,
+        provider="ta_cn_adapter",
+        source_trace=["ta_cn_adapter(ok)"],
+    )
+
+def _wrap_empty(self, security_id, domain, operation):
+    return DataResult.success(
+        data=None,
+        security_id=security_id,
+        domain=domain,
+        operation=operation,
+        provider="empty",
+        source_trace=["ta_cn_adapter(ok)"],
+    )
+
+def _wrap_error(self, security_id, domain, operation, error):
+    return DataResult.error(
+        security_id=security_id,
+        domain=domain,
+        operation=operation,
+        provider="ta_cn_adapter",
+        error=error,
+    )
+```
+
+- 成功非空：`freshness='delayed'`, `provider='ta_cn_adapter'`, `source_trace=['ta_cn_adapter(ok)']`
+- 空结果：`freshness='empty'`, `provider='empty'`, `source_trace=['ta_cn_adapter(ok)']`
+- MongoDB 不可用：`freshness='empty'`, `provider='error'`, `source_trace=['ta_cn_adapter(error: <msg>)']`
+
+#### 1A.4 服务→adapter 调用流与完整矩阵
+
+每个 service 方法遵循统一调用流：
+
+```
+Client API → Service.method(security_id, **params)
+  → SecurityId.symbol 提取
+  → TA_CNMongoAdapter.get_xxx(symbol, ...) 获取原始文档
+  → CanonicalObject.from_ta_cn_doc(doc) 映射
+  → DataResult.success/error 封装
+  → 返回 DataResult
+```
+
+**完整 collection × canonical × service × client 矩阵（以 T1 final_collection_scope 为唯一事实）：**
+
+| # | 集合 | Adapter 方法 | Canonical Object | Service 入口 | Client API |
+|---|---|---|---|---|---|
+| 1 | `stock_basic_info` | `get_stock_info(symbol)` | `StockInfo` | `metadata_service.get_stock_info(sid)` | `client.get_stock_info(sid)` |
+| 2 | `stock_basic_info` | `get_stock_list(market)` | `list[StockInfo]` | `metadata_service.get_stock_list(market)` | `client.get_stock_list(market)` |
+| 3 | `market_quotes` | `get_realtime_quotes(symbol)` | `RealtimeQuote` | `market_data_service.get_realtime_quote(sid)` | `client.get_realtime_quote(sid)` |
+| 4 | `stock_daily_quotes` | `get_daily_bars(symbol, start, end, limit)` | `list[DailyBar]` | `market_data_service.get_kline_daily(sid, start, end, limit)` | `client.get_kline_daily(sid, ...)` |
+| 5 | `stock_financial_data` | `get_financials(symbol, period)` | `FinancialStatement` (type='income') | `fundamental_service.get_income_statement(sid, period)` | `client.get_income_statement(sid, period)` |
+| 6 | `stock_financial_data` | `get_financials(symbol, period)` | `FinancialStatement` (type='balance') | `fundamental_service.get_balance_sheet(sid, period)` | `client.get_balance_sheet(sid, period)` |
+| 7 | `stock_financial_data` | `get_financials(symbol, period)` | `FinancialStatement` (type='cashflow') | `fundamental_service.get_cash_flow(sid, period)` | `client.get_cash_flow(sid, period)` |
+| 8 | `stock_news` | `get_news(symbol, limit)` | `list[NewsItem]` | `event_service.get_news(sid, limit)` | `client.get_news(sid, limit)` |
+| 9 | `index_basic_info` | `get_index_info(symbol)` | `IndexInfo` | `metadata_service.get_index_info(sid)` | `client.get_index_info(sid)` |
+| 10 | `index_basic_info` | `get_index_list(market)` | `list[IndexInfo]` | `metadata_service.get_index_list(market)` | `client.get_index_list(market)` |
+| 11 | `index_daily_quotes` | `get_index_daily_bars(symbol=...)` | `list[IndexDailyBar]` | `market_data_service.get_index_daily(sid, ...)` | `client.get_index_daily(sid, ...)` |
+| 12 | `index_daily_quotes` | `get_index_daily_bars(sector_code=...)` | `list[IndexDailyBar]` | `sector_service.get_sector_index_bars(sector_code, ...)` | `client.get_sector_index_bars(sector_code, ...)` |
+| 13 | `stock_sector_info` | `get_stock_sector_info(full_symbol)` | `list[SectorClassification]` | `sector_service.get_stock_sector(sid, classify_system)` | `client.get_stock_sector(sid, classify_system)` |
+| 14 | `stock_sector_info` | `get_stocks_by_sector(l1_code)` | `list[SectorClassification]` | `sector_service.get_stocks_by_sector(sector_code, classify_system)` | `client.get_stocks_by_sector(sector_code, classify_system)` |
+
+> 注意：`stock_financial_data` 在集合层只有 1 个 adapter 方法 `get_financials()`，但映射为 3 个不同 `statement_type` 的 canonical object 和 3 个 service 入口。这是唯一的多入口集合。
+
+#### 1A.5 测试策略
+
+**三层测试，全部无网络依赖：**
+
+**层 1：纯 fixture unit tests（必须）**
+
+文件：`test_ta_cn_mongo_adapter.py` + `test_domain_objects.py`
+
+- adapter 测试使用 `mongomock`（或内存 dict 替身）注入 db 句柄，预填典型文档。
+- 每个 adapter 方法至少 2 个用例：正常文档返回 + 空结果返回。
+- 每个 canonical `from_ta_cn_doc()` 至少 1 个用例：字段全部存在 + 部分字段缺失（None 填充不抛异常）。
+
+**层 2：adapter mapping / service / client integration（必须，mock DB）**
+
+文件：`test_services.py` + `test_client_phase1a.py`
+
+- service 测试：注入 mock adapter（FakeTA_CNMongoAdapter），验证 `DataResult` 的 `provider`/`freshness`/`source_trace` 正确性。
+- client 测试：注入 mock adapter 到 `UnifiedDataClient`，验证 8 个域入口方法的调用链。
+- 覆盖空数据 → `freshness='empty'` 和异常 → `freshness='empty', provider='error'` 两个分支。
+
+**层 3：真实 MongoDB read-only smoke（可选，默认不跑）**
+
+文件：`test_smoke_mongodb.py`（标记 `@pytest.mark.network`）
+
+- 连接真实 `tradingagents` 库，对每个集合执行 `find_one()`。
+- **默认跳过**：需用户通过 `--run-network` 或环境变量 `UD_RUN_SMOKE=1` 显式启用。
+- 验证 adapter 对真实文档 schema 的兼容性，不做断言（只验证不抛异常）。
+
+**覆盖率目标与测量命令：**
+
+```bash
+# Phase 1A 覆盖率测量（仅新增文件）
+PYTHONPATH=. pytest tests/data/unified_data \
+  --cov=skills.data.unified_data.adapters \
+  --cov=skills.data.unified_data.models.domain \
+  --cov=skills.data.unified_data.services \
+  --cov-report=term-missing \
+  --cov-fail-under=60
+
+# Phase 0 回归（不回归）
+PYTHONPATH=. pytest tests/data/unified_data -q
+```
+
+阈值：**≥ 60%**（与 Phase 1A 验收标准一致）。
+
+**fixture 文件结构（`tests/data/unified_data/fixtures/ta_cn_mock_docs.py`）：**
+
+提供 8 个集合各 1-2 个典型 MongoDB 文档字典，供 unit/integration 测试共用。文档结构基于 TA-CN `stock_models.py` 和 `stock_data_models.py` 的字段定义。
+
+#### 1A.6 回滚方式
+
+Phase 1A 回滚零风险：
+1. `git revert` Phase 1A 的全部提交（仅新增 `adapters/`、`models/domain/`、`services/`、修改 `client.py` 和 `__init__.py`）。
+2. 无 MongoDB 集合变更、无 schema 变更、无 cron/systemd 变更、无外部依赖变更。
+3. Phase 0 的 106 passed 测试不受影响（新增文件不影响已有导入）。
+
+#### 1A.7 残余风险
+
+| 风险 | 概率 | 影响 | 缓解 |
+|---|---|---|---|
+| TA-CN 集合字段名与文档不一致（schema drift） | 中 | 中 | `from_ta_cn_doc()` 使用 `doc.get(field)` 宽松策略；smoke test 验证 |
+| `stock_financial_data` 的 `raw_data` 嵌套结构复杂 | 中 | 中 | 映射逻辑容错：取 `raw_data.get(statement_type+'_statement', [])` 列表最新一期 |
+| `market_quotes` 字段名 `current_price` vs `close` 不统一 | 中 | 低 | 映射 fallback：`doc.get('current_price', doc.get('close'))` |
+| `index_daily_quotes` 中 `sector_code` 字段名不统一（可能为 `code`/`symbol`） | 中 | 低 | adapter 查询支持多字段名 fallback |
+| motor async vs pymongo sync 差异 | 低 | 中 | Phase 1A 统一使用 sync pymongo 接口；async 包装属 Phase 1B |
+
+#### 1A.8 IN / OUT 边界
+
+**IN（Phase 1A 交付）：**
+- `TA_CNMongoAdapter`（8 个只读查询方法）
+- 8 个 canonical domain objects（含 `from_ta_cn_doc()` 映射）
+- 5 个 domain services（14 个方法入口）
+- `UnifiedDataClient` 扩展（14 个域入口方法）
+- 纯 fixture unit tests + mock DB integration tests
+- 覆盖率 ≥ 60%
+
+**OUT（Phase 1A 明确不做）：**
+- 外部 API provider（Tushare / AKShare）— Phase 1B
+- `CacheManager` / `FreshnessPolicy` — Phase 1B
+- DSA SQLite adapter — Phase 1B
+- MongoDB 写入 / 集合创建 / 索引创建 — 禁止
+- `TA-CNAdapterProvider`（DataProvider 子类）— Phase 1B（将 `TA_CNMongoAdapter` 包装为 provider）
+- `task_center` 集成 — Phase 5
+- stock framework 集成 — Phase 6
+- 真实 MongoDB smoke test 默认执行 — 可选，默认跳过
+
+---
+
+#### Phase 1B：External Provider + Cache + Freshness（预计 1-2 天）
+
+**范围**：
+- DSA SQLite adapter（读 `StockDaily`，作为 A 股日线兜底）
+- `TushareProvider` + `AKShareProvider` 实现（行情/财务/估值/日历/元数据/指数/新闻域）
+- `ProviderRegistry` + `DataRouter` 基础版（fallback 链）
+- `CacheManager` + `FreshnessPolicy` 基础版（MongoDB `03_data_ud_cache_*` 写入）
+- `UnifiedDataClient` 接入 provider fallback + 缓存层
+
+**产物**：
+- `skills/data/unified_data/adapters/dsa_sqlite_adapter.py`
+- `skills/data/unified_data/providers/` 4 个文件（tushare / akshare / ta_cn_adapter / dsa_adapter）
+- `skills/data/unified_data/router/` 2 个文件
+- `skills/data/unified_data/cache/` 2 个文件
+
+**验收标准**：
+- Tushare → AKShare → TA-CN adapter fallback 链验证通过
+- 缓存命中时返回 `freshness=cached` 标签，不调 provider
+- 缓存写入到 `03_data_ud_cache_*` 集合，前缀隔离正确
+- `FreshnessPolicy` 按 domain 自动 TTL 失效
+
+**风险**：中（Tushare token 配额、MongoDB 连接）
+**是否需要 Verify/Review**：是
+
+---
+
+#### Phase 1C：端到端验收 + 测试补齐（预计 1-2 天）
+
+**范围**：
+- 端到端集成测试：query → cache miss → provider → cache write → return
+- 端到端集成测试：query → cache hit → return（不调 provider）
+- 端到端集成测试：query → provider fail → fallback → success
+- 端到端集成测试：query → all providers fail → AllProvidersFailedError
+- 单元测试覆盖率补齐至 ≥ 60%
+- index/sector 域端到端覆盖（Phase 1A 的 adapter 读取 + Phase 1B 的 provider 兜底）
+
+**产物**：
+- `tests/data/unified_data/` 完整测试套件
+
+**验收标准**：
+- 上述 4 条端到端路径全部通过
+- index_basic_info / index_daily_quotes / stock_sector_info 的 adapter + provider 双路径覆盖
+- 测试覆盖率 ≥ 60%
+
+**风险**：低
 **是否需要 Verify/Review**：是
 
 ---
@@ -1707,7 +2269,9 @@ class UnifiedDataClient:
 | Phase | 名称 | 预计时间 | 风险 | 是否 Verify | 是否 Review |
 |---|---|---|---|---|---|
 | 0 | 骨架 + 核心抽象 | 1-2 天 | 低 | 否 | 否 |
-| 1 | 核心读取 Adapter + Provider | 3-5 天 | 中 | 是 | 是 |
+| 1A | TA-CN read-only adapter（core A-share + index/sector） | 2-3 天 | 低-中 | 是 | 是 |
+| 1B | External Provider + Cache + Freshness | 1-2 天 | 中 | 是 | 是 |
+| 1C | 端到端验收 + 测试补齐 | 1-2 天 | 低 | 是 | 是 |
 | 2 | Provider Registry + Quality + Audit | 2-3 天 | 中 | 是 | 是 |
 | 3 | 重要持久化扩展 | 3-5 天 | 中-高 | 是 | 是 |
 | 4 | 龙虎榜 + 筹码 + 热门 | 2-3 天 | 中 | 否 | 否 |
@@ -1715,7 +2279,9 @@ class UnifiedDataClient:
 | 6 | Stock Framework 集成 | 2-3 天 | 中 | 是 | 是 |
 | 7 | 迁移规划文档 | 1 天 | 低 | 否 | 否 |
 
-**总计预计**：16-25 个工作日
+Phase 0-7 共 8 个编号阶段（Phase 0 为骨架，Phase 1-7 为业务能力阶段；Phase 1 细分为 1A/1B/1C 三个子阶段）。
+
+**总计预计**：17-28 个工作日
 
 ---
 

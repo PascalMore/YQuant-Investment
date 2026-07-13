@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Iterable, Literal
 
-from .exceptions import InvalidSecurityIdError
+from ..exceptions import InvalidSecurityIdError
 
 # ---------------------------------------------------------------------------
 # Market
