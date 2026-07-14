@@ -7,13 +7,20 @@
 | 状态 | Draft |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-12 |
-| 最后更新 | 2026-07-12 |
+| 最后更新 | 2026-07-14 |
 | 来源 RFC | RFC-10-009 |
 | 来源 SPEC | SPEC-10-009 |
 | 关联 RFC | RFC-03-007（Unified Data Layer）、RFC-08-001（Stock Framework） |
 | 关联 SPEC | SPEC-03-007（Unified Data Layer）、SPEC-08-001（Stock Framework） |
 | 关联 Design | DESIGN-03-007（Unified Data Layer） |
 | 目标模块 | task_center（`skills/infra/task_center/`） |
+
+### 版本历史（Changelog）
+
+| 版本 | 日期 | 变更 | 负责人 |
+|---|---|---|---|
+| V1.0 | 2026-07-12 | 初始创建，完整详细设计 | YQuant-Codex-Principal |
+| V1.1 | 2026-07-14 | 文档同步修订：Pascal 确认 Unified Data × Task Center 共用同一物理 MongoDB `tradingagents`，"物理隔离"措辞改为"命名空间隔离"（与 RFC-10-009 V0.2 / DESIGN-03-007 V3.3 一致） | YQuant-Principal |
 
 ---
 
@@ -2095,7 +2102,7 @@ python -m pytest tests/infra/task_center/ --cov=skills/infra/task_center --cov-r
 ### 17.2 回滚策略
 
 1. task_center 是**纯新增模块**，与 TA-CN/DSA/unified_data/stock 零耦合，可直接删除 `skills/infra/task_center/` 目录即完全回滚。
-2. task_center 使用 `10_infra_tc_*` MongoDB 集合物理隔离，删除这些集合不影响任何现有 TA-CN / unified_data / portfolio 数据。
+2. task_center 使用 `10_infra_tc_*` MongoDB 集合命名空间隔离，删除这些集合不影响任何现有 TA-CN / unified_data / portfolio 数据。
 3. 每个 Phase 独立部署，前一个 Phase 有问题不影响后续 Phase 的独立性回滚。
 4. 如果已创建的生产级 Job 需要回滚：`yq job disable <job_id>` → 删除对应 `10_infra_tc_*` 记录。
 
@@ -2126,7 +2133,7 @@ python -m pytest tests/infra/task_center/ --cov=skills/infra/task_center --cov-r
 | DO-2 | SPEC 定义 6 类实体 | Design 扩展到 11 类实体（增加 ProgressSnapshot/TaskEvent/TaskArtifact/TaskDependency/TaskSchedule） | 满足可观测性和依赖编排需求 |
 | DO-3 | STEP 表用 `index` 字段名 | 改为 `step_index` | SQL 保留字冲突 |
 | DO-4 | SPEC 定义 9 状态 | Design 增加到 11 状态（增加 queued/blocked），但 blocked 是 Phase 3+ | 更精确表达排队和依赖阻塞语义 |
-| DO-5 | SPEC 使用 `tc_*` 前缀 | Pascal 确认改为 MongoDB 默认，统一使用 `10_infra_tc_*` 集合前缀；SQLite 仅作为本地测试/降级可选 | 与 unified_data `03_data_ud_*` 物理隔离 |
+| DO-5 | SPEC 使用 `tc_*` 前缀 | Pascal 确认改为 MongoDB 默认，统一使用 `10_infra_tc_*` 集合前缀；SQLite 仅作为本地测试/降级可选 | 与 unified_data `03_data_ud_*` 命名空间隔离 |
 | DO-6 | SPEC 状态机 `failed → running` 为手动重试 | 确认：手动重试（`retry_execution`）创建新 Execution（clone params），旧 Execution 保持 failed | 更清晰的历史审计 |
 | DO-7 | RFC/SPEC 未明确定义 canceled 对 running 的行为 | 裁定：MVP 为协作式取消（callable 检查 `is_cancelled()`）；不强制 kill | Python 线程限制 |
 | DO-8 | SPEC 提到 `stale → running` 可手动恢复 | 确认：stale 的 Execution 可通过 `retry_execution` 创建新 Execution 恢复 | 保持历史清晰 |

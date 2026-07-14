@@ -149,3 +149,159 @@ def fresh_client() -> UnifiedDataClient:
 def fixed_now() -> datetime:
     """A fixed timestamp for deterministic DataResult assertions."""
     return datetime(2026, 7, 13, 0, 0, 0)
+
+
+# ---------------------------------------------------------------------------
+# Phase 1B-A: FakeTA_CNAdapter
+# ---------------------------------------------------------------------------
+# DESIGN-03-008 §4.1: the internal-first router tests need a configurable
+# stand-in for the real TA_CNMongoAdapter. The fake records every call
+# in ``call_log`` so tests can assert on routing behaviour, exposes
+# ``collections`` for canned Mongo-like payloads, and supports both an
+# exception injection knob and a "covered capability" knob for boundary
+# tests.
+
+
+class FakeTA_CNAdapter:
+    """Configurable TA-CN adapter substitute used by the internal-first tests.
+
+    Behaviour knobs (all kw-only):
+
+    * ``collections``  — ``dict[str, list[dict]]`` mimicking the eight
+      ``COLLECTION_*`` collections the real adapter queries.
+    * ``raise_on_query`` — exception instance to raise on every method
+      invocation. ``None`` disables the injection.
+    * ``covered_capabilities`` — optional override of the default
+      "covers every method-map capability" behaviour. When supplied,
+      capabilities outside the override cause the fake to return
+      ``None`` (the Router reads that as "not covered").
+    """
+
+    def __init__(
+        self,
+        *,
+        collections: dict | None = None,
+        raise_on_query: BaseException | None = None,
+        covered_capabilities: set | None = None,
+    ) -> None:
+        # Local import to avoid pulling ``DataRouter`` into the test
+        # conftest while half the rest of the suite still relies on the
+        # module-level imports above. The constant is a class-level dict
+        # so reading it via the class (rather than an instance) keeps the
+        # fake aligned with future map edits.
+        from skills.data.unified_data.router import DataRouter
+
+        self._collections: dict = collections or {}
+        self._raise = raise_on_query
+        # ``None`` means: cover every capability the Router's map knows.
+        # An explicit ``set`` means: cover exactly that set (useful for
+        # negative-coverage tests).
+        self._covered: set | None = covered_capabilities
+        self._method_map = DataRouter._TA_CN_CAPABILITY_METHOD_MAP
+        self.call_log: list[str] = []
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _resolve(self, capability: str) -> str | None:
+        """Return the adapter method name for ``capability`` if covered."""
+        method_name = self._method_map.get(capability)
+        if method_name is None:
+            return None
+        if self._covered is not None and capability not in self._covered:
+            return None
+        return method_name
+
+    def _maybe_raise_or_return(
+        self,
+        coll_name: str,
+        symbol: str | None = None,
+        *,
+        single: bool = False,
+    ) -> list | dict | None:
+        """Return canned docs for ``coll_name`` filtered by ``symbol``.
+
+        Raises the injected exception when configured. Returns ``None``
+        for single-object queries with no match (so the Router reports
+        an "empty" payload), or ``[]`` for collection-style queries.
+        """
+        if self._raise is not None:
+            raise self._raise
+        docs = list(self._collections.get(coll_name, []))
+        if symbol is not None:
+            docs = [d for d in docs if d.get("symbol") == symbol]
+        if single:
+            return docs[0] if docs else None
+        return docs
+
+    # ------------------------------------------------------------------
+    # TA-CN 11 read methods (mirrors TA_CNMongoAdapter signature)
+    # ------------------------------------------------------------------
+
+    def get_daily_bars(self, symbol, start_date=None, end_date=None, limit=120):
+        self.call_log.append("get_daily_bars")
+        return self._maybe_raise_or_return("stock_daily_quotes", symbol)
+
+    def get_realtime_quotes(self, symbol):
+        self.call_log.append("get_realtime_quotes")
+        return self._maybe_raise_or_return("market_quotes", symbol, single=True)
+
+    def get_financials(self, symbol, report_period=None):
+        self.call_log.append("get_financials")
+        return self._maybe_raise_or_return(
+            "stock_financial_data", symbol, single=True
+        )
+
+    def get_stock_list(self, market="CN", status="L", limit=0):
+        self.call_log.append("get_stock_list")
+        return self._maybe_raise_or_return("stock_basic_info")
+
+    def get_stock_info(self, symbol, market="CN"):
+        self.call_log.append("get_stock_info")
+        return self._maybe_raise_or_return(
+            "stock_basic_info", symbol, single=True
+        )
+
+    def get_index_list(self, market="CN"):
+        self.call_log.append("get_index_list")
+        return self._maybe_raise_or_return("index_basic_info")
+
+    def get_index_info(self, symbol):
+        self.call_log.append("get_index_info")
+        return self._maybe_raise_or_return(
+            "index_basic_info", symbol, single=True
+        )
+
+    def get_index_daily_bars(
+        self, symbol=None, sector_code=None, start_date=None, end_date=None, limit=120
+    ):
+        self.call_log.append("get_index_daily_bars")
+        return self._maybe_raise_or_return("index_daily_quotes")
+
+    def get_news(self, symbol, limit=20):
+        self.call_log.append("get_news")
+        return self._maybe_raise_or_return("stock_news")
+
+
+@pytest.fixture
+def fake_ta_cn_adapter():
+    """Empty-data ``FakeTA_CNAdapter`` covering every known capability."""
+    return FakeTA_CNAdapter(collections={})
+
+
+@pytest.fixture
+def fake_ta_cn_with_kline(cn_maotai):
+    """``FakeTA_CNAdapter`` pre-populated with one daily bar for ``cn_maotai``."""
+    return FakeTA_CNAdapter(
+        collections={
+            "stock_daily_quotes": [
+                {
+                    "symbol": cn_maotai.symbol,
+                    "trade_date": "20260713",
+                    "open": 1600,
+                    "close": 1620,
+                }
+            ]
+        }
+    )

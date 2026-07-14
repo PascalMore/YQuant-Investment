@@ -7,19 +7,32 @@
 | 状态 | 草稿（Draft） |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-12 |
-| 最后更新 | 2026-07-12 |
+| 最后更新 | 2026-07-14 |
 | 来源 RFC | RFC-03-007 |
 | 目标模块 | unified_data（全局数据访问层） |
 | 适配 Agent | YQuant-Developer-Engineer, YQuant-Test-Engineer |
 | 关联 RFC | RFC-03-003（数据架构）、RFC-00-001（全局架构） |
 | 关联 SPEC | SPEC-03-004、SPEC-03-005、SPEC-03-006 |
+| 版本号 | V1.2（与 RFC-03-007 V0.3 / DESIGN-03-007 V3.3 同步） |
 
 ---
 
 
 ## 0. Design 阶段修订说明（2026-07-12）
 
-根据 Pascal 后续确认，unified_data 新增持久化集合统一使用 MongoDB `03_data_ud_*` 前缀；DSA 既有 SQLite 仅作为只读 legacy source adapter，不作为 unified_data 新增持久化后端。实现阶段不得新增 SQLite 存储路径。
+根据 Pascal 后续确认，unified_data 新增持久化集合统一使用 MongoDB `03_data_ud_*` 前缀。**DSA 不是运行时数据源，不实现 DSA SQLite / `StockDaily` adapter，DSA 不出现在 `external_fallback_chains` 中**；DSA 既有 SQLite 仅为 DSA 子系统自身所有，与 unified_data 持久化后端无关。统一内部仅有 MongoDB 一条存储主线。
+
+## 0.3 V1.2 文档同步修订说明（2026-07-14 Pascal 架构基线同步）
+
+本次为文档同步修订（无代码改动、无生产副作用）。与 RFC-03-007 V0.3 / DESIGN-03-007 V3.3 同步，保持 Pascal 架构基线在三层文档中措辞一致。本节为 SPEC 内部修订的索引锚点，所有 §X 出现的下列措辞必须与本节一致：
+
+- 「internal-first 读取路径」→ 「TA-CN 既有 → UD 物化 → Query Cache → 外部 Provider」
+- 「DSA adapter / DSA SQLite / StockDaily」→ 仅作为分析/参考边界出现；不实现、不出现在 `external_fallback_chains`、不实现为 Provider
+- 「物理隔离」→ 一律改为「命名空间隔离（共享同一物理库 `tradingagents`）」
+
+## 0.4 V1.3 文档一致性修复（2026-07-14，Router 全失败对外契约同步）
+
+本次为纯文档一致性修复（无代码改动、无生产副作用），对齐 Phase 1B-A 已确认的架构决策：自 Phase 1B-A 起，`DataRouter` 在所有 Provider 失败时对调用方返回 `DataResult.error(provider="error", source_trace=[...])`，不再以 `AllProvidersFailedError` 作为 Router 主出口，不设兼容开关。本 SPEC 受影响条目：§8 异常表 `AllProvidersFailedError` 行、§10.1 T-011、§10.2 TI-004。`AllProvidersFailedError` 类保留作内部/历史兼容类型，Phase 0 旧基线行为在文档中明确标识为历史描述。
 
 ## 0.1 Phase 1A 契约澄清（2026-07-13）
 
@@ -41,8 +54,8 @@ Phase 1A（TA-CN read-only adapter）的精确契约如下，Implement/Verify/Re
 **Phase 1A 明确不做：**
 - 外部 API 调用（Tushare / AKShare provider）→ Phase 1B
 - `CacheManager` / `FreshnessPolicy` → Phase 1B
-- DSA SQLite adapter → Phase 1B
 - MongoDB 写入或新增集合（Phase 1A adapter 只读，不写任何集合）
+- DSA SQLite / `StockDaily` adapter → **不实现**（DSA 不是运行时数据源；本 SPEC 历史文本中任何"DSA SQLite adapter → Phase 1B"已废弃）
 - `task_center` 集成 → Phase 5
 - stock framework profile/model 集成 → Phase 6
 - `force_refresh` / `provider` 参数（无缓存层、无外部 provider，参数接受但忽略）
@@ -54,6 +67,38 @@ Phase 1A（TA-CN read-only adapter）的精确契约如下，Implement/Verify/Re
 - TA-CN MongoDB 不可用：`DataResult.error(...)` → `freshness="empty"`, `provider="error"`, `source_trace=["ta_cn_adapter(error: ...)"]`
 - `source_trace`：单 provider 成功为 `["ta_cn_adapter(ok)"]`，失败为 `["ta_cn_adapter(error: ...)"]`
 - `freshness`：Phase 1A 固定为 `"delayed"`（非缓存、非实时），由 Phase 1B FreshnessPolicy 覆盖
+
+## 0.2 共享 Mongo / Internal-First 架构基线修订（2026-07-14 Pascal 确认）
+
+以下基线由 Pascal 确认，必须在三层文档（RFC / SPEC / Design）中一致写入，旧语义不能仅靠附注覆盖。
+
+**1. 共享物理数据库**
+- Unified Data 与 TA-CN 共用同一物理 MongoDB 数据库 `tradingagents`。
+- 不使用物理库隔离；逻辑 ownership 通过集合命名空间前缀实现。
+
+**2. Collection Ownership 隔离**
+| 类别 | 集合前缀 | ownership | Unified Data 权限 |
+|---|---|---|---|
+| TA-CN 既有主集合 | 无前缀 | TA-CN | **只读复用** |
+| Unified Data 物化数据 | `03_data_ud_*` | Unified Data | 读写（Phase 1B+） |
+| Task Center 元数据 | `10_infra_tc_*` | Task Center | 不读写 |
+| Query Cache | `03_data_ud_cache_*` | Unified Data | 读写下短 TTL 缓存 |
+
+Unified Data 绝不回写、覆盖或在 TA-CN 既有无前缀集合中加字段污染。
+
+**3. Internal-First 权威读取路径**
+查询时先查共享 Mongo 内部源（TA-CN 既有数据 → UD 物化数据 → Query Cache），内部源全部未命中时再触发外部 Provider（Tushare → AKShare）。外部刷新失败不能阻断已有内部数据读取，必须返回明确的 DataResult 缺失/错误语义。
+
+**4. DSA 不是运行时数据源**
+不实现 DSA SQLite / `StockDaily` adapter。DSA 仅在分析/参考中出现。
+
+**5. 三层语义分离**
+- TA-CN 既有业务资产（无前缀，ownership: TA-CN）
+- Unified Data 可追溯物化数据集（`03_data_ud_*`，非 cache）
+- 可丢弃的短 TTL Query Cache（`03_data_ud_cache_*`）
+
+**6. Task Center 先行**
+Task Center 的最小 Task / Job / Execution、幂等、重试、执行审计能力须在 Unified Data 物化写入前可用；不创建真实 Job、不启用 cron/systemd 或长期调度。
 
 ## 1. 需求摘要
 
@@ -92,8 +137,8 @@ Phase 1A（TA-CN read-only adapter）的精确契约如下，Implement/Verify/Re
 ### 2.2 Out of Scope
 
 - [ ] 不在本次产出 Design 级文件清单（类图、模块文件树、函数签名细节）。
-- [ ] 不在本次实现 TA-CN adapter wrapper（阶段 2）。
-- [ ] 不在本次实现 DSA adapter wrapper（阶段 3）。
+- [ ] 不在本次实现 TA-CN adapter wrapper（阶段 2，长期规划）。
+- [ ] **不实现 DSA adapter**：DSA 不是运行时数据源，unified_data 不为 DSA 实现任何 adapter，不纳入 `external_fallback_chains`，不作为 internal source；DSA 仅在分析/参考文档中出现。
 - [ ] 不在本次覆盖 D4 资金流、D5 新闻、D8 另类数据、D9 基金（下一阶段）。
 - [ ] 不在本次实现实时 WebSocket 行情推送。
 - [ ] 不在本次修改 TA-CN / DSA / data-pipeline / data_interface 现有代码。
@@ -146,12 +191,14 @@ Phase 1A（TA-CN read-only adapter）的精确契约如下，Implement/Verify/Re
 |---|---|---|---|---|
 | RG-001 | 注册 provider | `register(TushareProvider)` | Registry 更新 capability → [provider] 映射 | provider name 重复抛 `ValueError` |
 | RG-002 | 查询 capability 的 providers | `get_providers("market_data.kline_daily")` | `[TushareProvider, AKShareProvider]`（按优先级） | 无 provider 时返回空列表 |
-| RG-003 | 路由请求 | `domain, operation, security_id, params` | `DataResult` | 全部 provider 失败抛 `AllProvidersFailedError` |
-| RG-004 | Fallback 链执行 | provider 链 `[tushare → akshare → baostock]` | 第一个成功的 provider 结果 | 每次尝试记录 attempt metadata |
+| RG-003 | 路由请求 | `domain, operation, security_id, params` | `DataResult` | 全部 provider 失败返回 `DataResult.error(...)` |
+| RG-004 | Internal-First 路径执行 | 查询先查 TA-CN 既有 → UD 物化 → Query Cache → 外部 Provider `external_fallback_chains` | 第一个命中的数据源结果 | 内部源命中时不触发外部 Provider；外部全部失败返回 DataResult.error，不阻断已有内部数据 |
 | RG-005 | 审计记录 | 每次查询 | 写入审计集合：query_id / domain / operation / security_id / provider_chain / elapsed_ms / status | 审计写入失败不影响查询结果（catch-and-log） |
 | RG-006 | 强制指定 provider | `provider="tushare"` 参数 | 只走指定 provider，不 fallback | 指定 provider 不可用时抛 `ProviderUnavailableError` |
 
 ### 3.5 CacheManager
+
+> **注意**：CacheManager 仅在 internal-first 读取路径的第 3 层（Query Cache）生效。TA-CN 既有集合和 UD 物化集合的查询不经过 CacheManager，由 DataRouter 直接路由到对应 adapter。
 
 | 编号 | 行为 | 输入 | 输出 | 错误/边界 |
 |---|---|---|---|---|
@@ -160,6 +207,7 @@ Phase 1A（TA-CN read-only adapter）的精确契约如下，Implement/Verify/Re
 | CA-003 | TTL 失效判断 | cached_at vs domain TTL | expired → 返回 None | TTL 由 FreshnessPolicy 定义 |
 | CA-004 | 强制刷新 | `force_refresh=True` 参数 | bypass cache，直接调 provider | 强制刷新后写入新缓存 |
 | CA-005 | 缓存 key 生成 | security_id + domain + params hash | 确定性 cache key | 相同参数生成相同 key |
+| CA-006 | 物化数据写入 | 外部 Provider 成功后的 DataResult | 写入 `03_data_ud_*` 物化集合 | Phase 1B+；与 Query Cache 写入分离；**禁止写入 TA-CN 既有无前缀集合** |
 
 ### 3.6 FreshnessPolicy
 
@@ -324,7 +372,9 @@ class DataRouter:
         registry: ProviderRegistry,
         cache: CacheManager,
         freshness: FreshnessPolicy,
-        fallback_chains: dict[str, list[str]],  # capability → [provider_name, ...]
+        ta_cn_adapter: "TA_CNMongoAdapter",           # internal-first 第 1 层
+        local_mongo_adapter: "LocalMongoAdapter",      # internal-first 第 2 层（UD 物化）
+        external_fallback_chains: dict[str, list[str]],  # capability → [provider_name, ...]（仅外部 Provider）
     ): ...
 
     def query(
@@ -332,11 +382,13 @@ class DataRouter:
         domain: str,
         operation: str,
         security_id: SecurityId,
-        provider: str | None = None,    # 强制指定 provider
+        provider: str | None = None,    # 强制指定 provider（跳过 internal-first，仅走外部指定）
         force_refresh: bool = False,
         **params,
     ) -> DataResult: ...
 ```
+
+> **读取顺序**：TA_CN adapter → LocalMongoAdapter（UD 物化）→ CacheManager → external_fallback_chains。详见 DESIGN-03-007 §8.1。
 
 ### 4.7 CacheManager
 
@@ -492,10 +544,12 @@ def get_news(  # [1A] 读 stock_news
 | is_available | akshare 可 import |
 | fetch 限流 | 内置简单延迟（如 0.5s/次），防封禁 |
 
-### 6.3 默认 Fallback 链
+### 6.3 默认 External Fallback 链（Internal-First 路径未命中时使用）
+
+> **注意**：以下 fallback 链仅在 internal-first 读取路径（TA-CN 既有 → UD 物化 → Query Cache）全部未命中时触发。外部 Provider 成功后，数据物化写入 `03_data_ud_*` 并写入 Query Cache。
 
 ```yaml
-fallback_chains:
+external_fallback_chains:
   "market_data.kline_daily": ["tushare", "akshare"]
   "market_data.realtime_quote": ["tushare", "akshare"]
   "financial.income_statement": ["tushare", "akshare"]
@@ -509,6 +563,8 @@ fallback_chains:
   "metadata.index_members": ["tushare", "akshare"]
   "news.stock_news": ["tushare", "akshare"]
 ```
+
+> DSA 不在 unified_data 的运行时数据源体系中：DSA SQLite / `StockDaily` 不作为 Provider 注册、不写入 `external_fallback_chains`、不被 `DataRouter.query()` 调用。DSA 仅在 unified_data 之外的文档与回测参考中出现。
 
 ---
 
@@ -528,13 +584,14 @@ unified_data:
       enabled: true
       request_delay_seconds: 0.5
 
-  fallback_chains:
+  external_fallback_chains:            # 仅在 internal-first 路径未命中时使用
     "market_data.kline_daily": ["tushare", "akshare"]
     # ...（见 §6.3）
 
   cache:
     database: "tradingagents"
-    collection_prefix: "03_data_03_data_ud_cache_"     # 缓存集合前缀
+    query_cache_prefix: "03_data_ud_cache_"     # Query Cache 集合前缀（可丢弃短 TTL）
+    materialized_prefix: "03_data_ud_"          # 物化数据集合前缀（可追溯）
     default_ttl_seconds: 3600
 
   freshness:
@@ -544,8 +601,10 @@ unified_data:
 
   audit:
     enabled: true
-    collection: "ud_audit_log"         # 审计日志集合
+    collection: "03_data_ud_query_audit"  # 审计日志集合
 ```
+
+> **注意**：`collection_prefix: "03_data_03_data_ud_cache_"` 为旧拼写错误，已修正为 `query_cache_prefix: "03_data_ud_cache_"`。
 
 ---
 
@@ -557,7 +616,7 @@ unified_data:
 | `UnsupportedCapabilityError` | provider 不支持该 capability | provider 收到未声明的操作 |
 | `ProviderUnavailableError` | provider 不可用 | token 缺失 / 依赖未安装 / 网络不通 |
 | `ProviderError` | provider 内部错误 | API 返回错误 / 解析失败 |
-| `AllProvidersFailedError` | fallback 链全部失败 | 所有 provider 都抛出异常 |
+| `AllProvidersFailedError` | **历史/内部类型**：Phase 0 旧基线曾以此异常为 Router 对调用方的全部失败出口。自 Phase 1B-A 起，Router 全部失败时对调用方返回 `DataResult.error(provider="error", source_trace=[...])`，**不抛此异常**。该类保留作内部/历史兼容，不作为 1B+/1C 对外验收语义 | 所有 provider 都抛出异常（内部仍可能构造，但 Router 不外抛） |
 | `CacheError` | 缓存读写异常 | MongoDB 连接失败 / 序列化错误（catch-and-log，不向上抛） |
 | `SerializationError` | DataResult 序列化失败 | data 包含不可 JSON 序列化的类型 |
 
@@ -596,7 +655,7 @@ unified_data:
 | T-008 | Provider capability 检查 | PV-001, PV-005 |
 | T-009 | Router 路由主成功 | RG-003 |
 | T-010 | Router fallback 成功 | RG-004 |
-| T-011 | Router 全部失败 | RG-003（AllProvidersFailedError） |
+| T-011 | Router 全部失败 | RG-003（`DataResult.error(...)`；自 Phase 1B-A 起 Router 不抛 `AllProvidersFailedError`，该异常仅保留为内部/历史类型） |
 | T-012 | Router 强制指定 provider | RG-006 |
 | T-013 | Cache 命中 | CA-001 |
 | T-014 | Cache 未命中 | CA-001（返回 None） |
@@ -612,7 +671,7 @@ unified_data:
 | TI-001 | 端到端：query → cache miss → provider → cache write → return |
 | TI-002 | 端到端：query → cache hit → return（不调 provider） |
 | TI-003 | 端到端：query → provider fail → fallback → success |
-| TI-004 | 端到端：query → all providers fail → AllProvidersFailedError |
+| TI-004 | 端到端：query → all providers fail → `DataResult.error(provider="error", source_trace=[...])`（自 Phase 1B-A 起 Router 不外抛 `AllProvidersFailedError`） |
 
 ---
 
@@ -621,7 +680,8 @@ unified_data:
 - 本 SPEC 新建 `skills/data/unified_data/`，不修改任何现有代码，**无破坏性变更**。
 - 现有 TA-CN / DSA / data-pipeline / data_interface 不受影响。
 - 现有 portfolio MongoDB 集合不受影响。
-- unified_data 的缓存集合使用 `03_data_ud_cache_` 前缀，与 portfolio 集合隔离。
+- unified_data 的物化集合（`03_data_ud_*`）与 Query Cache 集合（`03_data_ud_cache_*`）与 TA-CN 既有无前缀集合、portfolio 业务集合共用同一物理库 `tradingagents`，通过**集合命名空间前缀**（所有权 + 语义层级）逻辑隔离，不依赖物理库隔离。
+- unified_data **不实现 DSA adapter**：DSA 仅作为分析/参考上下文存在于文档与回测参考中，不作为 unified_data 的运行时数据源、不出现在 `external_fallback_chains` 中、不在 `DataRouter` 中被路由。
 
 ---
 
@@ -645,7 +705,7 @@ unified_data:
 ### 12.3 Phase 3
 
 - TA-CN adapter wrapper（让 TA-CN 通过 unified_data 获取数据）
-- DSA adapter wrapper
+- ~~DSA adapter wrapper~~ — **不实现**。Pascal 确认（2026-07-14）：DSA 不是运行时数据源，unified_data 不为 DSA 实现任何 adapter；DSA 不出现在 `external_fallback_chains` 中；DSA 仅在分析/参考文档中出现。
 
 ### 12.4 Phase 4（远期）
 
@@ -660,9 +720,10 @@ unified_data:
 - [ ] RFC 文件存在于 `docs/rfc/03_data/RFC-03-007-*.md`，明确业务价值、架构边界、目标/非目标和风险。
 - [ ] SPEC 文件存在于 `docs/spec/03_data/SPEC-03-007-*.md`，明确可执行、可测试的工程契约。
 - [ ] SPEC 不进入 Design 级文件清单（无类图、无模块文件树、无函数实现细节）。
+- [ ] **共享 Mongo / internal-first 边界**：SPEC 明确说明 Unified Data 与 TA-CN 共用同一物理库 `tradingagents`，通过命名空间前缀（TA-CN 无前缀 / `03_data_ud_*` / `03_data_ud_cache_*`）实现所有权，不依赖物理库隔离；权威读取路径为 internal-first。
+- [ ] **不实现 DSA adapter**：SPEC 明确不实现 DSA SQLite / `StockDaily` adapter，DSA 不在 `external_fallback_chains` 中，DSA 仅在分析/参考上下文中出现。
+- [ ] **Collection Ownership 不可回写**：SPEC 明确 Unified Data 绝不回写、覆盖或加字段污染 TA-CN 既有无前缀集合。
 - [ ] 明确 `unified_data` 与 `data-pipeline`、`task_center`、`stock` 的边界。
-- [ ] 明确 TA-CN / DSA 后续 adapter 迁移边界（阶段 2/3，不在 MVP 内）。
-- [ ] 明确后续 Design 分阶段建议。
 - [ ] 中文输出，专业简洁。
 
 ---
@@ -682,13 +743,13 @@ unified_data:
 
 ## 15. 开放问题
 
-（继承自 RFC §12，Design 阶段决策）
+（继承自 RFC §12，部分已在 2026-07-14 架构基线修订中解决，见 §0.2）
 
-1. Crypto 数据源是否纳入 MVP？
-2. MVP 实时行情深度（免费 API vs 仅日线）？
-3. 缓存集合命名前缀（`03_data_03_data_ud_cache_*`）？
-4. Provider 凭据统一管理策略？
-5. SecurityId 转换映射持久化（`security_master` 集合）？
+1. ~~Crypto 数据源是否纳入 MVP？~~ — 仍未纳入 MVP，Phase 6+ 决策。
+2. ~~MVP 实时行情深度（免费 API vs 仅日线）？~~ — 仍未决策。
+3. ~~缓存集合命名前缀？~~ — **已解决（2026-07-14）**：Query Cache = `03_data_ud_cache_*`，物化数据 = `03_data_ud_*`。
+4. ~~Provider 凭据统一管理策略？~~ — 仍未决策，Phase 1B 处理。
+5. ~~SecurityId 转换映射持久化？~~ — 纯内存计算，不持久化。
 
 ---
 

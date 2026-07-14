@@ -10,9 +10,61 @@ while still being a structural :class:`TA_CNMongoAdapter` subclass. It
 is consolidated here (instead of a separate ``_fakes.py`` module) so
 the T2 file plan's single test-package entry point remains the
 canonical location.
+
+Pandas fallback (Phase 1B-A)
+----------------------------
+The :mod:`skills.data.unified_data.providers` package unconditionally
+``import pandas as pd`` at module load time. Some CI / hermes-agent
+runner environments do not have ``pandas`` installed. To keep those
+test runs green without weakening the Phase 1B-A behaviour contract,
+this ``__init__`` installs a minimal :mod:`pandas` stub into
+``sys.modules`` **only when the real package is missing**. The stub
+exposes a no-op :class:`pandas.DataFrame` constructor plus the
+``columns`` accessor the stub DataFrame payloads need.
 """
 
 from __future__ import annotations
+
+import sys
+import types
+
+
+def _ensure_pandas_stub() -> None:
+    """Inject a minimal :mod:`pandas` stub when the real package is absent.
+
+    The stub is *only* used by the providers test code paths that ask
+    for ``pd.DataFrame(columns=[...])`` and read ``.columns`` /
+    ``len()``. Anything more elaborate is unnecessary in 1B-A because
+    the providers themselves return empty DataFrames — there is no
+    arithmetic, no group-by, no I/O.
+    """
+    if "pandas" in sys.modules:
+        return
+    try:
+        import pandas  # noqa: F401
+        return
+    except Exception:
+        pass
+
+    pd_stub = types.ModuleType("pandas")
+
+    class _DataFrame:  # minimal subset for the providers stub tests
+        def __init__(self, columns=None, data=None):
+            self._columns = list(columns or ["data"])
+            self._rows = list(data or [])
+
+        @property
+        def columns(self):
+            return list(self._columns)
+
+        def __len__(self) -> int:  # noqa: D401 - test stub
+            return len(self._rows)
+
+    pd_stub.DataFrame = _DataFrame  # type: ignore[attr-defined]
+    sys.modules["pandas"] = pd_stub
+
+
+_ensure_pandas_stub()
 
 from typing import Any
 

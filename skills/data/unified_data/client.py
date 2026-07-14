@@ -27,6 +27,7 @@ from datetime import datetime
 from typing import Any, Mapping
 
 from .config import UnifiedDataConfig
+from .freshness import FreshnessPolicy
 from .models import DataResult, Market, SecurityId
 from .provider import DataProvider
 from .registry import ProviderRegistry
@@ -52,11 +53,24 @@ class UnifiedDataClient:
         config: UnifiedDataConfig | None = None,
         *,
         ta_cn_adapter: TA_CNMongoAdapter | None = None,
+        freshness: FreshnessPolicy | None = None,
+        external_fallback_chains: dict[str, list[str]] | None = None,
     ) -> None:
         self._registry = registry if registry is not None else ProviderRegistry()
         self._config = config or UnifiedDataConfig.minimal()
-        self._router = DataRouter(self._registry, self._config)
         self._ta_cn_adapter = ta_cn_adapter
+        # Phase 1B-A: the Router now takes the TA-CN adapter, the
+        # freshness policy and the per-capability external chain
+        # overrides. When ``ta_cn_adapter`` is None the Router
+        # transparently degrades to a Phase 0 external-fallback-only
+        # router.
+        self._router = DataRouter(
+            self._registry,
+            self._config,
+            ta_cn_adapter=ta_cn_adapter,
+            freshness=freshness,
+            external_fallback_chains=external_fallback_chains,
+        )
         self._market_data_service: MarketDataService | None = None
         self._fundamental_service: FundamentalService | None = None
         self._sector_service: SectorService | None = None
@@ -102,6 +116,7 @@ class UnifiedDataClient:
         security_id: SecurityId,
         *,
         provider: str | None = None,
+        force_refresh: bool = False,
         market: Market | str | None = None,
         params: Mapping[str, Any] | None = None,
         fetched_at: datetime | None = None,
@@ -111,12 +126,18 @@ class UnifiedDataClient:
         See :meth:`DataRouter.query` for the full semantics. This method
         exists purely as a stable entry point for consumers that prefer
         to depend on the client object rather than the router directly.
+
+        ``force_refresh`` is a Phase 1B-A addition: when ``True`` the
+        Router skips Step 1 (TA-CN) and any future cache layer. The
+        parameter is keyword-only and defaults to ``False`` so the
+        signature stays backward-compatible with Phase 0 / 1A callers.
         """
         return self._router.query(
             domain,
             operation,
             security_id,
             provider=provider,
+            force_refresh=force_refresh,
             market=market,
             params=params,
             fetched_at=fetched_at,
@@ -298,15 +319,23 @@ class UnifiedDataClient:
         config: UnifiedDataConfig | None = None,
         *,
         ta_cn_adapter: TA_CNMongoAdapter | None = None,
+        freshness: FreshnessPolicy | None = None,
+        external_fallback_chains: dict[str, list[str]] | None = None,
     ) -> "UnifiedDataClient":
         """Build a client pre-populated with ``providers``.
 
         Providers are registered in the given order, which becomes the
         fallback order when no explicit chain is configured.
         Optionally attach a Phase 1A ``ta_cn_adapter`` to enable the
-        domain-specific entry methods.
+        domain-specific entry methods, a Phase 1B-A ``freshness``
+        policy and / or ``external_fallback_chains`` overrides.
         """
-        client = cls(config=config, ta_cn_adapter=ta_cn_adapter)
+        client = cls(
+            config=config,
+            ta_cn_adapter=ta_cn_adapter,
+            freshness=freshness,
+            external_fallback_chains=external_fallback_chains,
+        )
         for provider in providers:
             client.register_provider(provider)
         return client

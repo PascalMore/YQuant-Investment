@@ -48,6 +48,7 @@ from .exceptions import (
     UnifiedDataError,
     UnsupportedCapabilityError,
 )
+from .freshness import FreshnessPolicy
 from .models import (
     Capability,
     DataResult,
@@ -69,6 +70,14 @@ from .provider import DataProvider
 from .registry import ProviderRegistry
 from .router import DataRouter
 from .adapters import TA_CNMongoAdapter
+from .cache_manager import CacheManager
+from .local_mongo_adapter import LocalMongoAdapter
+from .providers import (
+    AKShareProvider,
+    BaseExternalProvider,
+    RateLimiter,
+    TushareProvider,
+)
 from .services import (
     EventService,
     FundamentalService,
@@ -116,4 +125,13 @@ __all__ = [
     "SectorClassification",
     "StockInfo",
     "IndexInfo",
+    # Phase 1B-A
+    "FreshnessPolicy",
+    "TushareProvider",
+    "AKShareProvider",
+    "BaseExternalProvider",
+    "RateLimiter",
+    # Phase 1B-B — persistence + cache plane
+    "LocalMongoAdapter",
+    "CacheManager",
 ]

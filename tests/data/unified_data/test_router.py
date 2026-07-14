@@ -1,12 +1,16 @@
 """Tests for DataRouter + UnifiedDataClient.
 
-Phase 0 acceptance targets:
+Phase 1B-A acceptance targets (DESIGN-03-008 §4.3):
     * DataRouter picks the first available provider from the chain
     * Fallback chain is exercised when the first provider fails
-    * AllProvidersFailedError raised when every provider fails
+    * When every provider fails the router returns ``DataResult.error``
+      (``provider == "error"``) instead of raising
+      ``AllProvidersFailedError`` (Phase 0 → 1B-A behaviour change)
     * UnifiedDataClient can complete a query with a fake provider
     * Provider unavailable / wrong capability → skipped (not error)
     * Forced ``provider=`` parameter bypasses the fallback chain
+    * ``provider="ta_cn_internal"`` short-circuits to Step 1 (TA-CN)
+    * ``force_refresh=True`` skips Step 1 (TA-CN)
 """
 
 from __future__ import annotations
@@ -90,7 +94,11 @@ class TestRouterHappyPath:
         assert result.provider == "primary"
         assert result.data == {"close": [100, 101]}
         assert result.freshness == "delayed"
-        assert result.source_trace == ["primary(ok)"]
+        # Phase 1B-B: silent skip paths now append their own trace entries
+        # (``ud_materialized(skipped: no adapter)`` / ``cache(skipped: no manager)``),
+        # so we assert the expected provider outcome is present in the trace
+        # rather than requiring the trace to equal it exactly.
+        assert "primary(ok)" in result.source_trace
         # The fallback provider must not have been called.
         assert second.call_log == []
 
@@ -139,11 +147,19 @@ class TestRouterFallback:
         )
         assert result.provider == "fallback"
         assert result.data == {"close": [50]}
-        # Trace records BOTH attempts.
-        assert result.source_trace == [
+        # Trace records BOTH provider attempts. Phase 1B-B additionally appends
+        # ``ud_materialized(skipped: no adapter)`` / ``cache(skipped: no manager)``
+        # at the front when the corresponding components are not wired, so we
+        # require both provider outcomes in order and tolerate the skip entries.
+        expected_provider_trace = [
             "primary(error: primary broken)",
             "fallback(ok)",
         ]
+        provider_trace = [
+            entry for entry in result.source_trace
+            if entry.startswith("primary(") or entry.startswith("fallback(")
+        ]
+        assert provider_trace == expected_provider_trace
         assert result.warnings == []
 
     def test_fallback_skips_unavailable_provider(
@@ -201,7 +217,9 @@ class TestRouterFallback:
         router = DataRouter(fresh_registry)
         result = router.query("market_data", "kline_daily", cn_maotai)
         assert result.provider == "winner"
-        assert result.source_trace[0] == "skipped(skipped: unavailable)"
+        # Phase 1B-B: ud_materialized / cache skip entries may appear at the
+        # front of the trace; the unavailable-provider skip still must appear.
+        assert "skipped(skipped: unavailable)" in result.source_trace
 
     def test_unsupported_capability_error_is_treated_as_failure(
         self, fresh_registry, cn_maotai
@@ -257,19 +275,29 @@ class TestRouterAllFailed:
             second_raises=ProviderError("err 2"),
         )
         router = DataRouter(fresh_registry)
-        with pytest.raises(AllProvidersFailedError) as excinfo:
-            router.query("market_data", "kline_daily", cn_maotai)
-        err = excinfo.value
-        assert err.capability == CN_CAP
-        assert len(err.attempts) == 2
-        names = [n for n, _ in err.attempts]
-        assert names == ["primary", "fallback"]
+        # Phase 1B-A behaviour change: the router no longer raises
+        # ``AllProvidersFailedError`` — it returns ``DataResult.error``
+        # (``provider == "error"``) with no payload.
+        result = router.query("market_data", "kline_daily", cn_maotai)
+        assert result.provider == "error"
+        assert result.data is None
+        assert sum(1 for entry in result.source_trace if "error" in entry) == 2
 
     def test_registry_empty_raises(self, fresh_registry, cn_maotai):
         router = DataRouter(fresh_registry)
-        with pytest.raises(AllProvidersFailedError) as excinfo:
-            router.query("market_data", "kline_daily", cn_maotai)
-        assert excinfo.value.attempts == []
+        # Phase 1B-A: empty registry → DataResult.error.
+        # Phase 1B-B: ud_materialized / cache skip entries are appended even
+        # when no external provider is registered, so the trace may contain
+        # those skip entries. We assert no provider attempts were made.
+        result = router.query("market_data", "kline_daily", cn_maotai)
+        assert result.provider == "error"
+        assert result.data is None
+        provider_attempts = [
+            entry for entry in result.source_trace
+            if not (entry.startswith("ud_materialized(")
+                    or entry.startswith("cache("))
+        ]
+        assert provider_attempts == []
 
     def test_all_skipped_raises(self, fresh_registry, cn_maotai):
         # All providers cover the capability but none is available.
@@ -288,8 +316,10 @@ class TestRouterAllFailed:
         fresh_registry.register(a)
         fresh_registry.register(b)
         router = DataRouter(fresh_registry)
-        with pytest.raises(AllProvidersFailedError):
-            router.query("market_data", "kline_daily", cn_maotai)
+        # Phase 1B-A: every candidate unavailable → DataResult.error.
+        result = router.query("market_data", "kline_daily", cn_maotai)
+        assert result.provider == "error"
+        assert result.data is None
 
 
 # ---------------------------------------------------------------------------
@@ -317,10 +347,11 @@ class TestRouterForcedProvider:
             fresh_registry, first_payload={"x": 1}, second_payload={"x": 2}
         )
         router = DataRouter(fresh_registry)
-        with pytest.raises(AllProvidersFailedError):
-            router.query(
-                "market_data", "kline_daily", cn_maotai, provider="unknown"
-            )
+        # Phase 1B-A: unknown forced provider → DataResult.error.
+        result = router.query(
+            "market_data", "kline_daily", cn_maotai, provider="unknown"
+        )
+        assert result.provider == "error"
 
     def test_forced_provider_wrong_capability_raises(
         self, fresh_registry, cn_maotai
@@ -333,10 +364,11 @@ class TestRouterForcedProvider:
         )
         fresh_registry.register(wrong)
         router = DataRouter(fresh_registry)
-        with pytest.raises(AllProvidersFailedError):
-            router.query(
-                "market_data", "kline_daily", cn_maotai, provider="wrong-cap"
-            )
+        # Phase 1B-A: capability/market mismatch → DataResult.error.
+        result = router.query(
+            "market_data", "kline_daily", cn_maotai, provider="wrong-cap"
+        )
+        assert result.provider == "error"
 
 
 # ---------------------------------------------------------------------------
@@ -439,8 +471,11 @@ class TestUnifiedDataClient:
             raise_on_fetch=ProviderError("boom"),
         )
         client = UnifiedDataClient.with_providers([a])
-        with pytest.raises(AllProvidersFailedError):
-            client.query("market_data", "kline_daily", cn_maotai)
+        # Phase 1B-A: client mirrors the router — DataResult.error,
+        # no exception.
+        result = client.query("market_data", "kline_daily", cn_maotai)
+        assert result.provider == "error"
+        assert result.data is None
 
     def test_client_exposes_registry_and_config(self):
         client = UnifiedDataClient()

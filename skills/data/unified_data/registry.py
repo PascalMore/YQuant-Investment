@@ -14,6 +14,8 @@ caching, and provider lifecycle hooks.
 
 from __future__ import annotations
 
+from typing import Mapping, Sequence
+
 from .models import Market
 from .provider import DataProvider
 
@@ -25,11 +27,25 @@ class ProviderRegistry:
     so that ``get_providers("market_data.kline_daily")`` always returns
     a list in registration order regardless of how the underlying set
     was constructed.
+
+    Phase 1B-A additions:
+
+    * :attr:`_external_fallback_chains` — a per-capability override of
+      the external fallback chain. Set via
+      :meth:`set_external_fallback_chains` and queried via
+      :meth:`get_external_fallback_chain`. The Router resolves its
+      chain in priority ``external_fallback_chains[capability] → config
+      .fallback_for(capability) → registry insertion order``.
     """
 
     def __init__(self) -> None:
         self._providers: dict[str, DataProvider] = {}
         self._by_capability: dict[str, list[DataProvider]] = {}
+        # Phase 1B-A: per-capability explicit external fallback chains.
+        # Keys are capability strings, values are ordered provider-name
+        # lists. The Router uses these ahead of the UnifiedDataConfig
+        # override and registry order.
+        self._external_fallback_chains: dict[str, list[str]] = {}
 
     # ------------------------------------------------------------------
     # Registration
@@ -124,6 +140,40 @@ class ProviderRegistry:
     ) -> bool:
         """Return ``True`` if any registered provider can serve the request."""
         return bool(self.get_providers(capability, market))
+
+    # ------------------------------------------------------------------
+    # Phase 1B-A: external fallback chain overrides
+    # ------------------------------------------------------------------
+
+    def set_external_fallback_chains(
+        self,
+        chains: Mapping[str, Sequence[str]],
+    ) -> None:
+        """Inject the ``external_fallback_chains`` configuration.
+
+        ``chains`` maps ``capability → ordered provider name list``.
+        Replaces any previously stored chains. Unknown capability
+        strings are accepted (the Router will simply ignore them when
+        no provider ever claims the capability).
+
+        Args:
+            chains: A mapping from capability string to an ordered
+                sequence of provider names. Each sequence is copied
+                so later caller-side mutations cannot affect the
+                stored configuration.
+        """
+        self._external_fallback_chains = {
+            key: list(names) for key, names in chains.items()
+        }
+
+    def get_external_fallback_chain(self, capability: str) -> list[str]:
+        """Return the explicit external fallback chain for ``capability``.
+
+        Returns ``[]`` when no chain has been configured for the
+        capability — callers are expected to treat that as
+        "fall back to the next priority level".
+        """
+        return list(self._external_fallback_chains.get(capability, []))
 
     # ------------------------------------------------------------------
     # Internal helpers

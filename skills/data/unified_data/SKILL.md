@@ -1,7 +1,7 @@
 ---
 name: unified_data
-description: YQuant 全局统一数据访问层（Phase 0 骨架 + Phase 1A TA-CN 只读适配器已交付）。触发场景：新建或修改 unified_data 模块入口（SecurityId / Market / DataResult / Capability）、消费方需要注册/路由 DataProvider，或需要从 fallback 链返回 DataResult；以及 Phase 1B+ 接入 Tushare / AKShare / DSA adapter 前的接口澄清。本 SKILL.md 覆盖 Phase 0 骨架与 Phase 1A TA-CN 只读适配器已交付的公共 API，不包含 Phase 1B/1C（External Provider / CacheManager / FreshnessPolicy）及后续 Phase。
-version: 0.1.0
+description: YQuant 全局统一数据访问层（Phase 0 骨架 + Phase 1A TA-CN 只读适配器已交付）。触发场景：新建或修改 unified_data 模块入口（SecurityId / Market / DataResult / Capability）、消费方需要注册/路由 DataProvider，或需要从 fallback 链返回 DataResult；以及 Phase 1B+ 接入 Tushare / AKShare 前的接口澄清。本 SKILL.md 覆盖 Phase 0 骨架与 Phase 1A TA-CN 只读适配器已交付的公共 API，不包含 Phase 1B/1C（External Provider / CacheManager / FreshnessPolicy）及后续 Phase。DSA 不是运行时数据源，不实现 DSA adapter。
+version: 0.2.0
 platforms: [linux, macos, windows]
 environments: [cli, repo, kanban]
 metadata:
@@ -13,6 +13,8 @@ metadata:
 # unified_data
 
 YQuant Unified Data Layer 的入口说明（Phase 0 骨架 + Phase 1A TA-CN 只读适配器已交付）。来源 RFC-03-007 / SPEC-03-007 / DESIGN-03-007。
+
+> **架构基线（Pascal 确认，2026-07-14 / V0.2 同步）**：Unified Data 与 TA-CN 共用同一物理 MongoDB `tradingagents`，依赖**集合命名空间前缀**（TA-CN 无前缀 / `03_data_ud_*` 物化 / `03_data_ud_cache_*` QueryCache）实现 ownership，不依赖物理库隔离。权威读取路径为 **internal-first**：TA-CN 既有 → UD 物化 → Query Cache → 外部 Provider；外部刷新失败不阻断内部已有数据读取。DSA 仅作为分析/参考上下文出现，不实现任何 DSA adapter，不出现在 `external_fallback_chains` 中。
 
 ## 模块定位
 
@@ -87,7 +89,7 @@ client = UnifiedDataClient.with_providers(
 
 1. MongoDB 缓存 / `CacheManager`（Phase 1+，集合前缀 `03_data_ud_cache_*`）。
 2. `FreshnessPolicy` / TTL 策略（Phase 1；当前 `DataResult.success` 默认 `freshness="delayed"` 由代码硬编码，Phase 1 由策略覆盖）。
-3. 真实 provider adapter（Tushare / AKShare / BaoStock / yfinance / DSA adapter）。TA-CN MongoDB 只读 adapter 已在 Phase 1A 交付；其余 provider adapter 属 Phase 1B+。
+3. 真实 provider adapter（Tushare / AKShare / BaoStock / yfinance）。TA-CN MongoDB 只读 adapter 已在 Phase 1A 交付；其余 provider adapter 属 Phase 1B+。**DSA adapter 不在此列**：DSA 不是运行时数据源，不实现任何 DSA SQLite / `StockDaily` adapter。
 4. `QualityScorer` / `AuditLogger` / `03_data_ud_query_audit` 写入。
 5. Provider 优先级 / 健康检测 / 后台刷新 / Rate limiter 配置（`UnifiedDataConfig` 仅含 `default_fallback_chain` + `capability_fallback_overrides`，无优先级字段）。
 6. domain canonical objects（`market_data` / `financial` / `valuation` / `flow` / `sector` / `sentiment` / `dragon_tiger` / `chip` / `news` / `calendar` / `metadata`）—— `DataResult.data` 在 Phase 0 为任意 `Any`，由消费方自行处理。
@@ -97,7 +99,7 @@ client = UnifiedDataClient.with_providers(
 Phase 0-7 共 8 个编号阶段（Phase 0 为骨架，Phase 1-7 为业务能力阶段；Phase 1 细分为 1A/1B/1C）。详见 `docs/design/03_data/DESIGN-03-007-unified-data-layer.md` §12：
 
 - Phase 1A ✅ 已交付 — TA-CN read-only adapter for core A-share + index/sector data（覆盖 8 个 TA-CN MongoDB 只读集合：`stock_basic_info` / `market_quotes` / `stock_daily_quotes` / `stock_financial_data` / `stock_news` / `index_basic_info` / `index_daily_quotes` / `stock_sector_info`）+ canonical objects（`StockInfo` / `RealtimeQuote` / `DailyBar` / `FinancialStatement` / `NewsItem` / `IndexInfo` / `IndexDailyBar` / `SectorClassification`）+ domain services + `UnifiedDataClient` facade。
-- Phase 1B — External Provider（Tushare / AKShare / DSA SQLite adapter）+ CacheManager + FreshnessPolicy。
+- Phase 1B — External Provider（Tushare / AKShare）+ CacheManager + FreshnessPolicy + LocalMongoAdapter（internal-first 读取路径）。不实现 DSA SQLite adapter（DSA 不是运行时数据源）。
 - Phase 1C — 端到端验收 + 测试补齐。
 - Phase 2 — Provider Registry 增强 + QualityScorer + AuditLogger。
 - Phase 3 — `03_data_ud_*` 持久化集合扩展（板块 / 情绪 / 资金流 / 技术指标）。

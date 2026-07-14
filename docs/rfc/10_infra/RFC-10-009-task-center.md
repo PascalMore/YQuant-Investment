@@ -7,8 +7,8 @@
 | 状态 | 草稿（Draft） |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-12 |
-| 最后更新 | 2026-07-12 |
-| 版本号 | V0.1 |
+| 最后更新 | 2026-07-14 |
+| 版本号 | V0.2 |
 | 所属模块 | 10_infra（基础设施） |
 | 依赖RFC | RFC-10-003（infra 架构）、RFC-10-004（AI Coding Pipeline） |
 | 关联RFC | RFC-03-007（Unified Data Layer） |
@@ -21,6 +21,7 @@
 | 版本号 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
 | V0.1 | 2026-07-12 | 初始创建，定义通用任务中心 | YQuant-Codex-Principal |
+| V0.2 | 2026-07-14 | 文档同步修订：Pascal 确认 Unified Data × Task Center 共用同一物理 MongoDB `tradingagents`，"物理隔离"措辞改为"命名空间隔离（共享同一物理库 `tradingagents`）"（与 RFC-03-007 V0.3 / DESIGN-03-007 V3.3 一致） | YQuant-Principal |
 
 ---
 
@@ -138,7 +139,7 @@ Pascal 要在 unified_data（数据刷新）、stock 量化分析框架（批量
 - 四层实体（Task → Job → Execution → Step）从抽象到具体，职责逐层递减
 - Task 是**任务定义**（是什么、怎么做），Job 是**任务实例**（什么时候做、用什么参数），Execution 是**执行记录**（结果如何），Step 是**执行步骤**（做到哪了）
 - 调度器在进程内运行（Python `sched` 或简单 sleep-poll 循环），不依赖外部消息队列
-- 所有状态和日志写入 MongoDB `10_infra_tc_*` 集合，与 `03_data_ud_*` 和 TA-CN 无前缀集合物理隔离
+- 所有状态和日志写入 MongoDB `10_infra_tc_*` 集合，与 `03_data_ud_*` 和 TA-CN 无前缀集合命名空间隔离（共享同一物理库 `tradingagents`）
 - Python API 是主要操作界面，CLI 是辅助入口
 
 ### 4.2 架构总览
