@@ -38,6 +38,13 @@ class ProviderRegistry:
       .fallback_for(capability) → registry insertion order``.
     """
 
+    # 默认优先级值（Phase 2 §4.1）
+    _DEFAULT_PRIORITY: int = 100
+    # 合法的健康状态（Phase 2 §4.1）
+    _ALLOWED_HEALTH_STATES: frozenset[str] = frozenset(
+        {"healthy", "unhealthy", "disabled"}
+    )
+
     def __init__(self) -> None:
         self._providers: dict[str, DataProvider] = {}
         self._by_capability: dict[str, list[DataProvider]] = {}
@@ -46,6 +53,9 @@ class ProviderRegistry:
         # lists. The Router uses these ahead of the UnifiedDataConfig
         # override and registry order.
         self._external_fallback_chains: dict[str, list[str]] = {}
+        # Phase 2 §4.1: 运行治理
+        self._priorities: dict[str, int] = {}
+        self._health_states: dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # Registration
@@ -71,7 +81,11 @@ class ProviderRegistry:
             self._by_capability.setdefault(capability, []).append(provider)
 
     def unregister(self, name: str) -> bool:
-        """Remove the provider named ``name``. Returns whether anything was removed."""
+        """Remove the provider named ``name``. Returns whether anything was removed.
+
+        Phase 2 §3.2.2 TTL 备注：unregister 必须清理 _priorities / _health_states
+        中该 provider 的残留状态，避免重注册时残留旧值。
+        """
         provider = self._providers.pop(name, None)
         if provider is None:
             return False
@@ -81,6 +95,8 @@ class ProviderRegistry:
             ]
             if not self._by_capability[capability]:
                 self._by_capability.pop(capability, None)
+        self._priorities.pop(name, None)
+        self._health_states.pop(name, None)
         return True
 
     def clear(self) -> None:
@@ -112,11 +128,17 @@ class ProviderRegistry:
         self,
         capability: str,
         market: Market | str | None = None,
+        state_filter: str | None = None,
     ) -> list[DataProvider]:
         """Return providers that serve ``capability`` (and ``market`` if given).
 
-        The returned list is in registration order; the caller is free
-        to apply priority, filtering or fallback logic on top of it.
+        始终按 ``(priority, insertion_order)`` 稳定排序：当所有 provider
+        都使用默认 priority（100）时，注册顺序与原 Phase 0 行为一致，
+        不会因引入排序而偷换调用方语义（DESIGN §4.1）。
+
+        Phase 2 增强：可选 ``state_filter`` —— ``"healthy"`` /
+        ``"unhealthy"`` / ``"disabled"``，先按状态过滤再按上述顺序输出；
+        ``None`` 保持 Phase 0 兼容（即不过滤状态）。
 
         If ``market`` is provided, providers that do not cover it are
         removed from the result. Unknown capability / market returns
@@ -126,12 +148,25 @@ class ProviderRegistry:
         if capability is None:
             return []
         providers = list(self._by_capability.get(capability, ()))
-        if market is None:
-            return providers
-        market_enum = self._coerce_market(market)
-        if market_enum is None:
-            return []
-        return [p for p in providers if market_enum in p.markets]
+        if market is not None:
+            market_enum = self._coerce_market(market)
+            if market_enum is None:
+                return []
+            providers = [p for p in providers if market_enum in p.markets]
+        if state_filter is not None:
+            providers = [
+                p for p in providers
+                if self._health_states.get(p.name, "healthy") == state_filter
+            ]
+        # 稳定排序：按 priority 升序，同 priority 时保持注册顺序
+        provider_order = {name: idx for idx, name in enumerate(self._providers)}
+        providers.sort(
+            key=lambda p: (
+                self._priorities.get(p.name, self._DEFAULT_PRIORITY),
+                provider_order.get(p.name, 0),
+            )
+        )
+        return providers
 
     def has_capability(
         self,
@@ -140,6 +175,45 @@ class ProviderRegistry:
     ) -> bool:
         """Return ``True`` if any registered provider can serve the request."""
         return bool(self.get_providers(capability, market))
+
+    # ------------------------------------------------------------------
+    # Phase 2: Priority & Health State
+    # ------------------------------------------------------------------
+
+    def set_priority(self, name: str, priority: int) -> None:
+        """设置 provider 的优先级（数值越小越优先）。
+
+        未知 provider → ValueError（fail-fast，不静默忽略）。
+        """
+        if name not in self._providers:
+            raise ValueError(f"Provider {name!r} is not registered")
+        self._priorities[name] = priority
+
+    def get_priority(self, name: str) -> int:
+        """返回 provider 的优先级。未设置时返回 _DEFAULT_PRIORITY (100)。"""
+        return self._priorities.get(name, self._DEFAULT_PRIORITY)
+
+    def set_health(self, name: str, state: str) -> None:
+        """设置 provider 的运行健康状态。
+
+        Args:
+            name: provider 名称。
+            state: ``"healthy"`` / ``"unhealthy"`` / ``"disabled"``。
+
+        Raises:
+            ValueError: provider 未注册或 state 非法。
+        """
+        if name not in self._providers:
+            raise ValueError(f"Provider {name!r} is not registered")
+        if state not in self._ALLOWED_HEALTH_STATES:
+            raise ValueError(
+                f"state must be 'healthy', 'unhealthy', or 'disabled', got {state!r}"
+            )
+        self._health_states[name] = state
+
+    def get_health(self, name: str) -> str:
+        """返回 provider 的健康状态。未设置时返回 ``"healthy"``。"""
+        return self._health_states.get(name, "healthy")
 
     # ------------------------------------------------------------------
     # Phase 1B-A: external fallback chain overrides

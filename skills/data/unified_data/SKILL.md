@@ -1,6 +1,6 @@
 ---
 name: unified_data
-description: YQuant 全局统一数据访问层（Phase 0 骨架 + Phase 1A TA-CN 只读适配器已交付）。触发场景：新建或修改 unified_data 模块入口（SecurityId / Market / DataResult / Capability）、消费方需要注册/路由 DataProvider，或需要从 fallback 链返回 DataResult；以及 Phase 1B+ 接入 Tushare / AKShare 前的接口澄清。本 SKILL.md 覆盖 Phase 0 骨架与 Phase 1A TA-CN 只读适配器已交付的公共 API，不包含 Phase 1B/1C（External Provider / CacheManager / FreshnessPolicy）及后续 Phase。DSA 不是运行时数据源，不实现 DSA adapter。
+description: YQuant 全局统一数据访问层。Phase 0、Phase 1A（TA-CN 只读适配器）、Phase 1B（外部 Provider / internal-first 持久化平面）与 Phase 1C（fake/mongomock E2E 验收）均已完成；下一规划阶段为 Phase 2（Provider Registry 增强 + QualityScorer + AuditLogger）。触发场景：新建或修改 unified_data 模块入口（SecurityId / Market / DataResult / Capability）、消费方需要注册/路由 DataProvider，或需要从 fallback 链返回 DataResult。DSA 不是运行时数据源，不实现 DSA adapter。
 version: 0.2.0
 platforms: [linux, macos, windows]
 environments: [cli, repo, kanban]

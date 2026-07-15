@@ -7,7 +7,6 @@ rather than setup boilerplate.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, Iterable
 
 import pytest
@@ -21,6 +20,7 @@ from skills.data.unified_data import (
     UnifiedDataConfig,
 )
 
+pytest_plugins = ("tests.data.unified_data.fixtures.quality_fixtures",)
 
 # ---------------------------------------------------------------------------
 # SecurityId fixtures
@@ -143,12 +143,6 @@ def fresh_registry() -> ProviderRegistry:
 def fresh_client() -> UnifiedDataClient:
     """Empty client with default config."""
     return UnifiedDataClient()
-
-
-@pytest.fixture
-def fixed_now() -> datetime:
-    """A fixed timestamp for deterministic DataResult assertions."""
-    return datetime(2026, 7, 13, 0, 0, 0)
 
 
 # ---------------------------------------------------------------------------
