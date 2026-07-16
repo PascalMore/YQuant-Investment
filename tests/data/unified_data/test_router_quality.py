@@ -394,21 +394,25 @@ class TestAuditParamsDurationMsContract:
     def test_audit_params_forwarded_for_explicit_provider_branch(
         self, fresh_registry, cn_maotai
     ):
-        """Branch 2 (explicit ``provider=``) also forwards params."""
+        """Branch 2 (explicit ``provider=``) also forwards params.
+
+        Phase 2 rollout (DESIGN-03-011 §8.6): params 走严格 allow-list；
+        这里用 ``limit`` 这类 allow-listed 键验证分支正确写入审计文档。
+        """
         db = mongomock.MongoClient().db
         fresh_registry.register(_provider("primary", _ok_payload()))
         router = DataRouter(
             fresh_registry,
             audit_logger=AuditLogger(mongo_db=db),
         )
-        params = {"report_period": "2026Q2"}
+        params = {"limit": 60}
         router.query(
             "market_data", "kline_daily", cn_maotai,
             provider="primary", params=params,
         )
 
         doc = db[AUDIT_COLL].find_one({})
-        assert doc["params"] == {"report_period": "2026Q2"}
+        assert doc["params"] == {"limit": 60}
         assert isinstance(doc["duration_ms"], int) and doc["duration_ms"] >= 0
 
     def test_audit_params_forwarded_for_ta_cn_internal_branch(

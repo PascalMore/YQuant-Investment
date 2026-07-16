@@ -7,13 +7,14 @@
 | 状态 | Draft |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-07-15 |
-| 最后更新 | 2026-07-15 |
-| 版本号 | V0.1 |
+| 最后更新 | 2026-07-16 |
+| 版本号 | V0.2 |
 | 来源 RFC | RFC-03-011 |
 | 来源 SPEC | SPEC-03-011 |
 | 关联 Design | DESIGN-03-007（Unified Data Layer 详细设计 §Phase 2） |
 | 关联 SPEC | SPEC-03-007、SPEC-03-009 |
 | 目标模块 | unified_data（`skills/data/unified_data/`） |
+| Phase 1 范围 | **Audit-only**：仅 Query Audit（AuditLogger）；QualitySummary 不注入；quality tier 仅观测不构成业务门禁 |
 
 ---
 
@@ -33,7 +34,7 @@
 - ✅ QualityScorer（数据质量评估组件，仅评数据可信度/可用性，不评投资价值）
 - ✅ Registry 运行治理（priority + health_state）
 - ✅ AuditLogger（追加式审计日志）
-- ✅ QualitySummary（质量汇总聚合）
+- ✅ QualitySummary（质量汇总聚合 — Phase 1 禁用，作为后续架构保留）
 - ❌ 不实现 Sector Router capability
 - ❌ 不实现 Registry 持久化到 MongoDB
 - ❌ 不实现后台质量汇总周期性计算 / 自动 provider 健康检查 / 熔断器
@@ -41,6 +42,7 @@
 - ❌ 不实现 task_center 集成（Phase 5）
 - ❌ 不实现 stock framework 集成（Phase 6）
 - ❌ 不实现 DSA SQLite adapter
+- ⚠️ **质量语义仅观测**（Pascal 已确认）：Phase 1 quality tier 不构成业务门禁，不阻断查询路径，仅用于监控和日志
 
 ---
 
@@ -68,12 +70,12 @@ DataRouter.query() 现有 Step 1-4 不变
 │  → append-only 03_data_ud_query_audit        │
 │  (catch-and-log, mongo_db=None → noop)       │
 └───────────────────┬──────────────────────────┘
-                     │ (内部触发)
+                     │ (内部触发 — Phase 1 禁用)
                      ▼
 ┌──────────────────────────────────────────────┐
-│              QualitySummary                   │
-│  → upsert 03_data_ud_quality_summary         │
-│  (catch-and-log, mongo_db=None → noop)       │
+│              QualitySummary (Phase 1 禁用)    │
+│  → ⛔ 不写入 03_data_ud_quality_summary
+│     （schema/TTL=365 天已确认，供后续启用）
 └──────────────────────────────────────────────┘
 ```
 
@@ -95,7 +97,7 @@ DataRouter.query()
        │
        ├─ 2. AuditLogger.log(result, duration_ms, params)  [可选, catch-and-log]
        │   → mongo.03_data_ud_query_audit.insert_one(doc)
-       │   (内部触发 QualitySummary.update)
+       │   (Phase 1 不触发 QualitySummary.update — quality_summary=None)
        │   • params = query() 入口 caller mapping 的浅拷贝快照
        │   • duration_ms = (now - ts) 实际毫秒（非负整数）
        │
@@ -777,7 +779,7 @@ class AuditLogger:
         self,
         mongo_db: Any = None,
         collection_name: str = "03_data_ud_query_audit",
-        ttl_days: int = 90,
+        ttl_days: int = 365,
         quality_summary: "QualitySummary | None" = None,
     ) -> None:
         self._mongo_db = mongo_db
@@ -842,11 +844,11 @@ class AuditLogger:
 候选索引（Implement 使用默认候选值，Pascal 确认后在生产创建）：
 
 ```javascript
-// 1. TTL 索引（按 fetched_at 过期，默认 90 天）
-// CreateIndexOptions: { expireAfterSeconds: 90 * 24 * 3600 }
+// 1. TTL 索引（按 fetched_at 过期，Pascal 已确认：365 天）
+// CreateIndexOptions: { expireAfterSeconds: 365 * 24 * 3600 }
 db.03_data_ud_query_audit.createIndex(
   {"fetched_at": 1},
-  {"expireAfterSeconds": 7776000}
+  {"expireAfterSeconds": 31536000}
 )
 
 // 2. 按 security_id 查询（排查特定标的审计记录）
@@ -862,8 +864,8 @@ db.03_data_ud_query_audit.createIndex(
 )
 ```
 
-> ⚠️ TTL 值（90 天）和二级索引设计为候选值。Implement 代码中：
-> - `AuditLogger.__init__` 的 `ttl_days` 参数默认 90（可覆盖）
+> ⚠️ Pascal 已确认 TTL=365 天。二级索引设计为候选值。Implement 代码中：
+> - `AuditLogger.__init__` 的 `ttl_days` 参数默认 365（Pascal 已确认）
 > - 所有索引在 Pascal 确认前**不**在代码/测试/脚本中硬编码 `createIndex`
 > - 测试使用 mongomock，mongomock 不支持 TTL 索引（静默忽略）
 
@@ -881,7 +883,11 @@ db.03_data_ud_query_audit.createIndex(
 
 ## 6. QualitySummary 详细设计
 
-### 6.1 接口与实现
+### 6.1 Phase 1 声明
+
+**QualitySummary 在整个 Phase 1 禁用，不注入到 AuditLogger**（`AuditLogger.__init__` 的 `quality_summary` 参数始终保持 `None`）。以下 schema、TTL 和索引作为后续启用时的已确认值记录在案。
+
+### 6.2 接口与实现（架构保留）
 
 ```python
 class QualitySummary:
@@ -982,7 +988,9 @@ class QualitySummary:
         )
 ```
 
-### 6.2 文档 Schema（已确认）
+### 6.3 文档 Schema（已确认 — TTL 已确认）
+
+TTL：365 天（按 `date` 自动过期；Phase 1 不启用，TTL 作为后续启用时的已确认值）
 
 集合：`tradingagents.03_data_ud_quality_summary`
 
@@ -999,7 +1007,7 @@ class QualitySummary:
 | `provider_distribution` | dict | {"ta_cn_internal": 30, "tushare": 10} | 各 provider 命中次数 |
 | `last_updated` | datetime | ISODate | 最后更新时间 |
 
-### 6.3 avg_quality_score 精确计算
+### 6.4 avg_quality_score 精确计算
 
 **设计选择**：每次 update 时读当前 doc → 计算新 avg = (old_avg * old_count + new_score) / (old_count + 1) → $set avg_quality_score。
 
@@ -1008,11 +1016,18 @@ class QualitySummary:
 - 精确计算避免浮点累积误差。
 - 如果未来 query_count 增长过高，可切换为定期聚合（Phase 3+）。
 
-### 6.4 索引
+### 6.5 索引
 
 唯一索引由复合键 `_id` 天然保证。不需要额外唯一索引。
 
 ```javascript
+// TTL 索引（按 date 过期，Pascal 已确认：365 天）
+// Phase 1 不创建（QualitySummary 未启用），作为后续启用时的 DDL
+// db.03_data_ud_quality_summary.createIndex(
+//   {"date": 1},
+//   {"expireAfterSeconds": 365 * 24 * 3600}
+// )
+
 // 按 domain + security_id 快速查询质量趋势（可选，Phase 2 默认不创建）
 // DDL pending Pascal confirmation
 // db.03_data_ud_quality_summary.createIndex(
@@ -1020,7 +1035,7 @@ class QualitySummary:
 // )
 ```
 
-### 6.5 行为矩阵
+### 6.6 行为矩阵
 
 | 场景 | mongo_db | 预期行为 |
 |------|----------|----------|
@@ -1144,26 +1159,30 @@ def query(self, ...) -> DataResult:
 | `03_data_ud_query_audit` | insert(append-only) | createIndex x3 | 每次 query 后 insert_one | noop / mongomock only |
 | `03_data_ud_quality_summary` | upsert | createIndex(domain, security_id, date) | 每次 audit 后 update_one | noop / mongomock only |
 
-### 8.2 副作用矩阵（Pascal 确认流程）
+### 8.2 副作用矩阵（Pascal 已确认）
 
-| 副作用 | 组件 | 影响 | 是否可回滚 | Pascal 确认状态 |
-|--------|------|------|-----------|----------------|
-| MongoDB 集合创建 | AuditLogger | `tradingagents.03_data_ud_query_audit` 创建 | 可回滚（drop collection） | ⏳ 待确认 |
-| MongoDB 索引创建 | AuditLogger | 3 个索引（TTL + security_id + capability） | 可回滚（drop index） | ⏳ 待确认 |
-| 审计日志写入 | AuditLogger | 每次 query 后 insert_one | 不可回滚（已写入数据） | ⏳ 待确认 |
-| 质量汇总集合创建 | QualitySummary | `tradingagents.03_data_ud_quality_summary` 创建 | 可回滚 | ⏳ 待确认 |
-| 质量汇总写入 | QualitySummary | 每次 audit 后 upsert | 不可回滚 | ⏳ 待确认 |
+| 副作用 | 组件 | 影响 | 是否可回滚 | Phase 1 状态 |
+|--------|------|------|-----------|--------------|
+| MongoDB 集合创建 | AuditLogger | `tradingagents.03_data_ud_query_audit` 创建（TTL=365 天） | 可回滚（drop collection） | ✅ 已确认（DDL 可执行） |
+| MongoDB 索引创建 | AuditLogger | 3 个索引（TTL expireAfterSeconds=31536000 + security_id + capability） | 可回滚（drop index） | ✅ 已确认 |
+| 审计日志写入 | AuditLogger | 每次 query 后 insert_one | 不可回滚（已写入数据） | ✅ 已确认（fail-open） |
+| quality tier 业务影响 | QualityScorer | 仅观测，不构成业务门禁 | 无副作用 | ✅ 已确认 |
+| 质量汇总集合创建 | QualitySummary | `tradingagents.03_data_ud_quality_summary` 创建（TTL=365 天） | 可回滚 | ⏳ QualitySummary 未启用；回滚策略记录在案 |
+| 质量汇总写入 | QualitySummary | 每次 audit 后 upsert（Phase 1 不执行） | 不可回滚 | ❌ Phase 1 禁用 |
 | Registry 内存状态变更 | ProviderRegistry | set_health / set_priority | 可回滚（重启恢复默认） | ✅ 无需确认（纯内存） |
 | QualityScorer 计算 | QualityScorer | 无持久化 | ✅ 无副作用 | ✅ 无需确认（纯计算） |
 
-### 8.3 Implement 默认行为（Pascal 确认前）
+### 8.3 Phase 1 默认行为与范围
 
-| 组件 | Pascal 确认前 | Pascal 确认后 |
-|------|--------------|--------------|
-| AuditLogger | `mongo_db=None`（noop），或注入 mongomock.Database | `mongo_db` 指向生产库 |
-| QualitySummary | `mongo_db=None`（noop），或注入 mongomock.Database | `mongo_db` 指向生产库 |
-| 集合/索引创建 | **不执行任何 DDL**。代码/测试/脚本中不硬编码 createIndex。 | 通过独立 MigrationScript 或 rollback-safe 部署脚本创建 |
-| 真实 provider smoke | 不执行 | Design 阶段 Pascal 确认后可选 |
+**Audit-only Phase 1 声明**：
+
+| 组件 | Phase 1 默认行为 | Pascal 确认后（未来 Phase） |
+|------|-----------------|----------------------------|
+| AuditLogger | `mongo_db=None`（noop），或注入 mongomock.Database。经 Pascal 确认 DDL+smoke 后启用真实写入 | `mongo_db` 指向生产库 |
+| QualitySummary | **全程禁用**。`AuditLogger.__init__` 的 `quality_summary` 参数始终保持 `None`。不创建 noop 实例 | `mongo_db` 指向生产库 |
+| 集合/索引创建 | **不执行任何 DDL**。代码/测试/脚本中不硬编码 createIndex | 通过独立 MigrationScript 或 rollback-safe 部署脚本创建 |
+| 真实 provider smoke | 不执行 | Pascal 确认后可选 |
+| quality tier 业务影响 | 仅观测，不构成业务门禁 | 待未来 Phase 决策 |
 
 ### 8.4 代码约束
 
@@ -1172,6 +1191,52 @@ def query(self, ...) -> DataResult:
 3. 全部测试使用 mongomock，不依赖真实 MongoDB。
 4. 测试中不创建真实 MongoDB 集合或索引。
 5. 所有 Phase 2 新增代码有显式守卫（`mongo_db is None`），确保无 MongoDB 时静默降级为 noop。
+
+### 8.5 MongoDB 权限分层架构（Pascal 已确认）
+
+| 账号/角色 | 用途 | 权限范围 | 备注 |
+|-----------|------|----------|------|
+| **运行时审计账号** | AuditLogger 日常写入 | 对 `03_data_ud_query_audit` 的 insert-only 权限 | 最小权限原则，仅能写入审计集合 |
+| **DDL/索引账号** | 集合创建、索引创建、TTL 设置 | 对 `03_data_ud_*` 集合的 createIndex / createCollection | 与运行时审计账号分离，仅在部署/迁移时使用 |
+| **未来只读账号** | 报告查询、故障排查 | 对 `03_data_ud_*` 集合的 read-only | Phase 1 不创建，报告/排查需使用时再建 |
+| **审计账号禁止复用** | — | **不得**具备 portfolio、Smart Money、交易、缓存和既有业务集合（`portfolio_*`、`smart_money_*`、`signal_*` 等）的任何权限 | 隔离遵守「审计账号不跨业务域」原则 |
+
+### 8.6 params 字段白名单（Pascal 已确认）
+
+- **白名单策略**：`AuditLogger._build_document` 对 `params` 字段采用白名单，仅记录允许的查询参数键。
+- **敏感字段丢弃**：凭据（`token`、`api_key`、`secret`）、密码、密钥等默认丢弃，不进入审计文档。
+- **实现方式**：白名单在 `AuditLogger.__init__` 中作为 `allowed_params: set[str]` 参数注入。未设置时默认允许所有非敏感字段（由 _sanitize_params 方法处理），Implement 阶段固化具体白名单。
+- `params` 在审计文档中始终存在（最少为空 JSON 对象 `{}`），不得省略。
+
+### 8.7 写入失败与降级策略（Pascal 已确认）
+
+- **fail-open**：AuditLogger / QualitySummary 写入失败不阻断主查询返回，不重试，不阻塞调用方。
+- **本地结构化日志**：写入失败时通过 `logger.warning` 输出，包含失败原因和写入集合名。
+- **不接外部告警**：Phase 1 写入失败不接外部告警系统（PagerDuty/短信/Telegram），仅本地日志 + 计数器。外部告警属于 Phase 3+。
+- **已写入数据不自动删除**：回滚优先停用注入，已有审计数据保留。
+
+### 8.8 Rollout 策略（Pascal 已确认）
+
+```
+第 1 步：DDL
+  - 创建 03_data_ud_query_audit 集合 + TTL 索引（expireAfterSeconds=31536000）+ 二级索引
+  - 创建 03_data_ud_quality_summary 集合 + TTL 索引（expireAfterSeconds=31536000）
+  - 使用独立 DDL 账号，建好即销毁连接
+
+第 2 步：真实 smoke
+  - 在生产环境用真实 AuditLogger 写入一条审计记录 → 立即读取验证 schema
+  - 验证 TTL 索引存在且 expireAfterSeconds 正确
+  - 验证写入失败不阻断主查询
+
+第 3 步：小范围 Audit-only 金丝雀
+  - 在 1–2 个低流量 capability（如 metadata.*）启用 AuditLogger 真实写入
+  - 观察 24–48h：写入成功率、延迟、无副作用
+
+第 4 步：观察
+  - 金丝雀通过后逐步开放到全部 capability
+  - 持续观察 1–2 周，每日检查 audit 数据量和写入延迟
+  - 回滚预案：停用 AuditLogger 注入（mongo_db=None），已写入数据保留不删
+```
 
 ---
 
@@ -1326,7 +1391,7 @@ PYTHONPATH=. pytest tests/data/unified_data/test_quality_scorer.py tests/data/un
 |---|------|--------|---------|--------------|
 | D1 | 域 TTL 默认值 | market_data=14400, financial=86400, news=3600, metadata=86400, index=14400（秒） | QualityScorer freshness 评分 | 每个域的 TTL 时长是否合理？是否需要额外域？ |
 | D2 | 分域配置覆盖 | §3.6 的 4 个域覆盖示例 | QualityScorer 配置 | 权重分配是否合理？是否需要添加/移除域的覆盖？ |
-| D3 | 审计集合索引 | §5.3 的 3 个索引（TTL + security_id + capability） | AuditLogger DDL | 索引策略是否合理？TTL 90 天是否合适？ |
+| D3 | 审计集合索引 | §5.3 的 3 个索引（TTL + security_id + capability） | AuditLogger DDL | Pascal 已确认 TTL=365 天。索引策略是否合理？ |
 | D4 | 质量汇总集合索引 | §6.4 的 domain+security_id+date 索引 | QualitySummary DDL | 是否需要该索引？查询模式是否满足？ |
 | D5 | 生产集合写入确认 | 两个集合（audit + quality_summary）何时启用真实写入 | all | 确认后 Implement 启用 MongoDB 后端；确认前仅 noop/mongomock |
 
@@ -1360,9 +1425,9 @@ PYTHONPATH=. pytest tests/data/unified_data/test_quality_scorer.py tests/data/un
 | 日查询次数 | ~10,000（初期） | 基于当前交易品种 × 域 × 刷新频率 |
 | 每日审计文档大小 | ~10KB/文档 | 含 params 字段的平均大小 |
 | 日审计数据量 | ~100MB | 10,000 × 10KB |
-| 90 天审计数据量 | ~9GB | 初始阶段，随使用增长可扩展 |
+| 365 天审计数据量 | ~36GB | 初始阶段，随使用增长可扩展，按 TTL=365 天估算 |
 | QualitySummary 文档数 | ~100/天 | 按 (domain, security_id, date) 聚合，非每个 query |
-| QualitySummary 总大小 | < 1MB | 100 文档/天 × 90 天 = 9,000 文档 |
+| QualitySummary 总大小 | < 4MB | 100 文档/天 × 365 天 = 36,500 文档 |
 
 ---
 
@@ -1438,49 +1503,63 @@ PYTHONPATH=. pytest tests/data/unified_data/test_quality_scorer.py tests/data/un
 
 ---
 
-|## 14. router.py 一次性行数豁免记录（Governance Track G2）
+## 14. router.py 一次性行数豁免记录（Governance Track G2 — 已于 G3 取代）
+
+### 14.1 背景
+
+G1（`t_888eabbe`）已将项目 Python 文件硬上限从 300 行调整为 800 行，并同步了 CLAUDE.md、RFC-03-010、DESIGN-03-010。
+Pascal 明确授权本 Phase 2 的 `skills/data/unified_data/router.py`（当前 1115 行）获得一次性、受控豁免，
+以继续独立 Verify（T24 replacement）；这不是普遍 >800 行豁免。
+
+> **G3 更新（2026-07-16）**：G3 将项目文件行数硬上限从 800 升级为 1200/2400/3600 四级分级（详见 CLAUDE.md:182 与 §14.6）。router.py 当前约 1195 行处于 ≤1200 常规范围，原 G2 的「下次扩展必须拆分 ≤800」不再是当前强制规则——下一次实质性功能扩展前仅需按 G3「1201–2400 受控扩张」规则操作（在 Design/PR 中说明职责边界、增长原因和拆分触发条件，需独立 Review）。
 |
-|### 14.1 背景
-|
-|G1（`t_888eabbe`）已将项目 Python 文件硬上限从 300 行调整为 800 行，并同步了 CLAUDE.md、RFC-03-010、DESIGN-03-010。
-|Pascal 明确授权本 Phase 2 的 `skills/data/unified_data/router.py`（当前 1115 行）获得一次性、受控豁免，
-|以继续独立 Verify（T24 replacement）；这不是普遍 >800 行豁免。
-|
-|### 14.2 适用对象与范围
-|
-|| 项目 | 值 |
-||------|-----|
-|| 豁免对象 | `skills/data/unified_data/router.py`（本次 `+151/-17`，变更后 ~1115 行） |
-|| 豁免范围 | 仅 DataRouter Health + Quality/Audit 集成及 T24 replacement 独立验证所需 diff |
-|| 本 Design 内引用 | §4.2 Router 集成（health_state 过滤）、§7 DataRouter 质量填充集成 |
-|| 风险等级 | 低（reader 影响，不暴露外部调用方，不修改已有公共契约） |
-|
-|### 14.3 边界与约束
-|
-|1. **不改业务语义**：本次 diff（+151/-17）不改变 DataRouter.query()、_resolve_external_chain、_query_external_single 的输入输出契约。
-|2. **不借机扩展**：不允许将其他文件（registry.py、quality 子包、audit 子包、config.py 等）也拉入豁免范围。不允许借本次豁免引入超出当前 Phase 2 质量/审计集成范围的功能。
-|3. **后续治理**：对 router.py 的下一次实质性功能扩展，必须先有拆分/重构 Design，将 ~1115 行按职责拆分为独立模块，再执行实现。不允许在 router.py 原文件上继续叠加功能。
-|4. **文档约束**：本豁免记录不影响 Phase 2 的设计契约、行为矩阵（DR-301~309）、兼容性声明、测试策略和验收标准。
-|5. **测试约束**：不得为凑行数或跳过豁免边界捏造测试结果。所有测试按 §9 现有策略执行。
-|
-|### 14.4 原始状态核实
-|
-|豁免判定时 `router.py` 的确认状态：
-|
-|- 总行数：~1115 行（含 43 行 __init__ + 2 个主 query 方法 + _resolve_external_chain + _query_external_single + 39 行 class + import + docstring + 末尾 footer）
-|- 本次 diff：+151 / -17（Phase 2：quality_scorer/audit_logger 参数 + 尾部评分/审计调用 + health_state 过滤 + 辅助 _filter_healthy）
-|- 超限比例：1115 / 800 ≈ 139%（超出 315 行）
-|- 超限原因：router.py 本身是 Phase 0 时期按"单文件路由"模式编写的，含 4 个外部查询路径+fallback 链+缓存策略+错误处理，现阶段拆分成本大于收益
-|
-> ⚠️ **演化承诺**：当 router.py 的下一次实质性功能变更到来时（Phase 3 或 Sector Router 或新数据通路），必须执行拆分：将健康检查/过滤独立到 `router/health.py`、质量集成独立到 `router/quality_mixin.py` 或 `_quality_integration` 模块，确保拆分后每个文件 ≤ 800 行。
-|
-|### 14.5 治理历史
-|
-|| 事件 | 时间 | 决策 | 产出 |
-||------|------|------|------|
-|| G1 调整上限 | 2026-07-16 | Python 硬上限 300→800 | CLAUDE.md + RFC-03-010 + DESIGN-03-010 同步 |
-|| G2 豁免记录 | 2026-07-16 | router.py 一次性豁免 1115 行 | 本 §14 |
-|| 下次功能扩展前 | TBD | 必须执行拆分 Design | 独立的 `router/` 子包 + 各文件 ≤ 800 行 |
+### 14.2 适用对象与范围
+
+| 项目 | 值 |
+|------|-----|
+| 豁免对象 | `skills/data/unified_data/router.py`（本次 `+151/-17`，变更后 ~1115 行） |
+| 豁免范围 | 仅 DataRouter Health + Quality/Audit 集成及 T24 replacement 独立验证所需 diff |
+| 本 Design 内引用 | §4.2 Router 集成（health_state 过滤）、§7 DataRouter 质量填充集成 |
+| 风险等级 | 低（reader 影响，不暴露外部调用方，不修改已有公共契约） |
+
+### 14.3 边界与约束
+
+1. **不改业务语义**：本次 diff（+151/-17）不改变 DataRouter.query()、_resolve_external_chain、_query_external_single 的输入输出契约。
+2. **不借机扩展**：不允许将其他文件（registry.py、quality 子包、audit 子包、config.py 等）也拉入豁免范围。不允许借本次豁免引入超出当前 Phase 2 质量/审计集成范围的功能。
+3. **后续治理（G2 原始约束，G3 已生效）**：对 router.py 的下一次实质性功能扩展，须按 G3「1201–2400 受控扩张」规则操作——在 Design/PR 中说明职责边界、增长原因和拆分触发条件，需独立 Review。G3 允许在不超过 2400 行的前提下继续叠加，且不强制拆分。
+4. **文档约束**：本豁免记录不影响 Phase 2 的设计契约、行为矩阵（DR-301~309）、兼容性声明、测试策略和验收标准。
+5. **测试约束**：不得为凑行数或跳过豁免边界捏造测试结果。所有测试按 §9 现有策略执行。
+
+### 14.4 原始状态核实
+
+豁免判定时 `router.py` 的确认状态：
+
+- 总行数：~1115 行（含 43 行 __init__ + 2 个主 query 方法 + _resolve_external_chain + _query_external_single + 39 行 class + import + docstring + 末尾 footer）
+- 本次 diff：+151 / -17（Phase 2：quality_scorer/audit_logger 参数 + 尾部评分/审计调用 + health_state 过滤 + 辅助 _filter_healthy）
+- 超限比例（G2 时期计算）：1115 / 800 ≈ 139%（超出 315 行）—— G3 生效后 router.py 当前约 1195 行已进入 ≤1200 常规范围，不再超限
+- 超限原因：router.py 本身是 Phase 0 时期按"单文件路由"模式编写的，含 4 个外部查询路径+fallback 链+缓存策略+错误处理，现阶段拆分成本大于收益
+
+> ⚠️ **演化承诺**：当 router.py 的下一次实质性功能变更到来时（Phase 3 或 Sector Router 或新数据通路），建议评估按职责拆分的维护性收益。G3 不强制拆分，但若文件超过 1200 行进入「受控扩张」级别，须遵守对应规则。
+
+### 14.5 治理历史
+
+| 事件 | 时间 | 决策 | 产出 |
+|------|------|------|------|
+| G1 调整上限 | 2026-07-16 | Python 硬上限 300→800 | CLAUDE.md + RFC-03-010 + DESIGN-03-010 同步 |
+| G2 豁免记录 | 2026-07-16 | router.py 一次性豁免 1115 行 | 本 §14 |
+| G3 四级分级上线 | 2026-07-16 | 将 800 单阈值升级为 1200/2400/3600 四级分级 | CLAUDE.md:182、本 §14.6 |
+| 下次功能扩展前 | TBD | G2 原始约束已由 G3 取代；按 G3 1201–2400 受控扩张规则执行 | 独立 Review |
+
+### 14.6 G3 四级分级规则（当前生效，2026-07-16）
+
+CLAUDE.md:182 同步的四级行数治理政策：
+
+| 范围 | 规则 |
+|------|------|
+| ≤1200 行：常规范围 | 新建/修改文件可正常演进，仍以职责内聚为目标 |
+| 1201–2400 行：受控扩张 | 下一次实质性功能扩展前须在 Design/PR 中说明职责边界、增长原因和拆分触发条件；需要独立 Review |
+| 2401–3599 行：架构例外 | 下一次实质性功能扩展前必须有 Principal Design，定义拆分模块/迁移顺序/验证；不得在无设计情况下继续叠加 |
+| ≥3600 行：禁止继续扩张 | 必须先完成拆分或取得 Pascal 针对具体文件的明确豁免 |
 |
 |## 15. 参考资料
 

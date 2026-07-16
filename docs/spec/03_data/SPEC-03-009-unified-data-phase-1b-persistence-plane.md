@@ -76,7 +76,7 @@
 - [ ] LocalMongoAdapter 实现：`__init__` / `get` / `put` / `invalidate`，仅操作 `03_data_ud_*` 集合。
 - [ ] CacheManager 实现（持久化版）：`__init__` / `get` / `put` / `invalidate`，仅操作 `03_data_ud_cache_*` 集合。
 - [ ] `03_data_ud_*` 与 `03_data_ud_cache_*` 数据信封定义：document schema、key 组成、TTL/freshness 行为。
-- [ ] DataRouter 构造函数守卫移除：条件化而非删除，`None` 默认值保留向后兼容。
+- [ ] DataRouter 构造函数守卫移除：直接删除两项 ValueError guard，`None` 默认值使 Step 2/3 自然跳过，由 helper 写具名 skip trace。
 - [ ] DataRouter Step 2/3 编排逻辑：激活条件、读优先顺序、过期判定、force_refresh/provider 影响。
 - [ ] 物化写入触发链：外部 Provider 成功后的同步写入 + CacheManager.put()、catch-and-log。
 - [ ] 缓存失败不阻塞行为：get/put 异常全部 catch-and-log，不阻断 Step 链。
@@ -108,12 +108,12 @@
 
 | 编号 | 行为 | 输入 | 输出 | 错误/边界 |
 |---|---|---|---|---|
-| DR-201 | Step 2 激活 | `self._local_mongo_adapter is not None` AND NOT `force_refresh` AND provider 未指定外部 | 查 `03_data_ud_*`，命中返回 DataResult | adapter 为 None / force_refresh / provider 指定外部 → 跳过 Step 2 |
+| DR-201 | Step 2 激活 | `self._local_mongo_adapter is not None` AND provider 未指定外部；force_refresh 于 helper 内部处理（记录 skipped trace，不调底层 get()） | 查 `03_data_ud_*`，命中返回 DataResult | adapter 为 None / provider 指定外部 → 跳过 Step 2；force_refresh 时 helper 内记录 skipped trace 后返回 None |
 | DR-202 | Step 2 命中未过期 | LocalMongoAdapter.get() 返回非空且 `expires_at > now` | `DataResult(provider="ud_materialized", freshness="cached")` | — |
 | DR-203 | Step 2 命中但过期 | LocalMongoAdapter.get() 返回非空但 `expires_at <= now` | 不返回过期数据，继续 Step 3 | 过期物化不返回，不删除（供后续重建） |
 | DR-204 | Step 2 未命中 | LocalMongoAdapter.get() 返回 None | 继续 Step 3 | — |
 | DR-205 | Step 2 异常 | LocalMongoAdapter.get() 抛异常 | catch-and-log, trace 记录 `"ud_materialized(error: ...)"`, 继续 Step 3 | 不阻断 |
-| DR-206 | Step 3 激活 | `self._cache_manager is not None` AND NOT `force_refresh` | 查 `03_data_ud_cache_*`，命中返回 DataResult | manager 为 None / force_refresh → 跳过 Step 3 |
+| DR-206 | Step 3 激活 | `self._cache_manager is not None`；force_refresh 于 helper 内部处理（记录 skipped trace，不调底层 get()） | 查 `03_data_ud_cache_*`，命中返回 DataResult | manager 为 None → 跳过 Step 3；force_refresh 时 helper 内记录 skipped trace 后返回 None |
 | DR-207 | Step 3 命中未过期 | CacheManager.get() 返回非空 + 未过期 | `DataResult(freshness="cached")`，provider 保持原值 | — |
 | DR-208 | Step 3 命中但过期 | CacheManager.get() 返回非空但过期 | 继续 Step 4 | 过期缓存不返回 |
 | DR-209 | Step 3 未命中 | CacheManager.get() 返回 None | 继续 Step 4 | — |
@@ -361,14 +361,16 @@ query(domain, operation, sid, provider=None, force_refresh=False, params):
             return result                              # 命中或 TA-CN 覆盖但空
 
     # Step 2: [1B-B] UD 物化
-    if not force_refresh and self._local_mongo_adapter is not None:
-        result = _try_materialized(sid, domain, operation, params, trace, ts)
+    # force_refresh 由 helper 内部处理（记录 skipped trace，不调底层 get()）
+    if self._local_mongo_adapter is not None:
+        result = _try_materialized(sid, domain, operation, params, trace, ts, force_refresh=force_refresh)
         if result is not None:
             return result                              # 物化命中未过期
 
     # Step 3: [1B-B] Query Cache
-    if not force_refresh and self._cache_manager is not None:
-        result = _try_cache(sid, domain, operation, params, trace, ts)
+    # force_refresh 由 helper 内部处理（记录 skipped trace，不调底层 get()）
+    if self._cache_manager is not None:
+        result = _try_cache(sid, domain, operation, params, trace, ts, force_refresh=force_refresh)
         if result is not None:
             return result                              # Cache 命中未过期
 
@@ -382,7 +384,10 @@ query(domain, operation, sid, provider=None, force_refresh=False, params):
 **`_try_materialized` 行为**：
 
 ```python
-def _try_materialized(sid, domain, operation, params, trace, ts):
+def _try_materialized(sid, domain, operation, params, trace, ts, force_refresh=False):
+    if force_refresh:
+        trace.append("ud_materialized(skipped: force_refresh)")
+        return None
     try:
         cached = self._local_mongo_adapter.get(sid, domain, operation, params)
         if cached is not None:
@@ -398,7 +403,10 @@ def _try_materialized(sid, domain, operation, params, trace, ts):
 **`_try_cache` 行为**：
 
 ```python
-def _try_cache(sid, domain, operation, params, trace, ts):
+def _try_cache(sid, domain, operation, params, trace, ts, force_refresh=False):
+    if force_refresh:
+        trace.append("cache(skipped: force_refresh)")
+        return None
     try:
         cached = self._cache_manager.get(sid, domain, operation, params)
         if cached is not None:

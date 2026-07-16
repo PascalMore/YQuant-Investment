@@ -172,7 +172,8 @@ DataResult 已有 `quality_score: float | None = None` 占位字段（Phase 0）
                      ▼
 ┌──────────────────────────────────────────────┐
 │              QualitySummary                    │
-│  → upsert to 03_data_ud_quality_summary       │
+|  → upsert to 03_data_ud_quality_summary
+│  （Phase 1 禁用：不注入 QualitySummary，TTL=365 天作为后续确认值）
 └──────────────────────────────────────────────┘
 ```
 
@@ -298,16 +299,24 @@ QualityScorer 必须支持：
 
 - 集合名：`tradingagents.03_data_ud_query_audit`
 - 模式：append-only（不 update、不 delete、仅 insert）
-- TTL：90 天（按 `fetched_at` 自动过期）
-- 索引：`fetched_at`（TTL 索引）、`(security_id, fetched_at)` 复合索引、`(capability, fetched_at)` 复合索引
+- TTL：365 天（按 `fetched_at` 自动过期，Pascal 已确认）
+- 索引：`fetched_at`（TTL 索引，`expireAfterSeconds` = 365 × 86400）、`(security_id, fetched_at)` 复合索引、`(capability, fetched_at)` 复合索引
 
-TTL 具体值（90 天）在 Design 阶段由 Pascal 确认。
+TTL 值（365 天）已由 Pascal 确认。
 
 #### 7.3.3 写入策略
 
 - **同步**：每次 DataRouter.query() 返回后同步写入（catch-and-log）。写入失败不影响 query 返回值。
 - **采样**：不采样——每次 query 都记录（Phase 2 基础要求）。批量/采样策略属于 Phase 3+
 - **去重**：不要求审计事件严格去重（append-only 自然重复）。幂等性不在此阶段要求。
+- **params 字段**（Pascal 已确认）：采用 params 白名单策略，只记录允许的查询参数键。敏感字段（凭据、令牌、密钥）默认丢弃，不进入审计文档。具体白名单在 Implement 阶段固化。
+
+#### 7.3.4 写入失败策略（Pascal 已确认）
+
+- **fail-open**：`AuditLogger` 写入失败不阻断主查询返回，不重试，不阻塞调用方。
+- **本地结构化日志**：写入失败时通过 `logger.warning` 输出本地日志，包含失败原因和写入集合名。
+- **不接外部告警**：Phase 1 写入失败不接外部告警系统（PagerDuty/短信/Telegram），仅本地日志 + 计数器。外部告警属于 Phase 3+。
+- **已写入数据不自动删除**：回滚优先停用注入，已有审计数据保留。
 
 ### 7.4 QualitySummary
 
@@ -332,7 +341,7 @@ TTL 具体值（90 天）在 Design 阶段由 Pascal 确认。
 
 - 集合名：`tradingagents.03_data_ud_quality_summary`
 - 模式：upsert（按 `(domain, security_id, date)` 复合键 upsert）
-- TTL：不设集合级 TTL（保留历史，无自动过期）
+- TTL：365 天（按 `date` 自动过期；Phase 1 不启用，TTL 作为后续启用时的已确认值）
 - 索引：`(domain, security_id, date)` 唯一复合索引
 
 #### 7.4.3 写入策略
@@ -346,10 +355,10 @@ TTL 具体值（90 天）在 Design 阶段由 Pascal 确认。
 
 ### 8.1 新增集合
 
-| 集合 | 操作 | DDL（集合/索引创建） | DML（写入） |
-|------|------|---------------------|------------|
-| `03_data_ud_query_audit` | insert（append-only） | Design 阶段 Pascal 确认 | Design 阶段 Pascal 确认写后端 |
-| `03_data_ud_quality_summary` | upsert | Design 阶段 Pascal 确认 | Design 阶段 Pascal 确认写后端 |
+| 集合 | 操作 | DDL（集合/索引创建） | DML（写入） | Phase 1 状态 |
+|------|------|---------------------|------------|--------------|
+| `03_data_ud_query_audit` | insert（append-only） | Pascal 已确认：TTL 索引 expireAfterSeconds=365×86400 + 二级索引 | 仅 AuditLogger 写入 | ✅ 启用（Audit-only Phase 1） |
+| `03_data_ud_quality_summary` | upsert | Pascal 已确认：TTL=365 天 | QualitySummary 不注入 | ❌ 禁用（TTL=365 天作为后续启用时的已确认值） |
 
 ### 8.2 确认流程
 
@@ -370,12 +379,46 @@ Pascal 确认 （Yes/No/修正）
   - Pascal 确认后：真实 MongoDB 写入 + 索引创建（通过 MigrationScript 或 rollback-safe 部署）
 ```
 
-### 8.3 Implement 阶段默认行为（Pascal 确认前）
+### 8.3 Phase 1 实现阶段默认行为与范围
 
-- `AuditLogger`：默认使用 `noop` 后端（不写入任何 MongoDB），可选注入 `mongomock` 后端用于测试。
-- `QualitySummary`：默认使用 `noop` 后端。
+**Audit-only Phase 1 声明**（Pascal 已确认）：
+- 第一阶段仅只记 query audit；不注入 QualitySummary；不让 quality tier 影响业务行为（质量语义仅观测，不构成业务门禁）。
+- `AuditLogger`：默认使用 `noop` 后端（不写入任何 MongoDB），可选注入 `mongomock` 后端用于测试。经 Pascal 确认后启用真实 MongoDB 写入。
+- `QualitySummary`：**整个 Phase 1 不注入**（包括 noop 实例也不创建）。其在 `AuditLogger.__init__` 中的参数始终保持 `None`。其 TTL=365 天作为后续启用时的已确认值记录在案。
 - 所有测试使用 `mongomock`，不依赖真实 MongoDB。
 - 所有实现代码在生产路径上有 `is_mongo_configured` 守卫（或等价机制），确保无 MongoDB 时静默降级为 no-op。
+
+### 8.4 MongoDB 权限分层架构（Pascal 已确认）
+
+| 账号/角色 | 用途 | 权限范围 | 备注 |
+|-----------|------|----------|------|
+| **运行时审计账号** | AuditLogger 日常写入 | 对 `03_data_ud_query_audit` 的 insert-only 权限 | 最小权限原则，仅能写入审计集合 |
+| **DDL/索引账号** | 集合创建、索引创建、TTL 设置 | 对 `03_data_ud_*` 集合的 createIndex / createCollection | 与运行时审计账号分离，仅在部署/迁移时使用 |
+| **未来只读账号** | 报告查询、故障排查 | 对 `03_data_ud_*` 集合的 read-only | Phase 1 不创建，报告/排查需使用时再建 |
+| **审计账号禁止复用** | — | **不得**具备 portfolio、Smart Money、交易、缓存和既有业务集合（`portfolio_*`、`smart_money_*`、`signal_*` 等）的任何权限 | 隔离遵守「审计账号不跨业务域」原则 |
+
+### 8.5 Rollout 策略（Pascal 已确认）
+
+```
+第 1 步：DDL
+  - 创建 03_data_ud_query_audit 集合 + TTL 索引（expireAfterSeconds=365×86400）+ 二级索引
+  - 创建 03_data_ud_quality_summary 集合 + TTL 索引（expireAfterSeconds=365×86400）
+  - 使用独立 DDL 账号，建好即销毁连接
+
+第 2 步：真实 smoke
+  - 在生产环境用真实 AuditLogger 写入一条审计记录 → 立即读取验证 schema
+  - 验证 TTL 索引存在且 expireAfterSeconds 正确
+  - 验证写入失败不阻断主查询
+
+第 3 步：小范围 Audit-only 金丝雀
+  - 在 1–2 个低流量 capability（如 metadata.*）启用 AuditLogger 真实写入
+  - 观察 24–48h：写入成功率、延迟、无副作用
+
+第 4 步：观察
+  - 金丝雀通过后逐步开放到全部 capability
+  - 持续观察 1–2 周，每日检查 audit 数据量和写入延迟
+  - 回滚预案：停用 AuditLogger 注入（mongo_db=None），已写入数据保留不删
+```
 
 ---
 
@@ -452,7 +495,7 @@ Pascal 确认 （Yes/No/修正）
 
 4. **明确写出由 Design 固化的边界**：
    - 评分公式/权重 → SPEC §6 中声明默认值或待定
-   - TTL 具体值（90 天）→ §7.3.2 声明待 Pascal 确认
+   - TTL 具体值（365 天，Pascal 已确认）→ §7.3.2
    - 索引策略细节 → SPEC §7 给出候选索引
 
 5. **明确禁止在 Pascal 确认生产副作用前创建集合/索引/真实写入** → §8.3

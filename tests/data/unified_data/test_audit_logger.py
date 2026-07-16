@@ -279,3 +279,170 @@ class TestCustomCollection:
         logger.log(result_ok)
         assert "custom_audit_collection" in mongomock_db.list_collection_names()
         assert "03_data_ud_query_audit" not in mongomock_db.list_collection_names()
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 rollout fixes — params allow-list + sensitive deny-list + 365d TTL
+# (DESIGN-03-011 §5.3, §8.6 — Pascal 已确认)
+# ---------------------------------------------------------------------------
+
+
+class TestDefaultTtlDays:
+    """AL-301: ttl_days 默认 365 天（Pascal 已确认；非历史 90）。"""
+
+    def test_default_ttl_days_is_365(self):
+        from skills.data.unified_data.audit import AuditLogger as AL
+
+        assert AL().ttl_days == 365
+
+    def test_explicit_ttl_days_honored(self):
+        from skills.data.unified_data.audit import AuditLogger as AL
+
+        assert AL(ttl_days=120).ttl_days == 120
+
+
+class TestParamsAllowList:
+    """AL-302..308: params 严格白名单 + 敏感 deny-list。"""
+
+    def test_known_query_keys_kept(self, result_ok, mongomock_db):
+        AuditLogger(mongo_db=mongomock_db).log(
+            result_ok,
+            params={
+                "security_id": "CN:600519",
+                "market": "CN",
+                "domain": "market_data",
+                "operation": "kline_daily",
+                "start_date": "2026-07-01",
+                "end_date": "2026-07-16",
+                "limit": 120,
+                "frequency": "1d",
+                "provider": "tushare",
+                "consumer": "ud_test",
+                "force_refresh": False,
+            },
+        )
+        doc = mongomock_db["03_data_ud_query_audit"].find_one({})
+        assert doc is not None
+        for key in (
+            "security_id", "market", "domain", "operation",
+            "start_date", "end_date", "limit", "frequency",
+            "provider", "consumer", "force_refresh",
+        ):
+            assert key in doc["params"], f"allowed key dropped: {key}"
+
+    def test_unknown_keys_dropped(self, result_ok, mongomock_db):
+        AuditLogger(mongo_db=mongomock_db).log(
+            result_ok,
+            params={
+                "limit": 50,
+                "sneaky_field": "x",
+                "internal_token": "leaked",  # both unknown AND contains token
+                "trace_id": "abc",
+                "extra_blob": {"foo": "bar"},
+            },
+        )
+        doc = mongomock_db["03_data_ud_query_audit"].find_one({})
+        assert doc is not None
+        assert doc["params"] == {"limit": 50}
+
+    def test_sensitive_keys_never_persisted(self, result_ok, mongomock_db):
+        AuditLogger(mongo_db=mongomock_db).log(
+            result_ok,
+            params={
+                "token": "leaked-token",
+                "password": "leaked-pw",
+                "secret": "leaked-secret",
+                "Authorization": "Bearer leaked",
+                "cookie": "session=leaked",
+                "mongodb_uri": "mongodb://user:pass@host",
+                "api_key": "leaked-key",
+                "limit": 10,
+            },
+        )
+        doc = mongomock_db["03_data_ud_query_audit"].find_one({})
+        assert doc is not None
+        serialized = repr(doc["params"]).lower()
+        for forbidden in (
+            "token", "password", "secret", "bearer", "cookie",
+            "mongodb://", "api_key", "leaked",
+        ):
+            assert forbidden not in serialized, (
+                f"sensitive substring {forbidden!r} leaked into params: {doc['params']!r}"
+            )
+        # allow-list 中的 limit 仍保留
+        assert doc["params"].get("limit") == 10
+
+    def test_connection_string_substring_dropped(self, result_ok, mongomock_db):
+        # 即使键名是某个允许的语义字段，子串匹配到 mongodb:// 也丢弃
+        AuditLogger(mongo_db=mongomock_db).log(
+            result_ok,
+            params={
+                "market": "mongodb://localhost:27017",
+                "limit": 5,
+            },
+        )
+        doc = mongomock_db["03_data_ud_query_audit"].find_one({})
+        assert doc is not None
+        assert "market" not in doc["params"], (
+            "connection-string value must be dropped even if key is allow-listed"
+        )
+        assert doc["params"] == {"limit": 5}
+
+    def test_none_params_yields_empty_dict(self, result_ok, mongomock_db):
+        AuditLogger(mongo_db=mongomock_db).log(result_ok, params=None)
+        doc = mongomock_db["03_data_ud_query_audit"].find_one({})
+        assert doc is not None
+        assert doc["params"] == {}
+
+    def test_non_string_key_dropped(self, result_ok, mongomock_db):
+        AuditLogger(mongo_db=mongomock_db).log(
+            result_ok,
+            params={"limit": 7, 123: "numeric-key", ("a", "b"): "tuple-key"},
+        )
+        doc = mongomock_db["03_data_ud_query_audit"].find_one({})
+        assert doc is not None
+        assert doc["params"] == {"limit": 7}
+
+    def test_sanitize_helper_directly(self):
+        from skills.data.unified_data.audit import (
+            ALLOWED_PARAM_KEYS,
+            sanitize_params,
+        )
+
+        # 已确认的 allow-list 必须至少包含这些键（SPEC/RFC 已声明的 query 语义字段）
+        for key in (
+            "security_id", "market", "domain", "operation",
+            "limit", "frequency", "provider", "consumer",
+            "force_refresh",
+        ):
+            assert key in ALLOWED_PARAM_KEYS, (
+                f"required allow-list key missing: {key}"
+            )
+
+        sanitized = sanitize_params(
+            {"limit": 1, "TOKEN": "x", "mongodb_uri": "mongodb://x", "x": 1}
+        )
+        assert sanitized == {"limit": 1}
+
+
+class TestAuditContractUnchanged:
+    """AL-309: 既有 noop / catch-and-log 语义保持。"""
+
+    def test_default_ctor_uses_365(self):
+        # 默认 365，且不创建任何索引/连接
+        al = AuditLogger()
+        assert al.ttl_days == 365
+        # mongo_db=None 时 log 必须不抛
+        from datetime import datetime
+        from skills.data.unified_data import DataResult, Market, SecurityId
+        r = DataResult(
+            data=[{"close": 1.0}],
+            security_id=SecurityId(market=Market.CN, symbol="000001"),
+            domain="market_data",
+            operation="kline_daily",
+            provider="ta_cn_internal",
+            fetched_at=datetime.now(),
+            freshness="delayed",
+            quality_score=1.0,
+        )
+        assert al.log(r) is None

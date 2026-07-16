@@ -28,7 +28,7 @@
 
 RFC-03-008 将 Phase 1B 拆为 1B-A（查询平面）与 1B-B（持久化缓存平面）。1B-A 已在 2026-07-14 交付（313 测试 PASS、零 Mongo 副作用、internal-first 路由编排稳定）。本 RFC 定义 **1B-B 持久化缓存平面**：
 
-- **LocalMongoAdapter**：只读 Unified Data 自有物化集合（`03_data_ud_*`），是 internal-first 路径的第 2 层。
+- **LocalMongoAdapter**：读取 Unified Data 自有物化集合（`03_data_ud_*`），是 internal-first 路径的第 2 层。TA-CN 无前缀业务集合严格只读；`03_data_ud_*` 仅在外部 Provider 成功后的物化写入（materialization）路径中可写。
 - **CacheManager**：读写短 TTL Query Cache（`03_data_ud_cache_*`），是 internal-first 路径的第 3 层。
 - **DataRouter slot-in**：激活 `router.py` 中已预留但被 ValueError 硬守卫的 `local_mongo_adapter` / `cache_manager` 两个构造参数。
 - **internal-first 完整四步路径生效**：TA-CN → UD 物化 → Query Cache → 外部 Provider。
@@ -58,7 +58,7 @@ if cache_manager is not None:
     raise ValueError("cache_manager is a Phase 1B-B slot; Phase 1B-A must pass None.")
 ```
 
-1B-B 的核心任务就是：**实现这两个组件，并移除（或条件化）ValueError 守卫，让 Router 的四步路径完整生效。**
+1B-B 的核心任务就是：**实现这两个组件，并直接删除 ValueError 守卫（保留 None 默认值保持向后兼容），让 Router 的四步路径完整生效。**
 
 ### 2.2 痛点
 
@@ -96,10 +96,10 @@ if cache_manager is not None:
 
 ### 3.1 必须目标（Must-Have）
 
-- [ ] 定义 `LocalMongoAdapter` 的精确公共接口：只读 `03_data_ud_*` 物化集合，按 `(security_id, domain, operation, params)` 查询，返回 `DataResult | None`。
+- [ ] 定义 `LocalMongoAdapter` 的精确公共接口：读取 `03_data_ud_*` 物化集合（仅外部 Provider 成功后的物化写入需要写权限），按 `(security_id, domain, operation, params)` 查询，返回 `DataResult | None`。
 - [ ] 定义 `CacheManager` 的精确公共接口：读写 `03_data_ud_cache_*` 短 TTL Query Cache，含 `get` / `put` / `invalidate` / `force_refresh` 语义。
 - [ ] 定义 `03_data_ud_*`（物化）与 `03_data_ud_cache_*`（Query Cache）的**数据信封**（document schema）、key 组成、TTL/freshness 规则、读写/invalidate 行为。
-- [ ] 定义 DataRouter 的 **Step 2/3 激活**机制：移除或条件化 ValueError 守卫，让 `local_mongo_adapter` / `cache_manager` 可注入并生效。
+- [ ] 定义 DataRouter 的 **Step 2/3 激活**机制：直接删除 ValueError 守卫，让 `local_mongo_adapter` / `cache_manager` 可注入并生效。
 - [ ] 定义 **internal-first 完整四步读优先顺序**：TA-CN 既有 → UD 物化 → Query Cache → 外部 Provider；Cache hit 时外部调用为 0。
 - [ ] 定义 **allow-list / 幂等 / 静默 / 错误归类 / source_trace** 行为契约。
 - [ ] 定义 **缓存失败不得阻塞正常查询**：CacheManager.get/put 异常时 catch-and-log，不影响 DataRouter 返回正确结果。
@@ -217,7 +217,7 @@ DataRouter.query()
   │    └─ 外部 provider 名 → 只走 Step 4 指定（1B-A 行为不变）
   │
   ├─ force_refresh=True?
-  │    └─ 跳过 Step 1/2/3，直接进 Step 4
+  │    └─ Step 1 跳过；Step 2/3 helper 仍可达（内部记录 `ud_materialized(skipped: force_refresh)` 和 `cache(skipped: force_refresh)` trace 后返回 None，均不调底层 get()）。直接进 Step 4
   │
   ├─ Step 1: 查 TA-CN adapter（只读，Phase 1A 既有）
   │    ├─ 命中 → 返回 DataResult(provider="ta_cn_internal")
@@ -258,7 +258,7 @@ DataRouter.query()
 | 全部内部未命中 + 外部全部不可用 | 返回 error | provider="error", freshness="empty" |
 | LocalMongoAdapter 异常 | catch-and-log, 继续 Step 3 | 不因物化异常阻断 |
 | CacheManager 异常 | catch-and-log, 继续 Step 4 | 不因 Cache 异常阻断 |
-| force_refresh=True | 跳过 Step 1/2/3 | provider=实际 provider |
+| force_refresh=True | Step 1 跳过；Step 2/3 helper 内记录 (`skipped: force_refresh`) trace 后返回 None，均不调底层 get()。直接进 Step 4 | provider=实际 provider |
 | provider="tushare" 指定 | 只走 Step 4 tushare | 1B-A 行为不变 |
 | 物化命中但过期 | 不返回过期物化，继续 Step 3/4 | — |
 
@@ -266,7 +266,7 @@ DataRouter.query()
 
 #### 5.2.1 定位
 
-LocalMongoAdapter 是 internal-first 读取路径的 **第 2 层**，负责只读 Unified Data 自有物化集合（`03_data_ud_*`）。与 `TA_CNMongoAdapter` 的区别：
+LocalMongoAdapter 是 internal-first 读取路径的 **第 2 层**，负责读取 Unified Data 自有物化集合（`03_data_ud_*`；仅在外部 Provider 成功后的物化写入路径中写）。与 `TA_CNMongoAdapter` 的区别：
 
 | 维度 | TA_CNMongoAdapter | LocalMongoAdapter |
 |---|---|---|
@@ -427,8 +427,8 @@ cache_key = sha256(
 
 | Step | 激活条件 | 跳过条件 |
 |---|---|---|
-| Step 2（物化） | `self._local_mongo_adapter is not None` AND NOT force_refresh AND provider 未指定外部 | adapter 为 None / force_refresh / provider 指定外部 |
-| Step 3（Cache） | `self._cache_manager is not None` AND NOT force_refresh | manager 为 None / force_refresh |
+| Step 2（物化） | `self._local_mongo_adapter is not None` AND provider 未指定外部；force_refresh 于 helper 内部处理（记录 skipped trace，不调底层 get()） | adapter 为 None / provider 指定外部 |
+| Step 3（Cache） | `self._cache_manager is not None`；force_refresh 于 helper 内部处理（记录 skipped trace，不调底层 get()） | manager 为 None |
 
 #### 5.4.3 物化写入触发
 
@@ -460,8 +460,7 @@ cache_key = sha256(
 
 `force_refresh=True`：
 - 跳过 Step 1（TA-CN）。
-- 跳过 Step 2（物化读取）。
-- 跳过 Step 3（Cache 读取）。
+- Step 2/3 helper 仍然可达：内部记录 `ud_materialized(skipped: force_refresh)` / `cache(skipped: force_refresh)` 后返回 None，均不调用底层 get()。
 - 直接走 Step 4（外部 Provider）。
 - Step 4 成功后**仍写入**物化 + Cache（刷新后更新缓存）。
 
@@ -522,7 +521,7 @@ cache_key = sha256(
 | 缓存层异常阻断正常查询 | 中 | 高 | catch-and-log 全覆盖；缓存层永远返回 None/不阻断 | Router 跳过该 Step |
 | 物化写入与查询返回的竞态（写入失败但已返回外部数据） | 低 | 低 | 物化写入异步或同步均可，失败 catch-and-log 不影响返回 | 下次查询重建 |
 | mongomock 与真实 Mongo 行为偏差 | 中 | 中 | 生产 rollout 前补真实 Mongo smoke test（需 Pascal 审批） | — |
-| DataRouter slot-in 破坏 1B-A 现有测试 | 低 | 中 | 保留 `None` 默认值向后兼容；守卫移除用条件化而非删除 | 回退守卫 |
+| DataRouter slot-in 破坏 1B-A 现有测试 | 低 | 中 | 保留 `None` 默认值向后兼容；守卫直接删除（保留 None 默认值） | 回退守卫 |
 | DDL 生产 rollout 未授权即执行 | 低 | 高 | 研发阶段零 DDL；SPEC 明确列出生产 rollout 清单需 Pascal 审批 | — |
 
 ---

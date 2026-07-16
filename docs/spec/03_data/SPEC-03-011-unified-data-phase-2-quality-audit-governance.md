@@ -7,14 +7,15 @@
 | 状态 | 草稿（Draft） |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-07-15 |
-| 最后更新 | 2026-07-15 |
+| 最后更新 | 2026-07-16 |
 | 来源 RFC | RFC-03-011 |
 | 关联 RFC | RFC-03-007（Unified Data Layer）、RFC-03-009（Phase 1B-B 持久化缓存平面） |
 | 关联 SPEC | SPEC-03-007（Unified Data Layer 契约）、SPEC-03-009（Phase 1B-B 持久化缓存平面） |
 | 关联 Design | DESIGN-03-007（Unified Data Layer 详细设计） |
 | 目标模块 | unified_data（`skills/data/unified_data/`） |
 | 适配 Agent | YQuant-Developer-Engineer, YQuant-Test-Engineer |
-| 版本号 | V0.1 |
+| 版本号 | V0.2 |
+| Phase 1 范围 | **Audit-only**：仅 Query Audit（AuditLogger）；QualitySummary 不注入；quality tier 仅观测不构成业务门禁 |
 
 ---
 
@@ -459,14 +460,14 @@ class AuditLogger:
         self,
         mongo_db: Any = None,           # 生产或 mongomock Database；None=noop
         collection_name: str = "03_data_ud_query_audit",
-        ttl_days: int = 90,              # TTL 周期（Design 阶段 Pascal 确认）
+        ttl_days: int = 365,            # TTL 周期（Pascal 已确认：365 天）
     ) -> None:
         """构建 AuditLogger。
 
         Args:
             mongo_db: MongoDB 数据库句柄。None 时 logger 内部不写入任何数据（noop 模式）。
             collection_name: 审计集合名。
-            ttl_days: TTL 过期天数（默认 90 天）。DB 层面使用相同的 TTL 索引。
+            ttl_days: TTL 过期天数（默认 365 天，Pascal 已确认）。DB 层面使用相同的 TTL 索引。
         """
 
     def log(
@@ -513,15 +514,17 @@ class AuditLogger:
 }
 ```
 
+> **params 字段**（Pascal 已确认）：采用 params 白名单策略，只记录允许的查询参数键。敏感字段（凭据、令牌、密钥）默认丢弃，不进入审计文档。`params` 在审计文档中始终存在（最少为空 JSON 对象 `{}`），不得省略。
+
 `quality_warnings` 的类型为 `list[str]`，用于保存 QualityScorer 产生的质量告警；没有告警时必须写入合法默认值空列表 `[]`，不得省略字段或写入 `null`。
 
 ### 6.3 索引
 
 ```javascript
-// TTL 索引（按 fetched_at 过期，90 天）
+// TTL 索引（按 fetched_at 过期，Pascal 已确认：365 天）
 db.03_data_ud_query_audit.createIndex(
   {"fetched_at": 1},
-  {"expireAfterSeconds": 90 * 24 * 3600}
+  {"expireAfterSeconds": 365 * 24 * 3600}
 )
 
 // 按 security_id 查询（排查特定标的的审计记录）
@@ -549,7 +552,11 @@ db.03_data_ud_query_audit.createIndex(
 
 ## 7. QualitySummary 契约
 
-### 7.1 接口签名
+### 7.1 Phase 1 声明
+
+**QualitySummary 在整个 Phase 1 禁用，不注入到 AuditLogger**（即 `AuditLogger.__init__` 的 `quality_summary` 参数始终保持 `None`）。以下 schema 和 TTL 作为后续启用时的已确认值记录在案。
+
+### 7.2 接口签名
 
 ```python
 class QualitySummary:
@@ -613,6 +620,7 @@ class QualitySummary:
 ### 7.2 文档 schema
 
 集合：`tradingagents.03_data_ud_quality_summary`
+TTL：365 天（按 `date` 自动过期；Phase 1 不启用，TTL 作为后续启用时的已确认值）
 
 ```json
 {
@@ -636,6 +644,13 @@ class QualitySummary:
 ### 7.3 索引
 
 ```javascript
+// TTL 索引（按 date 过期，Pascal 已确认：365 天）
+// 本索引在 Phase 1 不创建（QualitySummary 未启用），作为后续启用时的 DDL
+// db.03_data_ud_quality_summary.createIndex(
+//   {"date": 1},
+//   {"expireAfterSeconds": 365 * 24 * 3600}
+// )
+
 // 主键 upsert（复合键 = "domain:security_id:date"），不需要额外唯一索引
 // 按 domain + security_id 快速查询质量趋势
 db.03_data_ud_quality_summary.createIndex(
@@ -675,18 +690,27 @@ if self._audit_logger is not None:
 
 **设计选择**：QualitySummary 的更新由 AuditLogger 触发，而非分别从 Router 调用两次。这样 Router 对 Phase 2 只有一个调用点（`audit_logger.log()`），Router 不直接依赖 QualitySummary 组件。
 
+**Phase 1 约束**：QualitySummary **不注入**。`AuditLogger.__init__` 的 `quality_summary` 参数始终为 `None`，`log()` 内部不执行 `QualitySummary.update()`。上述设计作为后续启用的架构保留。
+
+**写入失败策略**（Pascal 已确认）：
+- **fail-open**：AuditLogger / QualitySummary 写入失败不阻断主查询返回
+- **本地结构化日志**：写入失败时通过 `logger.warning` 输出，包含失败原因和集合名
+- **不接外部告警**：Phase 1 写入失败不接 PagerDuty/短信/Telegram 等外部告警
+- **已写入数据不自动删除**：回滚优先停用注入，已有数据保留
+
 ---
 
 ## 9. Production Gate
 
-### 9.1 Pascal 确认前 Implement 的默认行为
+### 9.1 Phase 1 范围与 Pascal 确认后的行为
 
-| 组件 | Pascal 确认前 | Pascal 确认后 |
-|------|--------------|--------------|
-| AuditLogger | `mongo_db=None`（noop 模式），或显式注入 mongomock | `mongo_db` 指向生产 `tradingagents` 库 |
-| QualitySummary | `mongo_db=None`（noop 模式），或显式注入 mongomock | `mongo_db` 指向生产库 |
-| 集合/索引创建 | 不执行任何 DDL（不在代码/测试/脚本中硬编码 createIndex） | 通过 rollback-safe 部署脚本创建 |
-| 真实 provider smoke | 不执行 | Design 阶段 Pascal 确认后可选 |
+| 组件 | Phase 1（Audit-only） | Pascal 确认后（未来 Phase） |
+|------|----------------------|----------------------------|
+| AuditLogger | `mongo_db=None`（noop 模式），或显式注入 mongomock。经 Pascal 确认 DDL+smoke 后启用真实写入 | `mongo_db` 指向生产 `tradingagents` 库 |
+| QualitySummary | **全程禁用**。`AuditLogger.__init__` 的 `quality_summary` 参数保持 `None`。不创建 noop 实例。 | `mongo_db` 指向生产库 |
+| 集合/索引创建 | **不执行任何 DDL**（不在代码/测试/脚本中硬编码 createIndex） | 通过 rollback-safe 部署脚本创建 |
+| 真实 provider smoke | 不执行 | Pascal 确认后可选 |
+| quality tier 业务影响 | **仅观测**：quality tier 不构成业务门禁，不阻断查询路径 | 待未来 Phase 决策 |
 
 ### 9.2 Implement 代码约束
 

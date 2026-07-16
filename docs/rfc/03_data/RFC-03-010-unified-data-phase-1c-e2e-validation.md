@@ -397,7 +397,7 @@ def e2e_tushare_ok():
 **第 2 轮（T3 Remediation — 裁决后执行）**：
 | 任务 | 文件 | 说明 |
 |---|---|---|
-| 文件拆分 ≤800 行 | test_e2e_*.py 按 DESIGN-03-010 §3.9 拆分 | 入口 + fixtures + 4 场景文件 |
+| 文件按场景职责拆分 | 从 test_e2e_full_chain.py 按场景抽取到独立文件 | 入口 + fixtures + 4 场景文件（可维护性优化，非行数强制） |
 | 精确 source_trace 断言 | 场景 3/4/5 trace 改为 `==` 完整列表 | 按 SPEC-03-010 §6.1.1 执行 |
 | 业务字段断言 | 场景 6 index 外部兜底改 `is not None` 为字段级断言 | 按 SPEC-03-010 §6.1.1 执行 |
 | 全量回归测试 | `pytest tests/data/unified_data -q --tb=long` 全绿 | 确认 374+ passed |
