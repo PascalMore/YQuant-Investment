@@ -2,14 +2,9 @@
 
 The :class:`ProviderRegistry` is an in-memory mapping from capability to
 the list of providers that declare that capability, plus a name → provider
-map for O(1) lookup. Phase 0 keeps it deliberately simple:
-
-* No MongoDB persistence — providers live as long as the Python process.
-* No background health checks — ``is_available()`` is queried on demand.
-* No priority configuration beyond insertion order.
-
-Subsequent phases will add configuration-driven priority, availability
-caching, and provider lifecycle hooks.
+map for O(1) lookup. Phase 2 governance (DESIGN-03-011 §4.1, §4.4) adds
+per-provider ``priority`` and ``health`` state, and ``unregister`` /
+``clear`` reset that state so re-registration starts from defaults.
 """
 
 from __future__ import annotations
@@ -24,23 +19,27 @@ class ProviderRegistry:
     """In-memory registry of :class:`DataProvider` instances.
 
     Capabilities and provider names are normalized at registration time
-    so that ``get_providers("market_data.kline_daily")`` always returns
-    a list in registration order regardless of how the underlying set
-    was constructed.
+    so ``get_providers`` returns a list in registration order when all
+    priorities equal the default.
 
-    Phase 1B-A additions:
+    Phase 1B-A: :attr:`_external_fallback_chains` overrides the external
+    fallback chain per capability (``set_external_fallback_chains`` /
+    ``get_external_fallback_chain``); the Router resolves its chain in
+    priority ``external_fallback_chains[capability] → config
+    .fallback_for(capability) → registry insertion order``.
 
-    * :attr:`_external_fallback_chains` — a per-capability override of
-      the external fallback chain. Set via
-      :meth:`set_external_fallback_chains` and queried via
-      :meth:`get_external_fallback_chain`. The Router resolves its
-      chain in priority ``external_fallback_chains[capability] → config
-      .fallback_for(capability) → registry insertion order``.
+    Phase 2 (DESIGN-03-011 §4.1, §4.4): ``set_priority`` / ``set_health``
+    manage per-provider ``priority`` (default 100) and ``health`` (default
+    ``"healthy"``); ``get_providers`` sorts by ``(priority,
+    insertion_order)`` and applies the optional ``state_filter`` (``None``
+    preserves Phase 0 behaviour); ``unregister`` and ``clear`` atomically
+    reset ``_priorities`` and ``_health_states`` so re-registering the same
+    name starts from defaults (SPEC §4.3 P2-U1/P2-U2).
+    ``_external_fallback_chains`` is configuration state and is left
+    untouched by ``clear``.
     """
 
-    # 默认优先级值（Phase 2 §4.1）
     _DEFAULT_PRIORITY: int = 100
-    # 合法的健康状态（Phase 2 §4.1）
     _ALLOWED_HEALTH_STATES: frozenset[str] = frozenset(
         {"healthy", "unhealthy", "disabled"}
     )
@@ -48,12 +47,7 @@ class ProviderRegistry:
     def __init__(self) -> None:
         self._providers: dict[str, DataProvider] = {}
         self._by_capability: dict[str, list[DataProvider]] = {}
-        # Phase 1B-A: per-capability explicit external fallback chains.
-        # Keys are capability strings, values are ordered provider-name
-        # lists. The Router uses these ahead of the UnifiedDataConfig
-        # override and registry order.
         self._external_fallback_chains: dict[str, list[str]] = {}
-        # Phase 2 §4.1: 运行治理
         self._priorities: dict[str, int] = {}
         self._health_states: dict[str, str] = {}
 
@@ -83,8 +77,8 @@ class ProviderRegistry:
     def unregister(self, name: str) -> bool:
         """Remove the provider named ``name``. Returns whether anything was removed.
 
-        Phase 2 §3.2.2 TTL 备注：unregister 必须清理 _priorities / _health_states
-        中该 provider 的残留状态，避免重注册时残留旧值。
+        同步清理 ``_priorities`` / ``_health_states`` 中该 provider 的残留
+        状态（DESIGN §4.4.1）。
         """
         provider = self._providers.pop(name, None)
         if provider is None:
@@ -100,9 +94,17 @@ class ProviderRegistry:
         return True
 
     def clear(self) -> None:
-        """Remove every registered provider (test convenience)."""
+        """Remove every registered provider (test convenience).
+
+        Phase 2 reset: also clears ``_priorities`` / ``_health_states`` so
+        re-registering the same name returns to defaults (SPEC §4.3 P2-U2,
+        DESIGN §4.4.2). ``_external_fallback_chains`` is configuration
+        state, not registration state, and is left untouched.
+        """
         self._providers.clear()
         self._by_capability.clear()
+        self._priorities.clear()
+        self._health_states.clear()
 
     # ------------------------------------------------------------------
     # Query

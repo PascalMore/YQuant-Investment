@@ -7,13 +7,13 @@
 | 状态 | Draft |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-07-14 |
-| 最后更新 | 2026-07-14 |
+| 最后更新 | 2026-07-16 |
 | 来源 RFC | RFC-03-009（Phase 1B-B 持久化缓存平面） |
 | 关联 RFC | RFC-03-007（Unified Data Layer 总纲）、RFC-03-008（Phase 1B-A 查询平面） |
 | 关联 SPEC | SPEC-03-007（Unified Data Layer 契约）、SPEC-03-008（Phase 1B-A 查询平面） |
 | 关联 Design | DESIGN-03-007（Unified Data Layer 总设计）、DESIGN-03-008（Phase 1B-A 查询平面设计） |
 | 目标模块 | unified_data（`skills/data/unified_data/`） |
-| 版本号 | V0.1 |
+| 版本号 | V0.2 |
 | 适配 Agent | YQuant-Developer-Engineer, YQuant-Test-Engineer |
 
 ---
@@ -436,7 +436,7 @@ def _materialize(sid, domain, operation, params, result):
 | TA-CN 空 + 物化命中过期 + Cache 空 + 外部成功 | `"tushare"` | `label(...)` | `["ta_cn_internal(empty)", "ud_materialized(stale)", "cache(miss)", "tushare(ok)"]` | `[]` | ✅（更新过期物化） |
 | TA-CN 异常 + 物化异常 + Cache 空 + 外部成功 | `"akshare"` | `label(...)` | `["ta_cn_internal(error: ...)", "ud_materialized(error: ...)", "cache(miss)", "akshare(ok)"]` | `["ta_cn_internal error...", "ud_materialized error..."]` | ✅ |
 | 全部内部空 + 全外部失败 | `"error"` | `"empty"` | `[..., "tushare(error: ...)", "akshare(error: ...)"]` | `["all external providers failed"]` | 不写入 |
-| force_refresh + 外部成功 | `"tushare"` | `label(...)` | `["ta_cn_internal(skipped: force_refresh)", "ud_materialized(skipped: force_refresh)", "cache(skipped: force_refresh)", "tushare(ok)"]` | `[]` | ✅ |
+| force_refresh + 外部成功 | `"tushare"` | `label(...)` | `["ud_materialized(skipped: force_refresh)", "cache(skipped: force_refresh)", "tushare(ok)"]` | `[]` | ✅ |
 | provider="tushare" | `"tushare"` | `label(...)` | `["tushare(ok)"]` | `[]` | ✅（写入物化+Cache） |
 
 ---

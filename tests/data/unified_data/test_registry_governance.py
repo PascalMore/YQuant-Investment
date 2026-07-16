@@ -202,3 +202,84 @@ class TestPhase0Compat:
         assert [p.name for p in providers] == ["a", "b"]
         assert reg.get_priority("a") == 100
         assert reg.get_health("a") == "healthy"
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 T17 — unregister / clear 生命周期契约回归（SPEC §4.3 P2-U1/U2/U3，
+# DESIGN §4.4.1/4.4.2/4.4.3 UC-1~4）。独立测试矩阵，不弱化已有断言。
+# ---------------------------------------------------------------------------
+class TestLifecycleReset:
+    """P2-U1 / P2-U2：unregister 与 clear 必须原子清理 priority/health 残留。"""
+
+    def test_p2_u2_clear_resets_priority_and_health_defaults(self) -> None:
+        # UC-2：set custom → clear → re-register → defaults restored
+        reg = ProviderRegistry()
+        reg.register(_StaticProvider("alpha", "market_data.kline_daily"))
+        reg.set_priority("alpha", 7)
+        reg.set_health("alpha", "disabled")
+        assert reg.get_priority("alpha") == 7
+        assert reg.get_health("alpha") == "disabled"
+        reg.clear()
+        reg.register(_StaticProvider("alpha", "market_data.kline_daily"))
+        assert reg.get_priority("alpha") == 100
+        assert reg.get_health("alpha") == "healthy"
+        # state_filter=healthy 必须可见（回归 set_priority+disabled 残留）
+        assert [p.name for p in reg.get_providers(
+            "market_data.kline_daily", state_filter="healthy")] == ["alpha"]
+        # state_filter=disabled 必须为空
+        assert reg.get_providers(
+            "market_data.kline_daily", state_filter="disabled") == []
+
+    def test_p2_u1_unregister_resets_priority_and_health_defaults(self) -> None:
+        # UC-1：set custom → unregister → re-register → defaults restored
+        reg = ProviderRegistry()
+        reg.register(_StaticProvider("alpha", "market_data.kline_daily"))
+        reg.set_priority("alpha", 7)
+        reg.set_health("alpha", "disabled")
+        assert reg.unregister("alpha") is True
+        reg.register(_StaticProvider("alpha", "market_data.kline_daily"))
+        assert reg.get_priority("alpha") == 100
+        assert reg.get_health("alpha") == "healthy"
+        assert [p.name for p in reg.get_providers(
+            "market_data.kline_daily", state_filter="healthy")] == ["alpha"]
+
+    def test_p2_u1_unregister_isolates_other_providers(self) -> None:
+        # UC-4：unregister(A) 不影响 B 的 priority/health 状态
+        reg = ProviderRegistry()
+        reg.register(_StaticProvider("a", "market_data.kline_daily"))
+        reg.register(_StaticProvider("b", "market_data.kline_daily"))
+        reg.set_priority("a", 5)
+        reg.set_priority("b", 20)
+        reg.set_health("a", "disabled")
+        reg.set_health("b", "unhealthy")
+        assert reg.unregister("a") is True
+        # A 重注册视角下的默认（当前未注册）
+        assert reg.get_priority("a") == 100
+        assert reg.get_health("a") == "healthy"
+        # B 完全不受影响
+        assert reg.get_priority("b") == 20
+        assert reg.get_health("b") == "unhealthy"
+
+    def test_p2_u3_unknown_unregister_returns_false_no_side_effects(self) -> None:
+        # UC-3：unknown name → return False，不抛异常；不污染任何状态
+        reg = ProviderRegistry()
+        reg.register(_StaticProvider("alpha", "market_data.kline_daily"))
+        reg.set_priority("alpha", 42)
+        reg.set_health("alpha", "unhealthy")
+        assert reg.unregister("nonexistent") is False
+        # alpha 完全不受影响
+        assert reg.get_priority("alpha") == 42
+        assert reg.get_health("alpha") == "unhealthy"
+        assert [p.name for p in reg.get_providers(
+            "market_data.kline_daily", state_filter="unhealthy")] == ["alpha"]
+
+    def test_clear_does_not_reset_external_fallback_chains(self) -> None:
+        # DESIGN §4.4.2：clear() 是 provider 注册态 reset，
+        # 不影响 _external_fallback_chains（Phase 1B-A 的配置层）。
+        reg = ProviderRegistry()
+        reg.set_external_fallback_chains(
+            {"market_data.kline_daily": ["alpha", "beta"]})
+        reg.register(_StaticProvider("alpha", "market_data.kline_daily"))
+        reg.clear()
+        assert reg.get_external_fallback_chain(
+            "market_data.kline_daily") == ["alpha", "beta"]

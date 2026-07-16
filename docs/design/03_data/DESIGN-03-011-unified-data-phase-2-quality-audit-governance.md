@@ -96,6 +96,8 @@ DataRouter.query()
        ├─ 2. AuditLogger.log(result, duration_ms, params)  [可选, catch-and-log]
        │   → mongo.03_data_ud_query_audit.insert_one(doc)
        │   (内部触发 QualitySummary.update)
+       │   • params = query() 入口 caller mapping 的浅拷贝快照
+       │   • duration_ms = (now - ts) 实际毫秒（非负整数）
        │
        └─ 3. return result
 ```
@@ -1075,7 +1077,7 @@ def query(self, ...) -> DataResult:
             result.warnings = list(result.warnings or []) + scored.warnings
             # 在 source_trace 尾部追加质量评分 trace
             result.source_trace.append(
-                f"quality_scored: tier={scored.quality_tier}, score={scored.quality_score:.2f}"
+                f"quality_scored: tier={scored.quality_tier}, score={scored.quality_score}"
             )
         except Exception as exc:
             # QualityScorer 内部异常不阻断查询返回
@@ -1083,18 +1085,28 @@ def query(self, ...) -> DataResult:
 
     # Phase 2: AuditLogger（catch-and-log）
     if self._audit_logger is not None:
+        # ``params`` 是调用方在 :meth:`query` 入口传入的 mapping 的
+        # 防御性浅拷贝快照；后续对该 mapping 的变更不会回写到审计记录。
+        # ``duration_ms`` 由 ``ts`` (请求起始时间戳) 推导的实耗毫秒，
+        # 不再是硬编码 ``0``；详见 :meth:`DataRouter._compute_duration_ms`。
         try:
             self._audit_logger.log(
                 result,
                 consumer=self._config.consumer,
                 duration_ms=self._compute_duration_ms(ts),
-                params=params_dict,
+                params=dict(params_dict or {}),
             )
         except Exception as exc:
             logger.warning("AuditLogger.log failed: %s", exc)
 
     return result
 ```
+
+**Audit 字段契约**（与 `AuditLogger._build_document` 对齐）：
+
+- ``params`` — 来自 :meth:`query` 调用方的 `params` mapping 的浅拷贝快照；保留调用方传入的全部键。审计写入发生在 Step 1-4 完成后，因此 `params` 的取值冻结于查询入口，不受后续 orchestrator 内部变更影响。
+- ``duration_ms`` — 非负整数毫秒数。``ts`` 缺失时退化为 ``0``；``ts`` 晚于 ``now``（单调时钟偏移）时同样退化为 ``0``；其余情况取 ``int((now - ts).total_seconds() * 1000)`` 并用 ``max(0, ...)`` 兜底。所有 ``query()`` 出口路径（`provider == "ta_cn_internal"`、显式 `provider=`、`internal-first` 全路径，以及 `error` + `empty_ta_cn` 兜底分支）均经过同一个 :meth:`_enrich_with_quality_and_audit` helper，审计上下文一致。
+- ``quality_scorer`` / ``audit_logger`` 为 ``None`` 的 Phase 0/1B 路径保持完全不变；``scorer`` / ``audit`` / ``summary`` 异常继续走 catch-and-log，不影响主查询返回。
 
 ### 7.3 查询注入行为矩阵
 
@@ -1426,7 +1438,51 @@ PYTHONPATH=. pytest tests/data/unified_data/test_quality_scorer.py tests/data/un
 
 ---
 
-## 14. 参考资料
+|## 14. router.py 一次性行数豁免记录（Governance Track G2）
+|
+|### 14.1 背景
+|
+|G1（`t_888eabbe`）已将项目 Python 文件硬上限从 300 行调整为 800 行，并同步了 CLAUDE.md、RFC-03-010、DESIGN-03-010。
+|Pascal 明确授权本 Phase 2 的 `skills/data/unified_data/router.py`（当前 1115 行）获得一次性、受控豁免，
+|以继续独立 Verify（T24 replacement）；这不是普遍 >800 行豁免。
+|
+|### 14.2 适用对象与范围
+|
+|| 项目 | 值 |
+||------|-----|
+|| 豁免对象 | `skills/data/unified_data/router.py`（本次 `+151/-17`，变更后 ~1115 行） |
+|| 豁免范围 | 仅 DataRouter Health + Quality/Audit 集成及 T24 replacement 独立验证所需 diff |
+|| 本 Design 内引用 | §4.2 Router 集成（health_state 过滤）、§7 DataRouter 质量填充集成 |
+|| 风险等级 | 低（reader 影响，不暴露外部调用方，不修改已有公共契约） |
+|
+|### 14.3 边界与约束
+|
+|1. **不改业务语义**：本次 diff（+151/-17）不改变 DataRouter.query()、_resolve_external_chain、_query_external_single 的输入输出契约。
+|2. **不借机扩展**：不允许将其他文件（registry.py、quality 子包、audit 子包、config.py 等）也拉入豁免范围。不允许借本次豁免引入超出当前 Phase 2 质量/审计集成范围的功能。
+|3. **后续治理**：对 router.py 的下一次实质性功能扩展，必须先有拆分/重构 Design，将 ~1115 行按职责拆分为独立模块，再执行实现。不允许在 router.py 原文件上继续叠加功能。
+|4. **文档约束**：本豁免记录不影响 Phase 2 的设计契约、行为矩阵（DR-301~309）、兼容性声明、测试策略和验收标准。
+|5. **测试约束**：不得为凑行数或跳过豁免边界捏造测试结果。所有测试按 §9 现有策略执行。
+|
+|### 14.4 原始状态核实
+|
+|豁免判定时 `router.py` 的确认状态：
+|
+|- 总行数：~1115 行（含 43 行 __init__ + 2 个主 query 方法 + _resolve_external_chain + _query_external_single + 39 行 class + import + docstring + 末尾 footer）
+|- 本次 diff：+151 / -17（Phase 2：quality_scorer/audit_logger 参数 + 尾部评分/审计调用 + health_state 过滤 + 辅助 _filter_healthy）
+|- 超限比例：1115 / 800 ≈ 139%（超出 315 行）
+|- 超限原因：router.py 本身是 Phase 0 时期按"单文件路由"模式编写的，含 4 个外部查询路径+fallback 链+缓存策略+错误处理，现阶段拆分成本大于收益
+|
+> ⚠️ **演化承诺**：当 router.py 的下一次实质性功能变更到来时（Phase 3 或 Sector Router 或新数据通路），必须执行拆分：将健康检查/过滤独立到 `router/health.py`、质量集成独立到 `router/quality_mixin.py` 或 `_quality_integration` 模块，确保拆分后每个文件 ≤ 800 行。
+|
+|### 14.5 治理历史
+|
+|| 事件 | 时间 | 决策 | 产出 |
+||------|------|------|------|
+|| G1 调整上限 | 2026-07-16 | Python 硬上限 300→800 | CLAUDE.md + RFC-03-010 + DESIGN-03-010 同步 |
+|| G2 豁免记录 | 2026-07-16 | router.py 一次性豁免 1115 行 | 本 §14 |
+|| 下次功能扩展前 | TBD | 必须执行拆分 Design | 独立的 `router/` 子包 + 各文件 ≤ 800 行 |
+|
+|## 15. 参考资料
 
 - `docs/rfc/03_data/RFC-03-011-unified-data-phase-2-quality-audit-governance.md` — 来源 RFC
 - `docs/spec/03_data/SPEC-03-011-unified-data-phase-2-quality-audit-governance.md` — 来源 SPEC

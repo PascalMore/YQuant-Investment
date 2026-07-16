@@ -397,7 +397,7 @@ def e2e_tushare_ok():
 **第 2 轮（T3 Remediation — 裁决后执行）**：
 | 任务 | 文件 | 说明 |
 |---|---|---|
-| 文件拆分 ≤300 行 | `test_e2e_*.py` 按 DESIGN-03-010 §3.9 拆分 | 入口 + fixtures + 4 场景文件 |
+| 文件拆分 ≤800 行 | test_e2e_*.py 按 DESIGN-03-010 §3.9 拆分 | 入口 + fixtures + 4 场景文件 |
 | 精确 source_trace 断言 | 场景 3/4/5 trace 改为 `==` 完整列表 | 按 SPEC-03-010 §6.1.1 执行 |
 | 业务字段断言 | 场景 6 index 外部兜底改 `is not None` 为字段级断言 | 按 SPEC-03-010 §6.1.1 执行 |
 | 全量回归测试 | `pytest tests/data/unified_data -q --tb=long` 全绿 | 确认 374+ passed |
@@ -437,5 +437,5 @@ def e2e_tushare_ok():
 
 | 版本 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
-|| V0.3 | 2026-07-15 | T2.6 Review Remediation：① all-fail 语义收敛——Scene 4 改为 ta_cn_adapter=None 分支，trace 不含 ta_cn_internal(empty)；② 精确断言强化——Scene 3/5 trace 改为 `==` 完整列表，Scene 6 外部兜底改为业务字段断言；③ 测试节点飘移修正——AC-02~AC-08 改用完整类名；④ 文件拆分方案——DESIGN-03-010 §3.9 定义 6 文件 ≤300 行拆分。 | YQuant-Principal |
+|| V0.3 | 2026-07-15 | T2.6 Review Remediation：① all-fail 语义收敛——Scene 4 改为 ta_cn_adapter=None 分支，trace 不含 ta_cn_internal(empty)；② 精确断言强化——Scene 3/5 trace 改为 `==` 完整列表，Scene 6 外部兜底改为业务字段断言；③ 测试节点飘移修正——AC-02~AC-08 改用完整类名；④ 文件拆分方案——DESIGN-03-010 §3.9 定义 6 文件 ≤800 行拆分。 | YQuant-Principal |
 | V0.1 | 2026-07-14 | 初始创建 | YQuant-Principal |

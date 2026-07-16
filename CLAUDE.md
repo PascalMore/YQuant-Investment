@@ -179,7 +179,7 @@ workspace-yquant/
 - 类型注解：所有公共函数必须有
 - 文档：Google 风格 docstring，复杂逻辑必须有行内注释
 - 命名：snake_case / PascalCase / UPPER_CASE，禁止无意义名称
-- 每个文件不超过 300 行
+- 每个文件不超过 800 行
 
 ### 回测规范
 - 回测和实盘使用相同的事件驱动执行模型

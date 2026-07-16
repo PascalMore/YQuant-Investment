@@ -140,6 +140,8 @@ class DataRouter:
         cache_manager: Any = None,  # Phase 1B-B slot — always None in 1B-A
         freshness: FreshnessPolicy | None = None,
         external_fallback_chains: dict[str, list[str]] | None = None,
+        quality_scorer: Any = None,  # Phase 2 — QualityScorer | None
+        audit_logger: Any = None,  # Phase 2 — AuditLogger | None
     ) -> None:
         """Build the router.
 
@@ -154,12 +156,25 @@ class DataRouter:
                 external-fallback-only behaviour.
             local_mongo_adapter: Phase 1B-B slot — must be ``None`` in
                 1B-A.
-            cache_manager: Phase 1B-B slot — must be ``None`` in 1B-A.
+            cache_manager: Phase 1B-B slot — must be ``None`` in
+                1B-A.
             freshness: Optional :class:`FreshnessPolicy`. Defaults to
                 a fresh instance when omitted.
             external_fallback_chains: Optional per-capability chain
                 overrides; takes priority over ``config`` and registry
                 order.
+            quality_scorer: Phase 2 — optional :class:`QualityScorer`.
+                When ``None`` the router keeps Phase 1B-B behaviour
+                (``DataResult.quality_score`` stays ``None`` and no
+                ``quality_scored:`` trace is appended). All scoring
+                exceptions are caught-and-logged so a misbehaving
+                scorer never fails the primary fetch (DR-308).
+            audit_logger: Phase 2 — optional :class:`AuditLogger`.
+                When ``None`` no audit writes happen. The logger is
+                also responsible for invoking its injected
+                ``QualitySummary``. Any audit / summary exception is
+                caught-and-logged and never fails the primary fetch
+                (DR-309, DR-310).
         """
         self._registry = registry
         self._config = config or UnifiedDataConfig.minimal()
@@ -173,6 +188,10 @@ class DataRouter:
         self._local_mongo_adapter = local_mongo_adapter
         self._cache_manager = cache_manager
         self._freshness = freshness if freshness is not None else FreshnessPolicy()
+        # Phase 2 governance components — both default to ``None``
+        # (Phase 1B-B behaviour preserved).
+        self._quality_scorer = quality_scorer
+        self._audit_logger = audit_logger
         # Defensive copy of the chain overrides.
         self._external_chains: dict[str, list[str]] = {
             key: list(names) for key, names in (external_fallback_chains or {}).items()
@@ -201,6 +220,16 @@ class DataRouter:
     def freshness(self) -> FreshnessPolicy:
         """The freshness policy used to compute ``DataResult.freshness``."""
         return self._freshness
+
+    @property
+    def quality_scorer(self) -> Any:
+        """Phase 2 — the QualityScorer used to enrich ``DataResult``s, or ``None``."""
+        return self._quality_scorer
+
+    @property
+    def audit_logger(self) -> Any:
+        """Phase 2 — the AuditLogger receiving every query event, or ``None``."""
+        return self._audit_logger
 
     # ------------------------------------------------------------------
     # Query
@@ -252,15 +281,27 @@ class DataRouter:
         params_dict = dict(params or {})
         ts = fetched_at or datetime.now(timezone.utc).replace(tzinfo=None)
 
+        # Phase 2 enrichment is funneled through
+        # :meth:`_enrich_with_quality_and_audit` at the very end of
+        # every branch so a single helper controls the catch-and-log
+        # behaviour (DR-308/309). Branches below assign to ``result``
+        # and fall through instead of returning early.
+
         # ---- Branch 1: provider == "ta_cn_internal" → Step 1 only ----
         if provider == "ta_cn_internal":
-            return self._query_ta_cn(security_id, capability, params_dict, ts)
+            result = self._query_ta_cn(security_id, capability, params_dict, ts)
+            return self._enrich_with_quality_and_audit(
+                result, audit_params=params_dict, audit_started_at=ts
+            )
 
         # ---- Branch 2: provider is a known external name → single
         # provider, no chain ----
         if provider is not None:
-            return self._query_external_single(
+            result = self._query_external_single(
                 provider, security_id, capability, params_dict, ts
+            )
+            return self._enrich_with_quality_and_audit(
+                result, audit_params=params_dict, audit_started_at=ts
             )
 
         # ---- Branch 3: internal-first full path ----
@@ -279,7 +320,11 @@ class DataRouter:
             if ta_cn_result is not None:
                 if ta_cn_result.provider != "empty":
                     # Real TA-CN hit — short-circuit.
-                    return ta_cn_result
+                    return self._enrich_with_quality_and_audit(
+                        ta_cn_result,
+                        audit_params=params_dict,
+                        audit_started_at=ts,
+                    )
                 # Empty TA-CN result: proceed to Step 2/3/4. Save it
                 # as final fallback if everything else fails.
                 empty_ta_cn = ta_cn_result
@@ -308,8 +353,12 @@ class DataRouter:
         if result.provider == "error" and empty_ta_cn is not None:
             # Everything failed, return the empty TA-CN result instead
             # of pure "error" (SPEC-03-008 §4.3).
-            return empty_ta_cn
-        return result
+            return self._enrich_with_quality_and_audit(
+                empty_ta_cn, audit_params=params_dict, audit_started_at=ts
+            )
+        return self._enrich_with_quality_and_audit(
+            result, audit_params=params_dict, audit_started_at=ts
+        )
 
     # ------------------------------------------------------------------
     # Step 1: TA-CN
@@ -661,6 +710,10 @@ class DataRouter:
         if provider_obj is None:
             trace.append(f"{provider_name}(skipped: not registered)")
             return self._build_error_result(security_id, domain, operation, ts, trace)
+        if self._registry.get_health(provider_name) != "healthy":
+            health = self._registry.get_health(provider_name)
+            trace.append(f"{provider_name}(skipped: health={health})")
+            return self._build_error_result(security_id, domain, operation, ts, trace)
         if not provider_obj.supports(capability, security_id.market):
             trace.append(
                 f"{provider_name}(skipped: capability/market mismatch)"
@@ -722,7 +775,7 @@ class DataRouter:
         # Reuse the inherited trace when provided so callers can stitch
         # earlier steps (TA-CN exception) into the final result.
         trace: list[str] = list(inherited_trace) if inherited_trace is not None else []
-        chain_names = self._resolve_external_chain(capability)
+        chain_names = self._resolve_external_chain(capability, trace=trace)
         if not chain_names:
             return self._build_error_result(security_id, domain, operation, ts, trace)
 
@@ -785,7 +838,12 @@ class DataRouter:
             primary_provider=None,
         )
 
-    def _resolve_external_chain(self, capability: str) -> list[str]:
+    def _resolve_external_chain(
+        self,
+        capability: str,
+        *,
+        trace: list[str] | None = None,
+    ) -> list[str]:
         """Resolve the external fallback chain for ``capability``.
 
         Priority (per SPEC-03-008 §4.1 / §4.2):
@@ -795,18 +853,38 @@ class DataRouter:
         2. :class:`UnifiedDataConfig` per-capability override
            (``config.fallback_for(capability)``).
         3. Registry insertion order for the capability.
+
+        Every resolved source is filtered through the registry health state:
+        unregistered names remain eligible for the existing skip trace, while
+        registered providers in ``unhealthy`` or ``disabled`` state are
+        omitted before fetch dispatch. Unset health defaults to ``healthy``.
         """
         chain = self._external_chains.get(capability)
         if chain:
-            return list(chain)
-        chain = self._registry.get_external_fallback_chain(capability)
-        if chain:
-            return list(chain)
-        chain = self._config.fallback_for(capability)
-        if chain:
-            return list(chain)
-        providers = self._registry.get_providers(capability)
-        return [p.name for p in providers]
+            resolved = list(chain)
+        else:
+            chain = self._registry.get_external_fallback_chain(capability)
+            if chain:
+                resolved = list(chain)
+            else:
+                chain = self._config.fallback_for(capability)
+                if chain:
+                    resolved = list(chain)
+                else:
+                    providers = self._registry.get_providers(capability)
+                    resolved = [p.name for p in providers]
+
+        healthy_chain: list[str] = []
+        for name in resolved:
+            provider = self._registry.get(name)
+            if provider is not None and self._registry.get_health(name) != "healthy":
+                if trace is not None:
+                    trace.append(
+                        f"{name}(skipped: health={self._registry.get_health(name)})"
+                    )
+                continue
+            healthy_chain.append(name)
+        return healthy_chain
 
     @staticmethod
     def _attempt_provider_fetch(
@@ -835,6 +913,141 @@ class DataRouter:
         except ProviderError as exc:
             trace.append(f"{name}(error: {exc})")
             return None
+
+    # ------------------------------------------------------------------
+    # Phase 2 enrichment helper
+    # ------------------------------------------------------------------
+
+    def _enrich_with_quality_and_audit(
+        self,
+        result: DataResult,
+        *,
+        audit_params: Mapping[str, Any] | None = None,
+        audit_started_at: datetime | None = None,
+    ) -> DataResult:
+        """Apply Phase 2 quality scoring + audit logging to ``result``.
+
+        Behaviour (SPEC-03-011 §5.2 / §5.3, DESIGN-03-011 §7.2):
+
+        1. **Quality scoring** — when ``self._quality_scorer`` is not
+           ``None`` the result is scored in-place. On success:
+           ``result.quality_score`` is set, ``result.warnings`` is
+           extended with the scorer's warnings, and a
+           ``"quality_scored: tier=<tier>, score=<score>"`` trace
+           entry is appended. Scorer exceptions are caught-and-logged
+           and leave the result untouched (DR-308).
+        2. **Audit logging** — when ``self._audit_logger`` is not
+           ``None`` the (possibly enriched) result is forwarded. The
+           logger is invoked with:
+
+           * ``params`` — a defensive snapshot of the caller-supplied
+             ``params`` mapping taken at :meth:`query` entry time
+             (``audit_params``). This snapshot is captured once and
+             reused so subsequent mutations to the original ``params``
+             (e.g. by the orchestrator itself or by future Step 4
+             helpers) cannot retroactively change the audit record.
+             Sensitive fields are not stripped here — the audit logger
+             and ``AuditLogger.log`` already preserve the Phase 1B-A
+             schema where the audit document carries the caller-supplied
+             keys verbatim.
+           * ``duration_ms`` — the actual wall-clock cost of this
+             query, computed from ``audit_started_at`` (the request's
+             authoritative start timestamp) to "now". The result is
+             a non-negative integer expressed in milliseconds. It
+             replaces the legacy ``duration_ms=0`` placeholder so the
+             audit document reflects real elapsed time rather than a
+             constant zero.
+
+           The logger's own catch-and-log handles audit + summary
+           errors (DR-309, DR-310). This router wrapper adds an outer
+           guard so a logger that escapes its own catch block still
+           cannot fail the primary fetch.
+
+        The helper exists so the three top-level return paths in
+        :meth:`query` cannot diverge on the quality / audit semantics
+        (no branch can accidentally skip enrichment). The function
+        returns the same ``DataResult`` instance it received so callers
+        can keep their fall-through assignment style.
+        """
+        if self._quality_scorer is not None:
+            try:
+                scored = self._quality_scorer.score(result, domain=result.domain)
+            except Exception as exc:
+                # DR-308 — scorer exceptions must never fail the fetch.
+                logger.warning(
+                    "QualityScorer.score failed in router (catch-and-log): %s",
+                    exc,
+                )
+            else:
+                result.quality_score = scored.quality_score
+                # Preserve any pre-existing warnings (e.g. the
+                # TA-CN-failure warnings lifted in
+                # ``_lift_ta_cn_failure_warnings``) and append the
+                # scorer warnings afterwards.
+                existing = list(result.warnings or [])
+                result.warnings = existing + list(scored.warnings or [])
+                trace = list(result.source_trace or [])
+                trace.append(
+                    f"quality_scored: tier={scored.quality_tier}, "
+                    f"score={scored.quality_score}"
+                )
+                result.source_trace = trace
+
+        if self._audit_logger is not None:
+            # Snapshot the caller-supplied params once at query entry so
+            # later mutations cannot leak into the audit record.
+            params_snapshot: dict[str, Any] | None
+            if audit_params is None:
+                params_snapshot = None
+            elif isinstance(audit_params, Mapping):
+                # ``dict(mapping)`` builds a shallow copy; callers that
+                # passed nested mappings must deep-copy on their own
+                # (the audit schema today only records top-level keys).
+                params_snapshot = dict(audit_params)
+            else:
+                params_snapshot = None
+            try:
+                self._audit_logger.log(
+                    result,
+                    consumer=self._config.consumer,
+                    duration_ms=self._compute_duration_ms(audit_started_at),
+                    params=params_snapshot,
+                )
+            except Exception as exc:
+                # DR-309 — audit exceptions must never fail the fetch.
+                # AuditLogger.log already catches-and-logs internally;
+                # this is a defence-in-depth outer guard.
+                logger.warning(
+                    "AuditLogger.log failed in router (catch-and-log): %s",
+                    exc,
+                )
+        return result
+
+    @staticmethod
+    def _compute_duration_ms(started_at: datetime | None) -> int:
+        """Return non-negative milliseconds elapsed since ``started_at``.
+
+        Aligns the ``duration_ms`` audit field with DESIGN-03-011 §7.2:
+        the audit document records the real wall-clock cost of a query
+        rather than the legacy ``0`` placeholder.
+
+        Rules:
+
+        * ``started_at`` is ``None`` → ``0`` (defensive default; matches
+          the historical behaviour for callers that pre-date the audit
+          contract).
+        * ``started_at`` is in the future or equal to "now" → ``0``
+          (never negative; clamp protects downstream signed-int
+          assumptions).
+        * Otherwise → ``int((now - started_at).total_seconds() * 1000)``
+          with a ``max(0, ...)`` floor so monotonic-clock skew never
+          produces a negative duration.
+        """
+        if started_at is None:
+            return 0
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        delta_ms = int((now - started_at).total_seconds() * 1000)
+        return max(0, delta_ms)
 
     # ------------------------------------------------------------------
     # Helpers

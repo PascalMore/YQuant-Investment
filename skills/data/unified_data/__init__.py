@@ -85,8 +85,15 @@ from .services import (
     MetadataService,
     SectorService,
 )
+from .audit import AuditLogger
 from .client import UnifiedDataClient
 from .config import UnifiedDataConfig
+from .quality import (
+    QualityScorer,
+    QualityScorerConfig,
+    QualitySummary,
+    ScoredResult,
+)
 
 __all__ = [
     # exceptions
@@ -134,4 +141,10 @@ __all__ = [
     # Phase 1B-B — persistence + cache plane
     "LocalMongoAdapter",
     "CacheManager",
+    # Phase 2 — quality + audit governance (DESIGN-03-011)
+    "QualityScorer",
+    "QualityScorerConfig",
+    "ScoredResult",
+    "QualitySummary",
+    "AuditLogger",
 ]

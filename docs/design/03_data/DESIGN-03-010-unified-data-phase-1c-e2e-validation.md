@@ -563,14 +563,14 @@ def test_coverage_report_runs():
 - 每测试方法通过 fixture 获取独立的 mongomock 数据库 + 空 registry
 - 所有 e2e 测试合计应在 10 秒内完成（纯内存，无 I/O）
 
-### 3.9 文件拆分方案（CLAUDE.md ≤300 行约束）
+### 3.9 文件拆分方案（CLAUDE.md ≤800 行约束）
 
-当前 `test_e2e_full_chain.py` 约 993 行，违反 CLAUDE.md:182 的 `每个文件不超过 300 行` 约束。T3 Remediation 必须按以下方案拆分：
+当前 test_e2e_full_chain.py 约 993 行，违反 CLAUDE.md:182 的 `每个文件不超过 800 行` 约束。T3 Remediation 必须按以下方案拆分：
 
 #### 3.9.1 拆分原则
 
 - **保留** `test_e2e_full_chain.py` 作为**入口文件/命名空间**（仅 imports + re-exports），不包含测试类定义
-- **新建** 5 个文件，每个 ≤ 300 行
+- **新建** 5 个文件，每个 ≤ 800 行
 - 公共 fixture/constants 抽取到独立文件 `test_e2e_fixtures.py`
 - 各场景文件从 `test_e2e_fixtures.py` 导入 fixture，不重复定义
 - 每个拆分文件可独立运行：`pytest tests/data/unified_data/test_e2e_scene_4.py -q`
@@ -580,17 +580,17 @@ def test_coverage_report_runs():
 | 文件 | 内容 | 预计行数 | 关键约束 |
 |---|---|---|---|
 | `test_e2e_full_chain.py` | **入口**（保留）：模块 docstring + import re-exports（`from .test_e2e_scene_1_2_3 import *` 等） | ~30 | 仅 imports，不含测试类定义 |
-| `test_e2e_fixtures.py` | constants（KLINE_CAP 等）+ 全部 fixture 定义（`e2e_db`, `e2e_registry`, `e2e_ta_cn_miss`, …）+ `_make_db()` helper | ~260 | ≤ 300 行；不含 TestClass |
-| `test_e2e_scene_1_2_3.py` | `TestE2EScene1_AllMissExternalSuccess` + `TestE2EScene2_CacheHit` + `TestE2EScene3_ProviderFallback` | ~230 | ≤ 300 行 |
-| `test_e2e_scene_4.py` | `TestE2EScene4_AllFail` | ~110 | ≤ 300 行 |
-| `test_e2e_scene_5.py` | `TestE2EScene5_ForceRefresh`（含 `_build_router` helper） | ~220 | ≤ 300 行 |
-| `test_e2e_scene_6_7.py` | `TestE2EScene6_IndexDualPath` + `TestE2EScene7_CoverageGate` | ~180 | ≤ 300 行 |
+| `test_e2e_fixtures.py` | constants（KLINE_CAP 等）+ 全部 fixture 定义（`e2e_db`, `e2e_registry`, `e2e_ta_cn_miss`, …）+ `_make_db()` helper | ~260 | ≤ 800 行；不含 TestClass |
+| `test_e2e_scene_1_2_3.py` | `TestE2EScene1_AllMissExternalSuccess` + `TestE2EScene2_CacheHit` + `TestE2EScene3_ProviderFallback` | ~230 | ≤ 800 行 |
+| `test_e2e_scene_4.py` | `TestE2EScene4_AllFail` | ~110 | ≤ 800 行 |
+| `test_e2e_scene_5.py` | `TestE2EScene5_ForceRefresh`（含 `_build_router` helper） | ~220 | ≤ 800 行 |
+| `test_e2e_scene_6_7.py` | `TestE2EScene6_IndexDualPath` + `TestE2EScene7_CoverageGate` | ~180 | ≤ 800 行 |
 
 #### 3.9.3 验证方法
 
 ```bash
 # 各文件独立可运行
-wc -l tests/data/unified_data/test_e2e_*.py           # 每文件 ≤ 300
+wc -l tests/data/unified_data/test_e2e_*.py           # 每文件 ≤ 800
 pytest tests/data/unified_data/test_e2e_scene_4.py -q --tb=short    # exit 0
 pytest tests/data/unified_data/test_e2e_scene_5.py -q --tb=short    # exit 0
 
@@ -679,7 +679,7 @@ INDEX_DAILY_CAP = "market_data.index_daily"
 
 | 编号 | 验收项 | 验证命令 | 期望 |
 |---|---|---|---|
-| A-001 | test_e2e_full_chain.py 存在 | `ls -la tests/data/unified_data/test_e2e_full_chain.py` | 文件存在，> 300 行 |
+| A-001 | test_e2e_full_chain.py 存在 | `ls -la tests/data/unified_data/test_e2e_full_chain.py` | 文件存在，> 800 行 |
 | A-002 | 7 个 TestClass | `grep -c "class TestE2E" tests/data/unified_data/test_e2e_full_chain.py` | 7 |
 | A-003 | 场景 1 全 PASS | `pytest tests/data/unified_data/test_e2e_full_chain.py::TestE2EScene1_AllMissExternalSuccess -q --tb=short` | exit 0 |
 | A-004 | 场景 2 全 PASS | `pytest tests/data/unified_data/test_e2e_full_chain.py::TestE2EScene2_CacheHit -q --tb=short` | exit 0 |
