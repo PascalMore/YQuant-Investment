@@ -7,8 +7,8 @@
 | 状态 | Draft |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-07-15 |
-| 最后更新 | 2026-07-16 |
-| 版本号 | V0.2 |
+| 最后更新 | 2026-07-17 |
+| 版本号 | V0.3 |
 | 来源 RFC | RFC-03-011 |
 | 来源 SPEC | SPEC-03-011 |
 | 关联 Design | DESIGN-03-007（Unified Data Layer 详细设计 §Phase 2） |
@@ -572,7 +572,7 @@ class ProviderRegistry:
 
     def set_health(self, name: str, state: str) -> None:
         """设置 provider 的运行健康状态。
-        
+
         Args:
             name: provider 名称。
             state: "healthy" | "unhealthy" | "disabled"
@@ -1157,20 +1157,20 @@ def query(self, ...) -> DataResult:
 | 集合 | 操作 | DDL | DML | Pascal 确认前 |
 |------|------|-----|-----|--------------|
 | `03_data_ud_query_audit` | insert(append-only) | createIndex x3 | 每次 query 后 insert_one | noop / mongomock only |
-| `03_data_ud_quality_summary` | upsert | createIndex(domain, security_id, date) | 每次 audit 后 update_one | noop / mongomock only |
+| `03_data_ud_quality_summary` | upsert | ⛔ Phase 1 不创建（createIndex 仅在后续 Phase 启用） | 每次 audit 后 update_one（Phase 1 不执行） | noop / mongomock only |
 
-### 8.2 副作用矩阵（Pascal 已确认）
+### 8.2 副作用矩阵（Pascal 已确认架构决策）
 
-| 副作用 | 组件 | 影响 | 是否可回滚 | Phase 1 状态 |
-|--------|------|------|-----------|--------------|
-| MongoDB 集合创建 | AuditLogger | `tradingagents.03_data_ud_query_audit` 创建（TTL=365 天） | 可回滚（drop collection） | ✅ 已确认（DDL 可执行） |
-| MongoDB 索引创建 | AuditLogger | 3 个索引（TTL expireAfterSeconds=31536000 + security_id + capability） | 可回滚（drop index） | ✅ 已确认 |
-| 审计日志写入 | AuditLogger | 每次 query 后 insert_one | 不可回滚（已写入数据） | ✅ 已确认（fail-open） |
-| quality tier 业务影响 | QualityScorer | 仅观测，不构成业务门禁 | 无副作用 | ✅ 已确认 |
-| 质量汇总集合创建 | QualitySummary | `tradingagents.03_data_ud_quality_summary` 创建（TTL=365 天） | 可回滚 | ⏳ QualitySummary 未启用；回滚策略记录在案 |
-| 质量汇总写入 | QualitySummary | 每次 audit 后 upsert（Phase 1 不执行） | 不可回滚 | ❌ Phase 1 禁用 |
-| Registry 内存状态变更 | ProviderRegistry | set_health / set_priority | 可回滚（重启恢复默认） | ✅ 无需确认（纯内存） |
-| QualityScorer 计算 | QualityScorer | 无持久化 | ✅ 无副作用 | ✅ 无需确认（纯计算） |
+| 副作用 | 组件 | 影响 | 是否可回滚 | Phase 1 执行状态 |
+|--------|------|------|-----------|-----------------|
+| MongoDB 集合创建 | AuditLogger | `tradingagents.03_data_ud_query_audit` 创建（TTL=365 天） | 可回滚（drop collection） | 🔲 NOT DEPLOYED（DDL 尚未实施：须经 Implement→Verify→Review→Pascal 逐项授权） |
+| MongoDB 索引创建 | AuditLogger | 3 个索引（TTL expireAfterSeconds=31536000 + security_id + capability） | 可回滚（drop index） | 🔲 NOT DEPLOYED（索引创建尚未实施：须经 Implement→Verify→Review→Pascal 逐项授权） |
+| 审计日志写入 | AuditLogger | 每次 query 后 insert_one | 不可回滚（已写入数据） | 🔲 NOT IMPLEMENTED（fail-open 策略已确认；写入代码尚未实施：须经 Implement→Verify→Review→Pascal 逐项授权） |
+| quality tier 业务影响 | QualityScorer | 仅观测，不构成业务门禁 | 无副作用 | ✅ PLANNED（仅观测，不构成业务门禁） |
+| 质量汇总集合创建 | QualitySummary | `tradingagents.03_data_ud_quality_summary` 创建（TTL=365 天） | 可回滚 | ⏳ NOT DEPLOYED（QualitySummary 未启用；回滚策略记录在案） |
+| 质量汇总写入 | QualitySummary | 每次 audit 后 upsert（Phase 1 不执行） | 不可回滚 | ❌ NOT IMPLEMENTED（Phase 1 全程禁用） |
+| Registry 内存状态变更 | ProviderRegistry | set_health / set_priority | 可回滚（重启恢复默认） | ✅ N/A（纯内存，无需部署） |
+| QualityScorer 计算 | QualityScorer | 无持久化 | ✅ 无副作用 | ✅ N/A（纯计算，无需部署） |
 
 ### 8.3 Phase 1 默认行为与范围
 
@@ -1192,20 +1192,56 @@ def query(self, ...) -> DataResult:
 4. 测试中不创建真实 MongoDB 集合或索引。
 5. 所有 Phase 2 新增代码有显式守卫（`mongo_db is None`），确保无 MongoDB 时静默降级为 noop。
 
-### 8.5 MongoDB 权限分层架构（Pascal 已确认）
+### 8.5 MongoDB 权限分层架构与正式命名（Pascal 已确认）
 
-| 账号/角色 | 用途 | 权限范围 | 备注 |
-|-----------|------|----------|------|
-| **运行时审计账号** | AuditLogger 日常写入 | 对 `03_data_ud_query_audit` 的 insert-only 权限 | 最小权限原则，仅能写入审计集合 |
-| **DDL/索引账号** | 集合创建、索引创建、TTL 设置 | 对 `03_data_ud_*` 集合的 createIndex / createCollection | 与运行时审计账号分离，仅在部署/迁移时使用 |
-| **未来只读账号** | 报告查询、故障排查 | 对 `03_data_ud_*` 集合的 read-only | Phase 1 不创建，报告/排查需使用时再建 |
-| **审计账号禁止复用** | — | **不得**具备 portfolio、Smart Money、交易、缓存和既有业务集合（`portfolio_*`、`smart_money_*`、`signal_*` 等）的任何权限 | 隔离遵守「审计账号不跨业务域」原则 |
+#### 8.5.1 正式命名空间
 
-### 8.6 params 字段白名单（Pascal 已确认）
+| 类型 | 正式名称 | 权限范围 |
+|------|---------|----------|
+| Writer Role | `yquant_ud_audit_writer_role` | `03_data_ud_query_audit` insert-only |
+| Reader Role | `yquant_ud_audit_reader_role` | `03_data_ud_query_audit` find-only |
+| Writer User | `yquant_ud_audit_writer_user` | 授予 writer role |
+| Reader User | `yquant_ud_audit_reader_user` | 授予 reader role |
+| DDL Bootstrap | 独立身份（非上述任一运行时账号） | createCollection + createIndex + createRole + createUser |
+
+**命名规则**：所有角色和用户使用 `yquant_ud_audit_*` 前缀，不得使用其他前缀。DDL 脚本内部校验该前缀，不匹配时 fail-fast。
+
+#### 8.5.2 环境变量契约
+
+**DDL 身份**（`audit_rollout.py --apply` 使用，bootstrap 必须）：
+
+| 环境变量 | 强制 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `YQUANT_UD_AUDIT_DDL_MONGO_URI` | 是 | 无（fail-fast） | DDL 连接 URI |
+| `YQUANT_UD_AUDIT_DDL_MONGO_USERNAME` | 是 | 无（fail-fast） | DDL 用户名 |
+| `YQUANT_UD_AUDIT_DDL_MONGO_PASSWORD` | 是 | 无（fail-fast） | DDL 密码 |
+| `YQUANT_UD_AUDIT_DDL_MONGO_AUTH_DB` | 否 | `admin` | DDL 认证数据库 |
+
+**Writer 身份**（AuditLogger 运行时使用）：
+
+| 环境变量 | 强制 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `YQUANT_UD_AUDIT_WRITER_MONGO_URI` | 否（noop 可用） | 无 | Writer 连接 URI |
+| `YQUANT_UD_AUDIT_WRITER_MONGO_USERNAME` | 否 | 无 | Writer 用户名 |
+| `YQUANT_UD_AUDIT_WRITER_MONGO_PASSWORD` | 否 | 无 | Writer 密码 |
+| `YQUANT_UD_AUDIT_WRITER_MONGO_AUTH_DB` | 否 | `admin` | Writer 认证数据库 |
+
+**Reader 身份**（未来只读查询，Phase 1 不创建）：
+
+| 环境变量 | 强制 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `YQUANT_UD_AUDIT_READER_MONGO_URI` | 否 | 无 | Reader 连接 URI |
+| `YQUANT_UD_AUDIT_READER_MONGO_USERNAME` | 否 | 无 | Reader 用户名 |
+| `YQUANT_UD_AUDIT_READER_MONGO_PASSWORD` | 否 | 无 | Reader 密码 |
+| `YQUANT_UD_AUDIT_READER_MONGO_AUTH_DB` | 否 | `admin` | Reader 认证数据库 |
+
+**禁止复用规则**：绝对不得复用业务身份（如 `portfolio_*`、`smart_money_*` 使用的数据库用户）作为 audit DDL/writer/reader 身份。runtime writer 与 DDL bootstrap 必须严格分离。
+
+### 8.6 params 字段白名单 — 模块级常量（Pascal 已确认）
 
 - **白名单策略**：`AuditLogger._build_document` 对 `params` 字段采用白名单，仅记录允许的查询参数键。
-- **敏感字段丢弃**：凭据（`token`、`api_key`、`secret`）、密码、密钥等默认丢弃，不进入审计文档。
-- **实现方式**：白名单在 `AuditLogger.__init__` 中作为 `allowed_params: set[str]` 参数注入。未设置时默认允许所有非敏感字段（由 _sanitize_params 方法处理），Implement 阶段固化具体白名单。
+- **敏感字段丢弃**：凭据（`token`、`api_key`、`secret`、`password`、`credential`）、密钥等默认丢弃，不进入审计文档。
+- **实现方式**：白名单定义为 `scripts/unified_data/audit_rollout.py` 的**模块级常量** `ALLOWED_PARAMS: set[str]`，而非构造函数注入。常量在模块加载时固定，初始化后不可变。Implement 阶段固化具体键列表。
 - `params` 在审计文档中始终存在（最少为空 JSON 对象 `{}`），不得省略。
 
 ### 8.7 写入失败与降级策略（Pascal 已确认）
@@ -1218,13 +1254,20 @@ def query(self, ...) -> DataResult:
 ### 8.8 Rollout 策略（Pascal 已确认）
 
 ```
-第 1 步：DDL
+第 1 步：DDL（通过 scripts/unified_data/audit_rollout.py --apply）
+  - 创建 2 个 custom role：
+    · yquant_ud_audit_writer_role（03_data_ud_query_audit insert-only）
+    · yquant_ud_audit_reader_role（03_data_ud_query_audit find-only）
+  - 创建 2 个 runtime user：
+    · yquant_ud_audit_writer_user（授予 writer role）
+    · yquant_ud_audit_reader_user（授予 reader role）
   - 创建 03_data_ud_query_audit 集合 + TTL 索引（expireAfterSeconds=31536000）+ 二级索引
-  - 创建 03_data_ud_quality_summary 集合 + TTL 索引（expireAfterSeconds=31536000）
-  - 使用独立 DDL 账号，建好即销毁连接
+  - 使用独立 DDL 身份（YQUANT_UD_AUDIT_DDL_MONGO_* 环境变量），建好即销毁连接
+  - 不得创建 03_data_ud_quality_summary（Phase 1 不启用）
 
 第 2 步：真实 smoke
-  - 在生产环境用真实 AuditLogger 写入一条审计记录 → 立即读取验证 schema
+  - 用 writer user（yquant_ud_audit_writer_user）在生产环境写入一条审计记录
+  - 用 reader user（yquant_ud_audit_reader_user）立即读取验证 schema
   - 验证 TTL 索引存在且 expireAfterSeconds 正确
   - 验证写入失败不阻断主查询
 
@@ -1237,6 +1280,162 @@ def query(self, ...) -> DataResult:
   - 持续观察 1–2 周，每日检查 audit 数据量和写入延迟
   - 回滚预案：停用 AuditLogger 注入（mongo_db=None），已写入数据保留不删
 ```
+
+### 8.9 DDL 工具代码契约（audit_rollout.py）
+
+#### 8.9.1 现有实现状态
+
+`scripts/unified_data/audit_rollout.py` 当前已完成 collection + 索引创建（`run_apply` 约 L292-L342），但存在下列已识别的实现缺口，需在 Implement Remediation 阶段修复：
+
+| # | 缺口 | 现有实现 | 需修复方向 |
+|---|------|---------|-----------|
+| G1 | 无 role/user 创建 | `run_apply()` 无 createRole/createUser | 增加 role/user 创建逻辑（幂等） |
+| G2 | role 前缀错误 | 当前硬编码前缀 `ud_audit_writer*` / `ud_audit_reader*` | 改为 `yquant_ud_audit_writer*` / `yquant_ud_audit_reader*` |
+| G3 | role 仅校验前缀不创建 | `--writer-role/--reader-role` 仅校验命名前缀 | `--apply` 时须实际创建/校验 role + user |
+| G4 | 白名单注入位置 | 无现有白名单实现 | 在模块级添加 `ALLOWED_PARAMS` 常量 |
+| G5 | createUser 缺 pwd | `_ensure_user` 接收 `password_env_var` 却不读取；createUser 命令无 `pwd`（真实首次 --apply 对 SCRAM 用户失败）；docstring 声称 fail-fast 但代码未实现 | 仅须 createUser 时读取对应 runtime 密码环境变量作 `createUser.pwd`；缺失/空 fail-fast（退出码 3）；幂等校验路径不读密码；详见 §8.9.5 |
+
+#### 8.9.2 需新增的 role/user 创建函数
+
+```python
+# 在 audit_rollout.py 中新增：
+
+WRITER_ROLE_NAME = "yquant_ud_audit_writer_role"
+READER_ROLE_NAME = "yquant_ud_audit_reader_role"
+WRITER_USER_NAME = "yquant_ud_audit_writer_user"
+READER_USER_NAME = "yquant_ud_audit_reader_user"
+
+# 模块级白名单常量（替代构造函数注入）
+ALLOWED_PARAMS: set[str] = {
+    # Implement 阶段固化具体键
+}
+
+
+def _ensure_write_role(db: Any) -> bool:
+    """创建或校验 writer role：对 03_data_ud_query_audit 的 insert-only 权限。
+
+    幂等：role 已存在且权限精确匹配时不重复创建。
+    失败：角色已存在但 db / collection / actions / inherited roles / role binding 任一项不匹配 → fail-closed（退出码 4），不 warning-then-continue，不自动 drop/recreate。
+    """
+    ...
+
+
+def _ensure_read_role(db: Any) -> bool:
+    """创建或校验 reader role：对 03_data_ud_query_audit 的 find-only 权限。"""
+    ...
+
+
+def _ensure_write_user(db: Any) -> bool:
+    """创建或校验 writer user：授予 yquant_ud_audit_writer_role。
+
+    createUser 初始密码来源：YQUANT_UD_AUDIT_WRITER_MONGO_PASSWORD（§8.9.5）。
+    仅当用户不存在须 createUser 时读取该密码；用户已存在仅校验 role binding，不读密码。
+    """
+    ...
+
+
+def _ensure_read_user(db: Any) -> bool:
+    """创建或校验 reader user：授予 yquant_ud_audit_reader_role。
+
+    createUser 初始密码来源：YQUANT_UD_AUDIT_READER_MONGO_PASSWORD（§8.9.5）。
+    仅当用户不存在须 createUser 时读取该密码；用户已存在仅校验 role binding，不读密码。
+    """
+    ...
+```
+
+#### 8.9.3 错误处理
+
+| 场景 | 行为 | 退出码 |
+|------|------|--------|
+| DDL 凭证缺失（URI/USERNAME/PASSWORD） | fail-fast | 3 |
+| 现有 role/user/index 已存在但 db / collection / actions / inherited roles / role binding / TTL / key / order 任一项不精确匹配 | fail-closed：不自动 drop/recreate，不 warning-then-continue；直接 fail-fast | 4 |
+| role/user 名称不在 `yquant_ud_audit_*` 命名空间内 | fail-fast | 2 |
+| createRole/createUser 抛出权限异常 | fail-fast | 4 |
+| 须 createUser（用户不存在）但 runtime 密码环境变量缺失/空 | fail-fast：在 createUser DDL 命令发出前退出 | 3 |
+| createUser 命令本身成功，但 user 已存在且 role binding 不匹配 | fail-closed：不得修改/重建用户 | 4 |
+| collection/index 操作成功但 role/user 失败 | fail-closed：不声明成功 | 4 |
+| dry-run 模式 | 打印预期 role/user/index 操作，零副作用 | 0 |
+
+#### 8.9.4 `--verify` 只读验证范围与退出码
+
+`python scripts/unified_data/audit_rollout.py --verify` 的执行范围：
+
+| 验证项 | 检查内容 | 可选依赖 |
+|--------|----------|----------|
+| collection | `tradingagents.03_data_ud_query_audit` 是否存在 | 无 |
+| 3 个索引 | TTL `fetched_at`（expireAfterSeconds=31536000）、`(security_id, fetched_at)`、`(capability, fetched_at)` — 索引名、键顺序、expireAfterSeconds 精确匹配 | collection 存在 |
+| writer role | `yquant_ud_audit_writer_role` 是否存在，privileges 精确匹配（db=tradingagents, collection=03_data_ud_query_audit, actions=[insert]） | 无 |
+| reader role | `yquant_ud_audit_reader_role` 是否存在，privileges 精确匹配（db=tradingagents, collection=03_data_ud_query_audit, actions=[find]） | 无 |
+| writer user | `yquant_ud_audit_writer_user` 是否存在，授予 writer role | writer role 存在 |
+| reader user | `yquant_ud_audit_reader_user` 是否存在，授予 reader role | reader role 存在 |
+| QualitySummary | **不得存在** `03_data_ud_quality_summary` 集合（Phase 1 不启用） | 无 |
+
+**退出码**：0=全部通过（含预期不存在项）；1=任一项验证失败；2=argparse 拒绝（`--apply`/`--verify` 互斥冲突或未知参数）；3=凭证缺失；4=运行时错误。
+
+#### 8.9.5 createUser 初始密码传递契约（HIGH-1 修复基线）
+
+本节是 `_ensure_user` createUser pwd 缺口的唯一修复基线，与 RFC §8.4.7、SPEC §8.7 三层一致。Implement 阶段须严格按此实现。
+
+**密码来源映射**：
+
+| 目标 user | `_ensure_user` 的 `password_env_var` 参数值 | createUser.pwd 读取来源 |
+|-----------|---------------------------------------------|------------------------|
+| `yquant_ud_audit_writer_user` | `YQUANT_UD_AUDIT_WRITER_MONGO_PASSWORD` | `os.environ["YQUANT_UD_AUDIT_WRITER_MONGO_PASSWORD"]` |
+| `yquant_ud_audit_reader_user` | `YQUANT_UD_AUDIT_READER_MONGO_PASSWORD` | `os.environ["YQUANT_UD_AUDIT_READER_MONGO_PASSWORD"]` |
+
+语义：runtime 登录密码 = createUser 初始密码。复用既有 runtime 密码环境变量，不新增 env、不新增 alias/fallback。
+
+**`_ensure_user` 实现契约**（修复后须满足）：
+
+```python
+def _ensure_user(
+    db: Any,
+    *,
+    user_name: str,
+    roles: list[dict[str, Any]],
+    password_env_var: str,
+) -> str:
+    """幂等创建/校验 custom user；createUser 初始密码按需读取。
+
+    1. 经 DDL bootstrap identity 执行只读 usersInfo 判定用户是否存在（仅读不写，
+       不在预检阶段创建/更新 role/user/index/collection）。
+    2. 用户不存在 → 读 password_env_var；缺失/空 → raise MissingCredentialError（exit 3）。
+       → db.command({"createUser": user_name, "pwd": password, "roles": roles})。
+       password 仅在此单条 DDL 命令作用域内存活，执行后丢弃。
+    3. 用户已存在 → 不读密码、不轮换、不重设；仅校验 role binding 精确匹配，
+       不匹配 raise IdentityPrivilegeMismatch（exit 4），不修改/重建用户。
+    """
+```
+
+**关键行为断言**（Implement 须实现，Tester 须验证）：
+
+| # | 断言 | 触发条件 | 期望结果 |
+|---|------|----------|----------|
+| PWD-1 | createUser 命令含 pwd | 用户不存在 + 密码环境变量已设置 | `db.command` 收到的 dict 含 `"pwd"` 键且值非空 |
+| PWD-2 | createUser 前读密码 | 用户不存在 | `os.environ.get(password_env_var)` 在 createUser 之前被调用 |
+| PWD-3 | 密码缺失不发 createUser | 用户不存在 + 密码环境变量缺失/空 | raise MissingCredentialError，退出码 3；**不发 createUser 写 DDL**。注意：DDL identity 只读 `usersInfo` 存在性预检连接属于合法操作（已在 PWD-1/PWD-2 之前执行），此处禁止的是 createUser 写副作用，而非禁止预检只读连接 |
+| PWD-4 | 幂等不读密码 | 用户已存在 | 不读取密码环境变量；仅校验 role binding |
+| PWD-5 | role binding 不匹配不重建 | 用户已存在 + role binding 与契约不一致 | raise IdentityPrivilegeMismatch，退出码 4；不 updateUser/dropUser/createUser |
+| PWD-6 | 异常无 secret 泄露 | 上述任何异常路径 | 异常消息 / repr 不含 password 值 |
+
+**安全防护**（硬性，DSA 约束）：
+
+- 不得 print / log / return / 持久化 password 值。
+- password 变量生命周期限定在 createUser 命令构建与执行的单一作用域。
+- 不得出现在 traceback / 异常消息 / 诊断输出。
+- DDL bootstrap 密码（`YQUANT_UD_AUDIT_DDL_MONGO_PASSWORD`）与 runtime 密码严格隔离，不交叉引用。
+
+**测试契约**（Tester 须覆盖，fake admin / mongomock）：
+
+| # | 测试场景 | 验证点 |
+|---|----------|--------|
+| T-PWD-1 | fake admin 须 createUser | 断言 `createUser` 命令含 `pwd` 键且值非空 |
+| T-PWD-2 | 密码缺失 + 用户不存在 | 经 DDL identity（或 fake admin）只读 `usersInfo` 确认用户不存在后，runtime pwd 缺失/空 → 退出码 3；不发 `createUser`、不执行任何写 DDL、不创建/不使用 writer/reader runtime identity；无 secret 泄露。允许一次 DDL identity 只读连接用于存在性检查，不属于 runtime 登录或 createUser 写副作用 |
+| T-PWD-3 | 用户已存在（幂等） | 不读取密码环境变量；role binding 精确匹配 → "unchanged" |
+| T-PWD-4 | 用户已存在 + role binding 不匹配 | 退出码 4；不修改/重建用户 |
+| T-PWD-5 | 所有异常路径 | 异常消息 / 日志 / repr 不含 password 值 |
+
+**docs 一致性验证**：RFC §8.4.7、SPEC §8.7、本节三层契约必须一致；docs diff check 仅触及这三份文档。
 
 ---
 
@@ -1435,6 +1634,7 @@ PYTHONPATH=. pytest tests/data/unified_data/test_quality_scorer.py tests/data/un
 
 | 顺序 | 组件 | 依赖 | 验证 |
 |------|------|------|------|
+| 0 | DDL 脚本修复（audit_rollout.py） | 无 | test_audit_rollout.py（新增：A1~A10 验收点） |
 | 1 | QualityScorerConfig | 无（纯 dataclass） | test_quality_config.py |
 | 2 | QualityScorer | QualityScorerConfig | test_quality_scorer.py |
 | 3 | ProviderRegistry 治理 | 现有 registry 代码 | test_registry_governance.py |
@@ -1503,17 +1703,78 @@ PYTHONPATH=. pytest tests/data/unified_data/test_quality_scorer.py tests/data/un
 
 ---
 
-## 14. router.py 一次性行数豁免记录（Governance Track G2 — 已于 G3 取代）
+## 14. 后置验收边界：Developer Acceptance & Production Smoke
 
-### 14.1 背景
+### 14.1 Developer Acceptance 验收点
+
+Implement 阶段需要验证以下验收点（Kanban 任务完成条件）：
+
+| # | 验收点 | 验证方式 | 通过条件 |
+|---|--------|---------|----------|
+| A1 | `audit_rollout.py` role/user 创建 | 单元测试 mock `db.command()` 调用 | `_ensure_write_role` / `_ensure_read_role` / `_ensure_write_user` / `_ensure_read_user` 四函数存在，且 `run_apply` 调用链覆盖 |
+| A2 | 命名前缀为 `yquant_ud_audit_*` | grep 检验硬编码字符串 | `WRITER_ROLE_NAME.startswith("yquant_ud_audit")`, `READER_ROLE_NAME.startswith("yquant_ud_audit")` |
+| A3 | 权限范围正确 | `createRole` privileges 检查 | writer role 仅含 `{ resource: { db: "tradingagents", collection: "03_data_ud_query_audit" }, actions: ["insert"] }`；reader role 仅含 `["find"]` |
+| A4 | 白名单为模块级常量 | grep 检验 | `ALLOWED_PARAMS` 位于模块作用域（无缩进），非 `__init__` 参数 |
+| A5 | 拒绝 broad identity | 单元测试 mock | `run_apply` 不调用涉及 `portfolio_*` / `smart_money_*` / `signal_*` / `trade_*` / 缓存集合的 grant 操作 |
+| A6a | DDL bootstrap 凭证缺失 fail-fast | `YQUANT_UD_AUDIT_DDL_MONGO_URI`/`USERNAME`/`PASSWORD` 未设置 | 退出码 3，不发起任何 MongoDB 连接（连 DDL bootstrap 连接也不建立） |
+| A6b | runtime 密码缺失 + 用户不存在 fail-fast | 经 DDL identity 只读 `usersInfo` 确认用户不存在后，对应 runtime 密码环境变量缺失/空 | 退出码 3；允许一次 DDL identity 只读连接用于 `usersInfo` 存在性预检，但**不发 `createUser`、不执行任何写 DDL、不创建/不使用 writer/reader runtime identity**（与 T-PWD-2 一致） |
+| A7 | 未知参数拒绝 fail-fast | `--unknown-flag` | 退出码 2，argparse 报 `unrecognized arguments` |
+| A8 | dry-run 零副作用 | `python audit_rollout.py`（无 `--apply`） | 打印计划、退出码 0、不调用任何 MongoDB 连接 |
+| A9 | `--apply` 幂等 | 两次连续 `--apply` | 第二次不报错，输出包含 `skipped=[...]` |
+| A10 | 全部已有测试（269）不因 DDL 修改而失败 | `pytest tests/data/unified_data/ -m "not production_gate" -q --tb=short` | 0 failed |
+
+### 14.2 Production Smoke 边界
+
+仅在 Pascal 显式授权 DDL+smoke 后方可执行。以下是 smoke 的最小步骤和回滚边界：
+
+#### Smoke 步骤
+
+```bash
+# 1. DDL（role/user/index）——执行一次
+YQUANT_UD_AUDIT_DDL_MONGO_URI="..." YQUANT_UD_AUDIT_DDL_MONGO_USERNAME="..." YQUANT_UD_AUDIT_DDL_MONGO_PASSWORD="..." \
+  python scripts/unified_data/audit_rollout.py \
+  --apply
+
+# 2. 验证 DDL 结果
+YQUANT_UD_AUDIT_DDL_MONGO_URI="..." YQUANT_UD_AUDIT_DDL_MONGO_USERNAME="..." YQUANT_UD_AUDIT_DDL_MONGO_PASSWORD="..." \
+  python scripts/unified_data/audit_rollout.py \
+  --verify
+
+# 3. 用 writer user 写入一条审计记录
+# （通过 production_gate smoke test）
+PYTHONPATH=. MONGODB_URI="..." MONGODB_USERNAME="..." MONGODB_PASSWORD="..." \
+  pytest tests/data/unified_data/ -m "production_gate" -v -k "test_audit_logger_prod"
+
+# 4. 用 reader user 读取验证
+# （通过 production_gate smoke test）
+PYTHONPATH=. MONGODB_URI="..." MONGODB_USERNAME="..." MONGODB_PASSWORD="..." \
+  pytest tests/data/unified_data/ -m "production_gate" -v -k "test_audit_logger_read_prod"
+```
+
+#### 回滚边界
+
+| 操作 | 回滚命令 | 风险 |
+|------|---------|------|
+| 已创建 role | `db.dropRole("yquant_ud_audit_writer_role")` / `db.dropRole("yquant_ud_audit_reader_role")` | 无丢失（纯权限） |
+| 已创建 user | `db.dropUser("yquant_ud_audit_writer_user")` / `db.dropUser("yquant_ud_audit_reader_user")` | 无丢失（纯权限） |
+| 已创建集合 | `db.dropCollection("03_data_ud_query_audit")` | 损失已写入的审计数据 |
+| 已创建索引 | `db.03_data_ud_query_audit.dropIndex("name")` | 无丢失（数据完整） |
+| 已写入审计数据 | 不可回滚（保留），停用 AuditLogger 注入 | 前端窗口审计数据丢失 |
+| 全部回滚 | 删除 `quality/` 和 `audit/` 子包 | 零代码残留 |
+
+---
+
+## 15. router.py 一次性行数豁免记录（Governance Track G2 — 已于 G3 取代）
+
+### 15.1 背景
 
 G1（`t_888eabbe`）已将项目 Python 文件硬上限从 300 行调整为 800 行，并同步了 CLAUDE.md、RFC-03-010、DESIGN-03-010。
 Pascal 明确授权本 Phase 2 的 `skills/data/unified_data/router.py`（当前 1115 行）获得一次性、受控豁免，
 以继续独立 Verify（T24 replacement）；这不是普遍 >800 行豁免。
 
-> **G3 更新（2026-07-16）**：G3 将项目文件行数硬上限从 800 升级为 1200/2400/3600 四级分级（详见 CLAUDE.md:182 与 §14.6）。router.py 当前约 1195 行处于 ≤1200 常规范围，原 G2 的「下次扩展必须拆分 ≤800」不再是当前强制规则——下一次实质性功能扩展前仅需按 G3「1201–2400 受控扩张」规则操作（在 Design/PR 中说明职责边界、增长原因和拆分触发条件，需独立 Review）。
+> **G3 更新（2026-07-16）**：G3 将项目文件行数硬上限从 800 升级为 1200/2400/3600 四级分级（详见 CLAUDE.md:182 与 §15.6）。router.py 当前约 1195 行处于 ≤1200 常规范围，原 G2 的「下次扩展必须拆分 ≤800」不再是当前强制规则——下一次实质性功能扩展前仅需按 G3「1201–2400 受控扩张」规则操作（在 Design/PR 中说明职责边界、增长原因和拆分触发条件，需独立 Review）。
 |
-### 14.2 适用对象与范围
+### 15.2 适用对象与范围
 
 | 项目 | 值 |
 |------|-----|
@@ -1522,7 +1783,7 @@ Pascal 明确授权本 Phase 2 的 `skills/data/unified_data/router.py`（当前
 | 本 Design 内引用 | §4.2 Router 集成（health_state 过滤）、§7 DataRouter 质量填充集成 |
 | 风险等级 | 低（reader 影响，不暴露外部调用方，不修改已有公共契约） |
 
-### 14.3 边界与约束
+### 15.3 边界与约束
 
 1. **不改业务语义**：本次 diff（+151/-17）不改变 DataRouter.query()、_resolve_external_chain、_query_external_single 的输入输出契约。
 2. **不借机扩展**：不允许将其他文件（registry.py、quality 子包、audit 子包、config.py 等）也拉入豁免范围。不允许借本次豁免引入超出当前 Phase 2 质量/审计集成范围的功能。
@@ -1530,7 +1791,7 @@ Pascal 明确授权本 Phase 2 的 `skills/data/unified_data/router.py`（当前
 4. **文档约束**：本豁免记录不影响 Phase 2 的设计契约、行为矩阵（DR-301~309）、兼容性声明、测试策略和验收标准。
 5. **测试约束**：不得为凑行数或跳过豁免边界捏造测试结果。所有测试按 §9 现有策略执行。
 
-### 14.4 原始状态核实
+### 15.4 原始状态核实
 
 豁免判定时 `router.py` 的确认状态：
 
@@ -1541,16 +1802,16 @@ Pascal 明确授权本 Phase 2 的 `skills/data/unified_data/router.py`（当前
 
 > ⚠️ **演化承诺**：当 router.py 的下一次实质性功能变更到来时（Phase 3 或 Sector Router 或新数据通路），建议评估按职责拆分的维护性收益。G3 不强制拆分，但若文件超过 1200 行进入「受控扩张」级别，须遵守对应规则。
 
-### 14.5 治理历史
+### 15.5 治理历史
 
 | 事件 | 时间 | 决策 | 产出 |
 |------|------|------|------|
 | G1 调整上限 | 2026-07-16 | Python 硬上限 300→800 | CLAUDE.md + RFC-03-010 + DESIGN-03-010 同步 |
-| G2 豁免记录 | 2026-07-16 | router.py 一次性豁免 1115 行 | 本 §14 |
-| G3 四级分级上线 | 2026-07-16 | 将 800 单阈值升级为 1200/2400/3600 四级分级 | CLAUDE.md:182、本 §14.6 |
+| G2 豁免记录 | 2026-07-16 | router.py 一次性豁免 1115 行 | 本 §15 |
+| G3 四级分级上线 | 2026-07-16 | 将 800 单阈值升级为 1200/2400/3600 四级分级 | CLAUDE.md:182、本 §15.6 |
 | 下次功能扩展前 | TBD | G2 原始约束已由 G3 取代；按 G3 1201–2400 受控扩张规则执行 | 独立 Review |
 
-### 14.6 G3 四级分级规则（当前生效，2026-07-16）
+### 15.6 G3 四级分级规则（当前生效，2026-07-16）
 
 CLAUDE.md:182 同步的四级行数治理政策：
 
@@ -1560,8 +1821,8 @@ CLAUDE.md:182 同步的四级行数治理政策：
 | 1201–2400 行：受控扩张 | 下一次实质性功能扩展前须在 Design/PR 中说明职责边界、增长原因和拆分触发条件；需要独立 Review |
 | 2401–3599 行：架构例外 | 下一次实质性功能扩展前必须有 Principal Design，定义拆分模块/迁移顺序/验证；不得在无设计情况下继续叠加 |
 | ≥3600 行：禁止继续扩张 | 必须先完成拆分或取得 Pascal 针对具体文件的明确豁免 |
-|
-|## 15. 参考资料
+
+## 16. 参考资料
 
 - `docs/rfc/03_data/RFC-03-011-unified-data-phase-2-quality-audit-governance.md` — 来源 RFC
 - `docs/spec/03_data/SPEC-03-011-unified-data-phase-2-quality-audit-governance.md` — 来源 SPEC
