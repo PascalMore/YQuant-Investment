@@ -75,6 +75,8 @@ from .local_mongo_adapter import LocalMongoAdapter
 from .providers import (
     AKShareProvider,
     BaseExternalProvider,
+    FakeKlineClient,
+    KlineClient,
     RateLimiter,
     TushareProvider,
 )
@@ -134,6 +136,8 @@ __all__ = [
     "IndexInfo",
     # Phase 1B-A
     "FreshnessPolicy",
+    "FakeKlineClient",
+    "KlineClient",
     "TushareProvider",
     "AKShareProvider",
     "BaseExternalProvider",

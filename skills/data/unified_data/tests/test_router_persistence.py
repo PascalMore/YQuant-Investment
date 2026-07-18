@@ -56,7 +56,7 @@ from skills.data.unified_data import (
     ProviderRegistry,
     SecurityId,
 )
-from tests.data.unified_data.conftest import FakeProvider
+from skills.data.unified_data.tests.conftest import FakeProvider
 
 
 KLINE_CAP = "market_data.kline_daily"
@@ -613,7 +613,7 @@ class TestRouterMaterialization:
             with_cache=True,
         )
         # Inject a TA-CN adapter manually here (build helper skips it).
-        from tests.data.unified_data.conftest import FakeTA_CNAdapter
+        from skills.data.unified_data.tests.conftest import FakeTA_CNAdapter
         ta_cn = FakeTA_CNAdapter(
             collections={
                 "stock_daily_quotes": [
@@ -695,7 +695,7 @@ class TestRouterErrors:
         )
         db = _make_db()
         # Use a TA-CN adapter that does NOT cover the capability.
-        from tests.data.unified_data.conftest import FakeTA_CNAdapter
+        from skills.data.unified_data.tests.conftest import FakeTA_CNAdapter
         ta_cn = FakeTA_CNAdapter(
             covered_capabilities=set()  # cover nothing → Step 1 skipped
         )
@@ -727,7 +727,7 @@ class TestRouterIntegration:
         self, fresh_registry, cn_maotai, fake_ta_cn_with_kline
     ):
         # Step 1 misses (wrong collection), Step 2 hits, no external call.
-        from tests.data.unified_data.conftest import FakeTA_CNAdapter
+        from skills.data.unified_data.tests.conftest import FakeTA_CNAdapter
 
         ta_cn = FakeTA_CNAdapter(
             collections={}  # no docs → Step 1 returns empty

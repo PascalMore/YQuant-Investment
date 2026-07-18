@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from skills.data.unified_data import DataRouter, Market, ProviderRegistry
-from tests.data.unified_data.conftest import FakeProvider
+from skills.data.unified_data.tests.conftest import FakeProvider
 
 
 CAPABILITY = "market_data.kline_daily"

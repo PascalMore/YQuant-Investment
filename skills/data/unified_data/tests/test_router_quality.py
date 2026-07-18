@@ -32,7 +32,7 @@ from skills.data.unified_data import (
     QualityScorerConfig,
     QualitySummary,
 )
-from tests.data.unified_data.conftest import FakeProvider
+from skills.data.unified_data.tests.conftest import FakeProvider
 
 CAPABILITY = "market_data.kline_daily"
 AUDIT_COLL = "03_data_ud_query_audit"

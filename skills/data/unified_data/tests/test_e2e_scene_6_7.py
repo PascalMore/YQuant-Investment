@@ -16,7 +16,7 @@ from __future__ import annotations
 # defined there are auto-discoverable by pytest for this file's tests.
 # We can't add them to the package-level ``conftest.py`` because that's
 # excluded from this task's permitted-files list (Design §3.9.4).
-pytest_plugins = ["tests.data.unified_data.test_e2e_fixtures"]
+pytest_plugins = ["skills.data.unified_data.tests.test_e2e_fixtures"]
 
 import subprocess
 import sys
@@ -30,9 +30,9 @@ from skills.data.unified_data import (
     SecurityId,
 )
 
-from tests.data.unified_data.conftest import FakeProvider, FakeTA_CNAdapter
+from skills.data.unified_data.tests.conftest import FakeProvider, FakeTA_CNAdapter
 
-from .test_e2e_fixtures import INDEX_DAILY_CAP, INDEX_LIST_CAP, PROJECT_ROOT
+from skills.data.unified_data.tests.test_e2e_fixtures import INDEX_DAILY_CAP, INDEX_LIST_CAP, PROJECT_ROOT
 
 
 # ---------------------------------------------------------------------------
@@ -191,8 +191,8 @@ class TestE2EScene7_CoverageGate:
         --fail-under=60`` both exit 0.
 
         Both commands run against the existing
-        ``tests/data/unified_data`` suite (no path filter on the run
-        side — collection is fast and avoids touching production code).
+        ``skills/data/unified_data/tests`` suite (all tests are
+        now colocated there).
         """
         # Step 1: coverage run on the whole unified_data suite. Exclude
         # ``test_coverage_report_runs`` itself to avoid recursion
@@ -206,7 +206,7 @@ class TestE2EScene7_CoverageGate:
                 "run",
                 "-m",
                 "pytest",
-                "tests/data/unified_data",
+                "skills/data/unified_data/tests",
                 "-q",
                 "-k",
                 "not test_coverage_report_runs",

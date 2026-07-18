@@ -14,12 +14,14 @@ import pytest
 
 from skills.data.unified_data.exceptions import UnsupportedCapabilityError
 from skills.data.unified_data.models import Market, SecurityId
+from skills.data.unified_data.models.domain.market_data import DailyBar
 from skills.data.unified_data.providers import (
     STUB_COLUMNS,
     AKShareProvider,
     TushareProvider,
     stub_dataframe_for,
 )
+from skills.data.unified_data.providers.kline_client import FakeKlineClient
 
 
 # ---------------------------------------------------------------------------
@@ -64,13 +66,44 @@ class TestTushareProvider:
         monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
         assert TushareProvider().is_available() is False
 
-    def test_tushare_fetch_stub(self, cn_maotai):
-        """TP-105: fetch returns the canonical empty DataFrame for a known capability."""
-        provider = TushareProvider(token_env="TUSHARE_TOKEN_UNSET_FOR_TEST")
-        df = provider.fetch("market_data", "kline_daily", cn_maotai)
-        # Stub contract: empty rows, exact column set.
-        assert len(df) == 0
-        assert list(df.columns) == STUB_COLUMNS["market_data.kline_daily"]
+    def test_tushare_fetch_kline_daily_activated(self, cn_maotai):
+        """TP-105: Phase 1D — kline_daily returns list[DailyBar] (not stub DF).
+
+        Inject a FakeKlineClient with a Tushare-style fixture; verify
+        the mapping produces a valid DailyBar.
+        """
+        import pandas as pd
+
+        fixture = pd.DataFrame({
+            "ts_code": ["600519.SH", "600519.SH"],
+            "trade_date": ["20260713", "20260714"],
+            "open": [1600.0, 1610.0],
+            "high": [1620.0, 1625.0],
+            "low": [1590.0, 1600.0],
+            "close": [1615.0, 1620.0],
+            "pre_close": [1595.0, 1615.0],
+            "change": [20.0, 5.0],
+            "pct_chg": [1.25, 0.31],
+            "vol": [50000.0, 55000.0],
+            "amount": [800000.0, 890000.0],
+        })
+        client = FakeKlineClient(dataframe=fixture)
+        provider = TushareProvider(http_client=client)
+        result = provider.fetch("market_data", "kline_daily", cn_maotai)
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert all(isinstance(b, DailyBar) for b in result)
+        assert result[0].symbol == "600519"
+        assert result[0].trade_date == "20260713"
+
+    def test_tushare_fetch_stub_weekly(self, cn_maotai):
+        """TP-105: non-kline_daily capability (kline_weekly) still returns stub DataFrame."""
+        import pandas as pd
+
+        provider = TushareProvider()
+        result = provider.fetch("market_data", "kline_weekly", cn_maotai)
+        assert isinstance(result, pd.DataFrame)
+        assert list(result.columns) == STUB_COLUMNS["market_data.kline_weekly"]
 
     def test_tushare_fetch_unsupported(self):
         """TP-106: undeclared capability raises ``UnsupportedCapabilityError``."""
@@ -126,12 +159,29 @@ class TestAKShareProvider:
         )
         assert AKShareProvider().is_available() is False
 
-    def test_akshare_fetch_stub(self, cn_maotai):
-        """AK-105: fetch returns the canonical empty DataFrame for a known capability."""
-        provider = AKShareProvider()
-        df = provider.fetch("market_data", "kline_daily", cn_maotai)
-        assert len(df) == 0
-        assert list(df.columns) == STUB_COLUMNS["market_data.kline_daily"]
+    def test_akshare_fetch_kline_daily_activated(self, cn_maotai):
+        """AK-105: Phase 1D — kline_daily returns list[DailyBar] (not stub DF)."""
+        import pandas as pd
+
+        fixture = pd.DataFrame({
+            "日期": ["2026-07-13"],
+            "开盘": [1600.0],
+            "最高": [1620.0],
+            "最低": [1590.0],
+            "收盘": [1615.0],
+            "涨跌额": [20.0],
+            "涨跌幅": [1.25],
+            "成交量": [5000000.0],
+            "成交额": [800000000.0],
+            "换手率": [0.45],
+        })
+        client = FakeKlineClient(dataframe=fixture)
+        provider = AKShareProvider(http_client=client)
+        result = provider.fetch("market_data", "kline_daily", cn_maotai)
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert all(isinstance(b, DailyBar) for b in result)
+        assert result[0].trade_date == "20260713"
 
 
 # ---------------------------------------------------------------------------

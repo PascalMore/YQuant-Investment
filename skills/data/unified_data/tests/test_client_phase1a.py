@@ -36,8 +36,8 @@ from skills.data.unified_data.models.domain import (
     StockInfo,
 )
 
-from . import FakeTA_CNMongoAdapter
-from .fixtures import FakeDatabase
+from skills.data.unified_data.tests.conftest import FakeTA_CNMongoAdapter
+from skills.data.unified_data.tests.fixtures import FakeDatabase
 
 
 # ---------------------------------------------------------------------------
@@ -343,7 +343,7 @@ class TestClientConstruction:
 
     def test_real_db_adapter_works(self):
         """Real (FakeDatabase-backed) ``TA_CNMongoAdapter`` round-trips through client."""
-        from .fixtures.ta_cn_mock_docs import make_populated_database
+        from skills.data.unified_data.tests.fixtures.ta_cn_mock_docs import make_populated_database
 
         db = make_populated_database()
         adapter = TA_CNMongoAdapter(db)

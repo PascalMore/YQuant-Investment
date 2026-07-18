@@ -34,15 +34,20 @@ from __future__ import annotations
 import pandas as pd
 
 from .base_external import BaseExternalProvider
+from .kline_client import AKShareKlineClient, FakeKlineClient, KlineClient, TushareKlineClient
 from .rate_limiter import RateLimiter, with_retry
 from .tushare import TushareProvider
 from .akshare import AKShareProvider
 
 __all__ = [
+    "AKShareKlineClient",
     "AKShareProvider",
     "BaseExternalProvider",
+    "FakeKlineClient",
+    "KlineClient",
     "RateLimiter",
     "STUB_COLUMNS",
+    "TushareKlineClient",
     "TushareProvider",
     "stub_dataframe_for",
     "with_retry",

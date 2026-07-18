@@ -29,7 +29,7 @@ from skills.data.unified_data import (
     UnifiedDataConfig,
     UnsupportedCapabilityError,
 )
-from tests.data.unified_data.conftest import FakeProvider
+from skills.data.unified_data.tests.conftest import FakeProvider
 
 
 # ---------------------------------------------------------------------------

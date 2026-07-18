@@ -210,7 +210,7 @@ class TestNowInjection:
         request.getfixturevalue("fixed_now")
         fixture_def = request._fixture_defs["fixed_now"]
         assert fixture_def.func.__module__ == (
-            "tests.data.unified_data.fixtures.quality_fixtures"
+            "skills.data.unified_data.tests.fixtures.quality_fixtures"
         )
 
     def test_explicit_now_is_used_for_freshness(self, fixed_now) -> None:

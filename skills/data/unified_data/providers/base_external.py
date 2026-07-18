@@ -1,19 +1,26 @@
-"""Abstract base class for external providers (Phase 1B-A).
+"""Abstract base class for external providers (Phase 1D).
 
-External providers in Phase 1B-A do **not** call any real network API.
-Their :meth:`fetch` returns a pre-defined stub ``pd.DataFrame`` (see
-:data:`skills.data.unified_data.providers.STUB_COLUMNS`). The base class
-exists to give TushareProvider / AKShareProvider a uniform surface for
-future real-API work:
+External providers in Phase 1B-A did not perform real network I/O —
+their :meth:`fetch` returned pre-defined stub ``pd.DataFrame`` shapes
+(see :data:`skills.data.unified_data.providers.STUB_COLUMNS`). Phase 1D
+activates the ``market_data.kline_daily`` real call path for Tushare /
+AKShare via an injectable :class:`~.kline_client.KlineClient`; all
+other capabilities remain stubs.
+
+The base class exists to give TushareProvider / AKShareProvider a
+uniform surface:
 
 * Owns a :class:`RateLimiter` instance so subclasses do not duplicate
   the throttling state.
 * Exposes :meth:`_check_capability` so subclasses can validate the
-  requested capability at the top of :meth:`fetch` without re-implementing
-  the boilerplate.
-* Exposes :meth:`_to_canonical` as a hook for the eventual
-  ``pd.DataFrame → canonical domain object`` transformation (Phase 1B-B).
-  In 1B-A it is a no-op stub returning ``raw_df`` unchanged.
+  requested capability at the top of :meth:`fetch` without
+  re-implementing the boilerplate.
+* Exposes :meth:`_to_canonical` as a hook for the
+  ``pd.DataFrame → canonical domain object`` transformation. The base
+  implementation is a no-op stub returning ``raw_df`` unchanged; Phase
+  1D subclasses override it for ``kline_daily`` (returning
+  ``list[DailyBar]``) while leaving the no-op intact for any future
+  capability that has not yet implemented canonical mapping.
 
 Security (P-10):
     Subclasses are explicitly reminded in their module-level docstrings
@@ -33,7 +40,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing-only imports
 
 
 class BaseExternalProvider(DataProvider):
-    """Common base for Phase 1B-A stub providers.
+    """Common base for external providers (Phase 1B-A stubs + Phase 1D activation).
 
     Concrete subclasses must still implement :attr:`name`,
     :attr:`capabilities`, :attr:`markets`, :meth:`is_available` and
@@ -41,12 +48,15 @@ class BaseExternalProvider(DataProvider):
 
     * ``self._rate_limiter`` — a :class:`RateLimiter` configured for the
       subclass's expected traffic profile. Use ``self._rate_limiter.acquire()``
-      before performing a real API call (no-op in 1B-A).
+      before performing a real API call (no-op for stub paths).
     * :meth:`_check_capability` — wraps :meth:`DataProvider._assert_capability`
       to validate the requested capability at the top of :meth:`fetch`.
-    * :meth:`_to_canonical` — Phase 1B-B hook for converting raw provider
-      payloads into canonical domain objects. Phase 1B-A returns the
-      raw DataFrame unchanged.
+    * :meth:`_to_canonical` — hook for converting raw provider payloads
+      into canonical domain objects. The base implementation is a no-op
+      that returns ``raw_df`` unchanged; Phase 1D subclasses override it
+      for ``kline_daily`` (returning ``list[DailyBar]``). The base no-op
+      is retained so that any future capability without a mapping falls
+      through safely rather than crashing.
     """
 
     def __init__(
@@ -90,13 +100,24 @@ class BaseExternalProvider(DataProvider):
         self,
         raw_df: "pd.DataFrame",
         capability: str,
-    ) -> "pd.DataFrame":
+    ) -> Any:
         """Hook for converting raw provider payloads to canonical objects.
 
-        Phase 1B-A is a stub: this method returns ``raw_df`` unchanged.
-        Phase 1B-B is expected to override this in subclasses (or in a
-        dedicated transformer module) to perform the actual
-        ``pd.DataFrame`` → canonical mapping.
+        The base implementation is a **no-op** that returns ``raw_df``
+        unchanged — this preserves a safe default for any capability
+        that has not yet implemented canonical mapping (every capability
+        except ``market_data.kline_daily`` in Phase 1D).
+
+        Phase 1D subclasses override this method **in their own class
+        body** (the base method is deliberately not modified) and
+        dispatch on ``capability`` so they can return
+        ``list[DailyBar]`` for ``kline_daily`` while leaving all other
+        capabilities on the stub path.
+
+        Returns:
+            ``pd.DataFrame`` for stub capabilities (the raw input
+            unchanged); ``list[DailyBar]`` (or any canonical type) for
+            activated capabilities in subclasses.
         """
         return raw_df
 

@@ -25,7 +25,7 @@ from skills.data.unified_data import (
     SecurityId,
 )
 
-from tests.data.unified_data.conftest import FakeProvider, FakeTA_CNAdapter
+from skills.data.unified_data.tests.conftest import FakeProvider, FakeTA_CNAdapter
 
 
 # Capability + project-root constants (DESIGN-03-010 §4.1)
@@ -35,7 +35,7 @@ INDEX_DAILY_CAP = "market_data.index_daily"
 
 # Project root used by Scene 7's coverage subprocess.
 PROJECT_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 )
 
 

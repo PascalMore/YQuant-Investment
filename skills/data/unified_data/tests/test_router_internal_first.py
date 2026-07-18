@@ -11,7 +11,7 @@ implements:
     Step 4 — external fallback chain (Tushare → AKShare).
 
 The fixtures (``fake_ta_cn_adapter``, ``fake_ta_cn_with_kline``) live in
-``tests/data/unified_data/conftest.py``.
+``skills/data/unified_data/tests/conftest.py``.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from skills.data.unified_data import (
     SecurityId,
     UnifiedDataClient,
 )
-from tests.data.unified_data.conftest import FakeProvider
+from skills.data.unified_data.tests.conftest import FakeProvider
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +80,7 @@ class TestTACNStep:
 
     def test_ta_cn_exception_fallback(self, fresh_registry, cn_maotai):
         """DR-101: TA-CN raises → Router records a warning and falls back."""
-        from tests.data.unified_data.conftest import FakeTA_CNAdapter
+        from skills.data.unified_data.tests.conftest import FakeTA_CNAdapter
 
         boom = FakeTA_CNAdapter(
             collections={},
@@ -258,7 +258,7 @@ class TestExternalChainFailure:
 class TestTraceAndWarnings:
     def test_source_trace_full(self, fresh_registry, cn_maotai):
         """DR-109: 3-step trace — TA-CN error + Tushare fail + AKShare ok."""
-        from tests.data.unified_data.conftest import FakeTA_CNAdapter
+        from skills.data.unified_data.tests.conftest import FakeTA_CNAdapter
 
         adapter = FakeTA_CNAdapter(
             collections={},

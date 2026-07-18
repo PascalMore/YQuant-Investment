@@ -8,7 +8,7 @@ Phase 1A acceptance targets:
     * Sort orders match the Phase 1A matrix
 
 All tests run against an in-memory :class:`FakeDatabase` from
-``tests.data.unified_data.fixtures.fake_mongo`` — no network, no real
+``skills.data.unified_data.tests.fixtures.fake_mongo`` — no network, no real
 MongoDB.
 """
 
@@ -19,8 +19,8 @@ import pytest
 from skills.data.unified_data import TA_CNMongoAdapter
 from skills.data.unified_data.adapters import ta_cn_mongo_adapter as adapter_module
 
-from .fixtures import FakeDatabase
-from .fixtures.ta_cn_mock_docs import (
+from skills.data.unified_data.tests.fixtures import FakeDatabase
+from skills.data.unified_data.tests.fixtures.ta_cn_mock_docs import (
     INDEX_BASIC_INFO_HS300,
     INDEX_DAILY_QUOTES_HS300,
     MARKET_QUOTES_MAOTAI,

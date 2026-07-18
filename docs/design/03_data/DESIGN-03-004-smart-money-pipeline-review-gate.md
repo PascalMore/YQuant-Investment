@@ -50,7 +50,7 @@
 | `batch_report.py` | 新增批次汇总和文本格式化；`format_batch_closeout()` 在 pending 明细后追加补录命令提示 | 标准化批次汇报；引导用户完成闭环 |
 | `load_pending_confirmed.py` | 新增 `--date` 批量模式（F-009）、`--name-mapping` 参数、resolved 标记逻辑（F-010） | 支持批量补录与 pending 状态闭环 |
 | `smart_money_watcher.py` | `process_existing_files` 收集失败项并输出 batch summary | 批量可观测 |
-| `tests/test_image_pipeline_asset_name_guard.py` | 扩展测试 | 覆盖新增行为 |
+| `skills/data/data-pipeline/tests/test_a_share_name_corrector.py`、`test_asset_identity_review.py`、`test_run_unified_image_pipeline.py`、`test_run_unified_message_pipeline.py`、`test_batch_report.py`、`test_image_batch_state.py`、`test_smart_money_watcher.py` | 按被测模块拆分的回归测试 | 覆盖名称复核、pending 隔离、部分入库、批次收尾与 watcher 行为 |
 | `tests/test_load_pending_confirmed.py` | 新增测试文件 | 覆盖 --date 批量模式、resolved 标记、apply_command 生成 |
 
 ### 3.2 数据流/控制流
@@ -166,7 +166,13 @@ list[pipeline_result]
 - 手工验证：
   - 检查 pending CSV/JSON 字段可读。
 - 回归范围：
-  - `tests/test_image_pipeline_asset_name_guard.py`
+  - `skills/data/data-pipeline/tests/test_a_share_name_corrector.py`
+  - `skills/data/data-pipeline/tests/test_asset_identity_review.py`
+  - `skills/data/data-pipeline/tests/test_run_unified_image_pipeline.py`
+  - `skills/data/data-pipeline/tests/test_run_unified_message_pipeline.py`
+  - `skills/data/data-pipeline/tests/test_batch_report.py`
+  - `skills/data/data-pipeline/tests/test_image_batch_state.py`
+  - `skills/data/data-pipeline/tests/test_smart_money_watcher.py`
   - `skills/data/data-pipeline/scripts/test_codec_pipeline.py`
   - `tests/test_load_pending_confirmed.py`（新增）
 

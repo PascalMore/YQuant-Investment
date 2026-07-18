@@ -209,7 +209,7 @@ def result_missing_volume(fixed_now: datetime) -> DataResult:
     """N11：list[dict] daily-bar，volume 缺失（completeness=0.5）。
 
     DESIGN §3.5 footnote 锚点。警告文本精确为
-    ``"missing required fields: volume"``。
+    ``\"missing required fields: volume\"``。
     """
     return DataResult(
         data=[{"close": 1500.0}],

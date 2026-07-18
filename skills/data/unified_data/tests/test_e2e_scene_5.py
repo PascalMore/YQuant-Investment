@@ -21,7 +21,7 @@ from __future__ import annotations
 # defined there are auto-discoverable by pytest for this file's tests.
 # We can't add them to the package-level ``conftest.py`` because that's
 # excluded from this task's permitted-files list (Design §3.9.4).
-pytest_plugins = ["tests.data.unified_data.test_e2e_fixtures"]
+pytest_plugins = ["skills.data.unified_data.tests.test_e2e_fixtures"]
 
 from typing import Any
 
@@ -33,9 +33,9 @@ from skills.data.unified_data import (
     SecurityId,
 )
 
-from tests.data.unified_data.conftest import FakeProvider, FakeTA_CNAdapter
+from skills.data.unified_data.tests.conftest import FakeProvider, FakeTA_CNAdapter
 
-from .test_e2e_fixtures import make_cached_result
+from skills.data.unified_data.tests.test_e2e_fixtures import make_cached_result
 
 
 class TestE2EScene5_ForceRefresh:
