@@ -30,7 +30,6 @@ from skills.data.unified_data import (
     ProviderError,
     QualityScorer,
     QualityScorerConfig,
-    QualitySummary,
 )
 from skills.data.unified_data.tests.conftest import FakeProvider
 
@@ -84,16 +83,14 @@ class TestInjectionMatrix:
         doc = db[AUDIT_COLL].find_one({})
         assert doc["security_id"] == "CN:600519" and doc["provider"] == "primary"
 
-    def test_dr304_full_integration_quality_audit_summary(self, fresh_registry, cn_maotai):
+    def test_dr304_full_integration_quality_audit(self, fresh_registry, cn_maotai):
         db = mongomock.MongoClient().db
-        summary = QualitySummary(mongo_db=db)
-        logger = AuditLogger(mongo_db=db, quality_summary=summary)
+        logger = AuditLogger(mongo_db=db)
         fresh_registry.register(_provider("primary", _ok_payload()))
         router = DataRouter(fresh_registry, quality_scorer=QualityScorer(), audit_logger=logger)
         result = router.query("market_data", "kline_daily", cn_maotai)
         assert isinstance(result.quality_score, float)
         assert db[AUDIT_COLL].count_documents({}) == 1
-        assert db["03_data_ud_quality_summary"].count_documents({}) == 1
 
     def test_dr305_scorer_and_noop_audit_does_not_touch_db(self, fresh_registry, cn_maotai):
         fresh_registry.register(_provider("primary", _ok_payload()))
@@ -195,17 +192,18 @@ class TestExceptionTolerance:
         result = router.query("market_data", "kline_daily", cn_maotai)
         assert result.provider == "primary" and isinstance(result.quality_score, float)
 
-    def test_summary_exception_does_not_break_audit(self, fresh_registry, cn_maotai):
-        class _BoomSummary:
-            def update(self, *args, **kwargs):
-                raise RuntimeError("summary crashed")
+    def test_dr310_no_quality_summary_in_phase_1(self, fresh_registry, cn_maotai):
+        """Phase 1 Audit-only: QualitySummary 不注入；AuditLogger 不接受该参数。
 
+        验证审计文档写入不受 QualitySummary 缺失影响。
+        """
         db = mongomock.MongoClient().db
         fresh_registry.register(_provider("primary", _ok_payload()))
-        logger = AuditLogger(mongo_db=db, quality_summary=_BoomSummary())
+        logger = AuditLogger(mongo_db=db)
         router = DataRouter(fresh_registry, quality_scorer=QualityScorer(), audit_logger=logger)
         result = router.query("market_data", "kline_daily", cn_maotai)
-        assert result.provider == "primary" and db[AUDIT_COLL].count_documents({}) == 1
+        assert result.provider == "primary" and isinstance(result.quality_score, float)
+        assert db[AUDIT_COLL].count_documents({}) == 1
 
 
 # ---------------------------------------------------------------------------

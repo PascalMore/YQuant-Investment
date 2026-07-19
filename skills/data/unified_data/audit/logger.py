@@ -7,6 +7,11 @@
 ``params`` 字段使用严格 allow-list（DESIGN §8.6 已确认白名单策略）：
 仅记录 query 语义字段，未知键与命中敏感 deny-list 的键一律丢弃，
 绝不写入审计文档。TTL 默认 365 天（DESIGN §5.3, §8.2 已确认）。
+
+Phase 1 Audit-only：QualitySummary 不可注入。``__init__`` 不接受
+``quality_summary`` 参数（SPEC-03-011 §11.3 QS-F2）；任何尝试注入
+QualitySummary 的行为将导致 ``TypeError``。``log()`` 内无 QualitySummary
+调用，确保 QualitySummary 不可达（QS-F3）。
 """
 
 from __future__ import annotations
@@ -109,8 +114,7 @@ class AuditLogger:
         ttl_days: TTL 过期天数（默认 365 天，DESIGN §5.3 Pascal 已确认）。
             本组件不创建 TTL 索引，仅供将来 Pascal 确认后由独立迁移
             脚本使用。
-        quality_summary: 可选 QualitySummary 实例。注入后每次 log()
-            内部触发 summary.update()。（DESIGN §8 设计选择）。
+        Phase 1 Audit-only：不接受 quality_summary 参数（SPEC §11.3 QS-F2）。
     """
 
     def __init__(
@@ -118,12 +122,10 @@ class AuditLogger:
         mongo_db: Any = None,
         collection_name: str = "03_data_ud_query_audit",
         ttl_days: int = 365,
-        quality_summary: "QualitySummary | None" = None,
     ) -> None:
         self._mongo_db = mongo_db
         self._collection_name = collection_name
         self._ttl_days = ttl_days
-        self._quality_summary = quality_summary
 
     @property
     def collection_name(self) -> str:
@@ -157,15 +159,6 @@ class AuditLogger:
                 result, consumer, duration_ms, params
             )
             self._mongo_db[self._collection_name].insert_one(doc)
-
-            # Phase 2 internal: trigger QualitySummary update (DESIGN §8)
-            if self._quality_summary is not None:
-                self._quality_summary.update(
-                    result,
-                    quality_score=result.quality_score,
-                    quality_tier=doc.get("quality_tier"),
-                    now=result.fetched_at,
-                )
         except Exception as exc:
             logger.warning(
                 "AuditLogger.log failed (catch-and-log): %s", exc

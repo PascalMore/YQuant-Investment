@@ -87,13 +87,13 @@ Phase 2 在现有 Unified Data Layer 骨架之上，新增 5 个组件/能力：
 - [ ] `skills/data/unified_data/quality/summary.py` — QualitySummary 组件
 - [ ] `skills/data/unified_data/registry.py` — ProviderRegistry 增强（priority + health_state）
 - [ ] `skills/data/unified_data/router.py` — DataRouter.query() 质量填充 + 审计触发
-- [ ] `tests/data/unified_data/test_quality_scorer.py` — QualityScorer 测试
-- [ ] `tests/data/unified_data/test_quality_config.py` — 质量配置测试
-- [ ] `tests/data/unified_data/test_audit_logger.py` — AuditLogger 测试
-- [ ] `tests/data/unified_data/test_quality_summary.py` — QualitySummary 测试
-- [ ] `tests/data/unified_data/test_registry_governance.py` — Registry 治理测试
-- [ ] `tests/data/unified_data/test_router_quality.py` — Router 质量填充端到端测试
-- [ ] `tests/data/unified_data/fixtures/quality_fixtures.py` — 质量测试 fixture
+- [ ] `skills/data/unified_data/tests/test_quality_scorer.py` — QualityScorer 测试
+- [ ] `skills/data/unified_data/tests/test_quality_config.py` — 质量配置测试
+- [ ] `skills/data/unified_data/tests/test_audit_logger.py` — AuditLogger 测试
+- [ ] `skills/data/unified_data/tests/test_quality_summary.py` — QualitySummary 测试
+- [ ] `skills/data/unified_data/tests/test_registry_governance.py` — Registry 治理测试
+- [ ] `skills/data/unified_data/tests/test_router_quality.py` — Router 质量填充端到端测试
+- [ ] `skills/data/unified_data/tests/fixtures/quality_fixtures.py` — 质量测试 fixture
 
 ### 2.2 Out of Scope（Phase 2 不做）
 
@@ -1110,8 +1110,8 @@ Canary 期 24-48h 后必须全部满足方可进入全量 rollout：
 
 ```bash
 # QualitySummary 不可达性测试
-PYTHONPATH=. pytest tests/data/unified_data/test_audit_logger.py \
-  tests/data/unified_data/test_router_quality.py \
+PYTHONPATH=. pytest skills/data/unified_data/tests/test_audit_logger.py \
+  skills/data/unified_data/tests/test_router_quality.py \
   -k "quality_summary" -v --tb=short
 
 # 静态扫描
@@ -1182,13 +1182,13 @@ PYTHONPATH=. pytest tests/ -k "audit_rollout or audit_smoke" -v --tb=short
 | `skills/data/unified_data/audit/__init__.py` | audit 子包导出 |
 | `skills/data/unified_data/audit/logger.py` | AuditLogger 实现 |
 | `skills/data/unified_data/quality/summary.py` | QualitySummary 实现（放在 quality/ 下而非 audit/ 下） |
-| `tests/data/unified_data/test_quality_scorer.py` | QualityScorer 单元测试 |
-| `tests/data/unified_data/test_quality_config.py` | QualityScorerConfig 测试 |
-| `tests/data/unified_data/test_audit_logger.py` | AuditLogger 测试 |
-| `tests/data/unified_data/test_quality_summary.py` | QualitySummary 测试 |
-| `tests/data/unified_data/test_registry_governance.py` | Registry 治理测试 |
-| `tests/data/unified_data/test_router_quality.py` | Router 质量填充端到端测试 |
-| `tests/data/unified_data/fixtures/quality_fixtures.py` | 质量测试 fixture（各种评分配置 fixture） |
+| `skills/data/unified_data/tests/test_quality_scorer.py` | QualityScorer 单元测试 |
+| `skills/data/unified_data/tests/test_quality_config.py` | QualityScorerConfig 测试 |
+| `skills/data/unified_data/tests/test_audit_logger.py` | AuditLogger 测试 |
+| `skills/data/unified_data/tests/test_quality_summary.py` | QualitySummary 测试 |
+| `skills/data/unified_data/tests/test_registry_governance.py` | Registry 治理测试 |
+| `skills/data/unified_data/tests/test_router_quality.py` | Router 质量填充端到端测试 |
+| `skills/data/unified_data/tests/fixtures/quality_fixtures.py` | 质量测试 fixture（各种评分配置 fixture） |
 
 ### 15.2 修改文件
 
@@ -1197,7 +1197,7 @@ PYTHONPATH=. pytest tests/ -k "audit_rollout or audit_smoke" -v --tb=short
 | `skills/data/unified_data/__init__.py` | 新增导出 QualityScorer、ScoredResult、QualityScorerConfig、AuditLogger、QualitySummary |
 | `skills/data/unified_data/registry.py` | 新增 priority/health_state 方法 |
 | `skills/data/unified_data/router.py` | 构造函数新增 quality_scorer/audit_logger 参数 + query() 尾部评分+审计调用 |
-| `tests/data/unified_data/conftest.py` | 可选新增 quality_score fixture |
+| `skills/data/unified_data/tests/conftest.py` | 可选新增 quality_score fixture |
 
 ---
 
@@ -1205,7 +1205,7 @@ PYTHONPATH=. pytest tests/ -k "audit_rollout or audit_smoke" -v --tb=short
 
 ### 16.1 无副作用测试（全部测试均在此范畴）
 
-运行 `PYTHONPATH=. pytest tests/data/unified_data/ -m "not production_gate" -v`
+运行 `PYTHONPATH=. pytest skills/data/unified_data/tests/ -m "not production_gate" -v`
 
 - 全部使用 mongomock
 - 全部使用 FakeProvider/FakeTA_CNAdapter
@@ -1225,13 +1225,13 @@ PYTHONPATH=. pytest tests/ -k "audit_rollout or audit_smoke" -v --tb=short
 
 ```bash
 # 快速验证（无质量/审计）
-PYTHONPATH=. pytest tests/data/unified_data/ -m "not production_gate" -q --tb=short
+PYTHONPATH=. pytest skills/data/unified_data/tests/ -m "not production_gate" -q --tb=short
 
 # 质量相关全量
-PYTHONPATH=. pytest tests/data/unified_data/test_quality_scorer.py tests/data/unified_data/test_quality_config.py tests/data/unified_data/test_registry_governance.py tests/data/unified_data/test_router_quality.py -q --tb=short
+PYTHONPATH=. pytest skills/data/unified_data/tests/test_quality_scorer.py skills/data/unified_data/tests/test_quality_config.py skills/data/unified_data/tests/test_registry_governance.py skills/data/unified_data/tests/test_router_quality.py -q --tb=short
 
 # 审计相关全量
-PYTHONPATH=. pytest tests/data/unified_data/test_audit_logger.py tests/data/unified_data/test_quality_summary.py -q --tb=short
+PYTHONPATH=. pytest skills/data/unified_data/tests/test_audit_logger.py skills/data/unified_data/tests/test_quality_summary.py -q --tb=short
 ```
 
 ---

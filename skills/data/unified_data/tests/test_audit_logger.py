@@ -22,7 +22,6 @@ import pytest
 
 from skills.data.unified_data import DataResult, Market, SecurityId
 from skills.data.unified_data.audit import AuditLogger
-from skills.data.unified_data.quality.summary import QualitySummary
 
 
 # ---------------------------------------------------------------------------
@@ -124,14 +123,6 @@ class TestMongomockWrite:
         assert len(ids) == 2
         assert ids[0] != ids[1]
         assert all(value.version == 4 for value in parsed)
-
-    def test_log_updates_injected_quality_summary(self, result_ok, mongomock_db):
-        summary = QualitySummary(mongo_db=mongomock_db)
-        logger = AuditLogger(mongo_db=mongomock_db, quality_summary=summary)
-        logger.log(result_ok)
-        doc = mongomock_db["03_data_ud_quality_summary"].find_one({})
-        assert doc is not None
-        assert doc["query_count"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -446,3 +437,12 @@ class TestAuditContractUnchanged:
             quality_score=1.0,
         )
         assert al.log(r) is None
+
+    def test_qs_f3_quality_summary_injection_rejected(self):
+        """QS-F3 (SPEC §11.3): AuditLogger.__init__ 不接受 quality_summary 参数。
+
+        Phase 1 Audit-only 中 QualitySummary 不可注入。显式传入
+        quality_summary kwarg 时 __init__ 必须抛 TypeError。
+        """
+        with pytest.raises(TypeError):
+            AuditLogger(mongo_db=None, quality_summary="anything")

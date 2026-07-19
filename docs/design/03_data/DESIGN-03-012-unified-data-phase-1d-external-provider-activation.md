@@ -4,17 +4,25 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 | Draft |
+| 状态 | Final |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-18 |
-| 最后更新 | 2026-07-18 |
-| 来源 RFC | RFC-03-012（Phase 1D External Provider Activation） |
-| 来源 SPEC | SPEC-03-012（Phase 1D External Provider Activation） |
+| 最后更新 | 2026-07-20 |
+| 来源 RFC | RFC-03-012 V0.2（Phase 1D External Provider Activation，Final） |
+| 来源 SPEC | SPEC-03-012 V0.2（Phase 1D External Provider Activation，Final） |
 | 关联 RFC | RFC-03-007（总纲）、RFC-03-008（1B-A）、RFC-03-009（1B-B 命名锁定）、RFC-03-011（Phase 2 quality_score 归属） |
 | 关联 Design | DESIGN-03-007 / DESIGN-03-008 / DESIGN-03-009 / DESIGN-03-010 / DESIGN-03-011 |
 | 目标模块 | unified_data（`skills/data/unified_data/providers/`） |
-| 版本号 | V0.1 |
+| 版本号 | V0.2 |
 | 适配 Agent | YQuant-Developer-Engineer, YQuant-Test-Engineer |
+
+### 版本历史（Changelog）
+
+| 版本号 | 日期 | 更新内容 | 负责人 |
+|---|---|---|---|
+| V0.2 | 2026-07-20 | T2.1 契约措辞修正：将 §1 item 5、§2.3 兼容性风险表、§3.3.5 参数注释中「单位 warnings 默认开启」的语义残留统一修正为「构造参数保留但当前版本为 no-op，不注入 DataResult.warnings」。RFC-03-012 V0.2 / SPEC-03-012 V0.2 已锁定 no-op 契约，本次仅对齐 Design 措辞。 | YQuant-Principal |
+| V0.2 | 2026-07-20 | T2 收口定稿。基于 T1 已定稿的 RFC-03-012 V0.2 / SPEC-03-012 V0.2 审定并更新 Design：元数据状态 Final；测试路径修正（`tests/data/unified_data/` → `skills/data/unified_data/tests/` 对齐近期迁移）；§4 实现计划标为已完成（48 项测试 PASS，代码已交付）；§5.1 测试路径对齐；新增版本历史。 | YQuant-Principal |
+| V0.1 | 2026-07-18 | 初始创建。将 RFC-03-012 / SPEC-03-012 的 Phase 1D 需求落为文件级、函数级、签名级的可实现方案；裁定 SPEC §12 七项待决项；发现 Router L809 空 list gap 并给出 empty-payload-raise 方案；完成单位标注 no-op 裁定。 | YQuant-Principal |
 
 ---
 
@@ -26,7 +34,7 @@
 2. **真实客户端与 Protocol/Fake 同居 `kline_client.py`**：单文件包含抽象 + 全部实现，真实 SDK import 放在方法体内（延迟 import，与 `is_available()` 的 import guard 模式一致）。
 3. **Tushare 用 `pro_api(token).daily(...)`**（非 `pro_bar`）；`daily` 返回不复权口径，与 SPEC §0 锁定一致。
 4. **AKShare 用 `stock_zh_a_hist(symbol, period="daily", adjust="")`**：`adjust=""` 不复权，与 Tushare `daily` 口径对齐；`trade_date` 统一转 `YYYYMMDD`（与 DailyBar TA-CN 路径一致，消费方无需判断格式）。
-5. **单位 warnings 默认开启**，经构造参数 `emit_unit_warning: bool = True` 可关（跨源单位不一致是 RFC-03-012 §7 高风险项，保守默认开启）。
+5. **单位 warnings 构造参数 `emit_unit_warning: bool = True` 保留，但当前版本为 no-op**（Router 不改约束下无法注入 `DataResult.warnings`；参数留作未来扩展点，见 §3.7）。
 6. **`_to_canonical` 子类各自 override + 内部 capability 分支**：base 类保留 no-op（向后兼容，不破坏未来其他 capability 的 stub 路径）；Tushare/AKShare 子类 override 后按 `kline_daily` vs 其余分支。
 7. **Router 包装 `list[DailyBar]` 确认可行**：`router.py:806-824` 把 `provider.fetch(...)` 返回值直接装入 `DataResult.data`，与 TA-CN `get_daily_bars` 路径（返回 `list[DailyBar]`）完全一致；Router 不改。
 8. **【关键 gap 发现】空 payload 适配 Router `is not None` 检查**：`router.py:809` 用 `if result_data is not None` 判定成功，空 list `[]` 会被误判为成功（不触发 fallback）。Design 决策：provider.fetch 的 kline_daily 分支在空 payload 时 **raise `ProviderUnavailableError`**（而非返回空 list），让 Router 捕获后记 trace 并继续 fallback。详见 §3.6。
@@ -67,7 +75,7 @@
 | Router L809 `is not None` 把空 list 误判为成功 | **高** | §3.6 Design 决策：空 payload raise `ProviderUnavailableError` |
 | 1B-A 测试对 kline_daily 返回 stub DataFrame 的断言失效 | 中 | §5.4 回归：1B-A `test_providers.py` 中 kline_daily 相关断言需更新为 list[DailyBar] |
 | `_to_canonical` 签名变更（返回类型从 DataFrame 到 list[DailyBar] \| DataFrame）破坏 base 类契约 | 中 | §3.3：base 保留 no-op，子类 override 返回类型按 capability 分支；base 签名加 `Any` 返回标注 |
-| 跨源单位不一致（手/股、千元/元）被消费方误用 | 高 | §3.7 单位 warnings 默认开启 + SPEC §0 声明 + OQ-2 |
+| 跨源单位不一致（手/股、千元/元）被消费方误用 | 高 | §3.7 单位 warnings 当前为 no-op（参数保留但不注入 `DataResult.warnings`）+ SPEC §0 声明 + OQ-2 |
 | 真实网络下 `with_retry` 不覆盖 `ProviderUnavailableError` 导致配额耗尽不重试 | 中 | §3.8：接受现状（配额耗尽不应重试），文档标注 |
 | 延迟 import 在高并发下首次调用的 import 开销 | 低 | `is_available()` 已做 import guard；fetch 内 import 复用已加载模块 |
 
@@ -82,9 +90,9 @@
 | 路径 | 说明 |
 |---|---|
 | `skills/data/unified_data/providers/kline_client.py` | `KlineClient` Protocol + `FakeKlineClient` + `TushareKlineClient` + `AKShareKlineClient`（单文件，真实 SDK 延迟 import） |
-| `tests/data/unified_data/test_kline_client.py` | FakeKlineClient / TushareKlineClient / AKShareKlineClient 单测（含列名校验、空 DataFrame、异常注入、token 不泄露） |
-| `tests/data/unified_data/test_providers_kline_daily.py` | TushareProvider/AKShareProvider 的 kline_daily 激活路径单测（注入 FakeKlineClient，覆盖字段映射、空值、缺失列、行丢弃、单位标注、其余 capability 保持 stub） |
-| `tests/data/unified_data/test_router_kline_daily_fallback.py` | Router fallback：kline_daily 链 tushare→akshare 全路径矩阵（UT-DR-301~309） |
+| `skills/data/unified_data/tests/test_kline_client.py` | FakeKlineClient / TushareKlineClient / AKShareKlineClient 单测（含列名校验、空 DataFrame、异常注入、token 不泄露） |
+| `skills/data/unified_data/tests/test_providers_kline_daily.py` | TushareProvider/AKShareProvider 的 kline_daily 激活路径单测（注入 FakeKlineClient，覆盖字段映射、空值、缺失列、行丢弃、单位标注、其余 capability 保持 stub） |
+| `skills/data/unified_data/tests/test_router_kline_daily_fallback.py` | Router fallback：kline_daily 链 tushare→akshare 全路径矩阵（UT-DR-301~309） |
 
 #### 修改文件（5 个）
 
@@ -337,7 +345,7 @@ def __init__(
     token_env: str = DEFAULT_TOKEN_ENV,  # 沿用 1B-A
     http_client: KlineClient | None = None,        # [1D 新增] None → 默认 TushareKlineClient
     request_timeout_seconds: float = 30.0,         # [1D 新增]
-    emit_unit_warning: bool = True,                # [1D 新增] 单位提示默认开
+    emit_unit_warning: bool = True,                # [1D 新增] 当前为 no-op（保留构造参数，Phase 1D 不注入 DataResult.warnings，见 §3.7）
 ) -> None:
 ```
 
@@ -548,18 +556,18 @@ Phase 1D 新增代码（`kline_client.py` + provider 修改）**不引入新的 
 
 ---
 
-## 4. 实现计划
+## 4. 实现计划（已完成 — 供追溯参考）
 
-实现顺序（建议 Implement 阶段按此推进，每步可独立验证）：
+实现顺序（按此推进已实现并通过 48 项测试验证，单元测试位置已迁移至 `skills/data/unified_data/tests/`）：
 
-- [ ] **Step 1**：新建 `kline_client.py`（Protocol + FakeKlineClient + TushareKlineClient + AKShareKlineClient）。单元测试 `test_kline_client.py`（FakeKlineClient 返回/异常/空、TushareKlineClient token 缺失 raise、AKShareKlineClient 延迟 import、call_log 断言）。
-- [ ] **Step 2**：修改 `base_external.py`（docstring 措辞 + `_to_canonical` 返回标注 `Any` + 注释，**不改逻辑**）。
-- [ ] **Step 3**：修改 `tushare.py`（docstring 措辞 + 构造新增 3 参数 + fetch kline_daily 分支 + `_to_canonical_tushare`）。单测 `test_providers_kline_daily.py` 的 Tushare 部分（UT-TP-201~208）。
-- [ ] **Step 4**：修改 `akshare.py`（对称 Step 3 + `_to_canonical_akshare` + trade_date 转换 + limit 截断）。单测 AKShare 部分（UT-AK-201~207）。
-- [ ] **Step 5**：修改 `providers/__init__.py` + `unified_data/__init__.py`（导出新符号）。
-- [ ] **Step 6**：Router fallback 集成测试 `test_router_kline_daily_fallback.py`（UT-DR-301~309 + IT-001~004）。
-- [ ] **Step 7**：回归 1B-A `test_providers.py`（更新 kline_daily 返回 list[DailyBar] 的断言）+ `test_router_internal_first.py` + `test_client_phase1a.py` + `test_router.py`。
-- [ ] **Step 8**：安全测试（UT-SEC-401~403：token 不泄露、错误信息脱敏、FakeKlineClient 不读环境变量）。
+- [x] **Step 1**：新建 `kline_client.py`（Protocol + FakeKlineClient + TushareKlineClient + AKShareKlineClient）。单元测试 `test_kline_client.py`（FakeKlineClient 返回/异常/空、TushareKlineClient token 缺失 raise、AKShareKlineClient 延迟 import、call_log 断言）——**已交付**。
+- [x] **Step 2**：修改 `base_external.py`（docstring 措辞 + `_to_canonical` 返回标注 `Any` + 注释，**不改逻辑**）——**已交付**。
+- [x] **Step 3**：修改 `tushare.py`（docstring 措辞 + 构造新增 3 参数 + fetch kline_daily 分支 + `_to_canonical_tushare`）。单测 UT-TP-201~208——**已交付**。
+- [x] **Step 4**：修改 `akshare.py`（对称 Step 3 + `_to_canonical_akshare` + trade_date 转换 + limit 截断）。单测 UT-AK-201~207——**已交付**。
+- [x] **Step 5**：修改 `providers/__init__.py` + `unified_data/__init__.py`（导出新符号）——**已交付**。
+- [x] **Step 6**：Router fallback 集成测试 `test_router_kline_daily_fallback.py`（UT-DR-301~309 + IT-001~004）——**已交付**。
+- [x] **Step 7**：回归 1B-A `test_providers.py`（更新 kline_daily 返回 list[DailyBar] 的断言）+ 全量回归——**已交付**（564 项全 PASS）。
+- [x] **Step 8**：安全测试（UT-SEC-401~403：token 不泄露、错误信息脱敏、FakeKlineClient 不读环境变量）——**已交付**。
 
 ---
 
