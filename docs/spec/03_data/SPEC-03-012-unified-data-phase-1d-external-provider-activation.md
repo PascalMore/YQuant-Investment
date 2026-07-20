@@ -635,3 +635,52 @@ unified_data:
   - `skills/data/unified_data/models/__init__.py`（`DataResult`）
 - Tushare `daily` 文档：https://tushare.pro/document/2?doc_id=27
 - AKShare `stock_zh_a_hist` 文档：https://akshare.akfamily.xyz/data/stock/stock.html
+
+---
+
+## 14. Phase 1D Closeout 可追溯证据与边界
+
+### 14.1 验证证据清单
+
+| 证据 ID | 来源 | 时效 | 内容 | 覆盖范围 |
+|---|---|---|---|---|
+| `t_976ad8a2` | Kanban T5 Review | 2026-07-20 | Review PASS | 代码/文档/测试一致性审查 |
+| `t_9743d0b2` | Kanban 独立 Verify | 2026-07-20 | 48/48 离线专项测试 PASS，零网络调用；tushare/akshare provider 全部 kline_daily 路径覆盖 | 全部 unit + router fallback 测试 |
+| `t_01a2457f` | 真实 Tushare smoke | 2026-07-20 | 单次 CN 600519, 20260713-20260717, Tushare 主路径, 5 bars, OHLC 合理, 1.404s | **仅** CN kline_daily 单标的 5 自然日 Tushare 成功分支 |
+
+### 14.2 真实 smoke 证明的项目（SPEC §10 验收标准验证）
+
+| 验收项 | 证明程度 | 证据 |
+|---|---|---|
+| A-001：TushareProvider kline_daily 真实调用 | ✅ 直接证明 | smoke 返回 5 条非空 DailyBar，Tushare fetch=1 |
+| A-011：is_available 不泄露 token | ✅ 间接证明 | smoke 全程无 token 泄露；环境变量值未出现在任何输出 |
+| A-013：不返回 stub/假数据 | ✅ 直接证明 | smoke 收到真实 DailyBar（非 stub DataFrame） |
+| A-008：DataResult provider/source_trace 正确 | ✅ 直接证明 | handoff 字段 final_provider=tushare，warnings=[] |
+| A-015：不修改 Router/Registry/FreshnessPolicy/Client | ✅ 间接证明 | repo 无 diff（git status/diff 空） |
+| A-018：不修改 TA-CN | ✅ 间接证明 | repo 无 diff |
+
+### 14.3 真实 smoke **未**证明的项目（明确边界）
+
+以下验收项在离线测试中通过，但**未在真实网络 smoke 中执行**。任何声称它们「已真实验证」的说法均不准确：
+
+| 验收项 | 覆盖方式 | 真实网络验证状态 |
+|---|---|---|
+| A-002：AKShareProvider kline_daily 真实调用 | 仅离线 fake 客户端 | ❌ 未执行（smoke 中 Tushare 成功，AKShare 未触发） |
+| A-004：空结果/字段缺失/行丢弃 | 仅离线 fake 客户端 | ❌ 未执行（smoke 为正常数据路径） |
+| A-005：Tushare 其余 12 capability 保持 stub | 仅离线测试 | ❌ 未执行 |
+| A-006：AKShare 其余 6 capability 保持 stub | 仅离线测试 | ❌ 未执行 |
+| A-007：Router fallback 全路径（UT-DR-301~308） | 仅离线 fake 客户端 | ❌ 未执行 |
+| A-010：单位标注差异（DESIGN §3.7 no-op） | 仅离线测试 | ❌ 未执行 |
+| A-014：不新增 Mongo 集合/索引/写入 | 仅 grep 检查 | ✅ 但 grep 是静态分析，非 smoke |
+| A-021：1B-A 回归通过 | 仅离线测试 | ❌ 未执行 |
+
+> **结论**：真实 smoke 直接证明的范围是「CN kline_daily 单标的 5 自然日 Tushare 成功路径可正常工作并返回合理 DailyBar」。不可外推至配额、长期稳定性、AKShare、其他 capability、跨源单位场景。
+
+### 14.4 残余风险与证据缺口（不阻断 closeout）
+
+| 缺口 | 影响 | 后续阶段 |
+|---|---|---|
+| 缺少连续多日配额消耗监控 | 单次 smoke 不反映配额基线 | 建议 Phase 2 smoke 扩展 |
+| 缺少 AKShare 真实 fallback 证据 | AKShare → DailyBar 映射仅离线验证 | 建议后续 smoke 强制 AKShare 路径 |
+| 缺少多标的场景（不同板块/市值） | 仅单标的（600519 茅台） | 建议 Phase 2 扩展 |
+| 缺少 `force_refresh=True` 真实路径证据 | 强制跳过 TA-CN 后外部数据一致性仅离线验证 | 建议后续 smoke 覆盖 |

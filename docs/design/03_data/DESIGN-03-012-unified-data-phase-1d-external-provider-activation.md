@@ -733,3 +733,87 @@ Phase 1D 新增代码（`kline_client.py` + provider 修改）**不引入新的 
   - `skills/data/unified_data/models/domain/market_data.py`（`DailyBar` + `_f()` helper）
 - Tushare `daily` 文档：https://tushare.pro/document/2?doc_id=27
 - AKShare `stock_zh_a_hist` 文档：https://akshare.akfamily.xyz/data/stock/stock.html
+
+---
+
+## 10. Phase 1D Closeout 运行时验证路径与 Production Readiness 清单
+
+### 10.1 真实 smoke 运行时验证路径
+
+Smoke 脚本的执行路径与 DESIGN §3.2 类图一致：
+
+| 步骤 | 组件 | 实际行为 |
+|---|---|---|
+| 1 | `UnifiedDataClient.query(kline_daily, provider="tushare")` | 经 `DataRouter` 分派 |
+| 2 | `DataRouter._query_external_single`（forced provider 路径） | 跳过 internal-first Step 1-3 |
+| 3 | `TushareProvider.fetch(kline_daily)` | 入口 capability 分支 → 走真实路径 |
+| 4 | `TushareProvider._rate_limiter.acquire()` | RateLimiter 通过 |
+| 5 | `TushareProvider._http_client.get_kline_daily(sid, start, end, limit)` | TushareKlineClient 实例化，调 `pro.daily()` |
+| 6 | `_to_canonical_tushare(raw_df)` → `list[DailyBar]` | 5 条 DailyBar，字段映射正确 |
+| 7 | `Router` 包装为 `DataResult.success(provider="tushare", freshness=label(...))` | 返回成功 |
+
+### 10.2 观察到的证据（observed evidence）
+
+| 证据维度 | 观察值 |
+|---|---|
+| 返回条数 | 5（与日期范围 2026-07-13 ~ 2026-07-17 的 5 个交易日一致） |
+| 数据合理性 | OHLC 字段为正数且符合行情常识 |
+| provider 字段 | `"tushare"` |
+| source_trace | `["tushare(ok)"]` |
+| warnings | `[]` |
+| freshness | 由 `FreshnessPolicy.label(...)` 计算；本路径为外部实时数据 |
+| quality_score | `None`（符合 Phase 1D 约束） |
+| Tushare fetch 计数 | 1 |
+| AKShare fetch 计数 | 0（未触发） |
+| 总耗时 | 1.404s |
+| 副作用 | 无 Mongo/cache/Audit/QualitySummary 写入；repo 无 diff |
+| token 安全性 | 无泄露 |
+
+### 10.3 Production Readiness 门禁清单
+
+以下门禁对应 Phase 1D 代码进入生产环境前的检查项。**本 closeout 阶段不要求全部通过**（部分属后续阶段），但明确记录当前状态：
+
+| # | 门禁项 | 当前状态 | 通过条件 | 后续动作 |
+|---|---|---|---|---|
+| PR-1 | Tushare token 在目标环境配置 | ❌ 未配置 | `TUSHARE_TOKEN` 环境变量存在 | Pascal 授权后配置 |
+| PR-2 | tushare/akshare 包在目标环境安装 | ❌ 未安装 | `pip install tushare akshare` | Pascal 授权后安装 |
+| PR-3 | 真实 API 只读 smoke 在目标环境通过 | ✅ 已验证（`t_01a2457f`） | 单标的正常返回 | 建议扩展多标的 |
+| PR-4 | 离线测试 48/48 在目标环境通过 | ✅ 已验证（`t_9743d0b2`） | pytest 全部 PASS | 保持 |
+| PR-5 | 不触发生产副作用 | ✅ 已验证 | grep 验证 + smoke 中无写入 | 保持 |
+| PR-6 | 单位差异文档声明到位 | ✅ 已完成 | SPEC §0 + Design §3.4 标注 | 保持 |
+| PR-7 | `force_refresh` / `provider=` forced 路径真实验证 | ❌ 未执行 | 需后续 smoke 覆盖不同参数 | 建议 Phase 2 |
+| PR-8 | 连续多日/多标的稳定性验证 | ❌ 未执行 | 需独立稳定性测试 | 建议 Phase 2 |
+| PR-9 | quota/headroom 基线建立 | ❌ 未执行 | 初始配额测量 | 建议 Phase 2 |
+| PR-10 | AKShare fallback 真实路径验证 | ❌ 未执行 | 强制关闭 Tushare 后验证 | 建议后续 smoke |
+| PR-11 | CacheManager 集成（Phase 1B-B） | N/A | Phase 1B-B 未交付 | 后续 phase |
+| PR-12 | AuditLogger + QualitySummary 启用 | N/A | Phase 2 才启用 | 后续 phase |
+| PR-13 | cron/systemd 调度 | N/A | 本阶段不启用 | 后续 phase |
+
+### 10.4 实现后设计验证总结
+
+DESIGN §3.1 文件级改动清单的验证结果：
+
+**新增 4 个文件**（已验证存在且通过 48 项测试）：
+- `skills/data/unified_data/providers/kline_client.py` ✅
+- `skills/data/unified_data/tests/test_kline_client.py` ✅
+- `skills/data/unified_data/tests/test_providers_kline_daily.py` ✅
+- `skills/data/unified_data/tests/test_router_kline_daily_fallback.py` ✅
+
+**修改 5 个文件**（已验证 diff 符合预期）：
+- `tushare.py` / `akshare.py` / `base_external.py` / `providers/__init__.py` / `__init__.py` ✅
+
+**不改动文件**（已验证 `git diff` 无修改）：
+- `router.py` / `registry.py` / `freshness.py` / `client.py` / `models/**` / `adapters/**` / `local_mongo_adapter.py` / `cache_manager.py` / `audit/**` / `quality/**` / `config.py` / `exceptions.py` / `_stub_columns.py` / `rate_limiter.py` / TA-CN / 模板 ✅
+
+### 10.5 关键 Design 决策的验证结果
+
+| Design 决策 | 章节 | 验证方式 | 结论 |
+|---|---|---|---|
+| Protocol 而非 ABC | §3.3.1 | 代码审查 | ✅ 通过 |
+| 空 payload raise ProviderUnavailableError（Router gap） | §3.6 | UT-TP-202/AK-202/DR-305 | ✅ 通过 |
+| 单位 warning no-op | §3.7 | UT-TP-207/AK-205 | ✅ 通过 |
+| AKShare trade_date 统一 YYYYMMDD | §3.4.2 | UT-AK-205 | ✅ 通过 |
+| AKShare limit 截断 | §3.4.2 | UT-AK-206 | ✅ 通过 |
+| 延迟构造默认 client | §3.3.5 | UT-TP-208 | ✅ 通过 |
+| Provider 构造向后兼容（新增可选参数） | §3.3.5 | 代码审查 + 1B-A 回归 | ✅ 通过 |
+| base_external 不改方法体 | §3.1 | `git diff base_external.py` | ✅ 仅 docstring + 标注
