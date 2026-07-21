@@ -40,6 +40,12 @@ from .services import (
     MetadataService,
     SectorService,
 )
+# Phase 3 P3-B (T3-B): market sentiment service is a sibling of
+# SectorService but at the market level (no TA-CN surface). The
+# import is local to avoid widening the package-level ``__all__`` —
+# services/__init__.py is intentionally untouched in the T3-B
+# allowlist.
+from .services.sentiment_service import MarketSentimentService
 
 
 class UnifiedDataClient:
@@ -76,6 +82,12 @@ class UnifiedDataClient:
         self._sector_service: SectorService | None = None
         self._event_service: EventService | None = None
         self._metadata_service: MetadataService | None = None
+        # Phase 3 P3-B (T3-B): market sentiment service is a separate
+        # lazy attribute. We keep the ``None`` default so the rest of
+        # the existing service surface keeps its old behaviour. The
+        # service is wired against the existing router + the
+        # optional ``p3_writer`` (None in T3-B; T3-C injects one).
+        self._sentiment_service: MarketSentimentService | None = None
 
     # ------------------------------------------------------------------
     # Convenience
@@ -179,6 +191,26 @@ class UnifiedDataClient:
         if self._metadata_service is None:
             self._metadata_service = MetadataService(self._require_ta_cn())
         return self._metadata_service
+
+    # Phase 3 P3-B (T3-B): lazy ``MarketSentimentService`` loader.
+    #
+    # Deliberately **not** gated behind ``_require_ta_cn`` — sentiment
+    # has no TA-CN surface so the TA-CN adapter is optional (the
+    # service accepts ``adapter=None``). The router is the *only*
+    # required dependency; it is wired against the registry the
+    # client already owns. When ``ta_cn_adapter`` was injected we
+    # forward it (future-proofing — T3-C may use it for sector-breadth
+    # cross-checks); when it was not we pass ``None``.
+    def _get_sentiment_service(self) -> MarketSentimentService:
+        if self._sentiment_service is None:
+            self._sentiment_service = MarketSentimentService(
+                adapter=self._ta_cn_adapter,
+                router=self._router,
+                # ``p3_writer`` defaults to ``None`` for T3-B. T3-C
+                # will plumb a real one through ``UnifiedDataClient``
+                # once the refresh path is Gate-authorised.
+            )
+        return self._sentiment_service
 
     # ------------------------------------------------------------------
     # Phase 1A entry methods — 14 total (DESIGN-03-007 §Phase 1A 完整矩阵)

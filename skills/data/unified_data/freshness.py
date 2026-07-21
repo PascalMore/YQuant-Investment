@@ -53,6 +53,19 @@ class FreshnessPolicy:
         "calendar": 604800,      # 7 days
         "metadata": 604800,      # 7 days
         "news": 3600,            # 1 hour
+        # Phase 3 P3-A: sector snapshot TTL = 21600s (6h) — sector
+        # snapshot refresh is acceptable on the same day once a fresh
+        # close is observed. DESIGN-03-014 §4.4 l.649 reconciliation
+        # for the P3-A sector domain. P3-B (flow=43200) and P3-C
+        # (sentiment=3600) land in their own sub-stage tasks.
+        "sector": 21600,
+        # Phase 3 P3-B (T3-B): market sentiment snapshot TTL = 3600s
+        # (1h). Sentiment data is highly time-sensitive — a stale
+        # "market temperature" reading loses relevance within an
+        # hour, so the TTL is intentionally tight. Matches V0.5 §4.4
+        # l.650 alignment with the sector pattern (single-line
+        # addition, same shape as P3-A sector).
+        "market_sentiment": 3600,
     }
 
     # Boundaries for the realtime / delayed split (seconds since fetch).

@@ -83,6 +83,14 @@ from .models import DataResult, Market, SecurityId
 from .provider import DataProvider
 from .registry import ProviderRegistry
 
+# Phase 3 P3-A: import the capability→collection map so the router can
+# decide whether ``_try_materialized`` should consult the
+# ``P3PersistenceWriter`` (offline T3-A scaffold; no real MongoDB).
+try:
+    from .adapters.p3_persistence_writer import P3_COLLECTION_BY_CAPABILITY
+except Exception:  # pragma: no cover - never expected in this codebase
+    P3_COLLECTION_BY_CAPABILITY = {}
+
 logger = logging.getLogger(__name__)
 
 
@@ -123,6 +131,18 @@ class DataRouter:
             "calendar.trading_days",
             "calendar.is_trading_day",
             "metadata.index_members",
+            # Phase 3 P3-B (T3-B): sentiment.market_snapshot is a
+            # market-level aggregate — TA-CN MongoDB collections hold
+            # per-stock data and have no market-wide sentiment surface.
+            # The P3PersistenceWriter consults
+            # ``03_data_ud_market_sentiment_snapshot`` on the read path
+            # and the (yet-to-be-built) refresh path writes there. Mark
+            # as P3-B so the router skips Step 1 (DESIGN-03-014 §2.1
+            # Step 1 P3-B skip rule). Capability name matches the
+            # frozen ``P3_COLLECTION_BY_CAPABILITY`` key from the
+            # T3-A P3PersistenceWriter deliverable — keeping the
+            # capability naming aligned across the P3 surface.
+            "sentiment.market_snapshot",
         }
     )
 
@@ -142,6 +162,7 @@ class DataRouter:
         external_fallback_chains: dict[str, list[str]] | None = None,
         quality_scorer: Any = None,  # Phase 2 — QualityScorer | None
         audit_logger: Any = None,  # Phase 2 — AuditLogger | None
+        p3_writer: Any = None,  # Phase 3 P3-A — optional P3PersistenceWriter (offline T3-A)
     ) -> None:
         """Build the router.
 
@@ -192,6 +213,12 @@ class DataRouter:
         # (Phase 1B-B behaviour preserved).
         self._quality_scorer = quality_scorer
         self._audit_logger = audit_logger
+        # Phase 3 P3-A — optional P3PersistenceWriter. When ``None`` (the
+        # default), ``_try_materialized`` skips the P3 branch entirely
+        # so non-Phase-3 capability behaviour stays identical to 1B-B.
+        # Per DESIGN-03-014 §0.4 / §2.1, this is the one minimal allowed
+        # extension to ``DataRouter.query()`` orchestration.
+        self._p3_writer = p3_writer
         # Defensive copy of the chain overrides.
         self._external_chains: dict[str, list[str]] = {
             key: list(names) for key, names in (external_fallback_chains or {}).items()
@@ -496,8 +523,11 @@ class DataRouter:
         trace: list[str],
         ts: datetime,
         force_refresh: bool = False,
+        *,
+        capability: str | None = None,
+        p3_writer: Any = None,
     ) -> DataResult | None:
-        """Step 2: consult :class:`LocalMongoAdapter`.
+        """Step 2: consult :class:`LocalMongoAdapter` or ``P3PersistenceWriter``.
 
         Returns:
             * A :class:`DataResult` with ``provider="ud_materialized"``,
@@ -505,9 +535,17 @@ class DataRouter:
             * ``None`` otherwise (miss / expired / component disabled /
               error).
 
-        The underlying adapter already catches its own exceptions
-        (LM-104), so this wrapper is defensive only — it logs and
-        returns ``None`` if anything escapes the adapter.
+        Phase 3 P3-A extension (DESIGN-03-014 §0.4 / §2.1 — the one
+        minimal allowed change to the ``DataRouter.query()``
+        orchestration). When ``capability`` is one of the six Phase 3
+        capabilities (P3-A: ``sector.snapshot`` / ``sector.ranking``,
+        P3-B / P3-C: reserved) AND ``p3_writer`` is supplied, this
+        method consults ``p3_writer.get(collection, filter)`` instead
+        of :class:`LocalMongoAdapter`. The two paths are mutually
+        exclusive — a single capability is never split across both.
+        If ``p3_writer`` is ``None`` the call falls back to the
+        Phase 1B-B ``LocalMongoAdapter`` path so non-Phase-3 test
+        suites keep passing unchanged.
 
         Trace behaviour (DR-213):
             * ``adapter is None`` → trace records
@@ -520,6 +558,80 @@ class DataRouter:
             * Adapter miss / hit / error → trace records the
               canonical outcome.
         """
+        # Phase 3 dispatch (P3-A only — extensions to P3-B/P3-C land
+        # in T3-B/T3-C). The capability check is O(1) via the
+        # frozen dict. Both writer and capability must be present;
+        # otherwise we degrade gracefully to LocalMongoAdapter so
+        # non-Phase-3 callers keep their behaviour.
+        if (
+            capability is not None
+            and capability in P3_COLLECTION_BY_CAPABILITY
+            and p3_writer is not None
+        ):
+            if force_refresh:
+                trace.append("ud_materialized(skipped: force_refresh)")
+                return None
+            # Pre-bind ``collection`` so the except block can use it
+            # for the audit call without ``possibly unbound`` errors.
+            collection: str | None = None
+            try:
+                # Capability→collection resolution is hoisted out
+                # of the try/except so the exception handler can
+                # reference ``collection`` for the audit call below.
+                collection = P3_COLLECTION_BY_CAPABILITY[capability]
+                # Convert the Step-2 ``params`` (which describe the
+                # query) into a business-key filter. When ``params``
+                # is empty we use an empty filter — the writer
+                # returns every persisted record in that case. The
+                # exact mapping between params and filter is left to
+                # the future refresh path (T3-B+) which will own
+                # the canonical filter derivation; T3-A only needs
+                # the *dispatch* to be observable in the trace.
+                rows = p3_writer.get(collection, dict(params or {}))
+            except Exception as exc:
+                logger.warning(
+                    "P3PersistenceWriter.get failed in router: %s", exc
+                )
+                # T3-A P0.1 (decision B.b): when the writer exposes a
+                # custom audit hook (i.e. someone wired a real logger
+                # instead of the default no-op), emit a single
+                # ``attempt(outcome="exception")`` call before the
+                # router converts the failure into a trace entry +
+                # ``None`` return. The audit call is fail-open inside
+                # ``_safe_audit_call`` so a logger crash cannot mask
+                # the real error here. The default no-op logger
+                # returns immediately so this line is free for
+                # non-audited deployments. ``collection`` may stay
+                # ``None`` if the lookup itself raised — fall back
+                # to the capability string as the audit domain.
+                audit_logger = getattr(p3_writer, "audit_logger", None)
+                if audit_logger is not None:
+                    audit_logger.attempt(
+                        operation="get",
+                        domain=collection or str(capability),
+                        outcome="exception",
+                    )
+                trace.append(f"ud_materialized(error: {exc})")
+                return None
+            if rows:
+                trace.append("ud_materialized(ok)")
+                # Convert the first row to a minimal DataResult.
+                # T3-A only asserts the dispatch / provider tag;
+                # full DataResult hydration is T3-B work (it
+                # requires the real SectorSnapshot dataclass).
+                return DataResult(
+                    data=rows,
+                    security_id=security_id,
+                    domain=domain,
+                    operation=operation,
+                    provider="ud_materialized",
+                    fetched_at=ts,
+                    source_trace=list(trace),
+                    freshness="cached",
+                )
+            trace.append("ud_materialized(miss)")
+            return None
+
         if self._local_mongo_adapter is None:
             # Adapter slot not wired in — record the skip reason
             # explicitly per DR-213 so downstream observability
@@ -656,9 +768,14 @@ class DataRouter:
         # Step 2 (UD materialised). The helper self-manages the
         # ``force_refresh`` trace (``(skipped: force_refresh)``) and
         # returns ``None`` without calling ``LocalMongoAdapter.get()``.
+        # Phase 3 P3-A: pass the capability + optional ``p3_writer``
+        # so the Step-2 dispatch routes Phase 3 capabilities to
+        # ``P3PersistenceWriter`` instead of ``LocalMongoAdapter``.
         materialized = self._try_materialized(
             security_id, domain, operation, params, trace, ts,
             force_refresh=force_refresh,
+            capability=capability,
+            p3_writer=self._p3_writer,
         )
         if materialized is not None:
             return materialized
