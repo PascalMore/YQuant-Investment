@@ -117,10 +117,13 @@ def wrap_error(
 # Service classes — imported at the bottom because each one re-imports
 # the wrapping helpers defined above from this package.
 from .event_service import EventService  # noqa: E402
+from .flow_service import FlowService, PersistenceResult  # noqa: E402
 from .fundamental_service import FundamentalService  # noqa: E402
 from .market_data_service import MarketDataService  # noqa: E402
 from .metadata_service import MetadataService  # noqa: E402
 from .sector_service import SectorService  # noqa: E402
+# Phase 3 P3-C (T3-P3C): limit-up pool canonical record.
+from ..models.domain.sentiment import LimitUpPoolRecord  # noqa: E402
 
 
 __all__ = [
@@ -134,8 +137,13 @@ __all__ = [
     "wrap_error",
     # service classes
     "EventService",
+    "FlowService",
     "FundamentalService",
     "MarketDataService",
     "MetadataService",
     "SectorService",
+    # Phase 3 P3-B (T3-P3B): refresh-path outcome dataclass.
+    "PersistenceResult",
+    # Phase 3 P3-C (T3-P3C): limit-up pool canonical record.
+    "LimitUpPoolRecord",
 ]

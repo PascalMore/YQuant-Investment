@@ -649,7 +649,7 @@ def test_ut_20_happy_path_does_not_instantiate_fallback():
 
 
 def test_it_01_dry_run_pipeline_with_mocked_providers(tmp_path, monkeypatch):
-    """IT-01: run_unified_image_pipeline --dry-run with provider chain mocked."""
+    """IT-01: dry-run with the archive date explicit and business date from mock OCR."""
     # Patch the registry so the providers used by the real Extractor are mocks.
     from providers import registry
     saved = dict(registry._REGISTRY)
@@ -674,7 +674,6 @@ def test_it_01_dry_run_pipeline_with_mocked_providers(tmp_path, monkeypatch):
         ))
         result = asyncio.run(run_pipeline(
             str(img_path),
-            "2026-06-25",
             source_root,
             folder_date="2026-06-25",
             dry_run=True,
@@ -714,7 +713,7 @@ def test_it_02_save_pending_review_writes_provider_status(tmp_path):
         img_path.write_bytes(base64.b64decode(
             b"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9ZyJ8g0AAAAASUVORK5CYII="
         ))
-        extractor = MiniMaxImageExtractor(output_dir=str(tmp_path), date_str="2026-06-25")
+        extractor = MiniMaxImageExtractor(output_dir=str(tmp_path))
         records = asyncio.run(extractor.extract(str(img_path)))
         assert records, "extractor returned no records"
         record = records[0]
@@ -794,9 +793,7 @@ def test_ut_21_router_writes_merged_error_json_on_double_failure(
         # Use a dedicated debug dir under tmp_path so the assertion does
         # not collide with other tests' debug artefacts.
         debug_dir = tmp_path / "audit"
-        extractor = MiniMaxImageExtractor(
-            output_dir=str(debug_dir), date_str="2026-06-25"
-        )
+        extractor = MiniMaxImageExtractor(output_dir=str(debug_dir))
         import unittest.mock
         with unittest.mock.patch.object(Path, "exists", return_value=True):
             with pytest.raises(RuntimeError) as exc:

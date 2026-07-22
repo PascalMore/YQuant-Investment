@@ -143,6 +143,22 @@ class DataRouter:
             # T3-A P3PersistenceWriter deliverable — keeping the
             # capability naming aligned across the P3 surface.
             "sentiment.market_snapshot",
+            # Phase 3 P3-C (T3-P3C): sentiment.limit_up_pool is the
+            # per-stock limit-up/down pool — a separate capability
+            # from market_snapshot but sharing the same collection.
+            # TA-CN has no surface for per-stock limit-up data.
+            "sentiment.limit_up_pool",
+            # Phase 3 P3-B (T3-P3B): capital-flow data is per-symbol
+            # but the underlying TA-CN collections do not cover it.
+            # Both capabilities route to the same P3-B collection
+            # ``03_data_ud_stock_capital_flow`` via
+            # :data:`P3_COLLECTION_BY_CAPABILITY` (V0.5 §0.4). Mark
+            # both as NOT_COVERED so the router skips Step 1 (DESIGN-
+            # 03-014 §2.1 Step 1 P3-B skip rule). The P3-B refresh
+            # path lands in a Gate-authorised sub-stage; T3-P3B only
+            # exercises the read path + writer upsert round-trip.
+            "flow.capital_flow_daily",
+            "flow.northbound_daily",
         }
     )
 
@@ -714,13 +730,35 @@ class DataRouter:
         operation: str,
         params: Mapping[str, Any] | None,
         result: DataResult,
+        *,
+        capability: str | None = None,
     ) -> None:
         """Persist ``result`` into the persistence and cache layers.
 
         Synchronous, catch-and-log (MW-101..MW-104). Failure of either
         write does not affect ``result`` or its callers. Used only when
         Step 4 produced a successful external result.
+
+        P3 read-only guard (T3-P3B M1, V0.5 §2.1 / RFC §240-251 /
+        SPEC §537-546 / DESIGN §228-233): when ``capability`` is one of
+        the six :data:`P3_COLLECTION_BY_CAPABILITY` capabilities, this
+        method is a **no-op**. P3-B (capital-flow), P3-A (sector) and
+        P3-C (sentiment) reads are explicitly read-only — no Step-2
+        materialization, no Step-3 cache write fires. The Phase 3
+        read-only invariant is pinned both for the success path and
+        for ``force_refresh=True`` (which would otherwise re-trigger
+        the same write path). Non-P3 capabilities keep the Phase 1B-B
+        write behaviour unchanged.
         """
+        # Phase 3 read-only invariant — six P3 capabilities never
+        # trigger _materialize. The kw-only ``capability`` is the
+        # discriminator; an explicit ``None`` keeps backward
+        # compatibility with the Phase 1B-B call sites. The check is
+        # O(1) via the frozen capability map.
+        if capability is not None and capability in P3_COLLECTION_BY_CAPABILITY:
+            # P3 read is read-only by SPEC §537-546 — no Step-2 put,
+            # no Step-3 cache put.
+            return
         if self._local_mongo_adapter is not None:
             try:
                 self._local_mongo_adapter.put(
@@ -765,12 +803,28 @@ class DataRouter:
             list(inherited_trace) if inherited_trace is not None else []
         )
 
+        # Phase 3 read-only invariant: P3 capabilities skip the
+        # ``_materialize()`` Step-2 / Step-3 write pair at the end of
+        # the success path. The Step-2 / Step-3 read consultation
+        # (``_try_materialized`` / ``_try_cache``) remains active so
+        # pre-existing P3 data can still serve as a read cache. The
+        # only behaviour change is the write fan-out is suppressed for
+        # P3 capabilities (V0.5 §2.1 / SPEC §537-546 / DESIGN
+        # §228-233). Non-P3 capabilities keep their Phase 1B-B
+        # behaviour — including cache writes.
+        is_p3_capability = capability in P3_COLLECTION_BY_CAPABILITY
+
         # Step 2 (UD materialised). The helper self-manages the
         # ``force_refresh`` trace (``(skipped: force_refresh)``) and
         # returns ``None`` without calling ``LocalMongoAdapter.get()``.
         # Phase 3 P3-A: pass the capability + optional ``p3_writer``
         # so the Step-2 dispatch routes Phase 3 capabilities to
         # ``P3PersistenceWriter`` instead of ``LocalMongoAdapter``.
+        # Phase 3 P3-B (T3-P3B M1): P3 reads may still consult the
+        # P3 writer as a read cache — only the *write* fan-out is
+        # suppressed. This preserves the existing test
+        # ``test_query_with_p3_writer_still_readonly_in_query_path``
+        # which asserts ``ud_materialized(miss)`` is still recorded.
         materialized = self._try_materialized(
             security_id, domain, operation, params, trace, ts,
             force_refresh=force_refresh,
@@ -781,7 +835,11 @@ class DataRouter:
             return materialized
 
         # Step 3 (short-TTL query cache). Same self-managed
-        # ``force_refresh`` behaviour as Step 2.
+        # ``force_refresh`` behaviour as Step 2. The cache layer is
+        # Phase 1B-B's general-purpose read-through cache and is not
+        # P3-scoped, so P3 queries keep consulting it. The cache
+        # *write* is suppressed by the ``_materialize(...)`` guard
+        # below — both writes share the same read-only discriminator.
         cached = self._try_cache(
             security_id, domain, operation, params, trace, ts,
             force_refresh=force_refresh,
@@ -796,12 +854,33 @@ class DataRouter:
         if external_result.provider not in ("error", "empty"):
             # Persist a successful external hit into both the
             # materialised layer (Step 2 source) and the cache
-            # (Step 3 source). ``_materialize`` is catch-and-log;
-            # any failure is swallowed and the caller still sees the
-            # external result unchanged.
-            self._materialize(
-                security_id, domain, operation, params, external_result
-            )
+            # (Step 3 source) — except for the six P3 capabilities,
+            # which are explicitly read-only per V0.5 §2.1 /
+            # RFC-03-014 §240-251 / SPEC-03-014 §537-546 /
+            # DESIGN-03-014 §228-233.
+            #
+            # Phase 3 P3-B (T3-P3B M1): the **call** to
+            # ``_materialize`` is skipped entirely for P3
+            # capabilities (no trace entry, no internal decision
+            # branch, no incidental overhead). This is the
+            # contractual difference vs. the previous no-op
+            # behaviour — a spy / trace probe must observe
+            # zero ``LocalMongoAdapter.put`` and zero
+            # ``CacheManager.put`` invocations. Non-P3
+            # capabilities keep the Phase 1B-B write fan-out
+            # unchanged. The same discriminator also short-
+            # circuits ``force_refresh=True`` paths because the
+            # short-circuit happens before the call, not inside
+            # ``_materialize`` (V0.5 §2.1 read-only invariant).
+            if capability not in P3_COLLECTION_BY_CAPABILITY:
+                self._materialize(
+                    security_id,
+                    domain,
+                    operation,
+                    params,
+                    external_result,
+                    capability=capability,
+                )
         return external_result
 
     # ------------------------------------------------------------------

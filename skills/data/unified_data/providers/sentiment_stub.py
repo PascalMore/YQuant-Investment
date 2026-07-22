@@ -13,11 +13,11 @@ exposes but performs **no I/O** of any kind:
 
 Scope guardrails (T3-B kanban task body):
 
-* Capabilities advertised: ``{"sentiment.market_snapshot"}``. The
-  sister capability ``sentiment.limit_up_pool`` (V0.5 §2.2) is
-  **explicitly excluded** and arrives in T3-C. The capability name
-  matches the frozen ``P3_COLLECTION_BY_CAPABILITY`` key in
-  ``adapters/p3_persistence_writer.py``.
+* Capabilities advertised: `{"sentiment.market_snapshot"}`. The
+  sister capability `sentiment.limit_up_pool` (V0.5 section 2.2) is
+  **explicitly included** from T3-C onward. The capability name
+  matches the frozen `P3_COLLECTION_BY_CAPABILITY` key in
+  `adapters/p3_persistence_writer.py`.
 * Market coverage defaults to ``{Market.CN}``; tests can override via
   the ``markets`` kwarg.
 * ``fetch`` returns a list of plain ``dict`` objects that look exactly
@@ -84,8 +84,8 @@ class StubSentimentProvider(DataProvider):
       so the typical ``StubSentimentProvider()`` instantiation yields
       a fully-functional provider without test scaffolding.
     * ``capabilities``      — capability set. Defaults to
-      ``{"sentiment.market_snapshot"}``. Tests can extend the set to
-      cover dispatch edge cases.
+      ``{"sentiment.market_snapshot", "sentiment.limit_up_pool"}``.
+      Tests can subset the set to cover dispatch edge cases.
     * ``markets``           — covered markets. Defaults to
       ``{Market.CN}``.
     * ``available``         — value of :meth:`is_available` (defaults
@@ -105,7 +105,10 @@ class StubSentimentProvider(DataProvider):
         name: str = "sentiment_stub",
         *,
         payload: Iterable[dict] | None = None,
-        capabilities: Iterable[str] = ("sentiment.market_snapshot",),
+        capabilities: Iterable[str] = (
+            "sentiment.market_snapshot",
+            "sentiment.limit_up_pool",
+        ),
         markets: Iterable[Market] = (Market.CN,),
         available: bool = True,
         raise_on_fetch: BaseException | None = None,

@@ -60,7 +60,10 @@ from ..models import DataResult, Market, SecurityId
 # NOTE: T3-B scope forbids editing ``models/domain/__init__.py`` (the
 # Domain Object is intentionally *not* re-exported at the package level
 # for P3-B). Import the dataclass directly from its submodule.
-from ..models.domain.sentiment import MarketSentimentSnapshot
+from ..models.domain.sentiment import (
+    LimitUpPoolRecord,
+    MarketSentimentSnapshot,
+)
 from ..router import DataRouter
 
 logger = logging.getLogger(__name__)
@@ -71,12 +74,14 @@ class MarketSentimentService:
 
     Carries the ``sentiment.market_snapshot`` capability only — the
     sister ``sentiment.limit_up_pool`` capability from V0.5 §2.2
-    stays for T3-C. ``DOMAIN`` + ``OPERATION`` = the frozen
-    :data:`P3_COLLECTION_BY_CAPABILITY` key.
+    **is implemented** in T3-C on the same service class.
+    ``DOMAIN`` + ``OPERATION`` / ``LIMIT_UP_OPERATION`` = the frozen
+    :data:`P3_COLLECTION_BY_CAPABILITY` keys.
     """
 
     DOMAIN = "sentiment"
     OPERATION = "market_snapshot"
+    LIMIT_UP_OPERATION = "limit_up_pool"
 
     # ------------------------------------------------------------------
     # Construction
@@ -123,6 +128,11 @@ class MarketSentimentService:
         key — they must stay in lock-step.
         """
         return f"{self.DOMAIN}.{self.OPERATION}"
+
+    @property
+    def limit_up_capability(self) -> str:
+        """Return the limit-up pool capability string ``"sentiment.limit_up_pool"``."""
+        return f"{self.DOMAIN}.{self.LIMIT_UP_OPERATION}"
 
     @property
     def router(self) -> DataRouter | None:
@@ -285,6 +295,114 @@ class MarketSentimentService:
         raise NotImplementedError(
             "MarketSentimentService.refresh_market_sentiment_snapshot "
             "is reserved for T3-C; T3-B does not exercise the write path."
+        )
+
+    # ------------------------------------------------------------------
+    # P3-C: limit_up_pool read path
+    # ------------------------------------------------------------------
+
+    def get_limit_up_pool(
+        self,
+        trade_date: str | None = None,
+    ) -> DataResult:
+        """Look up the limit-up / limit-down pool for a given trading day.
+
+        Routes through ``sentiment.limit_up_pool`` (the router does the
+        full internal-first / Step-2 read dance — but P3 capabilities
+        skip the Step-2 / Step-3 *write* fan-out per the M1 read-only
+        guard). The Router's ``DataResult.data`` carries a
+        ``list[dict]`` that maps to :class:`LimitUpPoolRecord` via
+        :meth:`LimitUpPoolRecord.from_dict`.
+
+        Args:
+            trade_date: Trading day (``"YYYY-MM-DD"``). When ``None``
+                the query returns records for the most recent available
+                date as determined by the provider.
+
+        Returns:
+            A :class:`DataResult` whose ``data`` field is a
+            ``list[LimitUpPoolRecord]``-compatible ``list[dict]``.
+            ``provider == "empty"`` when the chain has no record;
+            ``provider == "error"`` when every candidate failed.
+
+        Raises:
+            ProviderUnavailableError: When no router was injected
+                (offline-only default — caller must inject).
+        """
+        if self._router is None:
+            raise ProviderUnavailableError(
+                "MarketSentimentService has no router wired; pass "
+                "`router=...` at construction time to enable reads."
+            )
+        # Use a market-level placeholder SecurityId — the limit-up pool
+        # is a date-based query, not a per-security query.
+        placeholder = SecurityId(
+            market=Market.INDEX,
+            symbol=f"limit_up_pool:{trade_date or 'latest'}",
+        )
+        params: dict[str, object] = {}
+        if trade_date is not None:
+            params["trade_date"] = trade_date
+        result = self._router.query(
+            domain=self.DOMAIN,
+            operation=self.LIMIT_UP_OPERATION,
+            security_id=placeholder,
+            market="CN",
+            params=params,
+        )
+        marker = "date_level_query(security_id=None)"
+        if not result.source_trace or marker not in result.source_trace:
+            result.source_trace.append(marker)
+        return result
+
+    # ------------------------------------------------------------------
+    # P3-C: limit_up_pool refresh path
+    # ------------------------------------------------------------------
+
+    def refresh_limit_up_pool(
+        self,
+        *,
+        p3_writer: Any | None = None,
+    ) -> Any:
+        """Refresh path for ``sentiment.limit_up_pool``.
+
+        T3-C offline contract:
+
+        1. When ``p3_writer`` is ``None`` (default) →
+           raises :class:`ProviderUnavailableError`. This keeps the
+           refresh path opt-in and prevents callers from accidentally
+           dropping data into a missing writer.
+        2. When ``p3_writer`` is wired → asserts the capability is
+           registered in :data:`P3_COLLECTION_BY_CAPABILITY`, then
+           raises :class:`NotImplementedError`. The full happy-path
+           (provider fetch → validate → upsert → return result)
+           is reserved for a future Gate-authorised sub-stage.
+
+        Args:
+            p3_writer: :class:`P3PersistenceWriter` for the refresh
+                path. ``None`` keeps refresh opt-in (T3-C offline
+                scope).
+
+        Raises:
+            ProviderUnavailableError: When ``p3_writer`` is ``None``.
+            ValueError: When capability is not registered in
+                :data:`P3_COLLECTION_BY_CAPABILITY`.
+            NotImplementedError: Full happy-path is reserved.
+        """
+        effective_writer = p3_writer if p3_writer is not None else self._p3_writer
+        if effective_writer is None:
+            raise ProviderUnavailableError(
+                "MarketSentimentService has no P3PersistenceWriter "
+                "wired; refresh path for limit_up_pool is opt-in."
+            )
+        if self.limit_up_capability not in P3_COLLECTION_BY_CAPABILITY:
+            raise ValueError(
+                f"capability {self.limit_up_capability!r} is not registered in "
+                "P3_COLLECTION_BY_CAPABILITY"
+            )
+        raise NotImplementedError(
+            "MarketSentimentService.refresh_limit_up_pool "
+            "is offline-scaffold only; full happy-path reserved."
         )
 
 

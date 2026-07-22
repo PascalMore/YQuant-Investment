@@ -62,6 +62,9 @@ logs/
 .cache/
 tmp/
 temp/
+# T4 test side-effect outputs
+tmp_out_mongo/
+docs/**/smoke_reports/
 # ad-hoc scratch scripts (added 2026-07-17, P-1 follow-up)
 tmp_*.py
 *.scratch.py

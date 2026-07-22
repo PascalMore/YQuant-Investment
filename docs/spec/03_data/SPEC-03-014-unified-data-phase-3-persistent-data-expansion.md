@@ -7,21 +7,22 @@
 | 状态 | Draft |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-07-20 |
-| 最后更新 | 2026-07-20（V0.2 修正：scope 对齐、MongoDB-first/SQLite 边界、三份 docstring 精确免责措辞、API 预算标记待确认、不改动清单声明为本卡约束） |
-| 来源 RFC | RFC-03-014（Phase 3 持久化扩展） |
+| 最后更新 | 2026-07-22（V0.4 AKShare 无 Token + 复用 Phase 2 MONGO_URI 同步：§0 PR-Gate 定义更新；§10.bis PR-0 Gate 分割 AKShare 跳过密钥审计 + MongoDB 改为 `MONGO_URI`；PR-2/PR-3/PR-4 移除 token 消耗语义；§14.1 副作用矩阵移除 token 消耗；§14.3 审计表移除 AKSHARE_TOKEN、MONGODB_URI→MONGO_URI；§11 OQ-8 标记已解决） |
+| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.3） |
 | 关联 RFC | RFC-03-007（Unified Data Layer 总纲）、RFC-03-011（Phase 2 质量与审计治理）、RFC-03-013（Phase 1E 情绪最小切片） |
 | 关联 SPEC | SPEC-03-007（Unified Data Layer 契约基线）、SPEC-03-008（Phase 1B-A 查询平面）、SPEC-03-013（Phase 1E 情绪最小切片） |
-| 关联 Design | DESIGN-03-014（Phase 3 持久化扩展详细设计，后续 T2 交付） |
+| 关联 Design | DESIGN-03-014（Phase 3 持久化扩展详细设计，V0.6） |
 | 目标模块 | unified_data（`skills/data/unified_data/`） |
-| 版本号 | V0.2 |
-| 适配 Agent | YQuant-Developer-Engineer, YQuant-Test-Engineer |
+| 版本号 | V0.4 |
+| 适配 Agent | YQuant-Developer-Engineer, YQuant-Test-Engineer, YQuant-Principal（T4 阶段） |
 
 ### 版本历史
 
 || 版本号 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|---|
 || V0.1 | 2026-07-20 | 初始创建。将 RFC-03-014 的 Phase 3 三阶段受控分期需求落为可执行契约，定义 SectorSnapshot / CapitalFlowRecord / MarketSentimentSnapshot 三个 domain object 字段级 schema、Provider 注册点、ETLV 验证点、读写路径边界与验收标准。 | YQuant-Principal |
-|| V0.2 | 2026-07-20 | 修正：字段计数对齐（SectorSnapshot=19, CapitalFlowRecord=17, MarketSentimentSnapshot=22）；SectorSnapshot dataclass Python 语法修复（snapshot_date 移至 market 前）；唯一键全部纳入 market；拆分明细 query 与 ETLV refresh 写入路径；标记硬编码值（超时/限速）为可配置/待验证；AuditLogger 声明默认关闭；记录级可追溯字段表（quality_flags/source_record_id/schema_version 标为待定）；northbound_daily 明确为个股级 scope。 | YQuant-Principal |
+||| V0.2 | 2026-07-20 | 修正：字段计数对齐（SectorSnapshot=19, CapitalFlowRecord=17, MarketSentimentSnapshot=22）；SectorSnapshot dataclass Python 语法修复（snapshot_date 移至 market 前）；唯一键全部纳入 market；拆分明细 query 与 ETLV refresh 写入路径；标记硬编码值（超时/限速）为可配置/待验证；AuditLogger 声明默认关闭；记录级可追溯字段表（quality_flags/source_record_id/schema_version 标为待定）；northbound_daily 明确为个股级 scope。 | YQuant-Principal |\n||| V0.3 | 2026-07-22 | T4 生产就绪扩展。新增 §14 只读预检与真实 Provider Smoke 测试契约（含副作用矩阵、MongoDB 预检规程、Secret Source 审计规程、Smoke 报告 YAML 模板、Zero-Persistence-Write 保证、DDL/DML 独立 Gate 细则、停止条件、成功标准）；新增 §10.bis PR 系列 Gate；§2 追加 T4 In/Out；§7 追加 A-016~A-025 T4 验收项；§9 追加 T4 约束；§11 追加 OQ-7/8/9。 | YQuant-Principal |
+||| V0.4 | 2026-07-22 | AKShare 无 Token + 复用 Phase 2 MONGO_URI 同步：AKShare 为匿名数据源，PR-0 跳过密钥审计；MongoDB 连接键从 `MONGODB_URI` 改为 `MONGO_URI`（沿用 Phase 2 已验证只读连接语义）；PR-2/PR-3/PR-4 移除 token 语义改为每小时配额；§14.1 副作用矩阵移除 token 消耗；§14.3 审计表移除 AKSHARE_TOKEN；§11 OQ-8 标记已解决。 | YQuant-Principal |
 
 ---
 
@@ -41,6 +42,11 @@
   - **禁止**：SQLite 不得作为 Phase 3 正式生产写入目标，不得出现在 `03_data_ud_*` 集合的生产写入路径中。
 - **internal-first 读取路径不变**：TA-CN 既有 → LocalMongo（`03_data_ud_*`）→ Cache → 外部 Provider。新集合通过 LocalMongoAdapter 读取。
 - **MongoDB `tradingagents` 库**：所有 `03_data_ud_*` 物化集合位于此物理库，通过前缀隔离 ownership。
+- **T4 生产就绪**：Phase 3 离线实现（T1 RFC+SPEC + T2 Design + T3 Implement）完成后，在真实生产环境上执行零写入只读预检与真实 Provider Smoke 的阶段。仅包含 MongoDB 只读连通预检、Secret Source 审计、真实 Provider Smoke（单标的、≤3 日窗口、零持久化写）。**不包含**任何 MongoDB DDL/DML、Cache/业务写入、cron/systemd、外部消息/webhook、`.env` 写入或回显。
+- **PR-Gate**：Production Readiness Gate 的缩写，T4 生产就绪阶段的授权关卡。包括 PR-0（MongoDB 连接秘密审计，使用 Phase 2 已验证的 `MONGO_URI`；AKShare 跳过密钥审计）、PR-1（MongoDB 只读预检）、PR-2/3/4（Provider smoke，AKShare 为匿名调用不依赖 PR-0）、PR-DDL-*（DDL 授权）、PR-CANARY-*（手动 canary）。
+- **Smoke 报告**：每个真实 Provider smoke 调用产出的结构化 YAML 报告，包含连通性、认证、权限、字段映射、数据样例、vs_fixture 偏差等独立节（§14.4.2）。
+- **Zero-Persistence-Write**：DataRouter.query() 对 P3 capability 的全程只读保证——Step 4 外部 Provider fetch 成功后仅返回 DataResult，不触发 `_materialize()`、不写物化集合、不写 Cache、不写 AuditLogger（§14.5）。
+- **FV（待验证事实）**：RFC §5.5 定义的生产环境待验证事项，T4 阶段通过真实 Provider smoke 逐一验证。
 
 ### 0.1 六项不变量逐条对应（RFC-03-007 §14 / SPEC-03-007 §0.2）
 
@@ -87,6 +93,12 @@
 - [ ] 全部：UnifiedDataClient 新增对应域方法（§5.1）
 - [ ] 全部：colocated 单元测试 + fixture
 - [ ] 全部：Pascal 逐项授权 Gate 确认后执行
+- [ ] **T4 新增**: Secret source 审计（PR-0）：逐候选文件验证存在性 + 可加载性
+- [ ] **T4 新增**: MongoDB 只读预检（PR-1）：ping + listCollections + 确认无意外 P3 集合
+- [ ] **T4 新增**: Provider smoke sector（PR-2）：单板块代码 ≤3 交易日，只读调用
+- [ ] **T4 新增**: Provider smoke flow（PR-3）：单标的 ≤3 交易日，只读调用
+- [ ] **T4 新增**: Provider smoke sentiment（PR-4）：单日期，只读调用
+- [ ] **T4 新增**: Smoke 报告生成：每 capability 独立 YAML 报告（§14.4.2 模板）
 
 ### 2.2 Out of Scope
 
@@ -101,6 +113,14 @@
 - ❌ 修改已有 domain object 的字段签名（`StockInfo`, `DailyBar`, `NewsItem` 等）
 - ❌ 个股级情绪分数（属 Phase 1E；与 P3-C 市场级情绪正交）
 - ❌ DSA adapter 实现或 DSA 数据源集成
+- ❌ **T4 禁止**: 任何 MongoDB DDL/DML/索引变更
+- ❌ **T4 禁止**: DataRouter.query() 或 force_refresh 路径中的 Cache/物化写入
+- ❌ **T4 禁止**: cron/systemd 注册或 canary 持续调度
+- ❌ **T4 禁止**: 外部消息/webhook 发送
+- ❌ **T4 禁止**: `.env` 写入或 secret 回显
+- ❌ **T4 禁止**: 依赖升级（pip install、requirements 变更）
+- ❌ **T4 禁止**: Git commit 或分支操作
+- ❌ **T4 禁止**: 将单标的 smoke 结论泛化为全量标的工作结论
 
 ---
 
@@ -671,7 +691,17 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 | A-012 | P3-C 单元测试：市场温度范围验证 | Python 断言 | P3-C |
 | A-013 | `git diff --check` exit 0 | 终端命令 | 全部 |
 | A-014 | `git diff --name-status` 仅含目标文件 | 终端命令 | 全部 |
-| A-015 | 文档中明确声明所有数据为「辅助研究数据，不构成交易指令或投资建议」 | `grep -c '辅助研究数据，不构成交易指令或投资建议'` 在 SPEC 三份 domain object docstring 中至少出现 3 次 | 全部 |
+|| A-015 | 文档中明确声明所有数据为「辅助研究数据，不构成交易指令或投资建议」 | `grep -c '辅助研究数据，不构成交易指令或投资建议'` 在 SPEC 三份 domain object docstring 中至少出现 3 次 | 全部 |
+|| **A-016** | **PR-0 Secret source 审计**：逐候选文件验证存在性 + 可加载性；结果表包括文件路径存在、可读、键声明存在三条独立记录 | 审计报告输出（不包含 secret 值/长度/URI/用户名） | T4 P3-A/B/C |
+|| **A-017** | **PR-1 MongoDB 只读预检**：连接 ping 成功 + `list_collection_names()` 列出所有集合 + 确认三个 P3 目标集合不存在 | 终端命令输出（不含密码） | T4 P3-A/B/C |
+|| **A-018** | **PR-2 smoke sector**：单板块代码 ≤3 交易日，零持久化写，产出 YAML 报告包含 connectivity/auth/permissions/field_mapping/data_sample/vs_fixture | 检查报告文件存在且包含全部六节 | T4 P3-A |
+|| **A-019** | **PR-3 smoke flow**：单标的 ≤3 交易日，零持久化写，产出 YAML 报告同上 | 同上 | T4 P3-B |
+|| **A-020** | **PR-4 smoke sentiment**：单日期，零持久化写，产出 YAML 报告同上 | 同上 | T4 P3-C |
+|| **A-021** | **T4 零持久化写验证**：DataRouter.query() 对 P3 capability 的 source_trace 不包含 `materialized`/`cache` 条目；force_refresh 也不产生产生持久化副作用 | Python spy/mock 验证 | T4 P3-A/B/C |
+|| **A-022** | **连通性/认证/权限/数据合理性四条独立记录**：每条 smoke 报告的 connectivity/auth/permissions 节必须独立、不可互相推导 | 检查 YAML 报告结构 | T4 P3-A/B/C |
+|| **A-023** | **Secret source 非泄露三布尔检查**：审计输出仅包含存在/不存在/可加载/不可加载/键声明/缺失的布尔结论，不含值/长度/URI/用户名 | 终端输出审计 | T4 P3-A/B/C |
+|| **A-024** | **失败后不自动重试、不切换写入**：smoke 失败仅记录报告，不写入物化/Cache，不自动重试，不自动回退 | 检查 smoke 报告输出 + 无 MongoDB 变更 | T4 P3-A/B/C |
+|| **A-025** | **DDL/DML/真实 refresh 仍阻塞**：T4 阶段不执行 `createCollection`、`createIndex`、`upsert()`、`refresh_xxx()` | 终端检查 MongoDB 集合清单 + 无新写入 | T4 P3-A/B/C |
 
 ---
 
@@ -746,6 +776,17 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 - Provider fetch 超时为可配置参数（[待验证] AKShare 实际响应时间分布）——V-GEN-2 中的超时值为建议默认值，非固定值
 - 所有 domain object docstring 必须包含「辅助研究数据，不构成交易指令或投资建议」
 
+### 9.4 T4 生产就绪约束
+
+- **T4 零写入硬边界**：PR-0~PR-4 的所有步骤设计为「零持久化副作用」——无集合/索引变更、无 MongoDB 写入、无 Cache 写入、无 cron/systemd 注册。任何步骤观察到异常停止条件时立即终止序列，**不降级为写入操作**
+- **PR-1 不读业务数据**：MongoDB 只读预检仅执行 `admin.command("ping")` + `list_collection_names()`，不得对 `stock_basic_info`、`market_quotes` 等 TA-CN 业务集合做任何查询
+- **PR-2/3/4 单标的有界调用**：每个 smoke 调用仅使用单板块代码/单标的/单日期，日期窗口 ≤3 个交易日，每 capability API 调用 ≤3 次，不自动重试
+- **PR-0 禁止 secret 输出**：secret source 审计仅输出存在/不存在/可加载/不可加载的布尔结论，**绝对禁止**输出值、长度、URI（含 `mongodb://...`、`https://...`）、用户名、全路径+键值组合
+- **连通性/认证/权限/数据合理性四条必须独立记录**：不得用连通性结论推导认证结论，不得用一次调用结果泛化为全局结论
+- **T4 不依赖 mock/offline 结论**：不允许将 mock/offline 结果表述为生产验证；所有烟雾测试必须在真实环境执行
+- **T4 不替换 T3 离线测试**：T4 阶段不替代 §8 定义的离线单元测试和 fixture 验证；两者为互补关系
+- **PR-DDL 系列仍阻塞**：T4 阶段完成的 smoke 报告作为 Pascal 审阅输入，DDL/DML/真实 refresh 仍需 Pascal 逐项独立授权
+
 ---
 
 ## 10. Pascal 授权 Gate 汇总
@@ -764,6 +805,30 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 
 ---
 
+## 10.bis T4 生产就绪授权 Gate（PR 系列）
+
+**前置说明**：§10 的 G-* 系列 Gate 为 T3 离线实施阶段的授权关卡。以下 PR-* 系列 Gate 为 **T4 生产就绪阶段**的授权关卡，在 T3 离线实现完成后执行。两系列 Gate 对应不同阶段，互不冲突、互不替换。
+
+| Gate ID | 授权内容 | 触发时机 | 影响范围 | 停止条件 | 涉及子阶段 | 执行人 |
+|---|---|---|---|---|---|---|
+| **PR-0** | **Secret source 审计**（仅 MongoDB）：逐候选文件证明 `MONGO_URI`（沿用 Phase 2 已验证的最小权限只读连接语义）的 `.env` 或等效 secret 源存在、可被进程加载、键声明匹配。**AKShare 跳过密钥审计**——AKShare 为匿名无 token 数据源。**禁止输出值、长度、URI、用户名或全路径+键值组合** | T4 起始 | 文件存在性检查、运行时 env 探测（只读） | 候选文件不存在或 `MONGO_URI` 键缺失 → 标记 MongoDB 为「NOT_AUTHORIZED」；AKShare 跳过 PR-0 检查 | P3-A/B/C | Pascal 或 DevOps |
+| **PR-1** | **MongoDB 只读连通预检**：使用 `pymongo.MongoClient` 连接 `tradingagents` 库，ping，列出所有集合，验证无三个 P3 目标集合。**不建集合、不读业务数据** | PR-0 pass | 网络 io（<1s）、MongoDB driver 加载 | 连接失败/认证拒绝/意外发现目标集合已存在 → 停止并记录 | P3-A/B/C | Dev/Agent |
+| **PR-2** | **AKShare Provider smoke：`sector.snapshot` + `sector.ranking`** — 单板块代码（`BK0489`），≤3 个交易日窗口，AKShare 匿名只读调用。**零持久化写** | PR-1 pass（AKShare smoke 不依赖 PR-0 pass） | AKShare API 调用 1-2 次、每小时配额 | API 返回错误/字段完全不匹配/json 解析异常 → 停止；差异仅记录在字段映射报告中 | P3-A | Dev/Agent |
+| **PR-3** | **AKShare Provider smoke：`flow.capital_flow_daily` + `flow.northbound_daily`** — 单标的（`600519` / `000001`），≤3 个交易日窗口，AKShare 匿名只读调用 | PR-1 pass（AKShare smoke 不依赖 PR-0 pass；可并行于 PR-2） | AKShare API 调用 2-4 次、每小时配额 | API 失败/空返回/北向字段缺失 → 停止并记录 | P3-B | Dev/Agent |
+| **PR-4** | **AKShare Provider smoke：`sentiment.market_snapshot` + `sentiment.limit_up_pool`** — 单日期，AKShare 匿名只读调用 | PR-1 pass（AKShare smoke 不依赖 PR-0 pass；可并行于 PR-2/PR-3） | AKShare API 调用 2 次、每小时配额 | API 失败/核心字段缺失 → 停止并记录 | P3-C | Dev/Agent |
+| **PR-DDL-P3A** | **DDL Gate：创建 MongoDB 集合 `03_data_ud_market_sector_snapshot` + 索引** | PR-2 pass + Pascal 独立确认 | MongoDB 元数据写入——集合创建、索引构建 | 写权限不足/长时间索引重建 → 停止；schema 版本须与 SPEC §3.1 一致 | P3-A | Pascal 手动确认 |
+| **PR-DDL-P3B** | **DDL Gate：创建 MongoDB 集合 `03_data_ud_stock_capital_flow` + 索引** | PR-3 pass + Pascal 独立确认 | MongoDB 元数据写入 | 同上 | P3-B | Pascal 手动确认 |
+| **PR-DDL-P3C** | **DDL Gate：创建 MongoDB 集合 `03_data_ud_market_sentiment_snapshot` + 索引** | PR-4 pass + Pascal 独立确认 | MongoDB 元数据写入 | 同上 | P3-C | Pascal 手动确认 |
+| **PR-CANARY-P3x** | **手动 Canary**：一次 refresh 调用（手动触发，非 cron），写入对应集合，验证 DataResult 返回正常 | 对应 PR-DDL pass + Pascal 确认 | 真实 MongoDB 写入 | 写入失败/数据质量异常 → 停止不升级到 cron | P3-A/B/C | Pascal 手动执行 |
+
+**关键约束**：
+- PR-1（MongoDB 预检）**不读业务数据**——仅 ping + listCollections 命令。不得对 `stock_basic_info`、`market_quotes` 等 TA-CN 集合做查询
+- PR-2/PR-3/PR-4 的输出必须**分别记录**连通性、认证、权限、字段映射四方面的观测结论。不得将一次调用结果泛化为全局结论
+- PR-DDL 系列与 PR-smoke 系列**完全解耦**——DDL 不是 PR-smoke 的前置要求，smoke 可先行验证 Provider 连通性，DDL 在 Pascal 确认 schema 最终版后才执行
+- PR-CANARY 系列与 PR-DDL 系列有依赖——先 DDL 才能写。但每个子阶段独立，P3-A 的 canary 不等待 P3-B 的 DDL
+- 同一子阶段的 Gate 建议按 **PR-smoke → Pascal 审阅 smoke 结论 → PR-DDL → PR-CANARY** 顺序执行
+- **长期调度（cron/systemd）和 task_center Job 创建仍为独立授权，不在本 T4 范围**
+
 ## 11. 开放问题
 
 - [ ] OQ-1：资金流数据是否需要分钟级盘中快照？当前仅日级。如需要，P3-B 的 collection schema 需增加 `snapshot_time` 维度。
@@ -771,6 +836,9 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 - [ ] OQ-3：`SectorSnapshot.members` 字段是否必要？如需要，更新频率为每日/每周？
 - [ ] OQ-4：3 个子阶段的执行顺序是否接受推荐序（P3-A → P3-B → P3-C）？
 - [ ] OQ-5：`03_data_ud_stock_capital_flow` 的倒填（backfill）策略？是否需要回填历史 N 个月数据？若需要，batch size 和限流策略。
+- [ ] **OQ-7（T4 新增）**：T4 生产就绪 PR-smoke 的执行人是否由当前 Agent 承担，还是需 Pascal 手动执行？PR-2/PR-3/PR-4 标注为「Dev/Agent」，若 Agent 无真实网络/API 权限则降级为 Pascal 手动
+- [ ] **OQ-8（T4 更新）**：AKShare 无需 token（已确认为匿名数据源），OQ-8 已解决。PR-0 审计仅覆盖 MongoDB 的 `MONGO_URI`。
+- [ ] **OQ-9（T4 新增）**：Provider smoke 结论中字段映射差异的阈值如何设定？RFC §6.3 提议 >50% 字段不匹配为停止条件——是否调整？
 
 ---
 
@@ -807,3 +875,256 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 - `skills/data/unified_data/freshness.py`（FreshnessPolicy TTL 注册点）
 - `skills/data/unified_data/providers/_stub_columns.py`（STUB_COLUMNS 注册点）
 - `skills/data/unified_data/router.py`（external_fallback_chains 通过构造参数传入；_TA_CN_NOT_COVERED 注册点）
+
+---
+
+## 14. T4 生产就绪只读预检与 Provider Smoke 测试契约
+
+### 14.1 副作用矩阵（Mongo/read、Provider/read、token use）
+
+每个 T4 步骤的可能副作用、风险等级与缓解措施：
+
+| 步骤 | 动作 | 可能副作用 | 风险等级 | 缓解措施 |
+|---|---|---|---|---|
+| PR-0: Secret source 审计 | 检查文件是否存在；`os.environ.get("KEY")` | 无（仅只读探测） | 无风险 | 禁止输出值/长度/URI/用户名；仅记录「存在/不存在」「可加载/不可加载」 |
+| PR-1: MongoDB 只读预检 | `MongoClient()` → `admin.command("ping")` → `list_collection_names()` | MongoDB 连接池建立；网络出站流量（~KB） | 低 | 不读业务数据；不建集合；连接超时 <3s |
+| PR-2: sector smoke | `akshare.stock_board_industry_cons_em("BK0489")` | AKShare 匿名 API 调用（1 次/调用）；网络流量（~KB） | 低 | 单代码限量；≤3 日窗口；零持久化写 |
+| PR-3: flow smoke | `akshare.stock_individual_fund_flow()` | AKShare 匿名 API 调用（2-4 次）；网络流量（~MB） | 低-中（带宽） | 单标的限量；≤3 日窗口；限速 ≥1s/call |
+| PR-4: sentiment smoke | `akshare.stock_zt_pool_em()` / `stock_market_fund_flow()` | AKShare 匿名 API 调用（2 次）；网络流量（~KB） | 低 | 单日期限量 |
+| PR-DDL: 集合创建 | `db.create_collection()` + `create_indexes()` | MongoDB 元数据变更——不可逆（drop 可撤销但有代价） | **中**（元数据变更） | Pascal 独立确认；schema 版本与 SPEC 最终版一致；提供 `drop_collection()` 回滚脚本 |
+| PR-CANARY: 手动写入 | `P3PersistenceWriter.upsert()` → 真实 MongoDB 写入 | 数据写入——可逆（delete_by_filter 可清理） | 中（数据写入） | 手动触发；单次执行；提供清理脚本；不自动重复 |
+
+**核心原则**：PR-0 到 PR-4 的所有步骤设计为「零持久化副作用」——无集合/索引变更、无 MongoDB 写入、无 Cache 写入、无 AuditLogger 写入、无 QualitySummary 写入、无 cron/systemd 注册。任何步骤观察到异常停止条件时立即终止序列，**不降级为写入操作**。
+
+### 14.2 MongoDB 只读预检规程
+
+**适用 Gate**：PR-1
+
+**步骤**：
+1. 从受控 secret source（PR-0 已验证）加载 MongoDB 连接参数
+2. 建立 `pymongo.MongoClient`（超时 3s）
+3. 执行 `admin.command("ping")` → 记录连通性结论
+4. 切换到 `tradingagents` 库 → 执行 `list_collection_names()` → 记录全量集合清单（不包含业务数据内容）
+5. 逐一检查集合名中是否包含 `03_data_ud_market_sector_snapshot` / `03_data_ud_stock_capital_flow` / `03_data_ud_market_sentiment_snapshot`
+6. **如果任一目标集合存在** → 停止 PR-1，记录该集合的创建元数据（`db[collection].options()`），标注为「UNEXPECTED_EXISTENCE」，需 Pascal 判断处理
+7. **如果所有目标集合不存在** → PR-1 通过
+
+**禁止事项**：
+- ❌ 查询 `stock_basic_info`、`market_quotes`、`stock_daily_quotes` 等 TA-CN 业务集合的数据
+- ❌ 创建或修改任何集合、索引、文档
+- ❌ 读代替写（不将此行作为开始写入的借口）
+- ❌ 在任意环节打印或记录连接串中的密码
+
+**失败处理**：
+- 连接失败 → 记录错误类型（DNS 解析/网络超时/认证拒绝），PR-1 失败。不自动重试
+- 认证拒绝 → 区分「用户无权限」和「凭据错误」两种场景，分别记录在结论中
+- list_collections 无权限 → 降低期望：仅验证可连接即可，集合检查改为「无法执行，需 Pascal 手动确认」
+
+### 14.3 Secret Source 审计规程
+
+**适用 Gate**：PR-0
+
+**候选 Secret Source**（逐项检查，非穷举、不输出值）：
+
+| 候选路径 | 检查内容 | 验证方法 | 结论 |
+|---|---|---|---|---|
+| `.env`（项目根目录） | 文件存在、可读 | `os.path.isfile() 且 os.access(R_OK)` | 存在/不存在/不可读 |
+| `.env` 键 `MONGO_URI` | 声明存在 | `os.getenv("MONGO_URI")` 返回非 None | 已声明/未声明 |
+| Hermes profile `.env` | 文件存在、可读 | `os.path.isfile(profile_path) 且 os.access(R_OK)` | 存在/不存在/不可读 |
+| Hermes 运行时 env | 键声明 | `os.getenv(key)` 返回非 None | 已声明/未声明 |
+| AKShare 匿名调用 | 无需密钥审计 | —（AKShare 为匿名数据源，无需 token） | 跳过 PR-0 |
+
+**约束**：
+- 每条检查仅输出结论（存在/不存在/可加载/不可加载 + 键声明存在/缺失）
+- **绝对禁止**：输出值、长度、URI（含 `mongodb://...`、`https://...`）、用户名、全路径+键值组合
+- 每个候选 source 独立记录，不归并、不默认降级
+- MongoDB `MONGO_URI` 候选 source 全部不存在或键缺失 → 标记 MongoDB 为「NOT_AUTHORIZED」，PR-1（MongoDB 预检）不执行
+- AKShare 跳过 PR-0 检查——PR-2/PR-3/PR-4 可独立于 PR-0 直接执行匿名只读 smoke
+- PR-0 审计结果由 Pascal 审阅确认后进入 PR-1
+
+### 14.4 真实 Provider Smoke 规程
+
+#### 14.4.1 通用规则
+
+| 维度 | 约束 |
+|---|---|
+| 范围 | 子阶段对应的 capability 各选一（共 6 个 capability） |
+| 标的选择 | sector: 单板块代码（推荐 `BK0489`「行业板块」）；flow: 单标的（推荐 `600519` 沪市 + `000001` 深市）；sentiment: 单日期 |
+| 日期窗口 | ≤3 个交易日（推荐最近一个完整交易日 + 前两个交易日） |
+| 写入 | **零写入**：不写物化集合、不写 Cache、不写 AuditLogger、不写 QualitySummary。仅打印/记录到本地文件 |
+| API 调用次数 | 每 capability ≤3 次（单标的 × 单日期 × 重试 0 次）。仅成功调用 1 次 + 异常不自动重试 |
+| 输出 | 每个 smoke 调用输出一个「capability smoke 报告」（见 §14.4.2） |
+| 并行 | PR-2/PR-3/PR-4 相互独立，可并行执行 |
+
+#### 14.4.2 Smoke 报告 YAML 模板
+
+每 capability 的 smoke 结果必须独立记录为结构化报告：
+
+```yaml
+capability: sector.snapshot              # capability 名称
+provider: akshare                        # Provider 名
+smoke_at: 2026-07-22T03:30:00+08:00      # 实际执行时间（ISO 8601）
+stock/代码: BK0489                        # 测试标的
+date_range: [2026-07-20, 2026-07-22]     # 请求日期窗口
+---
+connectivity:
+  status: success | failed               # API 连通性结论
+  latency_ms: 1234                        # 响应延迟（ms）
+  error: null | str                      # 失败时的错误信息
+auth:
+  status: authorized | unauthorized      # 认证状态
+  error: null | str
+permissions:
+  status: ok | restricted               # 权限状态（是否返回预期数据）
+  note: null | str
+field_mapping:
+  total_expected_fields: 19              # SPEC 定义的字段数
+  matched_fields: 18                     # 实际接口返回的匹配字段数
+  missing_fields: [field_a, field_b]     # SPEC 有但实际无的字段
+  extra_fields: [field_x]                # 实际有但 SPEC 无的字段
+  unmatched_types: [field_c → str vs int] # 类型不匹配的字段
+data_sample:
+  row_count: 15                          # 返回记录数
+  sample_rows: 5                         # 前 5 行样例打印
+  null_ratio: 0.03                       # 空值占比
+vs_fixture:
+  deviations:                            # 与离线 fixture 的偏差
+    - field: update_date
+      fixture_type: str
+      actual_type: datetime
+      impact: low                        # 偏差影响评估（low/medium/high）
+overall:
+  verdict: pass | conditional_pass | fail  # 总体评估
+  memo: |                               # 自由文本备注
+    Sector snapshot data returned successfully.
+    Field mapping is 95% compatible with SPEC.
+    Remapping needed for: update_date (type change).
+```
+
+#### 14.4.3 报告存储
+
+- 所有 smoke 报告写入本地文件（`docs/rfc/03_data/smoke_reports/` 目录），按 capability 命名：`smoke_sector_snapshot_20260722.yaml`
+- **不允许写入 MongoDB 或任何持久化存储**
+- 报告最终作为附件提供给 Pascal 审阅
+
+#### 14.4.4 失败与偏差处理
+
+| 场景 | 处理 |
+|---|---|
+| API 返回非 200 或空 DataFrame | 记录错误 → 该 capability 标记为 fail → 停止该子阶段的后续 smoke |
+| 认证拒绝（401/403） | 记录错误 → 标记 auth 为 unauthorized → 停止全部 smoke，回查 PR-0 |
+| 字段映射完全匹配（≥90% 字段名+类型匹配） | pass → 可直接进入 DDL Gate |
+| 字段映射部分匹配（70%-90%） | conditional_pass → 需 Pascal 审阅偏差后决定是否授权 DDL |
+| 字段映射匹配度低（<70%） | fail → 停止 → 需更新 domain object schema 后重做 smoke |
+| 限流（429） | 记录限流信息 → 标记为 rate_limited → 等待 ≥60s → **不自动重试**（留给 Pascal 判断） |
+| 网络超时 | 记录超时 → 标记为 timeout → 不自动重试 |
+
+### 14.5 Zero-Persistence-Write 保证
+
+**DataRouter.query() for P3 capabilities** 全程零持久化写：
+
+- Step 1（TA-CN adapter skip）：P3 capability 注册在 `_TA_CN_NOT_COVERED` → 直接跳过，零副作用
+- Step 2（P3PersistenceWriter 读）：仅 `get()` 操作——零写
+- Step 3（CacheManager 读）：仅 `get()` 操作——零写
+- Step 4（外部 Provider fetch）：成功返回 `DataResult.success()`——**不触发 `_materialize()`**，不写 LocalMongoAdapter、不写 Cache、不写 AuditLogger
+
+任何 `force_refresh` 参数在 P3 query 路径中均**不产生持久化副作用**——`force_refresh` 仅影响 FreshnessPolicy 判断，不改变写入行为。
+
+**显式 refresh 路径**（非 query，属独立 Gate）：
+- `refresh_sector_snapshot()` / `refresh_capital_flow()` / `refresh_market_sentiment()` 仅在对应子阶段的 CANARY Gate 授权后执行
+- CANARY 之前的任何 refresh 路径调用返回未授权错误，不执行 Provider fetch 和 MongoDB 写入
+
+**验证方式**（A-021）：
+- 通过 spy/source trace 验证：`DataResult.source_trace` 中不包含 `"ud_materialized"` 或 `"cache"` 条目
+- 通过 mock Router 验证：`_materialize()` 方法在 P3 capability 的 query 路径中不被调用
+
+### 14.6 DDL/DML 独立 Gate 细则
+
+PR-DDL-* 系列 Gate 与 PR-smoke 系列 Gate 的关系：
+
+```
+PR-0 (Secret 审计) ──→ PR-1 (MongoDB 预检) ──→ PR-2/3/4 (Smoke)
+                                                      │
+                                                      ▼
+                                              Pascal 审阅 Smoke 报告
+                                                      │
+                                              §14.4.4 判定 Verdict
+                                                      │
+                                           ┌──────────┴──────────┐
+                                           ▼                     ▼
+                                     PASS / CONDITIONAL    FAIL → 停止
+                                           │
+                                           ▼
+                          Pascal 独立确认 schema 最终版
+                                           │
+                                           ▼
+                                     PR-DDL-* (集合创建)
+                                           │
+                                           ▼
+                                     PR-CANARY-* (手动写入)
+```
+
+**DDL Gate 授权要求**（全部满足）：
+1. 该子阶段的 PR-smoke verdict 为 `pass` 或 `conditional_pass`（Pascal 已审阅偏差并确认可接受）
+2. Pascal 已确认 SPEC-03-014 中对应 schema 的最终版本（包含 smoke 发现的字段映射修正）
+3. 提供 `createCollection` + `createIndex` 的精确脚本（索引定义、TTL 策略、验证规则）
+4. 提供对应的 `dropCollection` 回滚脚本（作为安全网）
+5. Pascal 执行或明确授权执行 DDL
+6. **DDL 执行人**：Pascal 手动执行（或 Pascal 授权的 DevOps）。Agent 不直接执行 DDL
+
+**DDL 执行脚本示例**（以 P3-A 为例）：
+```javascript
+// P3-A: 创建板块快照集合
+db.createCollection("03_data_ud_market_sector_snapshot");
+
+// 创建索引（在创建集合后执行）
+db["03_data_ud_market_sector_snapshot"].createIndex(
+    {sector_code: 1, snapshot_date: -1},
+    {background: true, name: "sector_code_date"}
+);
+db["03_data_ud_market_sector_snapshot"].createIndex(
+    {snapshot_date: -1},
+    {background: true, name: "snapshot_date"}
+);
+db["03_data_ud_market_sector_snapshot"].createIndex(
+    {sector_type: 1, snapshot_date: -1},
+    {background: true, name: "sector_type_date"}
+);
+```
+
+### 14.7 成功标准
+
+T4 生产就绪阶段在以下全部条件满足时视为完成：
+
+1. **PR-0 通过**：Secret source 逐候选文件审计完成，状态为「AUTHORIZED」
+2. **PR-1 通过**：MongoDB 可连接、认证正常、目标集合不存在（或 Pascal 已确认意外存在的集合可接受）
+3. **PR-2/PR-3/PR-4 至少通过一个子阶段**：对应的 Provider smoke 报告生成，verdict 为 pass 或 conditional_pass
+4. **字段映射差异表**：每个 capability 的字段映射对照表已生成，未映射字段已标注
+5. **Pascal 审阅完成**：Pascal 审阅所有 smoke 报告并确认是否可进入 DDL Gate
+6. **DDL 提案**：针对通过 smoke 的子阶段，DDL Gate 提案已提交（含精确的集合创建脚本和索引定义）
+7. **无未解决的阻断**：§14.8 停止条件表中无未关闭的事项
+
+T4 阶段**不要求**所有三个子阶段同时通过 smoke——单子阶段通过的组合是合法的完成状态（如「P3-A 生产就绪 but P3-B/C 待后续」），取决于 Pascal 的判断。
+
+### 14.8 停止条件
+
+| 触发条件 | 对应 Gate | 后续动作 |
+|---|---|---|
+| Secret source 候选文件不存在 | PR-0 | 标记对应 Provider 为「NOT_AUTHORIZED」，不执行该 Provider 的 smoke |
+| MongoDB 连接失败或认证拒绝 | PR-1 | 不执行 PR-2/PR-3/PR-4（全部需 MongoDB 连通） |
+| 集合 `03_data_ud_*` 已意外存在 | PR-1 | 停止——记录集合存在情况，需 Pascal 判断是遗留还是意外 |
+| AKShare API 返回错误（非 200 / 空 DataFrame / 解析异常） | PR-2/PR-3/PR-4 | 停止对应 Provider 的后续 smoke |
+| 字段映射差异过大（>50% 字段名不匹配） | PR-2/PR-3/PR-4 | 停止——需重新调整 domain object schema 后重试 |
+| DDL 写入无权限 | PR-DDL | 停止——需 Pascal 手动授予写权限或换连接串 |
+| Canary 写入失败或数据质量异常 | PR-CANARY | 停止——不升级到定时采集 |
+
+**禁止绕过**：
+- 不允许在 PR-1（MongoDB 预检）成功前执行 Provider smoke（如果 Provider smoke 需要 MongoDB 连接）。但如果 smoke 设计为纯内存验证（仅打印结果），可与 PR-1 并行——由执行人自主判断风险
+- 不允许在 PR-0（Secret source 审计）通过前执行真实 API 调用
+- 不允许跳过 PR-smoke 直接发起 PR-DDL
+- 不允许将 PR-smoke 的连通性结论泛化为「全量标的工作正常」——仅单标的+有限日期结论
+- 不允许将 mock/offline 结果表述为生产验证
+- 不允许在 PR 阶段执行 `refresh_xxx()` 或 `CacheManager.put()` 或 `P3PersistenceWriter.upsert()`
+- **不允许输出 secret 值、长度、URI、用户名或全路径+键值组合**
+- 不允许自动重试失败的 smoke——仅记录结论
+- 不允许绕过停止条件：任何停止条件触发必须停止，不得在失败后降级为写入操作

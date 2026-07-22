@@ -66,6 +66,21 @@ class FreshnessPolicy:
         # l.650 alignment with the sector pattern (single-line
         # addition, same shape as P3-A sector).
         "market_sentiment": 3600,
+        # Phase 3 P3-B (T3-P3B): capital-flow TTL = 43200s (12h).
+        # Per V0.5 §4.4 l.650 reconciliation, capital-flow data is
+        # valid for half a day — once a fresh close is observed the
+        # previous reading can be refreshed. Matches the same shape
+        # as the P3-A sector entry: explicit TTL, single-line
+        # addition. Per the V0.5 §2.1 "explicit TTL" rule this
+        # value is hard-coded here rather than relying on the
+        # _DEFAULT_TTL fallback so consumers can read the intent
+        # directly off the table.
+        "flow": 43200,
+        # Phase 3 P3-C (T3-P3C): limit-up pool TTL = 3600s (1h).
+        # Per-stock limit-up data (封单金额/封成比/连板) is highly
+        # time-sensitive — stale readings lose relevance within an
+        # hour. Matches the market_sentiment TTL pattern.
+        "sentiment_limit_up_pool": 3600,
     }
 
     # Boundaries for the realtime / delayed split (seconds since fetch).

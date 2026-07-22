@@ -172,7 +172,7 @@ P3_UNIQUE_KEYS_BY_CAPABILITY: dict[str, frozenset[str]] = {
     "flow.capital_flow_daily": frozenset({"market", "symbol", "trade_date"}),
     "flow.northbound_daily": frozenset({"market", "symbol", "trade_date"}),
     "sentiment.market_snapshot": frozenset({"market", "snapshot_date", "snapshot_time"}),
-    "sentiment.limit_up_pool": frozenset({"market", "snapshot_date", "snapshot_time"}),
+    "sentiment.limit_up_pool": frozenset({"market", "symbol", "trade_date"}),
 }
 
 

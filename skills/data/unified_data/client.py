@@ -35,16 +35,17 @@ from .router import DataRouter
 from .adapters import TA_CNMongoAdapter
 from .services import (
     EventService,
+    FlowService,
     FundamentalService,
     MarketDataService,
     MetadataService,
+    PersistenceResult,
     SectorService,
 )
 # Phase 3 P3-B (T3-B): market sentiment service is a sibling of
-# SectorService but at the market level (no TA-CN surface). The
-# import is local to avoid widening the package-level ``__all__`` —
-# services/__init__.py is intentionally untouched in the T3-B
-# allowlist.
+# SectorService but at the market level (no TA-CN surface). The import
+# stays local (mirrors the T3-B precedent) so the package-level
+# ``__all__`` does not need to widen in the T3-B allowlist.
 from .services.sentiment_service import MarketSentimentService
 
 
@@ -61,6 +62,7 @@ class UnifiedDataClient:
         ta_cn_adapter: TA_CNMongoAdapter | None = None,
         freshness: FreshnessPolicy | None = None,
         external_fallback_chains: dict[str, list[str]] | None = None,
+        p3_writer: Any | None = None,
     ) -> None:
         self._registry = registry if registry is not None else ProviderRegistry()
         self._config = config or UnifiedDataConfig.minimal()
@@ -76,6 +78,11 @@ class UnifiedDataClient:
             ta_cn_adapter=ta_cn_adapter,
             freshness=freshness,
             external_fallback_chains=external_fallback_chains,
+            # Phase 3 P3-B (T3-P3B): the optional P3 writer is
+            # forwarded to the router so its read path can consult
+            # it as a read cache (M1 read-only guard still prevents
+            # the writer from being mutated on the read path).
+            p3_writer=p3_writer,
         )
         self._market_data_service: MarketDataService | None = None
         self._fundamental_service: FundamentalService | None = None
@@ -88,6 +95,18 @@ class UnifiedDataClient:
         # service is wired against the existing router + the
         # optional ``p3_writer`` (None in T3-B; T3-C injects one).
         self._sentiment_service: MarketSentimentService | None = None
+        # Phase 3 P3-B (T3-P3B): per-symbol capital-flow service is a
+        # separate lazy attribute. We keep the ``None`` default so the
+        # rest of the existing service surface keeps its old behaviour.
+        # The service is wired against the existing router + the
+        # optional ``p3_writer`` (None in T3-P3B; future Gate-authorised
+        # sub-stages inject one).
+        self._flow_service: FlowService | None = None
+        # Phase 3 P3-B (T3-P3B): keep a private reference to the
+        # optionally-injected writer so the lazy service loader can
+        # forward it without forcing callers to plumb both the
+        # client and the writer separately.
+        self._p3_writer = p3_writer
 
     # ------------------------------------------------------------------
     # Convenience
@@ -206,11 +225,31 @@ class UnifiedDataClient:
             self._sentiment_service = MarketSentimentService(
                 adapter=self._ta_cn_adapter,
                 router=self._router,
-                # ``p3_writer`` defaults to ``None`` for T3-B. T3-C
-                # will plumb a real one through ``UnifiedDataClient``
-                # once the refresh path is Gate-authorised.
+                p3_writer=self._p3_writer,
             )
         return self._sentiment_service
+
+    # Phase 3 P3-B (T3-P3B): lazy ``FlowService`` loader.
+    #
+    # Deliberately **not** gated behind ``_require_ta_cn`` — capital-flow
+    # has no TA-CN surface so the TA-CN adapter is optional (the
+    # service accepts ``adapter=None``). The router is the *only*
+    # required dependency; it is wired against the registry the client
+    # already owns. When ``ta_cn_adapter`` was injected we forward it
+    # (future-proofing — future Gate-authorised sub-stages may use it
+    # for cross-validation); when it was not we pass ``None``. The
+    # ``p3_writer`` is forwarded from the optional client kwarg so
+    # ``refresh_capital_flow`` has a writer available without callers
+    # having to build a FlowService by hand.
+    def _get_flow_service(self) -> FlowService:
+        if self._flow_service is None:
+            self._flow_service = FlowService(
+                adapter=self._ta_cn_adapter,
+                router=self._router,
+                p3_writer=self._p3_writer,
+                # ``audit_logger`` defaults to ``None`` for T3-P3B.
+            )
+        return self._flow_service
 
     # ------------------------------------------------------------------
     # Phase 1A entry methods — 14 total (DESIGN-03-007 §Phase 1A 完整矩阵)
@@ -341,6 +380,124 @@ class UnifiedDataClient:
         )
 
     # ------------------------------------------------------------------
+    # Phase 3 P3-B entry methods (DESIGN-03-014 §5.2 + SPEC-03-014 §5.1)
+    # ------------------------------------------------------------------
+
+    # P3-B.1 — get_capital_flow (per-symbol daily flow)
+    def get_capital_flow(
+        self,
+        security_id: SecurityId,
+        *,
+        trade_date: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        limit: int = 60,
+    ) -> DataResult:
+        """Return per-symbol capital-flow rows for ``security_id``.
+
+        Routes through ``flow.capital_flow_daily`` via the standard
+        internal-first chain. ``DataResult.data`` is a
+        ``list[CapitalFlowRecord]`` (T3-P3B M2 canonical object
+        contract — shaped at the service boundary).
+
+        The read path is read-only; explicit refresh is via
+        ``flow_service.refresh_capital_flow(...)`` (T3-P3B reserves
+        the write path for a Gate-authorised sub-stage).
+        """
+        return self._get_flow_service().get_capital_flow(
+            security_id,
+            trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+        )
+
+    # P3-B.2 — get_northbound_flow (market-level northbound)
+    def get_northbound_flow(
+        self,
+        security_id: SecurityId | None = None,
+        *,
+        date: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> DataResult:
+        """Return northbound capital-flow rows.
+
+        Routes through ``flow.northbound_daily``. The canonical
+        projection (V0.5 §3.2 ``record_scope``) is enforced at the
+        service boundary: the only populated fields on the returned
+        :class:`CapitalFlowRecord`s are ``{symbol, market,
+        trade_date}`` business-key + ``northbound_*`` + ``fetched_at``
+        + ``provider``; the rest are ``None``. ``security_id`` is
+        optional — a ``None`` value triggers a market-level query
+        (placeholder synthesised at the service layer, matching the
+        :class:`MarketSentimentService` precedent).
+        """
+        return self._get_flow_service().get_northbound_flow(
+            security_id=security_id,
+            date=date,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    # P3-B.3 — refresh_capital_flow (write path) facade
+    def refresh_capital_flow(
+        self,
+        security_id: SecurityId | None = None,
+        *,
+        date: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        provider: Any | None = None,
+    ) -> PersistenceResult:
+        """Refresh ``flow.capital_flow_daily`` via the offline writer.
+
+        T3-P3B M3 happy-path: provider fetch → validate →
+        ``p3_writer.upsert(...)`` → return :class:`PersistenceResult`.
+        No real MongoDB / API / AuditLogger / QualitySummary writes
+        fire — strictly ``mongomock`` /
+        :class:`P3PersistenceWriter` only.
+
+        Returns:
+            A :class:`PersistenceResult` whose ``status`` field is
+            one of ``"ok"``, ``"partial_failure"``, ``"skipped"``.
+
+        Raises:
+            ProviderUnavailableError: When ``p3_writer`` is not
+                injected (offline default).
+        """
+        return self._get_flow_service().refresh_capital_flow(
+            security_id=security_id,
+            date=date,
+            start_date=start_date,
+            end_date=end_date,
+            provider=provider,
+        )
+
+    # ------------------------------------------------------------------
+    # Phase 3 P3-C entry methods (DESIGN-03-014 section 4.5 / SPEC-03-014 section 5.1)
+    # ------------------------------------------------------------------
+
+    # P3-C.1 -- get_limit_up_pool (date-level limit-up pool)
+    def get_limit_up_pool(
+        self,
+        trade_date: str | None = None,
+    ) -> DataResult:
+        """Return the limit-up / limit-down pool for a given trading day.
+
+        Routes through ``sentiment.limit_up_pool`` via the standard
+        internal-first chain. ``DataResult.data`` is a ``list[dict]``
+        shaped exactly like ``LimitUpPoolRecord.from_dict`` accepts.
+
+        The read path is read-only; explicit refresh is via
+        ``sentiment_service.refresh_limit_up_pool(...)`` (offline
+        scaffold only for T3-C).
+        """
+        return self._get_sentiment_service().get_limit_up_pool(
+            trade_date=trade_date,
+        )
+
+    # ------------------------------------------------------------------
     # Construction helpers
     # ------------------------------------------------------------------
 
@@ -353,6 +510,7 @@ class UnifiedDataClient:
         ta_cn_adapter: TA_CNMongoAdapter | None = None,
         freshness: FreshnessPolicy | None = None,
         external_fallback_chains: dict[str, list[str]] | None = None,
+        p3_writer: Any | None = None,
     ) -> "UnifiedDataClient":
         """Build a client pre-populated with ``providers``.
 
@@ -360,13 +518,15 @@ class UnifiedDataClient:
         fallback order when no explicit chain is configured.
         Optionally attach a Phase 1A ``ta_cn_adapter`` to enable the
         domain-specific entry methods, a Phase 1B-A ``freshness``
-        policy and / or ``external_fallback_chains`` overrides.
+        policy and / or ``external_fallback_chains`` overrides, or a
+        Phase 3 P3 P3PersistenceWriter for the refresh path.
         """
         client = cls(
             config=config,
             ta_cn_adapter=ta_cn_adapter,
             freshness=freshness,
             external_fallback_chains=external_fallback_chains,
+            p3_writer=p3_writer,
         )
         for provider in providers:
             client.register_provider(provider)
