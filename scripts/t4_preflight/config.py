@@ -31,10 +31,7 @@ CANDIDATE_ENV_FILES: tuple[str, ...] = (
     "~/.hermes/profiles/yquant/.env",
 )
 
-CANDIDATE_SECRET_KEYS: tuple[str, ...] = (
-    "AKSHARE_TOKEN",
-    "MONGODB_URI",
-)
+CANDIDATE_SECRET_KEYS: tuple[str, ...] = ("MONGO_URI",)
 
 #: Allowed database for MongoDB preflight (SPEC §14.2 / DESIGN §15.5).
 ALLOWED_DATABASE: str = "tradingagents"

@@ -7,8 +7,8 @@
 | 状态 | Draft |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-21 |
-| 最后更新 | 2026-07-22（V0.10 AKShare 无 Token + 复用 Phase 2 MONGO_URI 同步：§15.3.2 Dry-Run 示例移除 AKSHARE_TOKEN、preflight-mongo 改为 MONGO_URI_env；§15.3.3 Live-Read 门槛分割 AKShare 不依赖 PR-0；§15.4.2 审计矩阵移除 AKSHARE_TOKEN、MONGODB_URI→MONGO_URI；YAML 输出示例同步更新） |
-| 版本号 | V0.10 |
+| 最后更新 | 2026-07-24（V0.12 T2.3 Design Correction：统一 MONGODB_DATABASE 校验语义——键值必须等于 tradingagents 否则 NOT_AUTHORIZED exit 3；统一 authSource 来源为 MONGODB_DATABASE 键值，消除硬编码 tradingagents 字面量和"忽略键值"冲突表述；删除 SecretProbeResult.key_declared 冗余字段——§15.3/§15.3.2/§15.3.3/§15.4.1/§15.4.2/§15.5.2/§15.5.4 全部同步更新） |
+| 版本号 | V0.12 |
 | 来源 RFC | RFC-03-014（Phase 3 持久化扩展） |
 | 来源 SPEC | SPEC-03-014（Phase 3 持久化扩展契约） |
 | 关联 Design | DESIGN-03-007（Unified Data Layer 总体设计，V3.4） |
@@ -1371,9 +1371,9 @@ P3-C 阶段
 
 | 文档 | 版本 | T4 覆盖内容 |
 |---|---|---|
-| RFC-03-014 | V0.3 §13 | 生产就绪详细规范（副作用矩阵、规程模板、停止条件） |
-| SPEC-03-014 | V0.3 §14 | 生产就绪契约（YAML 报告模板、Zero-Persistence-Write、DDL Gate 细则） |
-| **DESIGN-03-014（本 §）** | **V0.8** | **实现设计（文件 allowlist、CLI 接口、安全契约、Verify/Review 验收命令、测试副作用输出目录）** |
+| RFC-03-014 | V0.6 §13 | 生产就绪详细规范（副作用矩阵、规程模板、停止条件）——PR-1 凭据来源已对齐至 skills/.env 五组件键 |
+| SPEC-03-014 | V0.5 §14 | 生产就绪契约（YAML 报告模板、Zero-Persistence-Write、DDL Gate 细则）——PR-1 凭据来源已对齐至 skills/.env 五组件键 |
+| **DESIGN-03-014（本 §）** | **V0.11** | **实现设计（文件 allowlist、CLI 接口、安全契约、LegacyConfigResolver 组件式构造、PreflightRunner 预检流程、Verify/Review 验收命令）** |
 
 #### 15.1.2 设计哲学
 
@@ -1430,6 +1430,12 @@ P3-C 阶段
 
 ### 15.3 公共安全契约
 
+**MONGODB_DATABASE 值校验（跨阶段强制规则）**：
+`MONGODB_DATABASE` 键值**必须等于** `tradingagents`，否则视为 NOT_AUTHORIZED、退出码 3、零连接。此规则在以下三处一致执行：
+- **§15.3.3 audit-secret --live-read**：resolve 阶段验证 key 存在且非空（现有），追加值等于 `"tradingagents"` 检查
+- **§15.4.2 审计矩阵**：`MONGODB_DATABASE` 行声明 value must equal `tradingagents`（追加）
+- **§15.5.2 resolve(live=True)**：`database_ok` 调整为存在 + 值等于 `"tradingagents"` 双重检查；build_client() 的 `authSource` 取自 `MONGODB_DATABASE` 键值（resolve 阶段已校验等于 `tradingagents`）
+
 #### 15.3.1 CLI 入口语法
 
 ```text
@@ -1461,35 +1467,39 @@ python -m scripts.t4_preflight.cli <command> [--live-read] [--output-dir PATH] [
 
 #### 15.3.2 Dry-Run 默认行为
 
+> **状态对象语义**：dry-run 产物为 `SecretProbeResult`（§15.4.1），只含路径/依赖/参数级元数据，**不含任何 key 级存在性字段**（如 `key_declared`、`five_keys_declared`）。key 级状态属 live-read 的 `ResolvedConfig.*_resolved` 职责域，两者语义隔离、不重叠。
+
 默认（无 `--live-read`）时，所有命令执行受限的零连接探测：
 
 | 命令 | Dry-Run 行为 |
 |---|---|
-| `audit-secret` | 检查文件存在性 + 权限（os.access），不读取内容。仅输出「secret_home/.env: readable=true, key='MONGO_URI': absent」形式的元数据 |
-| `preflight-mongo` | 检查 `pymongo` importable + 配置路径可达。不实例化 MongoClient、不建立网络连接。输出「pymongo: importable=true, MONGO_URI_env: declared=true」 |
+| `audit-secret` | 检查 `skills/.env` 文件存在性 + 可读性（`os.access`），**不**调用 `dotenv_values()`、不读取文件内容。输出元数据仅限路径级：`skills/.env: exists=true, readable=true`。**不得**输出任何键状态、键计数、值、长度、URI、host、用户名、collection 名 |
+|| `preflight-mongo` | 检查 `pymongo` importable + `python-dotenv` importable + `skills/.env` 路径可达。不实例化 MongoClient、不建立网络连接。输出元数据仅限 import/路径级：`pymongo: importable=true, dotenv: importable=true, skills_env_path: accessible=true`。**不得**输出 `five_keys_declared` 或任何键状态/计数。MONGODB_DATABASE 值校验（必须等于 `tradingagents`）在 live-read 阶段由 `audit-secret --live-read` 执行，dry-run 不读取键值 |
 | `smoke-sector` | 检查 `akshare` importable + 测试参数初始化。输出「akshare: importable=true, test_symbol=BK0489, date_range=2026-07-20..2026-07-22, would_call: 2」 |
 | `smoke-flow` | 同上行为 |
 | `smoke-sentiment` | 同上行为 |
 
 #### 15.3.3 Live-Read 模式（`--live-read`）
 
+> **状态对象语义**：live-read 产物为 `ResolvedConfig.*_resolved` / live 状态（§15.5.2），含 key 级布尔字段（如 `database_resolved`、各 `declared` 状态）。与 dry-run 的 `SecretProbeResult`（无 key 级输出）语义隔离、不重叠。`declared=true` 等 key 级布尔仅出现在 live-read 输出中，不违反 §15.3.2 的 dry-run 禁令。
+
 当 `--live-read` 被显式传递时，各命令才执行实际网络/MongoDB 调用：
 
 | 命令 | Live-Read 动作 | 约束 |
 |---|---|---|
-| `audit-secret` | 实际调用 `os.getenv("KEY")` 验证值非 None（但**不**输出值/长度）。额外验证 `.env` 可被 `python-dotenv` 加载 |
-| `preflight-mongo` | `MongoClient(timeout=3s)` → `admin.command("ping")` → `list_collection_names()` | 不读业务数据；超时 3s；需 `MONGO_URI` 已在 PR-0 授权 |
+|| `audit-secret` | 实际调用 `dotenv_values(skills/.env)` 解析五组件，验证 MONGODB_HOST/PORT/USERNAME/PASSWORD/DATABASE 五个键全部非空**且 MONGODB_DATABASE 值等于 `"tradingagents"`**（但**不**输出值/长度）。**禁止**调用 `load_dotenv()`（全局 env 污染禁令，见 §15.5.2 不可违反复核清单）；仅使用 `dotenv_values()` 的本地无副作用解析 |
+| `preflight-mongo` | `LegacyConfigResolver(skills/.env).build_client(timeout=3)` → `admin.command("ping")` → `list_collection_names()` | 不读业务数据；超时 3s；需 PR-0 已确认五键全部 authorized |
 | `smoke-sector` | `akshare.stock_board_industry_cons_em("BK0489")` | 单板块 + ≤3 交易日；AKShare 匿名调用，不依赖 PR-0 授权 |
 | `smoke-flow` | `akshare.stock_individual_fund_flow("600519", market="sh")` | 2-4 次调用，限速 ≥1s；AKShare 匿名调用 |
 | `smoke-sentiment` | `akshare.stock_zt_pool_em("20260722")` / `stock_market_fund_flow()` | 单日期；AKShare 匿名调用 |
 
 **Live-Read 执行门槛**：
-1. MongoDB 预检 `preflight-mongo --live-read` 前，前序的 `audit-secret --live-read` 必须针对 `MONGO_URI` 为 PASS（MongoDB 连接秘密已授权）
+1. MongoDB 预检 `preflight-mongo --live-read` 前，前序的 `audit-secret --live-read` 必须针对 `skills/.env` 的五组件键（`MONGODB_HOST`/`PORT`/`USERNAME`/`PASSWORD`/`DATABASE`）**全部**为 `declared=true` 且 `loadable=true`，**且** MONGODB_DATABASE 值等于 `"tradingagents"`（MongoDB 连接秘密已授权，目标库已验证）
 2. AKShare smoke（`smoke-sector/flow/sentiment --live-read`）**不依赖 PR-0 授权**——AKShare 为匿名调用，可直接执行
-3. `audit-secret` 的输出中 `MONGO_URI` 的状态为 `AUTHORIZED` 后，方可执行 `preflight-mongo --live-read`
+3. `audit-secret` 的输出中 `MONGODB_HOST`/`PORT`/`USERNAME`/`PASSWORD`/`DATABASE` 全五键状态为 `AUTHORIZED` **且** MONGODB_DATABASE 值已验证等于 `"tradingagents"` 后，方可执行 `preflight-mongo --live-read`
 4. smoke 命令的 `preflight-mongo --live-read` 输出中 `ping=success`
 
-**不强制执行**：以上门槛由 CLI 输出 check 手动确认（非自动阻断——审查人通过查看报告链确认顺序合规）。但 `audit-secret --live-read` 未通过时，MongoDB preflight 命令应输出 `WARN: PR-0 not confirmed — MONGO_URI secret source presumed missing` 并将 `overall.verdict` 降为 `conditional_pass`。AKShare smoke 不受此警告影响。
+**不强制执行**：以上门槛由 CLI 输出 check 手动确认（非自动阻断——审查人通过查看报告链确认顺序合规）。但 `audit-secret --live-read` 未通过时（任一五键缺失或 MONGODB_DATABASE 值不等于 `"tradingagents"`），MongoDB preflight 命令应输出 `WARN: PR-0 not confirmed — skills/.env five keys(MONGODB_HOST/PORT/USERNAME/PASSWORD/DATABASE) not all authorized or MONGODB_DATABASE != "tradingagents"` 并将 `overall.verdict` 降为 `conditional_pass`。AKShare smoke 不受此警告影响。
 
 ### 15.4 Secret Source 非泄露审计设计（PR-0）
 
@@ -1500,11 +1510,20 @@ python -m scripts.t4_preflight.cli <command> [--live-read] [--output-dir PATH] [
 
 @dataclass(frozen=True)
 class SecretProbeResult:
-    """非泄露秘密探测结果。只输出布尔/枚举结论，不输出值/长度/URI/用户名。"""
+    """非泄露秘密探测结果。只输出布尔/枚举结论，不输出值/长度/URI/用户名。
+
+    与 ResolvedConfig（§15.5.2）的职责边界：SecretProbeResult 负责文件级元数据
+    （exists/readable/importable），不包含键级存在性信息——键级状态由
+    ResolvedConfig 的 database_resolved 等布尔字段覆盖。
+
+    **dry-run vs live-read 边界**：SecretProbeResult 是 dry-run 状态对象，
+    任何 declared / five_keys_declared 字段在 dry-run 下均不输出（仅含路径/依赖/
+    参数级元数据）。key 级布尔（如 database_resolved、各 declared 状态）属
+    live-read 的 ResolvedConfig.*_resolved 职责域。
+    """
     source_name: str                          # 候选源名称，如 "project_root_env"
     file_exists: bool                         # 文件存在
     file_readable: bool | None = None         # 文件可读（dry-run 为 None）
-    key_declared: bool | None = None          # 目标键在加载环境中是否存在
     is_loadable: bool | None = None           # 运行时可加载（os.getenv 非 None）
 
 
@@ -1524,42 +1543,65 @@ class SecretVerifier:
 - `SecretProbeResult` 的任何字段不得包含字符串长度、字符切片、模式前缀
 - YAML 序列化前必须通过 `Sanitizer.strip_secret(result)` 清洗（reporter.py §15.7）
 
-#### 15.4.2 候选 Secret Source 审计矩阵
+#### 15.4.2 候选 Secret Source 审计矩阵（Dry-run / Live-read 双列）
 
-遵循 SPEC §14.3 / RFC §13.3，审计以下候选源：
+遵循 SPEC §14.3 / RFC §13.3 及 T1 t_cafc0903 最终契约：MongoDB 连接凭据的唯一来源为 **Phase 2 `skills/.env` 五组件键**。
 
-| 候选路径 | 键名 | 验证方法 |
-|---|---|---|
-| `$(pwd)/.env` | `MONGO_URI` | `os.path.isfile()` + `os.access(R_OK)` + dotenv load |
-| `~/.hermes/profiles/yquant/.env` | `MONGO_URI` | 同上 |
-| `MONGO_URI` env | `MONGO_URI` | `os.getenv("MONGO_URI") is not None` |
-| AKShare 匿名调用 | 无需密钥审计 | AKShare 为匿名数据源，跳过 PR-0 检查 |
+| 候选路径 | 键名 | Dry-run（SecretProbeResult）× 无键级输出 | Live-read（dotenv_values + ResolvedConfig）× 仅布尔键级输出 |
+|---|---|---|---|
+| `skills/.env`（Phase 2 已存在） | `MONGODB_HOST` | **仅路径/依赖/参数级元数据**：检查文件存在性 + 可读性（`os.access`） + python-dotenv / pymongo importable。**不调用 `dotenv_values()`**，不读取文件内容。**不输出任何键级信息**（无 declared / count / 存在性 / 值 / 长度 / URI / host 地址 / 用户名 / 端口） | `dotenv_values()` → `key in parsed` + `present and non-empty` → `bool`（仅 `declared=true/false` / `loadable=true/false` 布尔状态）。**不输出值、长度、URI、host 地址、用户名、端口号** |
+| `skills/.env` | `MONGODB_PORT` | 同上 | 同上 |
+| `skills/.env` | `MONGODB_USERNAME` | 同上 | 同上 |
+| `skills/.env` | `MONGODB_PASSWORD` | 同上 | 同上 |
+| `skills/.env` | `MONGODB_DATABASE` | 同上 | `dotenv_values()` → `key in parsed` + `present and non-empty` + **value must equal `"tradingagents"`** → `bool`（仅 `declared` / `loadable` / `authorized` 布尔状态）。**不输出值、长度、数据库名、集合名** |
+| AKShare 匿名调用 | 无需密钥审计 | 跳过 ✅（AKShare 为匿名数据源，不依赖 PR-0 检查） | 跳过 ✅ |
+
+**已移除的候选路径**（依据 T1 t_cafc0903 契约，见 RFC-03-014 V0.6 / SPEC-03-014 V0.5）：
+
+| 已移除路径 | 移除理由 |
+|---|---|
+| `$(pwd)/.env`（项目根） | 已由 T1 裁定为 superseded——Phase 3 不复用此源 |
+| `~/.hermes/profiles/yquant/.env`（Hermes profile） | 已由 T1 裁定从审计表中移除——不再是 MongoDB 凭据候选 |
+| `MONGO_URI`（env 变量键） | 已由 T1 裁定为 superseded——component-based 构造替代 URI |
+| `MONGODB_URI`（env 变量键） | 已由 T0.4 → T1 裁定弃用，且与 `MONGODB_*` 五组件键命名空间冲突——不再计入审计 |
+
+**禁止**：`MongoClient` 构造不得使用 `MONGO_URI`、`MONGODB_URI` 或任何组合后的 URI 字符串。所有候选源的路由为 `LegacyConfigResolver`（§15.5.2）从 `skills/.env` 读取五组件键后按如下方式构造：
+
+```python
+MongoClient(
+    host=MONGODB_HOST,
+    port=int(MONGODB_PORT),
+    username=MONGODB_USERNAME,
+    password=MONGODB_PASSWORD,
+    authSource=MONGODB_DATABASE,
+    serverSelectionTimeoutMS=3000,
+)
+```
 
 **输出示例**（dry-run）：
 
+> **规格变更说明**：本示例代表 T2.1 修正后的 dry-run 输出格式。之前版本（V0.11 §15.4）包含键级 `declared: true` 输出，已在 T2.1 下标记为 superseded——dry-run 不得读取文件内容，因此无法也不应输出键存在性/状态/计数。
+
 ```yaml
-# audit-result-20260722.yaml
+# audit-result-YYYYMMDD.yaml (dry-run)
 secret_audit:
-  generated_at: "2026-07-22T03:30:00+08:00"
-  sources:
-    - source: "project_root_env"
-      path_checked: "/home/pascal/workspace/yquant-investment/.env"
-      file_exists: true
-      file_readable: null      # dry-run: 未实际读取
-      keys:
-        MONGO_URI:
-          declared: true       # detected in parsed env
-          loadable: null       # dry-run
-    - source: "runtime_env"
-      keys:
-        MONGO_URI:
-          declared: true
-          loadable: null
-    - source: "akshare_anonymous"
-      note: "AKShare 为匿名数据源，跳过 PR-0 密钥审计"
+  generated_at: "2026-07-24T03:30:00+08:00"
+  source: "phase2_skills_env"
+  source_path: "skills/.env"
+  file_exists: true
+  file_readable: true               # os.access check only — no content read
+  # keys: 不在 dry-run 下求值——不调用 dotenv_values()，不输出键状态/计数/值
+  importable:
+    python_dotenv: true             # module import check only
+    pymongo: true                   # module import check only
+  superseded_sources:               # 信息性——仅供审查人追溯
+    - "$(pwd)/.env: MONGO_URI → superseded by T1"
+    - "profile .env: MONGO_URI → superseded by T1"
+    - "runtime env: MONGO_URI → superseded by T1"
 overall:
-  status: conditional_authorized     # dry-run — 需 live-read 确认
-  missing_keys: []
+  mode: dry_run
+  # status 评价需要在 live-read 模式下完成；dry-run 不判断 authorized/unauthorized
+  note: "仅路径/import 元数据——需 --live-read 确认完整授权"
 ```
 
 ### 15.5 MongoDB 零写入只读预检设计（PR-1）
@@ -1583,31 +1625,263 @@ overall:
 - ❌ 任何写操作（`insert_one/insert_many/update_one/update_many/replace_one/delete_one/delete_many/bulk_write`）
 - ❌ 查询 `stock_basic_info`、`market_quotes`、`stock_daily_quotes` 等 TA-CN 业务集合
 
-#### 15.5.2 MongoDB 客户端工厂
+#### 15.5.2 LegacyConfigResolver 与组件式 MongoClient 工厂
 
 ```python
 # scripts/t4_preflight/mongo_client.py（设计草图）
 
+from dataclasses import dataclass, field
+from typing import Optional
+import os
+
+
+@dataclass(frozen=True)
+class ResolvedConfig:
+    """五组件解析结果。不包含原始值、长度、URI。"""
+    source_label: str = "phase2_skills_env"   # 审计来源标签（唯一恒定值）
+    source_path: str = "skills/.env"          # dotenv 相对路径
+    host_resolved: bool = False               # MONGODB_HOST 存在且非空
+    port_resolved: bool = False               # MONGODB_PORT 存在且可转换为 int
+    username_resolved: bool = False           # MONGODB_USERNAME 存在
+    password_resolved: bool = False           # MONGODB_PASSWORD 存在
+    database_resolved: bool = False           # MONGODB_DATABASE 存在
+    all_resolved: bool = False                # 五键全部解析成功
+    errors: list[str] = field(default_factory=list)  # 解析错误列表，不含原始值
+
+
 @dataclass(frozen=True)
 class MongoPreflightResult:
-    connectivity: str           # "success" / "dns_failure" / "timeout" / "auth_failure"
+    connectivity: str                         # "success" / "dns_failure" / "timeout" / "auth_failure" / "env_missing"
     latency_ms: float | None
-    collections: list[str] | None   # list_collection_names() 结果；None 表示 list 不可用
-    p3_collections_found: list[str]  # 匹配 03_data_ud_ 前缀的意外集合
+    collections: list[str] | None             # list_collection_names() 结果；None 表示 list 不可用
+    p3_collections_found: list[str]           # 匹配 03_data_ud_ 前缀的意外集合
     warnings: list[str]
 
 
-class MongoClientFactory:
-    """安全 MongoDB 客户端工厂（零写入模式）。"""
+class LegacyConfigResolver:
+    """Phase 2 skills/.env 五组件遗留配置解析器。
 
-    def create_preflight_client(self, timeout: int = 3) -> MongoClient | None:
-        """创建只读预检专用 MongoClient。以 short timeout + read_preference=secondaryPreferred 初始化。
-        在 dry-run 模式返回 None。"""
+    单一职责：从明确的 dotenv 路径读取 MONGODB_HOST/PORT/USERNAME/PASSWORD/DATABASE，
+    组件式构造 MongoClient。绝不 fallback 到 MONGO_URI/MONGODB_URI/profile .env。
+    绝不依赖 CWD 搜索或 load_dotenv() 全局污染。
+    """
 
-    def run_preflight(self, *, live: bool = False) -> MongoPreflightResult:
-        """执行预检四步：(1) parse URI from env → (2) ping → (3) list_collections → (4) check P3 collections。
-        所有步骤不携带业务数据 filter。"""
+    def __init__(self, dotenv_path: str = "skills/.env"):
+        if not dotenv_path:
+            raise ValueError("dotenv_path must be explicit, not empty")
+        self._dotenv_path = dotenv_path
+        self._resolved: ResolvedConfig | None = None
+        self._client: MongoClient | None = None
+
+    # --- 解析接口 ---
+
+    def resolve(self, *, live: bool = False) -> ResolvedConfig:
+        """解析五组件键。
+
+        live=False（dry-run 默认）：检查文件存在性 + 权限，不读取内容。
+        不加载 dotenv、不实例化 MongoClient。返回 ResolvedConfig(all_resolved=False)。
+        所有字段为 False/空列表。
+
+        live=True：实际调用 dotenv_values(self._dotenv_path) 加载，验证五键全部非空、
+        PORT 可转换为 int。返回 ResolvedConfig 含解析状态。
+        绝不输出/记录/返回原始值、长度、字符切片、URI。
+        """
+        if not live:
+            # dry-run: 仅检查文件存在性
+            exists = os.path.isfile(self._dotenv_path)
+            readable = os.access(self._dotenv_path, os.R_OK) if exists else False
+            errors = []
+            if not exists:
+                errors.append("file_not_found")
+            elif not readable:
+                errors.append("file_not_readable")
+            return ResolvedConfig(all_resolved=False, errors=errors)
+
+        # live-read: 实际读取 dotenv
+        try:
+            from dotenv import dotenv_values
+        except ImportError:
+            return ResolvedConfig(all_resolved=False, errors=["python-dotenv not installed"])
+
+        parsed = dotenv_values(self._dotenv_path)
+        errors = []
+        host_ok = bool(parsed.get("MONGODB_HOST", "") or "")
+        port_raw = parsed.get("MONGODB_PORT", "") or ""
+        port_ok = bool(port_raw)
+        if port_ok:
+            try:
+                int(port_raw)
+            except (ValueError, TypeError):
+                errors.append("MONGODB_PORT not a valid integer")
+                port_ok = False
+        username_ok = bool(parsed.get("MONGODB_USERNAME", "") or "")
+        password_ok = bool(parsed.get("MONGODB_PASSWORD", "") or "")
+        db_value = parsed.get("MONGODB_DATABASE", "") or ""
+        database_ok = bool(db_value) and db_value.strip().lower() == "tradingagents"
+        if bool(db_value) and not database_ok:
+            errors.append("MONGODB_DATABASE must equal 'tradingagents', got different value")
+        all_ok = host_ok and port_ok and username_ok and password_ok and database_ok
+
+        return ResolvedConfig(
+            source_label="phase2_skills_env",
+            source_path=self._dotenv_path,
+            host_resolved=host_ok,
+            port_resolved=port_ok,
+            username_resolved=username_ok,
+            password_resolved=password_ok,
+            database_resolved=database_ok,
+            all_resolved=all_ok,
+            errors=errors,
+        )
+
+    # --- 连接构造 ---
+
+    def build_client(self, *, live: bool = False, timeout: int = 3) -> MongoClient | None:
+        """构造组件式 MongoClient（非 URI）。
+
+        仅当 live=True 且 resolve() 五键全部通过时才构造。
+        dry-run 返回 None。
+        同一实例最多创建一个 client——二次调用返回同一 client 引用。
+
+        强制 DB=tradingagents——仅当 resolve(live=True) 已确认五键全部通过且
+        MONGODB_DATABASE 值等于 "tradingagents" 时才构造连接。
+        authSource 取自 MONGODB_DATABASE 键值（resolve 阶段已校验必须等于 tradingagents）。
+        绝不通过其他来源推断或硬编码 authSource。绝不依赖 CWD 搜索或 load_dotenv()。
+        """
+        if not live:
+            return None
+
+        if self._client is not None:
+            return self._client  # 最多一个 client
+
+        if self._resolved is None or not self._resolved.all_resolved:
+            cfg = self.resolve(live=True)
+            self._resolved = cfg
+            if not cfg.all_resolved:
+                return None
+
+        # 仅 live-read 时加载 dotenv——函数内 import 避免全局污染
+        from dotenv import dotenv_values
+        parsed = dotenv_values(self._dotenv_path)
+
+        import pymongo
+        self._client = pymongo.MongoClient(
+            host=str(parsed.get("MONGODB_HOST", "")),
+            port=int(str(parsed.get("MONGODB_PORT", "27017"))),
+            username=str(parsed.get("MONGODB_USERNAME", "")),
+            password=str(parsed.get("MONGODB_PASSWORD", "")),
+            authSource=str(parsed["MONGODB_DATABASE"]),  # resolve 阶段已校验 MONGODB_DATABASE 键存在且值等于 "tradingagents"；直接取不设 fallback——键缺失时 fail-fast KeyError
+            serverSelectionTimeoutMS=timeout * 1000,
+        )
+        return self._client
+
+    def close(self):
+        """关闭 client。幂等。"""
+        if self._client:
+            self._client.close()
+            self._client = None
+            self._resolved = None
+
+
+class PreflightRunner:
+    """预检运行器——封装 LegacyConfigResolver → ping → list_collections 流程。"""
+
+    def __init__(self, resolver: LegacyConfigResolver | None = None):
+        self.resolver = resolver or LegacyConfigResolver()
+
+    def run_preflight(self, *, live: bool = False, timeout: int = 3) -> MongoPreflightResult:
+        """执行预检三步：(1) 解析五组件 → (2) ping → (3) list_collections。
+
+        所有步骤不携带业务数据 filter。dry-run 返回预检未执行的元数据报告。
+        """
+        cfg = self.resolver.resolve(live=live)
+        if not live:
+            return MongoPreflightResult(
+                connectivity="dry_run",
+                latency_ms=None,
+                collections=None,
+                p3_collections_found=[],
+                warnings=["dry-run: config resolved, no connection attempted"],
+            )
+
+        if not cfg.all_resolved:
+            return MongoPreflightResult(
+                connectivity="env_missing",
+                latency_ms=None,
+                collections=None,
+                p3_collections_found=[],
+                warnings=[f"skills/.env five keys not all resolved: {cfg.errors}"],
+            )
+
+        import time
+        t0 = time.monotonic()
+
+        client = self.resolver.build_client(live=True, timeout=timeout)
+        if client is None:
+            return MongoPreflightResult(
+                connectivity="env_missing",
+                latency_ms=None,
+                collections=None,
+                p3_collections_found=[],
+                warnings=["Failed to build client from resolved config"],
+            )
+
+        try:
+            # Step 1: ping
+            client.admin.command("ping")
+            latency_ms = (time.monotonic() - t0) * 1000
+
+            # Step 2: list_collections (in tradingagents DB)
+            db = client["tradingagents"]
+            collections = db.list_collection_names()
+
+            # Step 3: check P3 collections
+            p3_patterns = [
+                "03_data_ud_market_sector_snapshot",
+                "03_data_ud_stock_capital_flow",
+                "03_data_ud_market_sentiment_snapshot",
+            ]
+            p3_found = [c for c in collections if c in p3_patterns]
+
+            return MongoPreflightResult(
+                connectivity="success",
+                latency_ms=latency_ms,
+                collections=collections,
+                p3_collections_found=p3_found,
+                warnings=[],
+            )
+        except pymongo.errors.ServerSelectionTimeoutError:
+            latency_ms = (time.monotonic() - t0) * 1000
+            return MongoPreflightResult(
+                connectivity="timeout",
+                latency_ms=latency_ms,
+                collections=None,
+                p3_collections_found=[],
+                warnings=["Server selection timeout (>3s)"],
+            )
+        except pymongo.errors.OperationFailure as exc:
+            latency_ms = (time.monotonic() - t0) * 1000
+            code = str(exc)
+            if "Authentication" in code or "auth" in code.lower():
+                return MongoPreflightResult(connectivity="auth_failure", latency_ms=latency_ms,
+                                            collections=None, p3_collections_found=[],
+                                            warnings=[f"auth_failure: {exc.code if hasattr(exc, 'code') else 'unknown'}"])
+            return MongoPreflightResult(connectivity="dns_failure", latency_ms=latency_ms,
+                                        collections=None, p3_collections_found=[],
+                                        warnings=[f"operation_failure: {exc}"])
+        finally:
+            self.resolver.close()
 ```
+
+**不可违反复核清单**（在 Implement Reviewer 阶段强制检查）：
+
+- `LegacyConfigResolver.__init__` 的 `dotenv_path` **必须**是显式路径（如 `"skills/.env"`），不得允许 CWD 推导或空字符串
+- `resolve(live=True)` 必须使用 `dotenv.dotenv_values()`（文件级解析），不得使用 `dotenv.load_dotenv()`（全局 env 污染）
+- `build_client(live=True)` **必须**使用五组件 `MongoClient(host, port, username, password, authSource)` 签名，不得组装为 `MongoClient(f"mongodb://{user}:{pwd}@{host}:{port}")` URI 串
+- `authSource` 必须来自 `MONGODB_DATABASE` 键值（`parsed["MONGODB_DATABASE"]` 直接取值——无 fallback 字面量），resolve 阶段已校验键存在且值等于 `"tradingagents"`——键缺失时 fail-fast KeyError
+- `build_client()` **不得**接受或引用 `MONGO_URI` / `MONGODB_URI` 变量
+- 所有 `dotenv_values()` 的返回值仅用于 `bool()` 判断和参数构造，**绝不**被赋予日志、print、YAML 输出
+- `ResolvedConfig` 的字符串字段仅含 `source_label` 和 `source_path`，**不包含** `host`、`port`、`username`、`password`、`database` 的实际值
 
 #### 15.5.3 集合存在检查
 
@@ -1622,6 +1896,8 @@ class MongoClientFactory:
 
 | 观察到的错误 | 报告状态 | 退出码 |
 |---|---|---|
+| `skills/.env` 文件不存在或不可读 | `connectivity: env_missing` | 3（unauthorized） |
+| `MONGODB_DATABASE` 值不等于 `"tradingagents"` | `connectivity: env_missing` + warning 注明实际值 | 3（unauthorized） |
 | DNS 解析失败 | `connectivity: dns_failure` | 2 |
 | 网络超时（>3s） | `connectivity: timeout` | 2 |
 | 认证拒绝（AuthFailure） | `connectivity: auth_failure` | 2 |
@@ -1808,11 +2084,11 @@ class MaterializeSpy:
 ```bash
 # PR-0 dry-run: Secret 源不可达时验证错误处理
 python -m scripts.t4_preflight.cli audit-secret
-# 预期：dry-run 输出有界元数据，退出码 0，不含任何 secret
+# 预期：dry-run 输出技能/.env 元数据（file_exists, file_readable），不含 any secret，退出码 0
 
-# PR-1 dry-run: 验证 import + 配置准备
+# PR-1 dry-run: 验证 import + 配置准备 + 五组件声明显式
 python -m scripts.t4_preflight.cli preflight-mongo
-# 预期：dry-run 报告 importable=true + 配置可达性，退出码 0
+# 预期：dry-run 报告 pymongo importable=true + dotenv importable=true + ResolvedConfig(source=phase2_skills_env, all_resolved=false) + 文件可达性，退出码 0
 
 # PR-2 dry-run: 确认 smoke 初始化参数
 python -m scripts.t4_preflight.cli smoke-sector
@@ -1837,11 +2113,11 @@ python -m scripts.t4_preflight.cli smoke-sentiment
 以下命令仅在 Review 通过、Pascal 确认后执行。执行人为 Pascal 或 Pascal 授权的 DevOps（对应 SPEC §14.6 / RFC §13.6）：
 
 ```bash
-# Step 1: PR-0 live — 实际验证 secret 可加载
+# Step 1: PR-0 live — 实际验证 skills/.env 五组件可加载
 python -m scripts.t4_preflight.cli audit-secret --live-read
-# 输出：audit-result-YYYYMMDD.yaml，要求 overall.status=authorized
+# 输出：audit-result-YYYYMMDD.yaml，要求 overall.status=authorized + missing_keys=[]
 
-# Step 2: PR-1 live — 实际 MongoDB ping + 集合清单
+# Step 2: PR-1 live — 实际 MongoDB ping + 集合清单（通过 LegacyConfigResolver）
 python -m scripts.t4_preflight.cli preflight-mongo --live-read
 # 输出：preflight-mongo-YYYYMMDD.yaml，要求 connectivity=success + p3_collections_found empty
 
@@ -1915,8 +2191,8 @@ docs/**/smoke_reports/
 | RFC §13 | SPEC §14 | DESIGN §15 | 一致性 |
 |---|---|---|---|
 | §13.1 副作用矩阵 | §14.1 副作用矩阵 | §15.3 公共安全契约 + §15.5/15.6 约束 | ✅ 设计实现 RFC/SPEC 约束 |
-| §13.2 MongoDB 预检规程 | §14.2 MongoDB 预检规程 | §15.5 MongoDB 零写入预检 | ✅ 对齐停止条件与白名单 |
-| §13.3 Secret Source 审计 | §14.3 Secret Source 审计 | §15.4 SecretVerifier + 候选矩阵 | ✅ 非泄露三布尔 |
+| §13.2 MongoDB 预检规程 | §14.2 MongoDB 预检规程 | §15.5 MongoDB 零写入预检（含 LegacyConfigResolver + PreflightRunner） | ✅ 对齐停止条件与白名单；PR-1 凭据来源改为 skills/.env 五组件键（匹配 RFC V0.6 / SPEC V0.5） |
+| §13.3 Secret Source 审计 | §14.3 Secret Source 审计 | §15.4 SecretVerifier + 候选矩阵 | ✅ 非泄露三布尔；候选源缩为单一 skills/.env（匹配 RFC V0.6 / SPEC V0.5） |
 | §13.4 Provider Smoke | §14.4 Provider Smoke | §15.6 AKShare 安全调用包装 | ✅ 单标的 ≤3 日 |
 | §13.5 Zero-Persistence-Write | §14.5 Zero-Persistence-Write | §15.9 零写入 spy | ✅ 通过 spy 模式验证 |
 | §13.6 DDL/DML 独立 Gate | §14.6 DDL/DML 独立 Gate | §15.11 Live-Read 执行流程 | ✅ DDL 仍 Pascal 独立 Gate |
@@ -1928,6 +2204,8 @@ docs/**/smoke_reports/
 
 | 版本号 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
+| V0.12-T2.5 | 2026-07-24 | **Design Correction（T2.5 消除 authSource fallback 字面量与 dry-run/live-read 状态对象混淆）**。基于 T2.4 Re-Review (PASS) 的两项残余张力修正：(1) §15.5.2 `build_client()` 的 `authSource` 从 `parsed.get("MONGODB_DATABASE", "tradingagents")` 改为 `parsed["MONGODB_DATABASE"]` 直接取值——移除 fallback 字面量，键缺失时 fail-fast KeyError；同步更新 §15.5.2 不可违反复核清单对应描述。(2) §15.3.2/§15.3.3 入口分别新增状态对象语义声明——dry-run 的 `SecretProbeResult` 不含 key 级字段，live-read 的 `ResolvedConfig.*_resolved` 含 key 级布尔，两者语义隔离不重叠；同步更新 §15.4.1 SecretProbeResult docstring。V0.12 主体版本号不变，追加 T2.5 标记。 | **YQuant-Codex-Principal（T2.5）** |
+| V0.11 | 2026-07-24 | **PR-1 凭证来源契约对齐 T1 t_cafc0903**。基于 RFC-03-014 V0.6 / SPEC-03-014 V0.5 裁定，将 MongoDB 连接凭据来源从 MONGO_URI + `$(pwd)/.env` + Hermes profile `.env` 统一为复用 Phase 2 `skills/.env` 五组件键（MONGODB_HOST/PORT/USERNAME/PASSWORD/DATABASE）。具体变更：§15.3.2 Dry-Run 输出改为五组件键声明状态；§15.3.3 Live-Read 门槛改为检查五键全部 authorized；§15.4.2 审计矩阵重写——候选源从 3 路径缩为单一 `skills/.env`，`MONGO_URI` 全部标为 superseded；§15.5.2 重写——新增 `LegacyConfigResolver` 组件式解析 + `PreflightRunner` 预检流程，消除 `MongoClientFactory` URI 构造模式；§15.5.4 新增 `env_missing` 失败分类；§15.10.2/§15.10.3 验收命令预期输出同步更新。 | **YQuant-Codex-Principal** |
 | V0.9 | 2026-07-22 | **Principal 正式裁定收口（本卡 T5C2）**。正式确认 §15.2 allowlist 的 `scripts/__init__.py` package marker 进入正式契约；§15.12 重写为分类治理边界：`tmp_out_mongo/` 推荐 Implement 阶段迁移至 `tmp_path`（`docs/**/smoke_reports/` 保持 `.gitignore`）。V0.8 由 Developer 临时落地，本版由 Principal 正式裁决。RFC-03-014 / SPEC-03-014 不变（allowlist 属 DESIGN 级实现细节）。 | **YQuant-Principal** |
 | V0.8 | 2026-07-22 | **T4 测试副作用收口（临时落地）**。§15.2 allowlist 由 22 增至 23 个正式文件，新增 `scripts/__init__.py` package marker；§15.12 固化 `tmp_out_mongo/` 与 `docs/**/smoke_reports/` 的根 `.gitignore` 规则。RFC-03-014 / SPEC-03-014 不变。 | YQuant-Developer-Engineer |
 | V0.7 | 2026-07-22 | **T4 Preflight & Smoke 工具链设计**（新增 §15）。定义 T4 阶段的 22 文件 allowlist、CLI 入口与安全契约、SecretVerifier 非泄露接口、MongoDB 零写入预检、Provider smoke 安全包装、报告脱敏、退出码分类、零写入 spy 机制、Verify/Review 验收命令与 Review PASS 后的 live-read 执行流程。与 RFC-03-014 V0.3 §13 及 SPEC-03-014 V0.3 §14 完全对齐。 | YQuant-Codex-Principal |

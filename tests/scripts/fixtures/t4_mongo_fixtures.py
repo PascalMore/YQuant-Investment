@@ -44,19 +44,19 @@ def use_fake_client(client: FakeMongoClient) -> Iterator[FakeMongoClient]:
 
 @contextmanager
 def isolated_mongo_uri_env(*, uri: str | None) -> Iterator[None]:
-    """Snapshot and set/restore ``MONGODB_URI``.
+    """Snapshot and set/restore ``MONGO_URI``.
 
     Pass ``uri=None`` to clear the env var.
     """
-    saved = os.environ.get("MONGODB_URI")
+    saved = os.environ.get("MONGO_URI")
     if uri is None:
-        os.environ.pop("MONGODB_URI", None)
+        os.environ.pop("MONGO_URI", None)
     else:
-        os.environ["MONGODB_URI"] = uri
+        os.environ["MONGO_URI"] = uri
     try:
         yield
     finally:
         if saved is None:
-            os.environ.pop("MONGODB_URI", None)
+            os.environ.pop("MONGO_URI", None)
         else:
-            os.environ["MONGODB_URI"] = saved
+            os.environ["MONGO_URI"] = saved

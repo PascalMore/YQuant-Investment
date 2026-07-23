@@ -17,7 +17,7 @@ Hard rules:
         unauthorized, or unexpected P3 collection that Pascal
         already accepted).
   - 2 → connectivity failure (DNS / timeout / auth).
-  - 3 → MONGODB_URI not declared (no auth, no smoke).
+  - 3 → MONGO_URI not declared (no auth, no smoke).
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help=(
-            "Override MONGODB_URI. When omitted, the value is read "
+            "Override MONGO_URI. When omitted, the value is read "
             "from os.environ at the moment of invocation. The URI "
             "is never emitted in the report."
         ),
@@ -95,8 +95,8 @@ def run_preflight(args: argparse.Namespace) -> int:
     if not args.live_read:
         exit_code = EXIT_PASS  # dry-run is informational; not a fail
     elif result.connectivity == "skipped":
-        # Either MONGODB_URI missing or dry-run
-        if "MONGODB_URI" in (result.warnings[0] if result.warnings else ""):
+        # Either MONGO_URI missing or dry-run
+        if "MONGO_URI" in (result.warnings[0] if result.warnings else ""):
             exit_code = EXIT_UNAUTHORIZED
         else:
             exit_code = EXIT_PASS

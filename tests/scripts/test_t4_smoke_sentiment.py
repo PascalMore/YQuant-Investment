@@ -78,7 +78,9 @@ def test_cli_smoke_sentiment_argparser_has_no_apply_flag() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_smoke_sentiment_live_with_fake_dispatcher() -> None:
+def test_smoke_sentiment_live_with_fake_dispatcher(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("MONGO_URI", raising=False)
+    monkeypatch.delenv("AKSHARE_TOKEN", raising=False)
     fake = FakeAkshareDispatcher()
     set_call_dispatcher(fake)
     try:
@@ -87,6 +89,10 @@ def test_smoke_sentiment_live_with_fake_dispatcher() -> None:
         pool = client.fetch_limit_up_pool("2026-07-22", live=True)
         assert market.connectivity == "success"
         assert pool.connectivity == "success"
+        assert [fn for fn, _ in fake.calls] == [
+            "stock_market_fund_flow",
+            "stock_zt_pool_em",
+        ]
     finally:
         reset_call_dispatcher()
 

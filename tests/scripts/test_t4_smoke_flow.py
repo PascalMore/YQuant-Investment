@@ -79,7 +79,9 @@ def test_cli_smoke_flow_argparser_has_no_apply_flag() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_smoke_flow_live_with_fake_dispatcher() -> None:
+def test_smoke_flow_live_with_fake_dispatcher(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("MONGO_URI", raising=False)
+    monkeypatch.delenv("AKSHARE_TOKEN", raising=False)
     fake = FakeAkshareDispatcher()
     set_call_dispatcher(fake)
     try:
@@ -90,6 +92,11 @@ def test_smoke_flow_live_with_fake_dispatcher() -> None:
         assert f_sh.connectivity == "success"
         assert f_sz.connectivity == "success"
         assert nb.connectivity == "success"
+        assert [fn for fn, _ in fake.calls] == [
+            "stock_individual_fund_flow",
+            "stock_individual_fund_flow",
+            "stock_hsgt_individual_em",
+        ]
     finally:
         reset_call_dispatcher()
 

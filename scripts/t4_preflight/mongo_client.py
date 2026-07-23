@@ -224,17 +224,18 @@ class MongoClientFactory:
         if uri is None:
             # Defer to the verifier pattern. We only call
             # ``os.getenv`` for the URI key — never for any other
-            # secret.
+            # secret. The key name is the Phase 2 standard
+            # ``MONGO_URI`` (DESIGN §15.5.2 / SPEC §14.2).
             import os
 
-            uri = os.getenv("MONGODB_URI")
+            uri = os.getenv("MONGO_URI")
 
         if not uri:
             return MongoPreflightResult(
                 connectivity="skipped",
                 collections=None,
                 p3_collections_found=(),
-                warnings=("MONGODB_URI not declared — cannot run preflight",),
+                warnings=("MONGO_URI not declared — cannot run preflight",),
                 detail=None,
                 latency_ms=None,
             )

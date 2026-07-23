@@ -49,7 +49,7 @@ def make_temp_env(
 @contextmanager
 def isolated_env(
     *,
-    clear: tuple[str, ...] = ("AKSHARE_TOKEN", "MONGODB_URI"),
+    clear: tuple[str, ...] = ("MONGO_URI",),
 ) -> Iterator[None]:
     """Context manager that snapshots and clears sensitive env vars.
 

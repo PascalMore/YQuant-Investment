@@ -104,7 +104,12 @@ def test_cli_smoke_sector_argparser_has_no_apply_flag() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_smoke_sector_live_with_fake_dispatcher(tmp_path: Path) -> None:
+def test_smoke_sector_live_with_fake_dispatcher(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("MONGO_URI", raising=False)
+    monkeypatch.delenv("AKSHARE_TOKEN", raising=False)
     fake = FakeAkshareDispatcher()
     set_call_dispatcher(fake)
     try:
@@ -116,6 +121,10 @@ def test_smoke_sector_live_with_fake_dispatcher(tmp_path: Path) -> None:
         # The fake returns 6 columns for sector.snapshot but
         # expected has 6; partial match is fine.
         assert snap.actual_fields is not None
+        assert [fn for fn, _ in fake.calls] == [
+            "stock_board_industry_cons_em",
+            "stock_board_industry_name_em",
+        ]
     finally:
         reset_call_dispatcher()
 

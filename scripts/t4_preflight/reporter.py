@@ -56,15 +56,19 @@ from .models import (
 
 #: Patterns that mark a value as "secret-shaped" and must be redacted.
 #: Order matters; first match wins. Case-insensitive substring match.
+#:
+#: Only the canonical candidate secret key (``MONGO_URI``) is listed
+#: here. The legacy ``AKSHARE_TOKEN`` / ``MONGODB_URI`` tokens are no
+#: longer part of the T4 preflight contract (AKShare is anonymous,
+#: Mongo uses the Phase 2 standard ``MONGO_URI``); see DESIGN §15.4.2
+#: and SPEC §14.3.
 _SECRET_PATTERNS: tuple[str, ...] = (
     "mongodb://",
     "mongodb+srv://",
     "https://",
     "http://",
-    "AKSHARE_TOKEN=",
-    "MONGODB_URI=",
-    "AKSHARE_TOKEN:",
-    "MONGODB_URI:",
+    "MONGO_URI=",
+    "MONGO_URI:",
     "password",
     "passwd",
     "api_key",

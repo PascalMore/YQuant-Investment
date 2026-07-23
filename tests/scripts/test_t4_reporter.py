@@ -80,8 +80,8 @@ def test_sanitizer_redacts_password_substring() -> None:
 
 
 def test_sanitizer_redacts_token_substring() -> None:
-    out = sanitize({"data": "AKSHARE_TOKEN=abcdef"})
-    assert "AKSHARE_TOKEN=abcdef" not in str(out)
+    out = sanitize({"data": "MONGO_URI=abcdef"})
+    assert "MONGO_URI=abcdef" not in str(out)
     assert out["data"] == "[REDACTED]"
 
 
@@ -120,9 +120,9 @@ def test_sanitizer_does_not_touch_clean_strings() -> None:
 
 def test_sanitizer_handles_nested_dict() -> None:
     out = sanitize(
-        {"outer": {"inner": {"deep": "AKSHARE_TOKEN=zzz", "ok": "safe"}}}
+        {"outer": {"inner": {"deep": "MONGO_URI=zzz", "ok": "safe"}}}
     )
-    assert "AKSHARE_TOKEN=zzz" not in str(out)
+    assert "MONGO_URI=zzz" not in str(out)
     assert out["outer"]["inner"]["ok"] == "safe"
     assert out["outer"]["inner"]["deep"] == "[REDACTED]"
 

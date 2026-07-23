@@ -119,7 +119,9 @@ class SecretVerifier:
           lives past this function call.
 
         The ``source_name`` we emit is the *key name only* (e.g.
-        ``"AKSHARE_TOKEN"``) — never the resolved value.
+        ``"MONGO_URI"``) — never the resolved value. Note: AKShare
+        is anonymous (PR-2/3/4), so ``AKSHARE_TOKEN`` is **not** a
+        valid candidate key in this toolchain (DESIGN §15.4.2).
         """
         if not live:
             return SecretProbeResult(

@@ -38,6 +38,8 @@ from scripts.t4_preflight.config import (
 from scripts.t4_preflight.mongo_client import (
     FakeMongoClient,
     MongoClientFactory,
+    reset_client_factory,
+    set_client_factory,
 )
 from scripts.t4_preflight.models import MongoPreflightResult
 
@@ -87,17 +89,27 @@ def test_dry_run_returns_warning() -> None:
 
 def test_live_success_no_unexpected_collections() -> None:
     client = FakeMongoClient(collections=("unrelated", "another"))
+    connection_params: dict[str, object] = {}
+
+    def _capturing_factory(uri: str, *, timeout_ms: int) -> FakeMongoClient:
+        connection_params.update(uri=uri, timeout_ms=timeout_ms)
+        return client
+
     f = MongoClientFactory()
-    with use_fake_client(client):
-        result = f.run_preflight(live=True, uri="mongodb://x", timeout_seconds=1)
+    set_client_factory(_capturing_factory)  # type: ignore[arg-type]
+    try:
+        result = f.run_preflight(live=True, uri="mongodb://x")
+    finally:
+        reset_client_factory()
     assert result.connectivity == "success"
     assert result.collections == ("unrelated", "another")
     assert result.p3_collections_found == ()
+    assert connection_params == {"uri": "mongodb://x", "timeout_ms": 3000}
+    assert client.calls == [
+        ("command", ("ping",), {}),
+        ("list_collection_names", (ALLOWED_DATABASE,), {}),
+    ]
     assert client.closed is True
-    # The factory should have called ping and list_collections once.
-    op_names = [c[0] for c in client.calls]
-    assert "command" in op_names
-    assert "list_collection_names" in op_names
 
 
 def test_live_detects_unexpected_p3_collections() -> None:
@@ -167,7 +179,7 @@ def test_live_without_uri_is_skipped() -> None:
         f = MongoClientFactory()
         result = f.run_preflight(live=True, timeout_seconds=1)
     assert result.connectivity == "skipped"
-    assert any("MONGODB_URI" in w for w in result.warnings)
+    assert any("MONGO_URI" in w for w in result.warnings)
 
 
 # ---------------------------------------------------------------------------

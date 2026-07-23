@@ -135,7 +135,7 @@ def test_secret_probe_result_field_types() -> None:
 
 def test_probe_file_dry_run_marks_readable_as_none(tmp_path: Path) -> None:
     p = tmp_path / ".env"
-    p.write_text("AKSHARE_TOKEN=\n", encoding="utf-8")
+    p.write_text("MONGO_URI=\n", encoding="utf-8")
     v = SecretVerifier()
     result = v.probe_file(p)
     assert result.file_exists is True
@@ -146,7 +146,7 @@ def test_probe_file_dry_run_marks_readable_as_none(tmp_path: Path) -> None:
 
 def test_probe_file_live_checks_readability(tmp_path: Path) -> None:
     p = tmp_path / ".env"
-    p.write_text("AKSHARE_TOKEN=\n", encoding="utf-8")
+    p.write_text("MONGO_URI=\n", encoding="utf-8")
     v = SecretVerifier()
     result = v.probe_file_live(p)
     assert result.file_exists is True
@@ -165,20 +165,20 @@ def test_probe_file_missing(tmp_path: Path) -> None:
 
 
 def test_probe_env_dry_run_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("AKSHARE_TOKEN", "sentinel-value-must-not-leak")
+    monkeypatch.setenv("MONGO_URI", "sentinel-value-must-not-leak")
     v = SecretVerifier()
-    result = v.probe_env("AKSHARE_TOKEN", live=False)
+    result = v.probe_env("MONGO_URI", live=False)
     assert result.is_loadable is None
     assert result.key_declared is None
     # The source_name is the *key*, not the value.
-    assert result.source_name == "AKSHARE_TOKEN"
+    assert result.source_name == "MONGO_URI"
 
 
 def test_probe_env_live_returns_boolean_only(monkeypatch: pytest.MonkeyPatch) -> None:
     """A-023: only the boolean conclusion is exposed."""
-    monkeypatch.setenv("AKSHARE_TOKEN", "sentinel-value-must-not-leak")
+    monkeypatch.setenv("MONGO_URI", "sentinel-value-must-not-leak")
     v = SecretVerifier()
-    result = v.probe_env("AKSHARE_TOKEN", live=True)
+    result = v.probe_env("MONGO_URI", live=True)
     assert result.is_loadable is True
     # The value itself is not in any field.
     for f in dataclasses.fields(result):
@@ -190,9 +190,9 @@ def test_probe_env_live_returns_boolean_only(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_probe_env_live_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("AKSHARE_TOKEN", raising=False)
+    monkeypatch.delenv("MONGO_URI", raising=False)
     v = SecretVerifier()
-    result = v.probe_env("AKSHARE_TOKEN", live=True)
+    result = v.probe_env("MONGO_URI", live=True)
     assert result.is_loadable is False
     assert result.key_declared is False
 
@@ -217,16 +217,13 @@ def test_cli_audit_secret_does_not_leak_secrets(tmp_path: Path) -> None:
     """A-023: stdout must not contain a value/length/URI substring."""
     out_dir = tmp_path / "out"
     with isolated_env():
-        os.environ["AKSHARE_TOKEN"] = "this-is-a-secret-12345"
-        os.environ["MONGODB_URI"] = "mongodb://user:secret@host/db"
+        os.environ["MONGO_URI"] = "mongodb://user:***@host/db"
         proc = _run_cli("audit-secret", "--output-dir", str(out_dir), "--live-read")
     out = proc.stdout + proc.stderr
     for forbidden in (
-        "this-is-a-secret-12345",
         "user:secret",
         "mongodb://",
-        "MONGODB_URI=",
-        "AKSHARE_TOKEN=",
+        "MONGO_URI=",
     ):
         assert forbidden not in out, (
             f"audit-secret output leaked substring {forbidden!r}: {out!r}"
@@ -237,8 +234,7 @@ def test_cli_audit_secret_live_with_known_keys_exits_pass(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When secret keys are declared and loadable, exit 0."""
-    monkeypatch.setenv("AKSHARE_TOKEN", "x")
-    monkeypatch.setenv("MONGODB_URI", "x")
+    monkeypatch.setenv("MONGO_URI", "x")
     out_dir = tmp_path / "out"
     # We also need a .env file in CWD for the file probe to declare
     # the key. Without it, the run is conditional (declared in env
@@ -264,7 +260,7 @@ def test_audit_secret_yaml_report_redacts_uri(tmp_path: Path) -> None:
     """The YAML report on disk must not contain a URI even if a
     candidate .env has one (sanity check on the Sanitizer)."""
     with isolated_env(), make_temp_env(
-        project_root_contents="MONGODB_URI=mongodb://user:secret@host/db\n"
+        project_root_contents="MONGO_URI=mongodb://user:***@host/db\n"
     ) as sandbox:
         # Run the audit from inside the sandbox so the file probe
         # finds the synthetic .env.
