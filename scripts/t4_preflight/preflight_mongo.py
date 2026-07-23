@@ -1,8 +1,15 @@
-"""PR-1: MongoDB zero-write preflight CLI (DESIGN §15.5 / SPEC §14.2).
+"""PR-1: MongoDB zero-write preflight CLI (DESIGN V0.12 §15.5 / SPEC §14.2).
 
 Default dry-run: do not instantiate MongoClient, do not connect.
-``--live-read`` authorizes the four-step preflight sequence
-(ping → list_collections → check P3 → close).
+``--live-read`` authorizes the four-step preflight sequence:
+
+1. Resolve the five ``MONGODB_*`` keys via
+   :class:`LegacyConfigResolver` from ``skills/.env``.
+2. Build a MongoClient with the resolved components
+   (``host``, ``port``, ``username``, ``password``, ``authSource``).
+3. ``admin.command("ping")`` — connectivity.
+4. ``db.list_collection_names()`` — enumerate, plus P3-collection
+   presence check.
 
 Hard rules:
 
@@ -10,14 +17,21 @@ Hard rules:
 * No business-data queries (``find`` / ``aggregate`` / ``count``).
 * No collection or index creation.
 * No secret value/URI in stdout, stderr, or the YAML report.
-* Exit code:
+* ``MONGODB_DATABASE`` must equal ``"tradingagents"`` (DESIGN
+  §15.3 cross-stage rule). Any other value → NOT_AUTHORIZED
+  exit 3, no connection.
+* ``authSource`` always equals ``MONGODB_DATABASE`` key value.
+* No fallback to ``MONGO_URI``, ``MONGODB_URI``, ``./.env``,
+  ``~/.hermes/...`` or any other source.
 
-  - 0 → success and no unexpected P3 collections.
-  - 1 → success but with warnings (e.g. list_collections
-        unauthorized, or unexpected P3 collection that Pascal
-        already accepted).
-  - 2 → connectivity failure (DNS / timeout / auth).
-  - 3 → MONGO_URI not declared (no auth, no smoke).
+Exit codes (DESIGN §15.5.4 / §15.8):
+
+* 0 → success and no unexpected P3 collections (PASS).
+* 1 → ping OK but ``list_collections`` not authorized
+      (CONDITIONAL PASS).
+* 2 → connectivity failure (DNS / timeout / auth).
+* 3 → ``MONGODB_DATABASE`` not equal ``tradingagents`` or any
+      of the five keys missing/empty (NOT_AUTHORIZED).
 """
 
 from __future__ import annotations
@@ -35,7 +49,7 @@ from .config import (
     EXIT_PASS,
     EXIT_UNAUTHORIZED,
 )
-from .mongo_client import MongoClientFactory
+from .mongo_client import PreflightRunner
 from .models import MongoPreflightResult
 from .reporter import to_yaml
 
@@ -54,7 +68,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
         prog="scripts.t4_preflight.cli preflight-mongo",
         description=(
             "PR-1: Zero-write MongoDB preflight. Default dry-run; "
-            "pass --live-read to actually ping the server."
+            "pass --live-read to actually resolve MONGODB_* keys and "
+            "ping tradingagents. MONGODB_DATABASE must equal "
+            "'tradingagents'."
         ),
     )
     p.add_argument("--live-read", action="store_true", default=False)
@@ -71,46 +87,70 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Server-selection timeout in seconds.",
     )
     p.add_argument(
-        "--mongo-uri",
+        "--uri",
         type=str,
         default=None,
         help=(
-            "Override MONGO_URI. When omitted, the value is read "
-            "from os.environ at the moment of invocation. The URI "
-            "is never emitted in the report."
+            "Legacy/explicit URI override. When omitted (the default "
+            "for PR-1 live-read), the resolver reads the five "
+            "MONGODB_* keys from skills/.env and builds the client "
+            "component-wise. No MONGO_URI / MONGODB_URI / URI "
+            "fallback is performed."
         ),
     )
     return p
 
 
+def _verdict_for(
+    live: bool,
+    result: MongoPreflightResult,
+) -> tuple[int, str]:
+    """Map a :class:`MongoPreflightResult` to (exit_code, verdict_str).
+
+    Implements DESIGN §15.5.4 / §15.8.
+    """
+    if not live:
+        return EXIT_PASS, "pass"  # dry-run is informational
+
+    if result.connectivity == "env_missing":
+        return EXIT_UNAUTHORIZED, "unauthorized"
+    if result.connectivity == "dry_run":
+        return EXIT_PASS, "pass"
+    if result.connectivity in ("dns_failure", "timeout", "auth_failure"):
+        return EXIT_FAIL, "fail"
+    if result.p3_collections_found:
+        return EXIT_FAIL, "fail"
+    if result.collections is None:
+        # ping succeeded but listCollections failed
+        return EXIT_CONDITIONAL, "conditional_pass"
+    return EXIT_PASS, "pass"
+
+
 def run_preflight(args: argparse.Namespace) -> int:
-    factory = MongoClientFactory()
-    result: MongoPreflightResult = factory.run_preflight(
-        uri=args.mongo_uri,
-        live=args.live_read,
-        timeout_seconds=args.timeout,
-    )
+    """Execute the PR-1 preflight and emit a sanitized YAML report."""
+    runner = PreflightRunner()
 
-    # ----- Verdict --------------------------------------------------------
-    if not args.live_read:
-        exit_code = EXIT_PASS  # dry-run is informational; not a fail
-    elif result.connectivity == "skipped":
-        # Either MONGO_URI missing or dry-run
-        if "MONGO_URI" in (result.warnings[0] if result.warnings else ""):
-            exit_code = EXIT_UNAUTHORIZED
+    if args.live_read:
+        if args.uri is not None:
+            # Explicit-uri override path (legacy test seam).
+            from .mongo_client import MongoClientFactory
+
+            factory = MongoClientFactory()
+            result = factory.run_preflight(
+                uri=args.uri,
+                live=True,
+                timeout_seconds=args.timeout,
+            )
         else:
-            exit_code = EXIT_PASS
-    elif result.connectivity in ("dns_failure", "timeout", "auth_failure"):
-        exit_code = EXIT_FAIL
-    elif result.p3_collections_found:
-        exit_code = EXIT_FAIL  # Pascal must accept
-    elif result.collections is None:
-        # list_collections failed but ping succeeded → conditional
-        exit_code = EXIT_CONDITIONAL
+            result = runner.run_preflight(live=True, timeout=args.timeout)
     else:
-        exit_code = EXIT_PASS
+        # Dry-run: still run through PreflightRunner so the report
+        # shape matches. PreflightRunner.run_preflight(live=False)
+        # returns connectivity="dry_run" without touching the file.
+        result = runner.run_preflight(live=False, timeout=args.timeout)
 
-    # ----- Output ---------------------------------------------------------
+    exit_code, verdict_str = _verdict_for(args.live_read, result)
+
     payload = {
         "preflight_mongo": {
             "generated_at": _now_iso(),
@@ -123,15 +163,7 @@ def run_preflight(args: argparse.Namespace) -> int:
             "detail": result.detail,
         },
         "overall": {
-            "verdict": (
-                "pass"
-                if exit_code == EXIT_PASS
-                else "conditional_pass"
-                if exit_code == EXIT_CONDITIONAL
-                else "fail"
-                if exit_code == EXIT_FAIL
-                else "unauthorized"
-            ),
+            "verdict": verdict_str,
         },
     }
     yaml_text = to_yaml(payload)
@@ -142,7 +174,10 @@ def run_preflight(args: argparse.Namespace) -> int:
         out_path = out_dir / f"preflight-mongo-{datetime.now().strftime('%Y%m%d')}.yaml"
         out_path.write_text(yaml_text, encoding="utf-8")
     except OSError as exc:
-        print(f"preflight-mongo: cannot write report: {exc.__class__.__name__}", file=sys.stderr)
+        print(
+            f"preflight-mongo: cannot write report: {exc.__class__.__name__}",
+            file=sys.stderr,
+        )
         return 2
 
     print(yaml_text)

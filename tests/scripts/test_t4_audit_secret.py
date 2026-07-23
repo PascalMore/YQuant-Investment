@@ -233,12 +233,13 @@ def test_cli_audit_secret_does_not_leak_secrets(tmp_path: Path) -> None:
 def test_cli_audit_secret_live_with_known_keys_exits_pass(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """When secret keys are declared and loadable, exit 0."""
-    monkeypatch.setenv("MONGO_URI", "x")
+    """When all five secret keys are declared and loadable, exit 0."""
+    monkeypatch.setenv("MONGODB_HOST", "x")
+    monkeypatch.setenv("MONGODB_PORT", "27017")
+    monkeypatch.setenv("MONGODB_USERNAME", "x")
+    monkeypatch.setenv("MONGODB_PASSWORD", "x")
+    monkeypatch.setenv("MONGODB_DATABASE", "tradingagents")
     out_dir = tmp_path / "out"
-    # We also need a .env file in CWD for the file probe to declare
-    # the key. Without it, the run is conditional (declared in env
-    # only).
     proc = _run_cli("audit-secret", "--output-dir", str(out_dir), "--live-read")
     # Env-only is at least conditional; the design accepts it.
     assert proc.returncode in (EXIT_PASS, EXIT_CONDITIONAL)

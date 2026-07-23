@@ -31,10 +31,41 @@ CANDIDATE_ENV_FILES: tuple[str, ...] = (
     "~/.hermes/profiles/yquant/.env",
 )
 
-CANDIDATE_SECRET_KEYS: tuple[str, ...] = ("MONGO_URI",)
+#: PR-0 secret-audit candidate keys (DESIGN V0.12 §15.4.2).
+#: Phase 3 uses the five-component ``MONGODB_*`` keys exclusively.
+#: The legacy ``MONGO_URI`` / ``MONGODB_URI`` are explicitly
+#: superseded (RFC/SPEC) and are NOT candidates here.
+CANDIDATE_SECRET_KEYS: tuple[str, ...] = (
+    "MONGODB_HOST",
+    "MONGODB_PORT",
+    "MONGODB_USERNAME",
+    "MONGODB_PASSWORD",
+    "MONGODB_DATABASE",
+)
 
-#: Allowed database for MongoDB preflight (SPEC §14.2 / DESIGN §15.5).
+#: PR-1 required keys for ``LegacyConfigResolver`` (DESIGN V0.12
+#: §15.5.2). All five must be present + non-empty + MONGODB_PORT
+#: must parse as int + MONGODB_DATABASE must equal ``tradingagents``.
+#: No fallback, no alias.
+MONGODB_FIVE_KEYS: tuple[str, ...] = (
+    "MONGODB_HOST",
+    "MONGODB_PORT",
+    "MONGODB_USERNAME",
+    "MONGODB_PASSWORD",
+    "MONGODB_DATABASE",
+)
+
+#: Allowed database value for MongoDB preflight
+#: (SPEC §14.2 / DESIGN §15.3 / §15.5.2). ``MONGODB_DATABASE`` must
+#: equal this exact string, otherwise the preflight refuses to
+#: instantiate any client (NOT_AUTHORIZED → exit 3).
 ALLOWED_DATABASE: str = "tradingagents"
+ALLOWED_DATABASE_VALUE: str = "tradingagents"
+
+#: Path to the canonical Phase-2 skills env file. Used by PR-1
+#: ``LegacyConfigResolver`` only. Never falls back to ``./.env``
+#: or any Hermes profile ``.env``.
+SKILLS_ENV_PATH: str = "skills/.env"
 
 #: Phase 3 business collections we explicitly check for (DESIGN §15.5.3).
 P3_BUSINESS_COLLECTIONS: tuple[str, ...] = (
