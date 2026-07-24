@@ -20,6 +20,7 @@ via :func:`set_call_dispatcher`.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import time
 from dataclasses import replace
@@ -374,3 +375,55 @@ class AKShareSmokeClient:
 def default_target(capability: str) -> str:
     """Return the design-default test target for a capability."""
     return DEFAULT_TEST_TARGETS[capability]
+
+
+# ---------------------------------------------------------------------------
+# Dry-run preflight metadata (DESIGN §15.3.2 / §15.10.2)
+# ---------------------------------------------------------------------------
+
+
+def akshare_importable() -> bool:
+    """Return True iff the ``akshare`` package can be imported.
+
+    Used by the smoke dry-run preflight block to surface
+    ``akshare: importable=true/false`` without ever calling AKShare.
+
+    Implementation note (MINOR-4 / DESIGN §15.3.2 / §15.10.2):
+        We use :func:`importlib.util.find_spec` rather than
+        ``import akshare`` because the latter goes through
+        ``sys.meta_path`` and would be observed by any import hook
+        (and, in production, would trigger side-effects of any
+        package-level statements akshare happens to run on import).
+        :func:`importlib.util.find_spec` is a pure spec lookup that
+        does NOT route through the import machinery and does NOT
+        execute any module code. The module never enters
+        ``sys.modules`` either way.
+    """
+    return importlib.util.find_spec("akshare") is not None
+
+
+def preflight_metadata(
+    *,
+    capabilities: tuple[str, ...],
+    test_symbol: str,
+    date_range: tuple[str, str],
+) -> dict[str, object]:
+    """Build the dry-run preflight metadata block.
+
+    The returned dict matches DESIGN §15.3.2 / §15.10.2:
+
+    * ``would_call`` — total call budget for the listed capabilities
+      (sum of :data:`AKSHARE_MAX_CALLS`).
+    * ``akshare.importable`` — boolean lazy-import check.
+    * ``test_symbol`` — fixed test symbol (no live resolution).
+    * ``date_range`` — fixed ``[start, end]`` tuple.
+
+    No live AKShare call, no network, no value resolution.
+    """
+    would_call = sum(AKSHARE_MAX_CALLS.get(c, 0) for c in capabilities)
+    return {
+        "would_call": would_call,
+        "akshare": {"importable": akshare_importable()},
+        "test_symbol": test_symbol,
+        "date_range": [date_range[0], date_range[1]],
+    }

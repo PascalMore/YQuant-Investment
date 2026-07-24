@@ -90,31 +90,25 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def _candidate_paths() -> list[Path]:
     """Resolve candidate env file paths relative to CWD.
 
-    The first entry is always ``<cwd>/.env`` (project root). The
-    second is the Hermes profile path, expanded to the user's home.
-    The toolchain never assumes a hardcoded path; it always uses
-    :class:`Path` so test fixtures can override.
+    Per DESIGN §15.4.2 / SPEC §14.3 / T1 t_cafc0903, the only
+    candidate is ``skills/.env`` (Phase 2 canonical). The
+    project-root ``./.env`` and Hermes profile ``.env`` were marked
+    superseded and removed from the audit.
     """
-    out: list[Path] = []
-    for raw in CANDIDATE_ENV_FILES:
-        p = Path(raw).expanduser()
-        out.append(p)
-    return out
+    return [Path(raw).expanduser() for raw in CANDIDATE_ENV_FILES]
 
 
 def _resolve_source_name(p: Path) -> str:
     """Map a path to a stable source label.
 
-    The label is the *label only* — not the path. The reporter will
-    emit a separate ``path_checked`` field if the absolute path is
-    needed (it is not, by design).
+    The label is the *label only* — not the path. The reporter emits
+    a separate ``path_checked`` field only when explicitly needed (it
+    is not, by design).
     """
     expanded = p.expanduser()
-    hermes_profile_env = Path("~/.hermes/profiles/yquant/.env").expanduser()
-    if expanded == hermes_profile_env:
-        return "hermes_profile_env"
-    if expanded == Path(".env") or expanded == Path.cwd() / ".env":
-        return "project_root_env"
+    # Canonical Phase 2 skills env — the only candidate source.
+    if expanded.name == ".env" and "skills" in expanded.parts:
+        return "phase2_skills_env"
     return "candidate_env_file"
 
 
@@ -142,7 +136,9 @@ def run_audit(args: argparse.Namespace) -> int:
         )
         # Per-key probes within this file.
         for key in CANDIDATE_SECRET_KEYS:
-            key_probe = verifier.probe_env_in_file(path, key)
+            key_probe = verifier.probe_env_in_file(
+                path, key, live=args.live_read
+            )
             # Combine the file-level and key-level conclusions into a
             # single SecretProbeResult for this key, with the source
             # name as the label.
@@ -153,7 +149,8 @@ def run_audit(args: argparse.Namespace) -> int:
                 key_declared=key_probe.key_declared,
                 is_loadable=None,
             )
-            sources.append(combined)
+            if args.live_read:
+                sources.append(combined)
             if (
                 combined.file_exists
                 and combined.key_declared is False
@@ -177,7 +174,8 @@ def run_audit(args: argparse.Namespace) -> int:
             key_declared=env_probe.key_declared,
             is_loadable=env_probe.is_loadable,
         )
-        sources.append(env_probe)
+        if args.live_read:
+            sources.append(env_probe)
 
     # ----- Verdict ---------------------------------------------------------
     # Per SPEC §14.3: at least one source must have BOTH a

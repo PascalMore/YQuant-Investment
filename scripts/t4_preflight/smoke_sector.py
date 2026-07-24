@@ -24,6 +24,7 @@ from .config import (
     AKSHARE_MAX_CALLS,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_TEST_TARGETS,
+    DRY_RUN_DATE_RANGE,
     EXIT_CONDITIONAL,
     EXIT_FAIL,
     EXIT_PASS,
@@ -42,6 +43,7 @@ from .provider_client import (
     AKShareSmokeClient,
     FieldMapper,
     default_target,
+    preflight_metadata,
     verdict_for_mapping,
 )
 from .reporter import smoke_report_to_yaml
@@ -230,6 +232,11 @@ def run_smoke(args: argparse.Namespace) -> int:
             "smoke_at": _now_iso(),
             "test_target": args.symbol,
             "date_range": [date_label, date_label],
+            "preflight": preflight_metadata(
+                capabilities=("sector.snapshot", "sector.ranking"),
+                test_symbol=DEFAULT_TEST_TARGETS["sector.snapshot"],
+                date_range=DRY_RUN_DATE_RANGE,
+            ),
         },
         connectivity=connectivity,
         auth=auth,

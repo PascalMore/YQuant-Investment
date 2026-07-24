@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 import scripts
 
-scripts.__path__.append(str(Path(__file__).resolve().parents[2] / "scripts"))
+scripts.__path__.append(str(Path(__file__).resolve().parents[3] / "scripts"))
 
 import pytest
 
@@ -37,16 +37,21 @@ from scripts.t4_preflight.config import (
 from scripts.t4_preflight.models import SecretProbeResult
 from scripts.t4_preflight.secrets import SecretVerifier
 
-from .fixtures.t4_secret_fixtures import isolated_env, make_temp_env
+from tests.scripts.t4_preflight.fixtures.t4_secret_fixtures import isolated_env, make_temp_env
 
 # Repo root is the parent of tests/
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-def _run_cli(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
+def _run_cli(
+    *args: str,
+    cwd: Path | None = None,
+    _pythonpath: str | None = None,
+) -> subprocess.CompletedProcess:
     """Run ``python -m scripts.t4_preflight.cli <args>`` as a subprocess.
 
-    Uses the project venv and sets ``PYTHONPATH=.``.
+    Uses the project venv and sets ``PYTHONPATH=.`` (or
+    ``_pythonpath`` when provided).
     """
     cmd = [
         sys.executable,
@@ -54,10 +59,11 @@ def _run_cli(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess
         "scripts.t4_preflight.cli",
         *args,
     ]
+    env = {**os.environ, "PYTHONPATH": _pythonpath or "."}
     return subprocess.run(
         cmd,
         cwd=cwd or REPO_ROOT,
-        env={**os.environ, "PYTHONPATH": "."},
+        env=env,
         capture_output=True,
         text=True,
         timeout=30,
@@ -70,20 +76,32 @@ def _run_cli(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess
 
 
 def test_resolve_source_name_labels_project_root_env() -> None:
-    assert audit_secret._resolve_source_name(Path(".env")) == "project_root_env"
+    # Per DESIGN §15.4.2 / SPEC §14.3, the only recognised source
+    # label is ``phase2_skills_env``; all other paths are
+    # ``candidate_env_file``.
+    assert (
+        audit_secret._resolve_source_name(Path(".env"))
+        == "candidate_env_file"
+    )
     assert (
         audit_secret._resolve_source_name(Path.cwd() / ".env")
-        == "project_root_env"
+        == "candidate_env_file"
     )
 
 
 def test_resolve_source_name_labels_hermes_profile_env() -> None:
     profile_env = Path("~/.hermes/profiles/yquant/.env")
 
-    assert audit_secret._resolve_source_name(profile_env) == "hermes_profile_env"
+    # The Hermes profile path is not under ``skills/``, so the
+    # label is ``candidate_env_file`` (not a recognised canonical
+    # source).
+    assert (
+        audit_secret._resolve_source_name(profile_env)
+        == "candidate_env_file"
+    )
     assert (
         audit_secret._resolve_source_name(profile_env.expanduser())
-        == "hermes_profile_env"
+        == "candidate_env_file"
     )
 
 
@@ -246,9 +264,21 @@ def test_cli_audit_secret_live_with_known_keys_exits_pass(
 
 
 def test_cli_audit_secret_no_keys_exits_unauthorized(tmp_path: Path) -> None:
+    """When no candidate source has any declared key, exit 3."""
     with isolated_env():
         out_dir = tmp_path / "out"
-        proc = _run_cli("audit-secret", "--output-dir", str(out_dir), "--live-read")
+        # Run from a temp sandbox so the production ``skills/.env``
+        # at the repo root is invisible; PYTHONPATH points to
+        # REPO_ROOT so the ``scripts.t4_preflight`` module is still
+        # resolvable.
+        proc = _run_cli(
+            "audit-secret",
+            "--output-dir",
+            str(out_dir),
+            "--live-read",
+            cwd=tmp_path,
+            _pythonpath=str(REPO_ROOT),
+        )
     assert proc.returncode == EXIT_UNAUTHORIZED
 
 

@@ -1409,20 +1409,20 @@ P3-C 阶段
 | 12 | 新建 | `scripts/t4_preflight/mongo_client.py` | 安全 MongoDB 客户端工厂（零写入模式） | PR-1 |
 | 13 | 新建 | `scripts/t4_preflight/provider_client.py` | AKShare 安全调用包装（超时、限速、异常分类） | PR-2/3/4 |
 | **测试** | | | | |
-| 14 | 新建 | `tests/scripts/test_t4_audit_secret.py` | Secret 审计单元测试 | PR-0 |
-| 15 | 新建 | `tests/scripts/test_t4_preflight_mongo.py` | MongoDB 预检单元测试（mongomock） | PR-1 |
-| 16 | 新建 | `tests/scripts/test_t4_smoke_sector.py` | Sector smoke 单元测试（mock AKShare） | PR-2 |
-| 17 | 新建 | `tests/scripts/test_t4_smoke_flow.py` | Flow smoke 单元测试 | PR-3 |
-| 18 | 新建 | `tests/scripts/test_t4_smoke_sentiment.py` | Sentiment smoke 单元测试 | PR-4 |
-| 19 | 新建 | `tests/scripts/test_t4_reporter.py` | 报告序列化/脱敏/格式测试 | PR-0 ~ PR-4 |
+| 14 | 新建 | `tests/scripts/t4_preflight/test_audit_secret.py` | Secret 审计单元测试 | PR-0 |
+| 15 | 新建 | `tests/scripts/t4_preflight/test_preflight_mongo.py` | MongoDB 预检单元测试（mongomock） | PR-1 |
+| 16 | 新建 | `tests/scripts/t4_preflight/test_smoke_sector.py` | Sector smoke 单元测试（mock AKShare） | PR-2 |
+| 17 | 新建 | `tests/scripts/t4_preflight/test_smoke_flow.py` | Flow smoke 单元测试 | PR-3 |
+| 18 | 新建 | `tests/scripts/t4_preflight/test_smoke_sentiment.py` | Sentiment smoke 单元测试 | PR-4 |
+| 19 | 新建 | `tests/scripts/t4_preflight/test_reporter.py` | 报告序列化/脱敏/格式测试 | PR-0 ~ PR-4 |
 | **夹具** | | | | |
-| 20 | 新建 | `tests/scripts/fixtures/t4_secret_fixtures.py` | 模拟 .env 文件 + 环境变量场景 | PR-0 |
-| 21 | 新建 | `tests/scripts/fixtures/t4_mongo_fixtures.py` | 模拟 mongomock 集合清单场景 | PR-1 |
-| 22 | 新建 | `tests/scripts/fixtures/t4_akshare_fixtures.py` | 模拟 AKShare API 响应（含字段变体） | PR-2/3/4 |
+| 20 | 新建 | `tests/scripts/t4_preflight/fixtures/t4_secret_fixtures.py` | 模拟 .env 文件 + 环境变量场景 | PR-0 |
+| 21 | 新建 | `tests/scripts/t4_preflight/fixtures/t4_mongo_fixtures.py` | 模拟 mongomock 集合清单场景 | PR-1 |
+| 22 | 新建 | `tests/scripts/t4_preflight/fixtures/t4_akshare_fixtures.py` | 模拟 AKShare API 响应（含字段变体） | PR-2/3/4 |
 | **根 package marker** | | | | |
-| 23 | 新建 | `scripts/__init__.py` | 让 `from scripts.t4_preflight import ...` 可被 `tests/scripts/test_t4_*.py` 解析；pytest collection 必要前提（T4B 77/77 PASS 已验证） | PR-0 ~ PR-4 |
+| 23 | 新建 | `scripts/__init__.py` | 让 `from scripts.t4_preflight import ...` 可被 `tests/scripts/t4_preflight/test_*.py` 解析；pytest collection 必要前提（T4B 77/77 PASS 已验证） | PR-0 ~ PR-4 |
 
-**总量**：23 个新建文件，位于 `scripts/__init__.py`、`scripts/t4_preflight/` 和 `tests/scripts/` 下。
+**总量**：23 个新建文件，位于 `scripts/__init__.py`、`scripts/t4_preflight/` 和 `tests/scripts/t4_preflight/` 下。
 
 > **Principal 正式裁决（2026-07-22）**：`scripts/__init__.py`（#23）为 T4 测试集合的必要 package marker，不包含任何运行时逻辑（仅 docstring），pytest 解析 `from scripts.t4_preflight import ...` 依赖其存在。正式确认其进入 T4 allowlist。该符号属 DESIGN 级实现细节，RFC/SPEC 无需提及。
 
@@ -2103,7 +2103,7 @@ python -m scripts.t4_preflight.cli smoke-sentiment
 # 预期：输出 would_call=2，退出码 0
 
 # A-021: 零写入 spy 验证（离线验证 DataRouter query() 无 materialize）
-.venv/bin/python -m pytest tests/scripts/test_t4_reporter.py::test_zero_write_spy -q
+.venv/bin/python -m pytest tests/scripts/t4_preflight/test_reporter.py::test_zero_write_spy -q
 ```
 
 **禁止通过 dry-run 泛化为生产结论**：dry-run 的导入+配置检查不得标注为「生产验证通过」。Review 报告必须明确区分 dry-run（离线）与 live-read（生产）结果。
@@ -2145,7 +2145,7 @@ python -m scripts.t4_preflight.cli smoke-sentiment --live-read
 | RC-5 | Dry-run 默认行为验证 | `scripts/t4_preflight/cli audit-secret` → exit 0，不连接网络 | stdout 含 "dry-run" |
 | RC-6 | 退出码标准化 | 每个命令的 error/status 映射到 {0,1,2,3} | pytest 参数化测试验证 |
 | RC-7 | 报告脱敏 | YAML 输出不含 secret 模式 | `grep -c "REDACTED" report.yaml` ≥ 预期脱敏字段数 |
-| RC-8 | 零写入 spy 测试通过 | `pytest tests/scripts/test_t4_reporter.py::test_zero_write_spy -q` | exit 0 |
+| RC-8 | 零写入 spy 测试通过 | `pytest tests/scripts/t4_preflight/test_reporter.py::test_zero_write_spy -q` | exit 0 |
 
 ### 15.11 Review PASS 后的 Live-Read 执行流程
 

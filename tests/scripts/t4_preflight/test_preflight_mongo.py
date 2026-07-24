@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 import scripts
 
-scripts.__path__.append(str(Path(__file__).resolve().parents[2] / "scripts"))
+scripts.__path__.append(str(Path(__file__).resolve().parents[3] / "scripts"))
 
 import pytest
 
@@ -52,12 +52,12 @@ from scripts.t4_preflight.mongo_client import (
 )
 from scripts.t4_preflight.models import MongoPreflightResult
 
-from .fixtures.t4_mongo_fixtures import (
+from tests.scripts.t4_preflight.fixtures.t4_mongo_fixtures import (
     isolated_skills_env,
     use_fake_client,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _run_cli(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
@@ -404,6 +404,81 @@ def test_preflight_mongo_argparser_has_no_apply_flag() -> None:
         opts = action.option_strings
         for forbidden in ("--apply", "--write", "--exec", "--commit", "--force"):
             assert forbidden not in opts
+
+
+# ---------------------------------------------------------------------------
+# MINOR-2: preflight-mongo CLI must NOT expose --uri (DESIGN §15.3.1 /
+# §15.5.2 "no MONGO_URI / MONGODB_URI / URI parameters"). The legacy
+# ``run_preflight(uri=...)`` seam is preserved as an internal test hook
+# only; CLI callers must go through the resolver.
+# ---------------------------------------------------------------------------
+
+
+def test_preflight_mongo_argparser_has_no_uri_flag() -> None:
+    """MINOR-2: --uri must not be exposed on the CLI."""
+    p = preflight_mongo.build_arg_parser()
+    for action in p._actions:  # noqa: SLF001
+        assert "--uri" not in action.option_strings, (
+            "preflight-mongo CLI must not expose --uri (DESIGN §15.3.1)"
+        )
+
+
+def test_preflight_mongo_run_preflight_internal_seam_preserved() -> None:
+    """MINOR-2: the internal ``run_preflight(uri=...)`` seam is kept
+    so existing tests with a synthetic URI can still exercise the
+    legacy fake-client path.
+    """
+    f = MongoClientFactory()
+    # Calling with uri=... must still work programmatically.
+    client = FakeMongoClient(collections=("unrelated",))
+    captured: dict[str, object] = {}
+
+    def _capturing_factory(
+        host: str,
+        port: int,
+        *,
+        username: str,
+        password: str,
+        auth_source: str,
+        timeout_ms: int,
+    ) -> FakeMongoClient:
+        captured["host"] = host
+        captured["port"] = port
+        captured["timeout_ms"] = timeout_ms
+        return client
+
+    set_client_factory(_capturing_factory)  # type: ignore[arg-type]
+    try:
+        result = f.run_preflight(live=True, uri="mongodb://internal-test")
+    finally:
+        reset_client_factory()
+    assert result.connectivity == "success"
+    assert client.closed is True
+
+
+def test_preflight_mongo_cli_rejects_uri_flag() -> None:
+    """MINOR-2: passing --uri on the CLI must fail (argparse error)."""
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "scripts.t4_preflight.cli",
+            "preflight-mongo",
+            "--uri",
+            "mongodb://example",
+        ],
+        cwd=str(REPO_ROOT),
+        env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert proc.returncode != 0, (
+        f"CLI should reject --uri; got rc={proc.returncode}, "
+        f"stdout={proc.stdout!r}, stderr={proc.stderr!r}"
+    )
+    # argparse writes to stderr; the unknown flag is mentioned.
+    assert "--uri" in proc.stderr or "unrecognized" in proc.stderr.lower()
 
 
 # ---------------------------------------------------------------------------

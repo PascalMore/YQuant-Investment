@@ -86,18 +86,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=DEFAULT_TIMEOUT_SECONDS,
         help="Server-selection timeout in seconds.",
     )
-    p.add_argument(
-        "--uri",
-        type=str,
-        default=None,
-        help=(
-            "Legacy/explicit URI override. When omitted (the default "
-            "for PR-1 live-read), the resolver reads the five "
-            "MONGODB_* keys from skills/.env and builds the client "
-            "component-wise. No MONGO_URI / MONGODB_URI / URI "
-            "fallback is performed."
-        ),
-    )
     return p
 
 
@@ -127,22 +115,18 @@ def _verdict_for(
 
 
 def run_preflight(args: argparse.Namespace) -> int:
-    """Execute the PR-1 preflight and emit a sanitized YAML report."""
+    """Execute the PR-1 preflight and emit a sanitized YAML report.
+
+    The CLI does NOT expose ``--uri`` (DESIGN §15.3.1 / §15.5.2):
+    callers cannot pass a URI string on the command line. The
+    internal ``MongoClientFactory.run_preflight(uri=...)`` seam is
+    kept for the unit-test path (``tests/scripts/t4_preflight/test_preflight_mongo.py``)
+    only; production callers must go through the resolver.
+    """
     runner = PreflightRunner()
 
     if args.live_read:
-        if args.uri is not None:
-            # Explicit-uri override path (legacy test seam).
-            from .mongo_client import MongoClientFactory
-
-            factory = MongoClientFactory()
-            result = factory.run_preflight(
-                uri=args.uri,
-                live=True,
-                timeout_seconds=args.timeout,
-            )
-        else:
-            result = runner.run_preflight(live=True, timeout=args.timeout)
+        result = runner.run_preflight(live=True, timeout=args.timeout)
     else:
         # Dry-run: still run through PreflightRunner so the report
         # shape matches. PreflightRunner.run_preflight(live=False)

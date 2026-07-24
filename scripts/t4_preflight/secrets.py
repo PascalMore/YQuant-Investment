@@ -156,30 +156,31 @@ class SecretVerifier:
         self,
         path: str | os.PathLike[str],
         key: str,
+        *,
+        live: bool = False,
     ) -> SecretProbeResult:
         """Probe whether ``key`` is declared in a given env file.
 
-        Dry-run semantics: do not parse the file. We use a tiny
-        substring check on the file *name contents read once*, but
-        we never cache the result and the substring is limited to
-        ``f"{key}="``. This is sufficient for the ``declared`` flag
-        and avoids loading full dotenv.
+        Dry-run semantics (DESIGN §15.3.2 / §15.4.2): do NOT read the
+        file body, do NOT call ``dotenv_values()``, do NOT emit any
+        key-level boolean. ``key_declared`` is always ``None``.
+
+        Live semantics (DESIGN §15.3.3 / §15.5.2): the caller has
+        authorized a real read. We do a single ``read_text`` and a
+        minimal ``f"{key}=" in text`` substring check; the result is
+        a boolean only. The value is never assigned to a name that
+        can be serialized or printed.
 
         IMPORTANT: this does NOT call :func:`dotenv.load_dotenv` or
-        mutate ``os.environ``. The result is purely a substring
-        detection on the file bytes.
+        mutate ``os.environ``.
         """
         p = Path(path)
         file_exists = p.is_file()
         declared: bool | None = None
-        if file_exists:
+        if live and file_exists:
             try:
-                # We do a single read and only match on a prefix.
-                # Reading the file is not a secret leak because the
-                # Sanitizer strips any value we might emit.
                 text = p.read_text(encoding="utf-8", errors="replace")
-                marker = f"{key}="
-                declared = marker in text
+                declared = f"{key}=" in text
             except OSError:
                 declared = False
         return SecretProbeResult(

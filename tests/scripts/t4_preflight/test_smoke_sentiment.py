@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 import scripts
 
-scripts.__path__.append(str(Path(__file__).resolve().parents[2] / "scripts"))
+scripts.__path__.append(str(Path(__file__).resolve().parents[3] / "scripts"))
 
 import pytest
 
@@ -29,9 +29,9 @@ from scripts.t4_preflight.provider_client import (
 )
 from scripts.t4_preflight.reporter import yaml_parse
 
-from .fixtures.t4_akshare_fixtures import FakeAkshareDispatcher
+from tests.scripts.t4_preflight.fixtures.t4_akshare_fixtures import FakeAkshareDispatcher
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _run_cli(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:

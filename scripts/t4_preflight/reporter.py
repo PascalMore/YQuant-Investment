@@ -54,14 +54,18 @@ from .models import (
 # Sanitizer
 # ---------------------------------------------------------------------------
 
-#: Patterns that mark a value as "secret-shaped" and must be redacted.
-#: Order matters; first match wins. Case-insensitive substring match.
+#: Patterns that mark a value as "secret-shaped" and must be redacted
+#: (DESIGN §15.7.2 Sanitizer rules). Order matters; first match wins.
+#: Case-insensitive substring match.
 #:
-#: Only the canonical candidate secret key (``MONGO_URI``) is listed
-#: here. The legacy ``AKSHARE_TOKEN`` / ``MONGODB_URI`` tokens are no
-#: longer part of the T4 preflight contract (AKShare is anonymous,
-#: Mongo uses the Phase 2 standard ``MONGO_URI``); see DESIGN §15.4.2
-#: and SPEC §14.3.
+#: The Sanitizer uses **generic secret-shaped patterns**, not a single
+#: canonical T4 key. Phase 2 introduced the five ``MONGODB_*`` keys
+#: (handled at the resolver layer) and dropped the legacy single-key
+#: contract (``MONGO_URI`` / ``AKSHARE_TOKEN``). Any scalar value whose
+#: text contains a URI prefix, ``password``/``passwd``/``secret``,
+#: ``token``/``api_key``/``apikey``, or the legacy ``MONGO_URI=`` /
+#: ``MONGO_URI:`` form is redacted regardless of its field name; see
+#: DESIGN §15.7.2 and SPEC §14.3.
 _SECRET_PATTERNS: tuple[str, ...] = (
     "mongodb://",
     "mongodb+srv://",
@@ -74,17 +78,22 @@ _SECRET_PATTERNS: tuple[str, ...] = (
     "api_key",
     "apikey",
     "secret",
-    "token=",
-    "token:",
+    "token",
+    "credential",
 )
 
 #: Field name substrings that mark a value as never-to-emit (drop entirely).
+#: Generic secret-shaped names; NOT a single canonical key.
 _SECRET_FIELD_NAMES: tuple[str, ...] = (
     "value",
     "password",
+    "passwd",
     "secret",
     "raw_secret",
+    "token",
     "credential",
+    "apikey",
+    "api_key",
 )
 
 
@@ -465,13 +474,21 @@ def secret_audit_to_yaml(result: SecretAuditResult) -> str:
 
 
 def smoke_report_to_yaml(report: SmokeReport) -> str:
-    """Convenience: serialize a SmokeReport to YAML (SPEC §14.4.2 template)."""
+    """Convenience: serialize a SmokeReport to YAML (SPEC §14.4.2 template).
+
+    The ``preflight`` metadata key is rendered as a dedicated YAML
+    section (DESIGN §15.3.2 / §15.10.2). It holds the dry-run-only
+    fields ``would_call``, ``akshare.importable``, ``test_symbol``
+    and the fixed ``date_range``. Sanitizer rules still apply; the
+    block contains no values.
+    """
     payload = {
         "capability": report.metadata.get("capability", "unknown"),
         "provider": report.metadata.get("provider", "unknown"),
         "smoke_at": report.metadata.get("smoke_at", "unknown"),
         "test_target": report.metadata.get("test_target", "unknown"),
         "date_range": report.metadata.get("date_range", []),
+        "preflight": dict(report.metadata.get("preflight", {})),
         "connectivity": {
             "status": report.connectivity.status,
             "latency_ms": report.connectivity.latency_ms,

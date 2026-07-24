@@ -21,6 +21,7 @@ from pathlib import Path
 from .config import (
     DEFAULT_OUTPUT_DIR,
     DEFAULT_TEST_TARGETS,
+    DRY_RUN_DATE_RANGE,
     EXIT_CONDITIONAL,
     EXIT_FAIL,
     EXIT_PASS,
@@ -38,6 +39,7 @@ from .models import (
 from .provider_client import (
     AKShareSmokeClient,
     FieldMapper,
+    preflight_metadata,
     verdict_for_mapping,
 )
 from .reporter import smoke_report_to_yaml
@@ -215,6 +217,14 @@ def run_smoke(args: argparse.Namespace) -> int:
             "smoke_at": _now_iso(),
             "test_target": f"{args.symbol_sh}/sh+{args.symbol_sz}/sz",
             "date_range": [date_label, date_label],
+            "preflight": preflight_metadata(
+                capabilities=(
+                    "flow.capital_flow_daily",
+                    "flow.northbound_daily",
+                ),
+                test_symbol=DEFAULT_TEST_TARGETS["flow.capital_flow_daily"],
+                date_range=DRY_RUN_DATE_RANGE,
+            ),
         },
         connectivity=connectivity,
         auth=auth,

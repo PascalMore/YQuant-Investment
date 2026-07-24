@@ -24,7 +24,7 @@ from dataclasses import asdict
 from pathlib import Path
 import scripts
 
-scripts.__path__.append(str(Path(__file__).resolve().parents[2] / "scripts"))
+scripts.__path__.append(str(Path(__file__).resolve().parents[3] / "scripts"))
 
 import pytest
 

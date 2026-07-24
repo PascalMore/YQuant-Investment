@@ -26,9 +26,20 @@ DEFAULT_OUTPUT_DIR: str = "./docs/rfc/03_data/smoke_reports/"
 # Candidate secret sources (SPEC §14.3 / DESIGN §15.4.2)
 # ---------------------------------------------------------------------------
 
+#: Path to the canonical Phase-2 skills env file. Used by PR-1
+#: ``LegacyConfigResolver`` and the PR-0 secret audit (SPEC §14.3 /
+#: DESIGN §15.4.2). Never falls back to ``./.env`` or any Hermes
+#: profile ``.env`` — those candidate paths were removed by T1
+#: (RFC V0.6 / SPEC V0.5).
+SKILLS_ENV_PATH: str = "skills/.env"
+
+#: PR-0 secret-audit candidate env files. Single canonical source:
+#: ``skills/.env``. The project-root ``./.env`` and the Hermes
+#: profile ``~/.hermes/profiles/yquant/.env`` were marked superseded
+#: by T1 and are NOT candidates here (DESIGN §15.4.2 removed-candidates
+#: table).
 CANDIDATE_ENV_FILES: tuple[str, ...] = (
-    "./.env",
-    "~/.hermes/profiles/yquant/.env",
+    SKILLS_ENV_PATH,
 )
 
 #: PR-0 secret-audit candidate keys (DESIGN V0.12 §15.4.2).
@@ -61,11 +72,6 @@ MONGODB_FIVE_KEYS: tuple[str, ...] = (
 #: instantiate any client (NOT_AUTHORIZED → exit 3).
 ALLOWED_DATABASE: str = "tradingagents"
 ALLOWED_DATABASE_VALUE: str = "tradingagents"
-
-#: Path to the canonical Phase-2 skills env file. Used by PR-1
-#: ``LegacyConfigResolver`` only. Never falls back to ``./.env``
-#: or any Hermes profile ``.env``.
-SKILLS_ENV_PATH: str = "skills/.env"
 
 #: Phase 3 business collections we explicitly check for (DESIGN §15.5.3).
 P3_BUSINESS_COLLECTIONS: tuple[str, ...] = (
@@ -100,6 +106,12 @@ DEFAULT_TEST_TARGETS: dict[str, str] = {
     "sentiment.market_snapshot": "auto",
     "sentiment.limit_up_pool": "auto",
 }
+
+#: Fixed dry-run date range used for the preflight metadata block
+#: (DESIGN §15.3.2 / §15.10.2). Smoke dry-runs emit a non-empty range
+#: so reviewers can confirm the test envelope without invoking any
+#: real call.
+DRY_RUN_DATE_RANGE: tuple[str, str] = ("2026-07-20", "2026-07-22")
 
 # ---------------------------------------------------------------------------
 # Field mapping thresholds (DESIGN §15.6.2 / SPEC §14.4.4)
