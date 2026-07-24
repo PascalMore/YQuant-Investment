@@ -22,6 +22,16 @@ push_repo() {
 
     cd "$repo_path"
 
+    # ── Submodules: initialize BEFORE iterating .gitmodules ──
+    # Required so each submodule working tree starts at the committed gitlink,
+    # not whatever the parent's working tree currently has checked out.
+    # Fail fast if a submodule is broken — do NOT use `|| true` here, otherwise
+    # the next loop would silently work on a half-initialized tree.
+    if [ -f "$repo_path/.gitmodules" ]; then
+        git submodule update --init
+        echo "[$TIMESTAMP] $prefix: submodules initialized" >> "$log_file"
+    fi
+
     # ── Submodules (auto-detect from .gitmodules) ──
     if [ -f "$repo_path/.gitmodules" ]; then
         while IFS= read -r submod; do
@@ -57,7 +67,11 @@ push_repo() {
 
     # ── Main repo ──
     cd "$repo_path"
-    git submodule update --init --recursive 2>/dev/null || true
+    # NOTE: do NOT run `git submodule update` here. After the loop above pushed
+    # submodule heads to origin, a submodule update would reset each submodule
+    # working tree back to the gitlink currently recorded by the main repo,
+    # silently discarding any new submodule SHA before `git add -A` records it.
+    # Submodule initialization has already happened above, before the loop.
 
     # Detect branch (default main)
     MAIN_BRANCH=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo "main")
