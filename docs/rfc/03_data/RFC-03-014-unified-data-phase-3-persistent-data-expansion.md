@@ -7,8 +7,8 @@
 | 状态 | 草稿（Draft） |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-07-20 |
-| 最后更新 | 2026-07-25（V0.7 B1-P3A 轻量更新：§13.6 Gate 序列图标注 PR-DDL-P3A 已冻结、PR-DDL-P3B/P3C 尚未冻结；权威契约引用 DESIGN-03-014 §6.4 V0.13 / SPEC-03-014 §14.6.4 V0.6。不动其它章节） |
-| 版本号 | V0.7 |
+| 最后更新 | 2026-07-25（V0.8 B1-P3B 轻量更新：§13.6 Gate 序列图冻结状态标注更新——PR-DDL-P3A 与 PR-DDL-P3B 均已冻结、PR-DDL-P3C 尚未冻结；权威契约引用 DESIGN-03-014 §6.4/§6.4.bis V0.14 / SPEC-03-014 §14.6.4/§14.6.bis V0.7。不动其它章节） |
+| 版本号 | V0.8 |
 | 所属模块 | 03_data（数据层） |
 | 依赖 RFC | RFC-03-007（Unified Data Layer 总纲）、RFC-03-011（Phase 2 质量与审计治理） |
 | 依赖 SPEC | SPEC-03-007（Unified Data Layer 契约）、SPEC-03-014（Phase 3 持久化扩展契约，本文件对应之 SPEC） |
@@ -27,7 +27,8 @@
 ||| V0.4 | 2026-07-22 | 历史更新——**已被 V0.6 替换**。AKShare 无 Token + 复用 Phase 2 MONGO_URI 同步。—— AKShare 为匿名数据源，PR-0 跳过其密钥审计（§6.2），FV-10 改为匿名调用（§5.5），PR-2/PR-3/PR-4 移除 token 消耗语义（§6.2），PR-0 约束仅限 MongoDB 秘密（§6.4），§13.3 审计表移除 AKSHARE_TOKEN 并将 MONGODB_URI 替换为 Phase 2 已验证的 MONGO_URI。V0.6 将此 MONGO_URI 单键来源迁移至 skills/.env 五组件键（MONGODB_HOST/PORT/USERNAME/PASSWORD/DATABASE），V0.4 的 MONGO_URI 语义视为 superseded。 | YQuant-Principal |
 ||| V0.5 | 2026-07-23 | 修正：清除 §13.1 PR-2/PR-3/PR-4 行「API token 消耗」残留——AKShare 为匿名数据源无 Token，改为「AKShare 匿名 API 调用」；与 SPEC §14.1 对齐。 | YQuant-Principal |
 |||| V0.6 | 2026-07-24 | PR-1 凭证来源契约对齐：MongoDB 连接凭据来源从 MONGO_URI + Hermes profile `.env` 改为复用 Phase 2 skills/.env 五组件键（MONGODB_HOST、MONGODB_PORT、MONGODB_USERNAME、MONGODB_PASSWORD、MONGODB_DATABASE），沿用 PortfolioMongoLoader Phase-2 Mongo 认证语义（组件式构造连接，非 URI）；PR-0 审计表对应更新；移除 Hermes profile `.env` 候选路径；历史 MONGO_URI 描述均标为 superseded。 | YQuant-Principal |
-|||| V0.7 | 2026-07-25 | B1-P3A 轻量更新。§13.6 DDL Gate 序列图后追加「B1-P3A 冻结状态」说明：仅 PR-DDL-P3A 已冻结（权威契约见 DESIGN-03-014 §6.4 V0.13 / SPEC-03-014 §14.6.4 V0.6），PR-DDL-P3B / PR-DDL-P3C 尚未冻结。不动 §13.6 既有 DDL Gate 授权要求 1-5、不动其它章节。 | YQuant-Principal |
+||||| V0.7 | 2026-07-25 | B1-P3A 轻量更新。§13.6 DDL Gate 序列图后追加「B1-P3A 冻结状态」说明：仅 PR-DDL-P3A 已冻结（权威契约见 DESIGN-03-014 §6.4 V0.13 / SPEC-03-014 §14.6.4 V0.6），PR-DDL-P3B / PR-DDL-P3C 尚未冻结。不动 §13.6 既有 DDL Gate 授权要求 1-5、不动其它章节。 | YQuant-Principal |
+|||||| V0.8 | 2026-07-25 | B1-P3B 轻量更新。§13.6 冻结状态说明更新为「PR-DDL-P3A 与 PR-DDL-P3B 均已冻结」（权威契约见 DESIGN-03-014 §6.4/§6.4.bis V0.14 / SPEC-03-014 §14.6.4/§14.6.bis V0.7），PR-DDL-P3C 尚未冻结。不动 §13.6 既有 DDL Gate 授权要求 1-5、不动其它章节。 | YQuant-Principal |
 
 ---
 
@@ -667,7 +668,7 @@ PR-0 (Secret 审计) ──→ PR-1 (MongoDB 预检) ──→ PR-2/3/4 (Smoke)
                                      PR-CANARY-* (手动写入)
 ```
 
-**B1-P3A 冻结状态（2026-07-25）**：在上图 PR-DDL-* 节点中，**仅 `PR-DDL-P3A` 已冻结**——其 DDL 执行语义、rollback 脚本、audit 字段、失败矩阵、退出码的权威契约见 DESIGN-03-014 §6.4（V0.13）/ SPEC-03-014 §14.6.4（V0.6）。`PR-DDL-P3B` 与 `PR-DDL-P3C` **尚未冻结**，待各自子阶段进入 B1 阶段时独立补充对应契约。本节既有 Gate 通用要求（1-5）与「DDL 执行人」条文不变。
+**B1 冻结状态（2026-07-25）**：在上图 PR-DDL-* 节点中，**`PR-DDL-P3A` 与 `PR-DDL-P3B` 已冻结**——其 DDL 执行语义、rollback 脚本、audit 字段、失败矩阵、退出码的权威契约见 DESIGN-03-014 §6.4（P3-A，V0.14）/ §6.4.bis（P3-B，V0.14）与 SPEC-03-014 §14.6.4（P3-A，V0.7）/ §14.6.bis（P3-B，V0.7）。`PR-DDL-P3C` **尚未冻结**，待 P3-C 进入 B1 阶段时独立补充对应契约。本节既有 Gate 通用要求（1-5）与「DDL 执行人」条文不变。
 
 **DDL Gate 授权要求**（全部满足）：
 
