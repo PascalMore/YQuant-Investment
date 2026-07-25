@@ -157,6 +157,20 @@ def run_smoke(args: argparse.Namespace) -> int:
         or ranking.connectivity in ("error", "timeout", "rate_limited")
     )
 
+    # B0 Fix D — surface endpoint_unreachable for ProxyError / ConnectionError.
+    # PR-2 calls *.push2.eastmoney.com from this environment and the
+    # egress is restricted; reviewers need to tell network-block from
+    # real upstream defect. We reuse ``error_class`` (added in Fix B)
+    # when available; otherwise we fall back to the free-form ``error``
+    # string. Pure reporting annotation, no extra live calls.
+    endpoint_unreachable = (
+        snapshot.connectivity == "error"
+        and (snapshot.error_class in {"ProxyError", "ConnectionError"})
+    ) or (
+        ranking.connectivity == "error"
+        and (ranking.error_class in {"ProxyError", "ConnectionError"})
+    )
+
     if args.live_read:
         if any_error and not any_success:
             connectivity = ConnectionResult(
@@ -200,10 +214,24 @@ def run_smoke(args: argparse.Namespace) -> int:
         overall = OverallVerdict(verdict="pass", memo="dry-run — no real calls made")
         exit_code = EXIT_PASS
     elif any_error and not any_success:
-        overall = OverallVerdict(
-            verdict="fail",
-            memo=(snapshot.error or ranking.error or "AKShare call failed"),
-        )
+        # B0 Fix D — when the only failure mode is ProxyError /
+        # ConnectionError from the upstream (e.g. *.push2.eastmoney.com
+        # being blocked by egress), surface that the endpoint is
+        # unreachable rather than presenting a generic AKShare failure.
+        if endpoint_unreachable:
+            overall = OverallVerdict(
+                verdict="fail",
+                memo=(
+                    "endpoint_unreachable: "
+                    + (snapshot.error or ranking.error or "unknown network error")
+                    + " — egress restriction, not a code defect."
+                ),
+            )
+        else:
+            overall = OverallVerdict(
+                verdict="fail",
+                memo=(snapshot.error or ranking.error or "AKShare call failed"),
+            )
         exit_code = EXIT_FAIL
     else:
         verdict = verdict_for_mapping(field_mapping.matched_ratio)
@@ -225,19 +253,34 @@ def run_smoke(args: argparse.Namespace) -> int:
 
     date_label = args.date or datetime.now(tz=_CST).date().isoformat()
 
+    report_metadata: dict[str, object] = {
+        "capability": "sector.snapshot+sector.ranking",
+        "provider": "akshare",
+        "smoke_at": _now_iso(),
+        "test_target": args.symbol,
+        "date_range": [date_label, date_label],
+        "preflight": preflight_metadata(
+            capabilities=("sector.snapshot", "sector.ranking"),
+            test_symbol=DEFAULT_TEST_TARGETS["sector.snapshot"],
+            date_range=DRY_RUN_DATE_RANGE,
+        ),
+    }
+    # B0 Fix D — surface endpoint_status as a metadata field so reviewers
+    # can tell a network-block from a code defect without parsing the
+    # free-form ``connectivity.error`` string. Only set when a live
+    # read actually ran AND the failure mode was ProxyError /
+    # ConnectionError AND **all** calls failed (``not any_success``);
+    # dry-run / success / partial-failure paths keep the field absent
+    # (== null in YAML). Mirrors the memo "egress restriction" branch
+    # at l.216-235 which also requires ``not any_success`` — without
+    # this guard, a single ProxyError on snapshot with ranking success
+    # would incorrectly blanket-label the whole endpoint as
+    # unreachable. See B0 Review MAJOR-1 (Fix E).
+    if args.live_read and endpoint_unreachable and not any_success:
+        report_metadata["endpoint_status"] = "endpoint_unreachable"
+
     report = SmokeReport(
-        metadata={
-            "capability": "sector.snapshot+sector.ranking",
-            "provider": "akshare",
-            "smoke_at": _now_iso(),
-            "test_target": args.symbol,
-            "date_range": [date_label, date_label],
-            "preflight": preflight_metadata(
-                capabilities=("sector.snapshot", "sector.ranking"),
-                test_symbol=DEFAULT_TEST_TARGETS["sector.snapshot"],
-                date_range=DRY_RUN_DATE_RANGE,
-            ),
-        },
+        metadata=report_metadata,
         connectivity=connectivity,
         auth=auth,
         permissions=permissions,

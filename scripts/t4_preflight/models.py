@@ -78,6 +78,12 @@ class SmokeCallResult:
     actual_fields: tuple[str, ...] | None = None
     sample: tuple[dict[str, Any], ...] | None = None
     error: str | None = None
+    # Deterministic error class label for fail-mode triage. Populated only
+    # when ``connectivity`` is ``error`` / ``timeout`` / ``rate_limited``.
+    # Values: "Timeout" / "ProxyError" / "ConnectionError" /
+    # "RateLimited" / "Other" (None when ``connectivity`` is success /
+    # skipped). See provider_client._one_call for the classification rules.
+    error_class: str | None = None
 
 
 # ---------------------------------------------------------------------------

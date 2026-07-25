@@ -237,11 +237,20 @@ class AKShareSmokeClient:
             self._call_counters[capability] += 1
             self._last_call_at = time.perf_counter()
             name = exc.__class__.__name__
+            name_lower = name.lower()
             connectivity = "error"
-            if "timeout" in name.lower():
+            error_class = name
+            if "timeout" in name_lower:
                 connectivity = "timeout"
-            elif "rate" in name.lower() or "limit" in name.lower():
+            elif "rate" in name_lower or "limit" in name_lower:
                 connectivity = "rate_limited"
+                # Subset of "Other"; keep raw class string for triage.
+            # NOTE: ProxyError (urllib3) and ConnectionError (requests) are
+            # intentionally kept under ``connectivity == "error"`` so the
+            # smoke verdict behaviour is unchanged. ``error_class`` carries
+            # the deterministic class label so downstream reports can tell
+            # ProxyError / ConnectionError / Timeout apart without parsing
+            # the free-form ``error`` string.
             return SmokeCallResult(
                 capability=capability,
                 call_index=call_index,
@@ -251,6 +260,7 @@ class AKShareSmokeClient:
                 actual_fields=None,
                 sample=None,
                 error=f"{name}: {exc.__class__.__module__}",
+                error_class=error_class,
             )
 
         self._call_counters[capability] += 1
@@ -327,11 +337,15 @@ class AKShareSmokeClient:
                 call_index=1,
                 connectivity="skipped",
             )
+        # AKShare 1.17.54: stock_hsgt_individual_em(symbol='002008') uses a
+        # single ``symbol`` kwarg (the legacy ``stock=`` kwarg is no longer
+        # accepted). Pass ``symbol`` explicitly so the call resolves against
+        # the correct upstream endpoint.
         return self._one_call(
             capability="flow.northbound_daily",
             call_index=1,
             fn_name="stock_hsgt_individual_em",
-            params={"stock": symbol},
+            params={"symbol": symbol},
         )
 
     def fetch_market_sentiment(

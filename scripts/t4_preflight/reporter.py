@@ -481,8 +481,16 @@ def smoke_report_to_yaml(report: SmokeReport) -> str:
     fields ``would_call``, ``akshare.importable``, ``test_symbol``
     and the fixed ``date_range``. Sanitizer rules still apply; the
     block contains no values.
+
+    B0 Fix D — ``endpoint_status`` is emitted as a top-level YAML
+    field only when ``report.metadata`` carries the key explicitly.
+    Callers (currently :mod:`scripts.t4_preflight.smoke_sector`) set
+    it only on the live-read path when both PR-2 calls fail with
+    ``ProxyError`` / ``ConnectionError``. Dry-run, success paths, and
+    generic RuntimeError failures therefore keep the field absent
+    (the YAML stays clean — no ``endpoint_status: null`` noise).
     """
-    payload = {
+    payload: dict[str, Any] = {
         "capability": report.metadata.get("capability", "unknown"),
         "provider": report.metadata.get("provider", "unknown"),
         "smoke_at": report.metadata.get("smoke_at", "unknown"),
@@ -530,6 +538,11 @@ def smoke_report_to_yaml(report: SmokeReport) -> str:
             "memo": report.overall.memo,
         },
     }
+    # B0 Fix D — emit ``endpoint_status`` only when the caller set it
+    # in metadata. Absent key keeps the YAML clean (no ``null`` noise
+    # on dry-run / success / generic RuntimeError paths).
+    if "endpoint_status" in report.metadata:
+        payload["endpoint_status"] = report.metadata["endpoint_status"]
     return _yaml_dump(sanitize(payload))
 
 

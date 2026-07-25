@@ -7,13 +7,13 @@
 | 状态 | Draft |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-07-20 |
-| 最后更新 | 2026-07-24（V0.5 PR-1 凭证来源契约对齐：MongoDB 连接凭据来源从 MONGO_URI + Hermes profile `.env` 改为复用 Phase 2 skills/.env 五组件键；PR-0 审计目标从 MONGO_URI 改为 MONGODB_HOST/PORT/USERNAME/PASSWORD/DATABASE；移除 Hermes profile `.env` 候选路径） |
+| 最后更新 | 2026-07-25（V0.6 B1-P3A 冻结：新增 §14.6.4 PR-DDL-P3A 精确契约——前置条件/集合/索引/写入身份/原子性/rollback 路径/audit 工件/退出码/停止条件/执行人/不授权范围；G-A-1 行与 §10.bis PR-DDL-P3A 行引用 §14.6.4 + DESIGN §6.4；标注仅 P3-A 已授权、P3-B/P3-C 仍阻塞。权威定义在 DESIGN-03-014 §6.4 V0.13） |
 | 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.3） |
 | 关联 RFC | RFC-03-007（Unified Data Layer 总纲）、RFC-03-011（Phase 2 质量与审计治理）、RFC-03-013（Phase 1E 情绪最小切片） |
 | 关联 SPEC | SPEC-03-007（Unified Data Layer 契约基线）、SPEC-03-008（Phase 1B-A 查询平面）、SPEC-03-013（Phase 1E 情绪最小切片） |
-| 关联 Design | DESIGN-03-014（Phase 3 持久化扩展详细设计，V0.6） |
+| 关联 Design | DESIGN-03-014（Phase 3 持久化扩展详细设计，V0.13） |
 | 目标模块 | unified_data（`skills/data/unified_data/`） |
-| 版本号 | V0.5 |
+| 版本号 | V0.6 |
 | 适配 Agent | YQuant-Developer-Engineer, YQuant-Test-Engineer, YQuant-Principal（T4 阶段） |
 
 ### 版本历史
@@ -23,7 +23,8 @@
 || V0.1 | 2026-07-20 | 初始创建。将 RFC-03-014 的 Phase 3 三阶段受控分期需求落为可执行契约，定义 SectorSnapshot / CapitalFlowRecord / MarketSentimentSnapshot 三个 domain object 字段级 schema、Provider 注册点、ETLV 验证点、读写路径边界与验收标准。 | YQuant-Principal |
 ||| V0.2 | 2026-07-20 | 修正：字段计数对齐（SectorSnapshot=19, CapitalFlowRecord=17, MarketSentimentSnapshot=22）；SectorSnapshot dataclass Python 语法修复（snapshot_date 移至 market 前）；唯一键全部纳入 market；拆分明细 query 与 ETLV refresh 写入路径；标记硬编码值（超时/限速）为可配置/待验证；AuditLogger 声明默认关闭；记录级可追溯字段表（quality_flags/source_record_id/schema_version 标为待定）；northbound_daily 明确为个股级 scope。 | YQuant-Principal |\n||| V0.3 | 2026-07-22 | T4 生产就绪扩展。新增 §14 只读预检与真实 Provider Smoke 测试契约（含副作用矩阵、MongoDB 预检规程、Secret Source 审计规程、Smoke 报告 YAML 模板、Zero-Persistence-Write 保证、DDL/DML 独立 Gate 细则、停止条件、成功标准）；新增 §10.bis PR 系列 Gate；§2 追加 T4 In/Out；§7 追加 A-016~A-025 T4 验收项；§9 追加 T4 约束；§11 追加 OQ-7/8/9。 | YQuant-Principal |
 ||| V0.4 | 2026-07-22 | 历史更新——**已被 V0.5 替换**。AKShare 无 Token + 复用 Phase 2 MONGO_URI 同步：AKShare 为匿名数据源，PR-0 跳过密钥审计；MongoDB 连接键从 `MONGODB_URI` 改为 `MONGO_URI`（沿用 Phase 2 已验证只读连接语义）；PR-2/PR-3/PR-4 移除 token 语义改为每小时配额；§14.1 副作用矩阵移除 token 消耗；§14.3 审计表移除 AKSHARE_TOKEN；§11 OQ-8 标记已解决。V0.5 将此 MONGO_URI 单键来源迁移至 skills/.env 五组件键（MONGODB_HOST/PORT/USERNAME/PASSWORD/DATABASE），V0.4 的 MONGO_URI 语义视为 superseded。 | YQuant-Principal |
-||| V0.5 | 2026-07-24 | PR-1 凭证来源契约对齐：MongoDB 连接凭据来源从 MONGO_URI + Hermes profile `.env` 改为复用 Phase 2 skills/.env 五组件键（MONGODB_HOST、MONGODB_PORT、MONGODB_USERNAME、MONGODB_PASSWORD、MONGODB_DATABASE），沿用 PortfolioMongoLoader Phase-2 Mongo 认证语义（组件式构造连接，非 URI）；PR-0 审计表对应更新；移除 Hermes profile `.env` 候选路径；历史 MONGO_URI 描述均标为 superseded。 | YQuant-Principal |
+|||| V0.5 | 2026-07-24 | PR-1 凭证来源契约对齐：MongoDB 连接凭据来源从 MONGO_URI + Hermes profile `.env` 改为复用 Phase 2 skills/.env 五组件键（MONGODB_HOST、MONGODB_PORT、MONGODB_USERNAME、MONGODB_PASSWORD、MONGODB_DATABASE），沿用 PortfolioMongoLoader Phase-2 Mongo 认证语义（组件式构造连接，非 URI）；PR-0 审计表对应更新；移除 Hermes profile `.env` 候选路径；历史 MONGO_URI 描述均标为 superseded。 | YQuant-Principal |
+|||| V0.6 | 2026-07-25 | B1-P3A DDL 契约冻结。新增 §14.6.4（PR-DDL-P3A 精确契约：前置条件/集合/索引/写入身份/原子性/rollback 路径/audit 工件/退出码/停止条件/执行人/不授权范围），权威定义引用 DESIGN-03-014 §6.4 V0.13；§10 G-A-1 行停止条件列追加 §14.6.4 + DESIGN §6.4 引用；§10.bis PR-DDL-P3A 行标注「仅 P3-A 已授权冻结、P3-B/P3-C 仍阻塞」并引用 §14.6.4。不动既有 §3.1/§14.4/§14.5/§14.6 通用要求/§14.7/§14.8 条文。 | YQuant-Principal |
 
 ---
 
@@ -794,7 +795,7 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 
 | Gate ID | 动作 | 集合/API | 影响范围 | 停止条件 | 子阶段 |
 |---|---|---|---|---|---|
-| G-A-1 | `db.createCollection("03_data_ud_market_sector_snapshot")` + `createIndex()` | MongoDB | 新增集合 3 个索引 | Pascal 确认 schema | P3-A |
+| G-A-1 | `db.createCollection("03_data_ud_market_sector_snapshot")` + `createIndex()` | MongoDB | 新增集合 3 个索引 | Pascal 确认 schema；DDL 执行按 §14.6.4 PR-DDL-P3A 冻结契约（rollback/audit/exit code 权威定义见 DESIGN §6.4） | P3-A |
 | G-A-2 | AKShareProvider 首次真实调用 `sector.snapshot` / `sector.ranking` | AKShare API | [待 Pascal 在具体 Gate 授权时确认的请求预算/计量单位]；当前 Gate 仅确认首次 smoke 可行，不做全量预算估计 | smoke 成功 + 日志审核 | P3-A |
 | G-A-3 | 手动触发一日 canary 采集 | MongoDB + AKShare | 当日板块快照写入 | Pascal 审核数据质量 | P3-A |
 | G-B-1 | `db.createCollection("03_data_ud_stock_capital_flow")` + `createIndex()` | MongoDB | 新增集合 2 个索引 | Pascal 确认 schema | P3-B |
@@ -817,7 +818,7 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 | **PR-2** | **AKShare Provider smoke：`sector.snapshot` + `sector.ranking`** — 单板块代码（`BK0489`），≤3 个交易日窗口，AKShare 匿名只读调用。**零持久化写** | PR-1 pass（AKShare smoke 不依赖 PR-0 pass） | AKShare API 调用 1-2 次、每小时配额 | API 返回错误/字段完全不匹配/json 解析异常 → 停止；差异仅记录在字段映射报告中 | P3-A | Dev/Agent |
 | **PR-3** | **AKShare Provider smoke：`flow.capital_flow_daily` + `flow.northbound_daily`** — 单标的（`600519` / `000001`），≤3 个交易日窗口，AKShare 匿名只读调用 | PR-1 pass（AKShare smoke 不依赖 PR-0 pass；可并行于 PR-2） | AKShare API 调用 2-4 次、每小时配额 | API 失败/空返回/北向字段缺失 → 停止并记录 | P3-B | Dev/Agent |
 | **PR-4** | **AKShare Provider smoke：`sentiment.market_snapshot` + `sentiment.limit_up_pool`** — 单日期，AKShare 匿名只读调用 | PR-1 pass（AKShare smoke 不依赖 PR-0 pass；可并行于 PR-2/PR-3） | AKShare API 调用 2 次、每小时配额 | API 失败/核心字段缺失 → 停止并记录 | P3-C | Dev/Agent |
-| **PR-DDL-P3A** | **DDL Gate：创建 MongoDB 集合 `03_data_ud_market_sector_snapshot` + 索引** | PR-2 pass + Pascal 独立确认 | MongoDB 元数据写入——集合创建、索引构建 | 写权限不足/长时间索引重建 → 停止；schema 版本须与 SPEC §3.1 一致 | P3-A | Pascal 手动确认 |
+| **PR-DDL-P3A** | **DDL Gate：创建 MongoDB 集合 `03_data_ud_market_sector_snapshot` + 索引**（**仅 P3-A 已授权冻结**；P3-B/P3-C 的 PR-DDL 仍阻塞，见 §14.6.4） | PR-2 pass + Pascal 独立确认 | MongoDB 元数据写入——集合创建、索引构建 | 写权限不足/长时间索引重建 → 停止；schema 版本须与 SPEC §3.1 一致；DDL 执行/rollback/audit/exit code 按 §14.6.4 冻结契约（权威定义 DESIGN §6.4） | P3-A | Pascal 手动确认 |
 | **PR-DDL-P3B** | **DDL Gate：创建 MongoDB 集合 `03_data_ud_stock_capital_flow` + 索引** | PR-3 pass + Pascal 独立确认 | MongoDB 元数据写入 | 同上 | P3-B | Pascal 手动确认 |
 | **PR-DDL-P3C** | **DDL Gate：创建 MongoDB 集合 `03_data_ud_market_sentiment_snapshot` + 索引** | PR-4 pass + Pascal 独立确认 | MongoDB 元数据写入 | 同上 | P3-C | Pascal 手动确认 |
 | **PR-CANARY-P3x** | **手动 Canary**：一次 refresh 调用（手动触发，非 cron），写入对应集合，验证 DataResult 返回正常 | 对应 PR-DDL pass + Pascal 确认 | 真实 MongoDB 写入 | 写入失败/数据质量异常 → 停止不升级到 cron | P3-A/B/C | Pascal 手动执行 |
@@ -963,6 +964,12 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 ```yaml
 capability: sector.snapshot              # capability 名称
 provider: akshare                        # Provider 名
+# optional metadata — only emitted when the live-read ran AND ALL
+# PR-2 calls failed with ProxyError/ConnectionError. Absent
+# (== null in YAML) in dry-run, success, partial-failure, and
+# generic RuntimeError paths. See scripts/t4_preflight/smoke_sector.py
+# Fix E / DESIGN-03-014 §15.7.1.
+endpoint_status: endpoint_unreachable   # optional; absent = not network-blocked
 smoke_at: 2026-07-22T03:30:00+08:00      # 实际执行时间（ISO 8601）
 stock/代码: BK0489                        # 测试标的
 date_range: [2026-07-20, 2026-07-22]     # 请求日期窗口
@@ -1091,6 +1098,30 @@ db["03_data_ud_market_sector_snapshot"].createIndex(
     {background: true, name: "sector_type_date"}
 );
 ```
+
+#### 14.6.4 PR-DDL-P3A 精确契约（B1-P3A 冻结）
+
+> **授权状态**：**仅 P3-A 已冻结**（本 §14.6.4）。P3-B / P3-C 的 PR-DDL 精确契约（§14.6.4 的对应版本）**仍阻塞**，待各自子阶段进入 B1 阶段时独立补充。下游 Implement / Verify / Review 严格按本节冻结契约执行 P3-A 的 DDL。
+
+**权威来源**：DDL 执行语义、rollback 脚本、audit 字段、失败矩阵、退出码的权威定义在 **DESIGN-03-014 §6.4**（V0.13）。本节为 SPEC 层的契约引用与 Gate 集成，不重复完整定义——如本节与 DESIGN §6.4 出现差异，以 DESIGN §6.4 为准。
+
+**PR-DDL-P3A 契约**：
+
+| 维度 | 冻结值 |
+|---|---|
+| 前置条件 | (a) PR-2 verdict 为 `pass` 或 `conditional_pass`（Pascal 已审阅偏差）；(b) Pascal 已确认 SPEC-03-014 §3.1 schema 最终版；(c) §14.6 DDL Gate 授权要求 1-6 全部满足 |
+| 集合 | 仅 `03_data_ud_market_sector_snapshot`（库 `tradingagents`，主仓 `main` 本地工作树） |
+| 索引 | 三条——`sector_code_date` / `snapshot_date` / `sector_type_date`，全部 `background: true`（定义见 DESIGN §6.2，本节引用不重述） |
+| 写入身份 | 复用现有 `MONGODB_USERNAME`（Phase 2 PortfolioMongoLoader 组件式构造连接语义） |
+| 写入原子性 | **失败即停，不自动回滚**；`createCollection` / `createIndex` 在目标已存在时 fail-stop（exit 4），由操作员手动评估 |
+| rollback 脚本 | `/tmp/yquant-p3-ddl-p3a-20260725/rollback.js`（dropIndex 反向顺序 + dropCollection；不提交仓库；权威内容见 DESIGN §6.4.1） |
+| audit 工件 | stdout + `/tmp/yquant-p3-ddl-p3a-20260725/audit.json`；字段 `{operation, collection, index, ts, exit_code, error, rollback_script_path}`（定义见 DESIGN §6.4.2）；**不引入**新 audit 集合 |
+| 退出码 | `0`=DDL 成功；`2`=DDL 失败（非权限、非已存在）；`3`=权限不足；`4`=目标已存在（fail-stop）。退出码 1 不使用（与 §15.5.4 PR-1 conditional pass 语义分离）。退出码定义见 DESIGN §6.4.4 |
+| 停止条件 | 任一非 0 退出码即 fail-stop；**不自动回滚**、**不自动重试**；是否运行 rollback.js 由操作员按 DESIGN §6.4.3 失败矩阵的「operator action」列判断 |
+| DDL 执行人 | Pascal 手动执行（或 Pascal 授权的 DevOps）；Agent 不直接执行 DDL（与 §14.6 DDL Gate 授权要求 6 一致） |
+| 不授权范围 | 不 refresh、不 upsert 业务数据、不写 Cache、不写 AuditLogger（`03_data_ud_query_audit`）、不写 QualitySummary、不动 cron/systemd、不动 `.env`、不建新角色、不动生产代码树 |
+
+**与 §14.6 既有契约的关系**：本 §14.6.4 是 §14.6 DDL Gate 通用要求在 P3-A 上的**精确化与冻结**，不修改 §14.6 的 1-6 授权要求、不修改 §14.6 的 DDL 执行脚本示例（该示例与 DESIGN §6.2 一致）、不修改 §14.7 成功标准与 §14.8 停止条件的既有条文。
 
 ### 14.7 成功标准
 

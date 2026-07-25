@@ -7,8 +7,8 @@
 | 状态 | Draft |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-21 |
-| 最后更新 | 2026-07-24（V0.12 T2.3 Design Correction：统一 MONGODB_DATABASE 校验语义——键值必须等于 tradingagents 否则 NOT_AUTHORIZED exit 3；统一 authSource 来源为 MONGODB_DATABASE 键值，消除硬编码 tradingagents 字面量和"忽略键值"冲突表述；删除 SecretProbeResult.key_declared 冗余字段——§15.3/§15.3.2/§15.3.3/§15.4.1/§15.4.2/§15.5.2/§15.5.4 全部同步更新） |
-| 版本号 | V0.12 |
+| 最后更新 | 2026-07-25（V0.13 B1-P3A 冻结：新增 §6.4 P3-A DDL 执行/回滚/审计/失败矩阵/退出码契约——§6.4.1 rollback 脚本 drop 顺序、§6.4.2 audit.json 字段定义、§6.4.3 失败处理矩阵、§6.4.4 退出码（0/2/3/4，与 SPEC §14.6.4 对齐）。仅冻结 P3-A；P3-B/P3-C 的对应 §6.4 版本尚未冻结。不引入新依赖、不动既有 §3.1/§6.1/§6.2/§6.3） |
+| 版本号 | V0.13 |
 | 来源 RFC | RFC-03-014（Phase 3 持久化扩展） |
 | 来源 SPEC | SPEC-03-014（Phase 3 持久化扩展契约） |
 | 关联 Design | DESIGN-03-007（Unified Data Layer 总体设计，V3.4） |
@@ -27,6 +27,7 @@
 || V0.4 | 2026-07-21 | **Design Correction（T2.6 消除 T2.5 REVISE 阻断）**。关闭 T2.5 Synthesis 提出的 2 BLOCKING + 1 MAJOR + 4 MINOR 共 7 项 finding：① BLOCKING ① §2.1 l.229 post-Gate `_materialize()` 写入违背只读承诺 → 重写为"查询路径保持只读，写入仅 refresh 路径"；② BLOCKING ② §0.4/§2.1 关于 `_try_materialized()` 的内部冲突 → 采用方案 A（允许最小扩展：追加 capability 参数 + P3PersistenceWriter 注入，显式声明为 query() 编排的唯一例外）；③ MINORs 全数对齐 RFC/SPEC 一致性与措辞。 | YQuant-Principal |
 || V0.5 | 2026-07-21 | **Design Correction（T2.8 闭合 MINOR-N2）**。闭合 T2.7 REVISE 发现的 MINOR-N2：§4.5 l.704（client 层 `security_id: SecurityId | None = None`）与 §5.2 l.842-844（service 层 `security_id: SecurityId` 必填）签名矛盾——采用方案 Y，§5.2 统一为 `security_id: SecurityId | None = None`（匹配 §4.5 与 SPEC §5.1 l.577）。移除"必填/不得 placeholder"措辞，改为"默认 None=市场级，非 None=个股级"。SPEC §5.1 已为 optional 无需修改；RFC 无签名引用无需修改。 | YQuant-Principal |
 || V0.6 | 2026-07-22 | **Contract Gate Adjudication（T3-P3B 契约裁断）**。闭合 Fix-M23 Review 发现的 PersistenceResult 形状冲突：采纳方向 B（实现形状可接受），将 §5.4.1 中 `PersistenceStatus` Enum + 多字段 canonical 定义替换为 P3-B FlowService 的实际 `PersistenceResult(frozen, slots)` 实现（`status: str` / `capability` / `collection` / `persisted` / `failed` / `skipped` / `reason` / `writer_outcome`）；同步更新 §5.4.2 模板代码、§2.2 constraint #6 `overall_status→status`、§2.3 场景表字段对齐。RFC/SPEC 无此项引用，不受影响。 | YQuant-Principal |
+|| V0.13 | 2026-07-25 | **B1-P3A DDL 契约冻结**。新增 §6.4（P3-A DDL 执行、回滚、审计、失败矩阵、退出码），面向 PR-DDL-P3A Gate：§6.4.1 rollback 脚本（dropIndex 反向顺序 + dropCollection，落到 `/tmp/yquant-p3-ddl-p3a-20260725/rollback.js`）；§6.4.2 audit.json 字段定义（`{operation, collection, index, ts, exit_code, error, rollback_script_path}`，不引入新 audit 集合）；§6.4.3 失败处理矩阵（已存在/index 冲突/auth 失败/timeout/网络，全部 fail-stop 不自动回滚）；§6.4.4 退出码 0/2/3/4（与 SPEC §14.6.4 对齐，退出码 1 不使用以避免与 §15.5.4 PR-1 conditional pass 歧义）。仅冻结 P3-A；P3-B/P3-C 的对应 §6.4 版本待各自 B1 阶段独立补充。不引入新依赖、不动既有 §3.1/§6.1/§6.2/§6.3。 | YQuant-Principal |
 
 ---
 
@@ -1105,6 +1106,102 @@ db["03_data_ud_market_sector_snapshot"].createIndex(
 
 **禁止字段**：上述集合中**不包含** `quality_summary`、`quality_score`、`quality_flags` 等 Phase 2 质量字段——QualitySummary 仍冻结（RFC-03-011）。
 
+### 6.4 P3-A DDL 执行、回滚与审计契约（B1-P3A 冻结）
+
+> **授权范围（B1-P3A）**：本节**仅**冻结 P3-A 子阶段 `03_data_ud_market_sector_snapshot` 的 DDL 范围、回滚脚本、audit 字段、失败处理与退出码。P3-B / P3-C 的 DDL 契约（§6.4 的对应版本）**尚未冻结**，待各自子阶段进入 B1 阶段时独立补充。权威的集合创建与索引脚本以 §6.2 为准；本节定义其执行语义、失败处理与可审计工件。
+
+本节面向 **PR-DDL-P3A** Gate（SPEC §14.6.4 / RFC §13.6）。约束：
+
+- **写入目标**：仅集合 `03_data_ud_market_sector_snapshot`，库 `tradingagents`，主仓 `main` 本地工作树。
+- **写入身份**：复用现有 `MONGODB_USERNAME`（Phase 2 PortfolioMongoLoader 已验证的组件式构造连接，非 URI）。DDL 完成后权限摘要落到 `/tmp/yquant-p3-ddl-p3a-20260725/audit.json`。最小权限收敛（如 DDL 专用角色/收回 createCollection 权限）放到后续独立 Gate，不在本契约内。
+- **索引定义**：完全照 §6.2 当前定稿版本——三条索引名 `sector_code_date` / `snapshot_date` / `sector_type_date`，全部 `background: true`。本节不重新定义索引，仅引用 §6.2。
+- **写入原子性**：失败即停，**不自动回滚**。`createCollection` 与 `createIndex` 在目标已存在时 fail-stop，由操作员手动评估（见 §6.4.3）。
+- **写入前审计**：仅 stdout 与 `/tmp/yquant-p3-ddl-p3a-20260725/audit.json`，字段定义见 §6.4.2。**不引入**新的 audit 集合（`03_data_ud_query_audit` 写入属 Phase 2，不在本 Gate）。
+- **不授权范围**：不 refresh、不 upsert 业务数据、不写 Cache、不写 AuditLogger、不写 QualitySummary、不动 cron/systemd、不动 `.env`、不建新角色、不动生产代码树（本节为设计文档增补 + `/tmp` 下 rollback.js 文件生成）。
+
+#### 6.4.1 Rollback 脚本（drop 顺序）
+
+回滚脚本随 DDL 同步生成到 `/tmp/yquant-p3-ddl-p3a-20260725/rollback.js`（**不提交到仓库**），作为操作员手动回滚的安全网。脚本权威内容（与 §6.2 创建脚本严格对称）：
+
+```javascript
+// P3-A rollback: 回滚 03_data_ud_market_sector_snapshot 的 DDL
+// 适用场景：DDL 全部成功后操作员决定撤销；或 DDL 部分成功后清理残留。
+// 顺序：先逐条 dropIndex（反向），再 dropCollection。
+// 失败即停，不自动级联——由操作员逐条评估。
+
+// Step 1: 反向 dropIndex（与 §6.2 创建顺序相反）
+db["03_data_ud_market_sector_snapshot"].dropIndex("sector_type_date");
+db["03_data_ud_market_sector_snapshot"].dropIndex("snapshot_date");
+db["03_data_ud_market_sector_snapshot"].dropIndex("sector_code_date");
+
+// Step 2: dropCollection
+db["03_data_ud_market_sector_snapshot"].drop();
+```
+
+**部分索引已建的处理**：若 `createIndex` 仅成功前 N 条即失败（§6.4.3 的 `INDEX_PARTIAL` 场景），操作员按**已实际建成索引的反向顺序**逐条 `dropIndex`，最后执行 `dropCollection`。`dropCollection` 本身会级联删除剩余索引，因此即便跳过逐条 `dropIndex` 也可完成回滚——逐条 `dropIndex` 的价值在于让操作员在每一步确认状态，而非功能性必需。
+
+**回滚脚本边界**：
+
+- 回滚脚本仅处理 P3-A 一个集合；P3-B / P3-C 的回滚脚本待各自子阶段 B1 冻结时补充。
+- 回滚脚本是**安全网**，不是自动机制——DDL 失败时 **fail-stop**，等待操作员决定是否运行回滚（见 §6.4.3 失败矩阵的「operator action」列）。
+- 回滚脚本不删除业务数据——DDL 之前该集合不存在业务数据，DDL 之后若已运行 CANARY 写入则业务数据回滚属 PR-CANARY 清理脚本职责，不在本 §6.4 范围。
+
+#### 6.4.2 Audit JSON 字段定义
+
+DDL 执行过程产出结构化审计，落到 stdout（人类可读）与 `/tmp/yquant-p3-ddl-p3a-20260725/audit.json`（机读）。**不引入**新 audit 集合；本 JSON 为本次 DDL 的单次工件，非持续写入。
+
+`audit.json` 为 JSON 数组，每个元素描述一次原子操作（`createCollection` / 每条 `createIndex`），字段定义：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `operation` | string | `"createCollection"` / `"createIndex"` |
+| `collection` | string | 固定为 `"03_data_ud_market_sector_snapshot"`（P3-A 范围） |
+| `index` | string \| null | `createIndex` 操作时为索引名（`sector_code_date` / `snapshot_date` / `sector_type_date`）；`createCollection` 时为 `null` |
+| `ts` | string | 操作完成（或失败）的 ISO-8601 时间戳，带时区 |
+| `exit_code` | int | 该操作的退出码（见 §6.4.4）：`0`=成功，`2`=DDL 失败，`3`=权限不足，`4`=目标已存在（fail-stop） |
+| `error` | string \| null | 失败时的错误摘要（**不含** secret / 连接串 / 凭据明文）；成功时为 `null` |
+| `rollback_script_path` | string | 固定指向 `/tmp/yquant-p3-ddl-p3a-20260725/rollback.js`，便于操作员快速定位回滚脚本 |
+
+**审计约束**：
+
+- `audit.json` 不记录任何凭据值、URI、用户名、密码长度——与 SPEC §14.1 / RFC §13.1 的 secret 禁输出原则一致。
+- `audit.json` 是单次 DDL 工件，**不**作为 `03_data_ud_query_audit`（Phase 2 AuditLogger 集合）的替代或前身。
+- `audit.json` 落在 `/tmp`，不提交仓库，不纳入 cron/systemd。
+
+#### 6.4.3 失败处理矩阵
+
+DDL 执行（`createCollection` → 三条 `createIndex`）的失败场景、对应退出码与操作员动作：
+
+| 场景 | 触发信号 | 退出码 | operator action |
+|---|---|---|---|
+| `createCollection` 成功 + 三条 `createIndex` 全部成功 | `audit.json` 全部 `exit_code=0` | **0**（整体成功） | 无需动作；进入 PR-CANARY-P3A 评估 |
+| `createCollection` 成功但某条 `createIndex` 失败 | 该条 `exit_code=2`，`error` 含索引错误 | **2**（DDL 失败） | fail-stop；操作员评估是否运行 `rollback.js`（§6.4.1）清理残留索引+集合 |
+| `createCollection` 失败（非已存在） | `createCollection` 行 `exit_code=2` | **2**（DDL 失败） | fail-stop；集合未创建，无需回滚；排查 Mongo 错误后重试需 Pascal 重新授权 |
+| 目标集合已存在 | `createCollection` 行 `exit_code=4` | **4**（fail-stop） | fail-stop；**不自动覆盖**；操作员确认是遗留还是意外，参考 PR-1 `p3_collections_found` 结论决定是否降级处理 |
+| 索引已存在（createCollection 成功后某索引名冲突） | 对应 `createIndex` 行 `exit_code=4` | **4**（fail-stop） | fail-stop；操作员确认索引定义是否与 §6.2 一致，决定保留或 dropIndex 后重建 |
+| 认证 / 权限不足（无 createCollection 或 createIndex 权限） | `exit_code=3`，`error` 含 auth/permission 摘要 | **3**（权限不足） | fail-stop；不重试；Pascal 授予 DDL 所需权限或换连接身份后重新授权 |
+| 网络超时 / 连接中断 | `exit_code=2`，`error` 含 timeout/网络摘要 | **2**（DDL 失败） | fail-stop；不自动重试；操作员确认 Mongo 连通性（参考 PR-1 结论）后由 Pascal 决定是否重试 |
+
+**通用原则**：
+
+- **fail-stop，不自动回滚**：任何非 0 退出码立即停止后续步骤，**不**自动运行 `rollback.js`。是否回滚由操作员按上表「operator action」列判断。
+- **已存在 = fail-stop 而非覆盖**：`createCollection` / `createIndex` 在目标已存在时返回 exit 4，等待操作员评估——绝不静默覆盖既有集合或索引。
+- **不自动重试**：与 PR-smoke 的「不自动重试」原则一致（RFC §6.4 / SPEC §14.8）。失败后重试需 Pascal 重新授权。
+- **secret 安全**：`error` 字段不得包含凭据、URI、用户名、密码长度——仅含操作类型与失败类别摘要。
+
+#### 6.4.4 退出码（与 SPEC §14.6.4 对齐）
+
+本 §6.4.4 退出码**仅**作用于 PR-DDL-P3A 的 DDL 执行阶段（`createCollection` + `createIndex`），与 §15.5.4 的 PR-1 只读预检退出码（0/1/2/3，针对 ping + list_collections）**不冲突**——两者作用于不同 Gate（PR-DDL-P3A vs PR-1）、不同操作（DDL 写入 vs 只读连通性检查）。
+
+| 退出码 | 含义 | 对应场景 |
+|---|---|---|
+| **0** | DDL 成功 | `createCollection` + 三条 `createIndex` 全部成功 |
+| **2** | DDL 失败（非权限、非已存在） | `createCollection` / `createIndex` 执行错误、网络超时、连接中断 |
+| **3** | 权限不足 | 认证拒绝或缺少 createCollection / createIndex 权限 |
+| **4** | 目标已存在（fail-stop） | 集合或索引已存在，等待操作员评估 |
+
+退出码 1 在本 DDL 契约中**不使用**（1 在 §15.5.4 中表示 PR-1 的 conditional pass，语义不同，避免歧义）。退出码 ≥5 为后续 Gate 预留，本 P3-A 契约不定义。
+
 ---
 
 ## 7. 异常分类
@@ -2002,6 +2099,13 @@ field_mapping.type_mismatches   # list[{"field": str, "expected": str, "actual":
 class SmokeReport:
     """标准 smoke 报告模型。序列化为 YAML 时自动脱敏。"""
     metadata: SmokeMetadata          # capability, provider, smoke_at, test_target
+    # `metadata.endpoint_status: str | None` is an **optional** field
+    # on the SmokeMetadata header. It is written only when the live-read
+    # ran AND ALL PR-2 calls failed with ProxyError/ConnectionError
+    # (Fix E in scripts/t4_preflight/smoke_sector.py, see
+    # SPEC-03-014 §14.4.2). It MUST be absent in dry-run, success,
+    # partial-failure (any_success=True), and generic RuntimeError
+    # paths; reporters MUST NOT serialize the key as `null`.
     connectivity: ConnectionResult   # status, latency_ms, error
     auth: AuthResult                 # status, error
     permissions: PermissionResult    # status, note
