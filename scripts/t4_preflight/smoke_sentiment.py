@@ -14,6 +14,19 @@ homemade "market temperature / limit up count" sentiment dashboard.
 That schema is what the real upstream returns; any sentiment overlay
 (market_temperature / limit_up_count / northbound_net_inflow) must be
 computed downstream from the row, not re-fetched here.
+
+B2 empty semantics contract (DESIGN §4.2.1 / §15.14.3):
+``empty_semantics`` was removed from the ``LedgerBlock`` in T3 X2
+(Pascal 2026-07-26). Empty-return classification is conveyed
+through ``OverallVerdict.verdict`` (``"fail"`` is the conservative
+default when ``row_count == 0`` without auxiliary trading-day
+context) and ``OverallVerdict.memo`` instead. PR-4's two endpoints
+both returned 0 rows in the B2 live-read — the report therefore
+emits ``overall.verdict: fail`` and records the failure reason in
+``overall.memo``.
+
+Ledger block (DESIGN §15.14.3): every report carries the six-field
+``LedgerBlock``; the four ``*_count`` fields stay at 0.
 """
 
 from __future__ import annotations
@@ -36,6 +49,7 @@ from .models import (
     DataSampleResult,
     FieldMappingResult,
     FixtureDeviationResult,
+    LedgerBlock,
     OverallVerdict,
     PermissionResult,
     SmokeReport,
@@ -241,6 +255,17 @@ def run_smoke(args: argparse.Namespace) -> int:
             else EXIT_FAIL
         )
 
+    ledger = LedgerBlock(
+        provider_attempts=len(all_calls) if args.live_read else 0,
+        actual_calls=sum(1 for call in all_calls if call.connectivity == "success")
+        if args.live_read
+        else 0,
+        retry_count=0,
+        fallback_count=0,
+        mongo_calls=0,
+        write_operations=0,
+    )
+
     report = SmokeReport(
         metadata={
             "capability": "sentiment.market_snapshot+sentiment.limit_up_pool",
@@ -264,6 +289,7 @@ def run_smoke(args: argparse.Namespace) -> int:
         data_sample=data_sample,
         vs_fixture=FixtureDeviationResult(()),
         overall=overall,
+        ledger=ledger,
     )
 
     yaml_text = smoke_report_to_yaml(report)

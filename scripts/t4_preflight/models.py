@@ -152,6 +152,51 @@ class OverallVerdict:
     memo: str = ""
 
 
+# ---------------------------------------------------------------------------
+# Reporter ledger block (DESIGN §15.14.3)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class LedgerBlock:
+    """Six-field reporter ledger (DESIGN §15.14.3 最小实现 / T3 X2).
+
+    Captures the minimum accounting surface every smoke report must
+    carry. The four ``*_count`` fields (``retry_count`` /
+    ``fallback_count`` / ``mongo_calls`` / ``write_operations``) are
+    fixed at ``0`` in the current no-retry / no-fallback /
+    zero-write scope (DESIGN §15.5.3 / §15.9). ``worktree_changed``
+    was removed by the 2026-07-26 T3 Implementer following Pascal's
+    X2 minimum-scope direction — worktree probing stays opt-in via
+    ``reporter.detect_worktree_changed`` and is NOT emitted by the
+    smoke path. Empty-return semantics are conveyed through
+    ``OverallVerdict.verdict`` / ``OverallVerdict.memo`` rather than
+    a dedicated field.
+
+    Attributes:
+        provider_attempts: Number of provider attempts in this smoke
+            (incl. retried calls — currently 1 per call because no
+            retry is wired).
+        actual_calls: Number of network round-trips actually issued.
+        retry_count: 0 in the current scope (DESIGN §15.6.1).
+        fallback_count: 0 in the current scope (no fallback wired).
+        mongo_calls: 0 — query-path read-only.
+        write_operations: 0 — zero-persistence-write (A-021 / §15.9).
+    """
+
+    provider_attempts: int = 0
+    actual_calls: int = 0
+    retry_count: int = 0
+    fallback_count: int = 0
+    mongo_calls: int = 0
+    write_operations: int = 0
+
+
+def _default_ledger() -> "LedgerBlock":
+    """Build the default ``LedgerBlock`` used by ``SmokeReport``."""
+    return LedgerBlock()
+
+
 @dataclass(frozen=True)
 class SmokeReport:
     """Standard smoke report (SPEC §14.4.2 / DESIGN §15.7.1)."""
@@ -168,6 +213,13 @@ class SmokeReport:
     )
     vs_fixture: FixtureDeviationResult = field(default_factory=FixtureDeviationResult)
     overall: OverallVerdict = field(default_factory=lambda: OverallVerdict("skipped"))
+    # DESIGN §15.14.3 ledger block. Carries the six-field accounting surface
+    # (provider_attempts / actual_calls / retry_count / fallback_count /
+    # mongo_calls / write_operations). Default empty block — callers
+    # populate via ``LedgerBlock(...)``.
+    ledger: "LedgerBlock" = field(  # type: ignore[name-defined]
+        default_factory=lambda: _default_ledger()
+    )
 
 
 # ---------------------------------------------------------------------------

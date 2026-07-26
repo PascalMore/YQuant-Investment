@@ -40,6 +40,7 @@ from .config import SANITIZER_MAX_LIST_LENGTH, SANITIZER_MAX_STRING_LENGTH
 from .models import (
     ConnectionResult,
     AuthResult,
+    LedgerBlock,
     PermissionResult,
     FieldMappingResult,
     DataSampleResult,
@@ -298,6 +299,47 @@ def _dataclass_to_dict(obj: Any) -> Any:
     return _convert(obj)
 
 
+# ---------------------------------------------------------------------------
+# Worktree-change detection helper (DESIGN §15.14.3)
+# ---------------------------------------------------------------------------
+
+
+def detect_worktree_changed(*, cwd: str | None = None) -> bool:
+    """Return ``True`` iff the working tree has uncommitted changes.
+
+    DESIGN §15.14.3 row 2710 specifies the detection rule:
+    ``subprocess.run(["git", "diff", "--quiet"])``. Exit 0 → clean
+    (``False``); exit != 0 → dirty (``True``). This is a pure shell
+    probe — never touches the database, never mutates the working
+    tree, never writes a file. Falls back to ``False`` when ``git`` is
+    missing / the call errors out so the smoke report can still be
+    emitted.
+
+    IMPORTANT (T3 X2 scope): This helper is **opt-in**. It is NOT
+    invoked by ``smoke_report_to_yaml`` itself; the reporter renders
+    six ledger fields and does not touch worktree state. Per
+    Pascal's 2026-07-26 X2 direction, smoke flows under X2 do not
+    call this function — they construct ``LedgerBlock(...)`` with
+    only the six documented accounting fields so the dry-run path
+    emits zero subprocess side-effects. The helper remains available
+    for future Pascal-authorised live-read
+    flows that legitimately need the probe.
+    """
+    import subprocess
+
+    try:
+        proc = subprocess.run(
+            ["git", "diff", "--quiet"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return proc.returncode != 0
+
+
 def _convert(value: Any) -> Any:
     """Convert tuples to lists recursively (YAML serializer prefers lists)."""
     if isinstance(value, dict):
@@ -489,7 +531,17 @@ def smoke_report_to_yaml(report: SmokeReport) -> str:
     ``ProxyError`` / ``ConnectionError``. Dry-run, success paths, and
     generic RuntimeError failures therefore keep the field absent
     (the YAML stays clean — no ``endpoint_status: null`` noise).
+
+    B2 ledger — every report carries the six-field ``ledger:`` block
+    (DESIGN §15.14.3): ``provider_attempts`` / ``actual_calls`` /
+    ``retry_count`` / ``fallback_count`` / ``mongo_calls`` /
+    ``write_operations``. The block is sourced from ``report.ledger``;
+    if absent it defaults to a fresh ``LedgerBlock()`` so legacy
+    callers keep producing YAML that matches the §15.14.3 contract.
     """
+    ledger = report.ledger
+    if not isinstance(ledger, LedgerBlock):
+        ledger = LedgerBlock()  # backstop — never observed in practice
     payload: dict[str, Any] = {
         "capability": report.metadata.get("capability", "unknown"),
         "provider": report.metadata.get("provider", "unknown"),
@@ -533,6 +585,14 @@ def smoke_report_to_yaml(report: SmokeReport) -> str:
                 for d in report.vs_fixture.deviations
             ]
         },
+        "ledger": {
+            "provider_attempts": ledger.provider_attempts,
+            "actual_calls": ledger.actual_calls,
+            "retry_count": ledger.retry_count,
+            "fallback_count": ledger.fallback_count,
+            "mongo_calls": ledger.mongo_calls,
+            "write_operations": ledger.write_operations,
+        },
         "overall": {
             "verdict": report.overall.verdict,
             "memo": report.overall.memo,
@@ -552,8 +612,10 @@ __all__ = [
     "to_yaml",
     "secret_audit_to_yaml",
     "smoke_report_to_yaml",
+    "detect_worktree_changed",
     "ConnectionResult",
     "AuthResult",
+    "LedgerBlock",
     "PermissionResult",
     "FieldMappingResult",
     "DataSampleResult",

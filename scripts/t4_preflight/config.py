@@ -140,6 +140,29 @@ SANITIZER_MAX_LIST_LENGTH: int = 100
 SAMPLE_ROW_LIMIT: int = 5
 
 # ---------------------------------------------------------------------------
+# Reporter ledger (DESIGN §15.14.3)
+# ---------------------------------------------------------------------------
+#: Reporter ledger fields (DESIGN §15.14.3 最小实现 / T3 X2 scope).
+#: Six-field accounting surface every smoke report MUST emit on
+#: dry-run and live-read paths. The four ``*_count`` fields are
+#: fixed at ``0`` in the current no-retry / no-fallback /
+#: zero-write scope (DESIGN §15.5.3 / §15.9). ``worktree_changed``
+#: and ``empty_semantics`` were removed by the 2026-07-26 T3
+#: Implementer following Pascal's X2 minimum-scope direction —
+#: worktree probing stays opt-in (see
+#: ``scripts.t4_preflight.reporter.detect_worktree_changed``) and
+#: empty-semantics classification is rendered through verdict+memo
+#: rather than as a dedicated field.
+LEDGER_FIELDS: tuple[str, ...] = (
+    "provider_attempts",
+    "actual_calls",
+    "retry_count",
+    "fallback_count",
+    "mongo_calls",
+    "write_operations",
+)
+
+# ---------------------------------------------------------------------------
 # Exit codes (DESIGN §15.8)
 # ---------------------------------------------------------------------------
 

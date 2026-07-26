@@ -7,26 +7,29 @@
 | 状态 | Draft |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-07-20 |
-| 最后更新 | 2026-07-25（V0.8 B1-P3C 冻结：新增 §14.6.ter PR-DDL-P3C 精确契约——前置条件/集合/索引/写入身份/原子性/rollback 路径/audit 工件/退出码/停止条件/执行人/不授权范围；G-C-1 行与 §10.bis PR-DDL-P3C 行引用 §14.6.ter + DESIGN §6.4.ter；标注 P3-A + P3-B + P3-C 已授权冻结、Phase 3 三子阶段 DDL 全部授权。权威定义在 DESIGN-03-014 §6.4.ter V0.15） |
-| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.9） |
+| 最后更新 | 2026-07-26（V0.10 Pascal C+X2 决策同步：§14.4.5.2 PR-3 三选一由 Pascal 2026-07-26 确定选 C（当前 Phase 3 不提供 northbound net inflow，字段保持 None，持股历史不得伪装为净流入，不引入新 endpoint/capability）；§14.4.5.3 PR-4 空返回语义按 X2 收敛（reporter 仅保留必要账本字段，移除 empty_semantics 分类与 verdict 篡改语义，空返回维持 fail）。§14.4.5.6/§14.4.5.7 同步更新。删除三选一「未选择/阻塞」失效文本。PR-2 SSL 单变量网络诊断边界与零 live-read 预算不变。不动 §3 domain object 字段定义、不动 §14.6.x DDL 冻结契约、不动既有授权范围。权威可执行契约，RFC §13.4.5 引用本节） |
+| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.11） |
 | 关联 RFC | RFC-03-007（Unified Data Layer 总纲）、RFC-03-011（Phase 2 质量与审计治理）、RFC-03-013（Phase 1E 情绪最小切片） |
 | 关联 SPEC | SPEC-03-007（Unified Data Layer 契约基线）、SPEC-03-008（Phase 1B-A 查询平面）、SPEC-03-013（Phase 1E 情绪最小切片） |
-| 关联 Design | DESIGN-03-014（Phase 3 持久化扩展详细设计，V0.15） |
+| 关联 Design | DESIGN-03-014（Phase 3 持久化扩展详细设计，V0.17） |
 | 目标模块 | unified_data（`skills/data/unified_data/`） |
-| 版本号 | V0.8 |
+| 版本号 | V0.10 |
 | 适配 Agent | YQuant-Developer-Engineer, YQuant-Test-Engineer, YQuant-Principal（T4 阶段） |
 
 ### 版本历史
 
-|| 版本号 | 日期 | 更新内容 | 负责人 |
+| 版本号 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|---|
-|| V0.1 | 2026-07-20 | 初始创建。将 RFC-03-014 的 Phase 3 三阶段受控分期需求落为可执行契约，定义 SectorSnapshot / CapitalFlowRecord / MarketSentimentSnapshot 三个 domain object 字段级 schema、Provider 注册点、ETLV 验证点、读写路径边界与验收标准。 | YQuant-Principal |
-||| V0.2 | 2026-07-20 | 修正：字段计数对齐（SectorSnapshot=19, CapitalFlowRecord=17, MarketSentimentSnapshot=22）；SectorSnapshot dataclass Python 语法修复（snapshot_date 移至 market 前）；唯一键全部纳入 market；拆分明细 query 与 ETLV refresh 写入路径；标记硬编码值（超时/限速）为可配置/待验证；AuditLogger 声明默认关闭；记录级可追溯字段表（quality_flags/source_record_id/schema_version 标为待定）；northbound_daily 明确为个股级 scope。 | YQuant-Principal |\n||| V0.3 | 2026-07-22 | T4 生产就绪扩展。新增 §14 只读预检与真实 Provider Smoke 测试契约（含副作用矩阵、MongoDB 预检规程、Secret Source 审计规程、Smoke 报告 YAML 模板、Zero-Persistence-Write 保证、DDL/DML 独立 Gate 细则、停止条件、成功标准）；新增 §10.bis PR 系列 Gate；§2 追加 T4 In/Out；§7 追加 A-016~A-025 T4 验收项；§9 追加 T4 约束；§11 追加 OQ-7/8/9。 | YQuant-Principal |
-||| V0.4 | 2026-07-22 | 历史更新——**已被 V0.5 替换**。AKShare 无 Token + 复用 Phase 2 MONGO_URI 同步：AKShare 为匿名数据源，PR-0 跳过密钥审计；MongoDB 连接键从 `MONGODB_URI` 改为 `MONGO_URI`（沿用 Phase 2 已验证只读连接语义）；PR-2/PR-3/PR-4 移除 token 语义改为每小时配额；§14.1 副作用矩阵移除 token 消耗；§14.3 审计表移除 AKSHARE_TOKEN；§11 OQ-8 标记已解决。V0.5 将此 MONGO_URI 单键来源迁移至 skills/.env 五组件键（MONGODB_HOST/PORT/USERNAME/PASSWORD/DATABASE），V0.4 的 MONGO_URI 语义视为 superseded。 | YQuant-Principal |
-|||| V0.5 | 2026-07-24 | PR-1 凭证来源契约对齐：MongoDB 连接凭据来源从 MONGO_URI + Hermes profile `.env` 改为复用 Phase 2 skills/.env 五组件键（MONGODB_HOST、MONGODB_PORT、MONGODB_USERNAME、MONGODB_PASSWORD、MONGODB_DATABASE），沿用 PortfolioMongoLoader Phase-2 Mongo 认证语义（组件式构造连接，非 URI）；PR-0 审计表对应更新；移除 Hermes profile `.env` 候选路径；历史 MONGO_URI 描述均标为 superseded。 | YQuant-Principal |
-||||| V0.6 | 2026-07-25 | B1-P3A DDL 契约冻结。新增 §14.6.4（PR-DDL-P3A 精确契约：前置条件/集合/索引/写入身份/原子性/rollback 路径/audit 工件/退出码/停止条件/执行人/不授权范围），权威定义引用 DESIGN-03-014 §6.4 V0.13；§10 G-A-1 行停止条件列追加 §14.6.4 + DESIGN §6.4 引用；§10.bis PR-DDL-P3A 行标注「仅 P3-A 已授权冻结、P3-B/P3-C 仍阻塞」并引用 §14.6.4。不动既有 §3.1/§14.4/§14.5/§14.6 通用要求/§14.7/§14.8 条文。 | YQuant-Principal |
-|||||| V0.7 | 2026-07-25 | B1-P3B DDL 契约冻结。新增 §14.6.bis（PR-DDL-P3B 精确契约：前置条件/集合/索引/写入身份/原子性/rollback 路径/audit 工件/退出码/停止条件/执行人/不授权范围），权威定义引用 DESIGN-03-014 §6.4.bis V0.14；§10 G-B-1 行停止条件列追加 §14.6.bis + DESIGN §6.4.bis 引用；§10.bis PR-DDL-P3B 行标注「P3-B 已授权冻结、P3-C 仍阻塞」并引用 §14.6.bis。退出码语义按 task 授权：0=PASS / 2=preflight target already exists / 3=collection create fail / 4=index create fail。不动既有 §3.2/§14.4/§14.5/§14.6 通用要求/§14.6.4/§14.7/§14.8 条文。 | YQuant-Principal |
-||||||| V0.8 | 2026-07-25 | B1-P3C DDL 契约冻结。新增 §14.6.ter（PR-DDL-P3C 精确契约：前置条件/集合/索引/写入身份/原子性/rollback 路径/audit 工件/退出码/停止条件/执行人/不授权范围），权威定义引用 DESIGN-03-014 §6.4.ter V0.15；§10 G-C-1 行停止条件列追加 §14.6.ter + DESIGN §6.4.ter 引用；§10.bis PR-DDL-P3C 行标注「P3-A + P3-B + P3-C 已全部授权冻结」并引用 §14.6.ter。退出码语义按 task 授权：0=PASS / 2=preflight target already exists / 3=collection create fail / 4=index create fail。不动既有 §3.3/§14.4/§14.5/§14.6 通用要求/§14.6.4/§14.6.bis/§14.7/§14.8 条文。 | YQuant-Principal |
+| V0.1 | 2026-07-20 | 初始创建。将 RFC-03-014 的 Phase 3 三阶段受控分期需求落为可执行契约，定义 SectorSnapshot / CapitalFlowRecord / MarketSentimentSnapshot 三个 domain object 字段级 schema、Provider 注册点、ETLV 验证点、读写路径边界与验收标准。 | YQuant-Principal |
+| V0.2 | 2026-07-20 | 修正：字段计数对齐（SectorSnapshot=19, CapitalFlowRecord=17, MarketSentimentSnapshot=22）；SectorSnapshot dataclass Python 语法修复（snapshot_date 移至 market 前）；唯一键全部纳入 market；拆分明细 query 与 ETLV refresh 写入路径；标记硬编码值（超时/限速）为可配置/待验证；AuditLogger 声明默认关闭；记录级可追溯字段表（quality_flags/source_record_id/schema_version 标为待定）；northbound_daily 明确为个股级 scope。 | YQuant-Principal |
+| V0.3 | 2026-07-22 | T4 生产就绪扩展。新增 §14 只读预检与真实 Provider Smoke 测试契约（含副作用矩阵、MongoDB 预检规程、Secret Source 审计规程、Smoke 报告 YAML 模板、Zero-Persistence-Write 保证、DDL/DML 独立 Gate 细则、停止条件、成功标准）；新增 §10.bis PR 系列 Gate；§2 追加 T4 In/Out；§7 追加 A-016~A-025 T4 验收项；§9 追加 T4 约束；§11 追加 OQ-7/8/9。 | YQuant-Principal |
+| V0.4 | 2026-07-22 | 历史更新——**已被 V0.5 替换**。AKShare 无 Token + 复用 Phase 2 MONGO_URI 同步：AKShare 为匿名数据源，PR-0 跳过密钥审计；MongoDB 连接键从 `MONGODB_URI` 改为 `MONGO_URI`（沿用 Phase 2 已验证只读连接语义）；PR-2/PR-3/PR-4 移除 token 语义改为每小时配额；§14.1 副作用矩阵移除 token 消耗；§14.3 审计表移除 AKSHARE_TOKEN；§11 OQ-8 标记已解决。V0.5 将此 MONGO_URI 单键来源迁移至 skills/.env 五组件键（MONGODB_HOST/PORT/USERNAME/PASSWORD/DATABASE），V0.4 的 MONGO_URI 语义视为 superseded。 | YQuant-Principal |
+| V0.5 | 2026-07-24 | PR-1 凭证来源契约对齐：MongoDB 连接凭据来源从 MONGO_URI + Hermes profile `.env` 改为复用 Phase 2 skills/.env 五组件键（MONGODB_HOST、MONGODB_PORT、MONGODB_USERNAME、MONGODB_PASSWORD、MONGODB_DATABASE），沿用 PortfolioMongoLoader Phase-2 Mongo 认证语义（组件式构造连接，非 URI）；PR-0 审计表对应更新；移除 Hermes profile `.env` 候选路径；历史 MONGO_URI 描述均标为 superseded。 | YQuant-Principal |
+| V0.6 | 2026-07-25 | B1-P3A DDL 契约冻结。新增 §14.6.4（PR-DDL-P3A 精确契约：前置条件/集合/索引/写入身份/原子性/rollback 路径/audit 工件/退出码/停止条件/执行人/不授权范围），权威定义引用 DESIGN-03-014 §6.4 V0.13；§10 G-A-1 行停止条件列追加 §14.6.4 + DESIGN §6.4 引用；§10.bis PR-DDL-P3A 行标注「仅 P3-A 已授权冻结、P3-B/P3-C 仍阻塞」并引用 §14.6.4。不动既有 §3.1/§14.4/§14.5/§14.6 通用要求/§14.7/§14.8 条文。 | YQuant-Principal |
+| V0.7 | 2026-07-25 | B1-P3B DDL 契约冻结。新增 §14.6.bis（PR-DDL-P3B 精确契约：前置条件/集合/索引/写入身份/原子性/rollback 路径/audit 工件/退出码/停止条件/执行人/不授权范围），权威定义引用 DESIGN-03-014 §6.4.bis V0.14；§10 G-B-1 行停止条件列追加 §14.6.bis + DESIGN §6.4.bis 引用；§10.bis PR-DDL-P3B 行标注「P3-B 已授权冻结、P3-C 仍阻塞」并引用 §14.6.bis。退出码语义按 task 授权：0=PASS / 2=preflight target already exists / 3=collection create fail / 4=index create fail。不动既有 §3.2/§14.4/§14.5/§14.6 通用要求/§14.6.4/§14.7/§14.8 条文。 | YQuant-Principal |
+| V0.8 | 2026-07-25 | B1-P3C DDL 契约冻结。新增 §14.6.ter（PR-DDL-P3C 精确契约：前置条件/集合/索引/写入身份/原子性/rollback 路径/audit 工件/退出码/停止条件/执行人/不授权范围），权威定义引用 DESIGN-03-014 §6.4.ter V0.15；§10 G-C-1 行停止条件列追加 §14.6.ter + DESIGN §6.4.ter 引用；§10.bis PR-DDL-P3C 行标注「P3-A + P3-B + P3-C 已全部授权冻结」并引用 §14.6.ter。退出码语义按 task 授权：0=PASS / 2=preflight target already exists / 3=collection create fail / 4=index create fail。不动既有 §3.3/§14.4/§14.5/§14.6 通用要求/§14.6.4/§14.6.bis/§14.7/§14.8 条文。 | YQuant-Principal |
+| V0.9 | 2026-07-26 | B2 实测映射契约冻结。新增 §14.4.5（B2 单次只读 smoke 实测映射契约冻结）：依据 2026-07-26 B2 一次性只读 smoke 的冻结证据（真实报告只读副本位于 `/tmp/yquant-b2-pr234-20260726/`，不可移动/提交、不可重跑），冻结六项可执行契约——（1）§14.4.5.2 PR-3 `flow.northbound_daily` 经 `stock_hsgt_individual_em(symbol)` 实际返回北向**持股历史**语义（9 个持股字段），**不是**北向净流入；现有 expected 0/11，缺失 date/stock/northbound_net_inflow；禁止伪装，T2 须三选一（A 分流正确 endpoint / B 变更 capability 语义 / C Pascal 确认放弃净流入），未获选择不得自行实现。（2）§14.4.5.3 PR-4 空返回语义区分（无交易日/schema drift/调用异常），本次 row_count=0 且 actual_fields=0 判定 verdict=fail、empty_semantics=undetermined，T2 须在 reporter 定义 empty_semantics 字段，后续独立 live-read 在交易日复验；本阶段不重跑。（3）§14.4.5.4 PR-2 SSL 网络停止诊断边界（endpoint_unreachable，非代码 defect，禁止与 mapping 修复耦合，仅允许后续单变量网络诊断）。（4）§14.4.5.5 单次 live-read 精确调用预算（PR-2=2/PR-3=3/PR-4=2，本次已用尽）与零写入边界（无重试/无 fallback/零 Mongo/Cache/Audit/DDL/cron）。（5）§14.4.5.6 T2 实现最小文件范围与禁止修改清单。（6）§14.4.5.7 T2 验收准则 7 项。本节为权威可执行契约，RFC §13.4.5 引用本节，DESIGN §15.x V0.16 为工具链设计定义。不动 §3 domain object 字段定义（除非 Pascal 确认选项 B）、不动 §14.6.x DDL 冻结契约、不动既有授权范围。 | YQuant-Principal |
+| V0.10 | 2026-07-26 | **Pascal C+X2 决策同步（Recovery/T2.5）**。§14.4.5.2 PR-3 三选一由 Pascal 2026-07-26 明确选 **C**（当前 Phase 3 不提供 northbound net inflow；`northbound_net_inflow` 保持 None；持股历史不得伪装为净流入；不引入新 endpoint/capability；§3 字段定义不变）。§14.4.5.3 PR-4 空返回语义按 **X2** 收敛：移除 `empty_semantics` reporter 字段与三分类（undetermined/no_trading_data/schema_drift/call_anomaly）；空返回维持 verdict=fail（保守）；reporter 账本同步移除 `worktree_changed`（X1 候选 runtime git-worktree 探测被 X2 否决）。§14.4.5.6 T2 最小文件范围与禁止清单同步更新（移除 empty_semantics/worktree_changed）。§14.4.5.7 验收准则第 2 项移除 empty_semantics 要求。删除全部「未选择/阻塞等待 Pascal」失效文本。§14.4.5.4 PR-2 SSL 边界、§14.4.5.5 零写入边界、§3 domain object、§14.6.x DDL 冻结契约均不变。权威可执行契约，RFC §13.4.5 V0.11 引用本节，DESIGN §4.2.1/§15.14 V0.17 为工具链设计定义。 | YQuant-Principal |
 
 ---
 
@@ -540,9 +543,9 @@ SENTIMENT_LIMIT_UP_POOL = "sentiment.limit_up_pool"
 
 | 集合名 | 子阶段 | 唯一键 | 索引 | TTL |
 |---|---|---|---|---|
-|| `03_data_ud_market_sector_snapshot` | P3-A | `{market, sector_code, snapshot_date}` | `{sector_code:1, snapshot_date:-1}`, `{snapshot_date:-1}`, `{sector_type:1, snapshot_date:-1}` | 无（物化可追溯数据） |
-|| `03_data_ud_stock_capital_flow` | P3-B | `{market, symbol, trade_date}` | `{symbol:1, trade_date:-1}`, `{trade_date:-1}` | 无（物化可追溯数据） |
-|| `03_data_ud_market_sentiment_snapshot` | P3-C | `{market, snapshot_date, snapshot_time}` | `{snapshot_date:-1}`, `{snapshot_time:-1}` | 无（物化可追溯数据） |
+| `03_data_ud_market_sector_snapshot` | P3-A | `{market, sector_code, snapshot_date}` | `{sector_code:1, snapshot_date:-1}`, `{snapshot_date:-1}`, `{sector_type:1, snapshot_date:-1}` | 无（物化可追溯数据） |
+| `03_data_ud_stock_capital_flow` | P3-B | `{market, symbol, trade_date}` | `{symbol:1, trade_date:-1}`, `{trade_date:-1}` | 无（物化可追溯数据） |
+| `03_data_ud_market_sentiment_snapshot` | P3-C | `{market, snapshot_date, snapshot_time}` | `{snapshot_date:-1}`, `{snapshot_time:-1}` | 无（物化可追溯数据） |
 
 **唯一键语义**：同一唯一键的记录通过 upsert（`update_one` with `$set`）更新，相同键的后续写入覆盖先前的完整记录。不保留历史版本（如需版本跟踪属 Phase 5+）。
 
@@ -656,7 +659,7 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 | # | 验证点 | 描述 | 子阶段 | 验证方式 |
 |---|---|---|---|---|
 | V-GEN-1 | **唯一键幂等性** | 相同唯一键的重复写入应当 upsert，不产生重复记录 | 全部 | 单元测试：mock 数据库验证 upsert 行为 |
-|| V-GEN-2 | **Provider fetch 超时** | AKShare fetch 超时（可配置，默认 `30s`；[待验证] AKShare 实际响应时间分布）后降级为 `DataResult.error` | 全部 | 集成测试：mock Provider 模拟超时 |
+| V-GEN-2 | **Provider fetch 超时** | AKShare fetch 超时（可配置，默认 `30s`；[待验证] AKShare 实际响应时间分布）后降级为 `DataResult.error` | 全部 | 集成测试：mock Provider 模拟超时 |
 | V-GEN-3 | **空 Provider 返回** | Provider 返回空 DataFrame → 成功但 data=[] | 全部 | 单元测试 |
 | V-GEN-4 | **数据格式** | `snapshot_date` / `trade_date` 格式为 `YYYY-MM-DD` | 全部 | 单元测试：正则校验 |
 | V-GEN-5 | **来源可追溯** | `provider` 字段非空 | 全部 | fixture 验证：3 字段均非空 |
@@ -681,9 +684,9 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 
 | 编号 | 验收项 | 验证方式 | 子阶段 |
 |---|---|---|---|
-|| A-001 | `SectorSnapshot` domain object 定义完整（19 个字段 + `from_dict`） | Python import + `from_dict()` 返回有效对象 | P3-A |
-|| A-002 | `CapitalFlowRecord` domain object 定义完整（17 个字段 + `from_dict`） | 同上 | P3-B |
-|| A-003 | `MarketSentimentSnapshot` domain object 定义完整（22 个字段 + `from_dict`） | 同上 | P3-C |
+| A-001 | `SectorSnapshot` domain object 定义完整（19 个字段 + `from_dict`） | Python import + `from_dict()` 返回有效对象 | P3-A |
+| A-002 | `CapitalFlowRecord` domain object 定义完整（17 个字段 + `from_dict`） | 同上 | P3-B |
+| A-003 | `MarketSentimentSnapshot` domain object 定义完整（22 个字段 + `from_dict`） | 同上 | P3-C |
 | A-004 | AKShareProvider 新增 6 个 capability 注册成功 | `registry.has_capability("sector.snapshot", "CN") == True` | 全部 |
 | A-005 | external_fallback_chains 中 Phase 3 六项正确注册 | 断言 `chain` 为 `["akshare"]` | 全部 |
 | A-006 | FreshnessPolicy flow/sector/sentiment TTL 正确注册 | `policy.get_ttl("flow") == 43200` 等 | 全部 |
@@ -695,17 +698,17 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 | A-012 | P3-C 单元测试：市场温度范围验证 | Python 断言 | P3-C |
 | A-013 | `git diff --check` exit 0 | 终端命令 | 全部 |
 | A-014 | `git diff --name-status` 仅含目标文件 | 终端命令 | 全部 |
-|| A-015 | 文档中明确声明所有数据为「辅助研究数据，不构成交易指令或投资建议」 | `grep -c '辅助研究数据，不构成交易指令或投资建议'` 在 SPEC 三份 domain object docstring 中至少出现 3 次 | 全部 |
-|| **A-016** | **PR-0 Secret source 审计**：逐候选文件验证存在性 + 可加载性；结果表包括文件路径存在、可读、键声明存在三条独立记录 | 审计报告输出（不包含 secret 值/长度/URI/用户名） | T4 P3-A/B/C |
-|| **A-017** | **PR-1 MongoDB 只读预检**：连接 ping 成功 + `list_collection_names()` 列出所有集合 + 确认三个 P3 目标集合不存在 | 终端命令输出（不含密码） | T4 P3-A/B/C |
-|| **A-018** | **PR-2 smoke sector**：单板块代码 ≤3 交易日，零持久化写，产出 YAML 报告包含 connectivity/auth/permissions/field_mapping/data_sample/vs_fixture | 检查报告文件存在且包含全部六节 | T4 P3-A |
-|| **A-019** | **PR-3 smoke flow**：单标的 ≤3 交易日，零持久化写，产出 YAML 报告同上 | 同上 | T4 P3-B |
-|| **A-020** | **PR-4 smoke sentiment**：单日期，零持久化写，产出 YAML 报告同上 | 同上 | T4 P3-C |
-|| **A-021** | **T4 零持久化写验证**：DataRouter.query() 对 P3 capability 的 source_trace 不包含 `materialized`/`cache` 条目；force_refresh 也不产生产生持久化副作用 | Python spy/mock 验证 | T4 P3-A/B/C |
-|| **A-022** | **连通性/认证/权限/数据合理性四条独立记录**：每条 smoke 报告的 connectivity/auth/permissions 节必须独立、不可互相推导 | 检查 YAML 报告结构 | T4 P3-A/B/C |
-|| **A-023** | **Secret source 非泄露三布尔检查**：审计输出仅包含存在/不存在/可加载/不可加载/键声明/缺失的布尔结论，不含值/长度/URI/用户名 | 终端输出审计 | T4 P3-A/B/C |
-|| **A-024** | **失败后不自动重试、不切换写入**：smoke 失败仅记录报告，不写入物化/Cache，不自动重试，不自动回退 | 检查 smoke 报告输出 + 无 MongoDB 变更 | T4 P3-A/B/C |
-|| **A-025** | **DDL/DML/真实 refresh 仍阻塞**：T4 阶段不执行 `createCollection`、`createIndex`、`upsert()`、`refresh_xxx()` | 终端检查 MongoDB 集合清单 + 无新写入 | T4 P3-A/B/C |
+| A-015 | 文档中明确声明所有数据为「辅助研究数据，不构成交易指令或投资建议」 | `grep -c '辅助研究数据，不构成交易指令或投资建议'` 在 SPEC 三份 domain object docstring 中至少出现 3 次 | 全部 |
+| **A-016** | **PR-0 Secret source 审计**：逐候选文件验证存在性 + 可加载性；结果表包括文件路径存在、可读、键声明存在三条独立记录 | 审计报告输出（不包含 secret 值/长度/URI/用户名） | T4 P3-A/B/C |
+| **A-017** | **PR-1 MongoDB 只读预检**：连接 ping 成功 + `list_collection_names()` 列出所有集合 + 确认三个 P3 目标集合不存在 | 终端命令输出（不含密码） | T4 P3-A/B/C |
+| **A-018** | **PR-2 smoke sector**：单板块代码 ≤3 交易日，零持久化写，产出 YAML 报告包含 connectivity/auth/permissions/field_mapping/data_sample/vs_fixture | 检查报告文件存在且包含全部六节 | T4 P3-A |
+| **A-019** | **PR-3 smoke flow**：单标的 ≤3 交易日，零持久化写，产出 YAML 报告同上 | 同上 | T4 P3-B |
+| **A-020** | **PR-4 smoke sentiment**：单日期，零持久化写，产出 YAML 报告同上 | 同上 | T4 P3-C |
+| **A-021** | **T4 零持久化写验证**：DataRouter.query() 对 P3 capability 的 source_trace 不包含 `materialized`/`cache` 条目；force_refresh 也不产生产生持久化副作用 | Python spy/mock 验证 | T4 P3-A/B/C |
+| **A-022** | **连通性/认证/权限/数据合理性四条独立记录**：每条 smoke 报告的 connectivity/auth/permissions 节必须独立、不可互相推导 | 检查 YAML 报告结构 | T4 P3-A/B/C |
+| **A-023** | **Secret source 非泄露三布尔检查**：审计输出仅包含存在/不存在/可加载/不可加载/键声明/缺失的布尔结论，不含值/长度/URI/用户名 | 终端输出审计 | T4 P3-A/B/C |
+| **A-024** | **失败后不自动重试、不切换写入**：smoke 失败仅记录报告，不写入物化/Cache，不自动重试，不自动回退 | 检查 smoke 报告输出 + 无 MongoDB 变更 | T4 P3-A/B/C |
+| **A-025** | **DDL/DML/真实 refresh 仍阻塞**：T4 阶段不执行 `createCollection`、`createIndex`、`upsert()`、`refresh_xxx()` | 终端检查 MongoDB 集合清单 + 无新写入 | T4 P3-A/B/C |
 
 ---
 
@@ -815,7 +818,7 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 
 | Gate ID | 授权内容 | 触发时机 | 影响范围 | 停止条件 | 涉及子阶段 | 执行人 |
 |---|---|---|---|---|---|---|
-|| **PR-0** | **Secret source 审计**（仅 MongoDB）：逐候选文件证明五组件键 `MONGODB_HOST`、`MONGODB_PORT`、`MONGODB_USERNAME`、`MONGODB_PASSWORD`、`MONGODB_DATABASE`（来自 **skills/.env**，复用 Phase 2 PortfolioMongoLoader 认证语义，组件式构造连接，非 URI）的文件存在、可被进程加载、全部五键声明且非空匹配。**AKShare 跳过密钥审计**——AKShare 为匿名无 token 数据源。**禁止输出值、长度、URI、用户名或全路径+键值组合** | T4 起始 | 文件存在性检查、运行时 env 探测（只读） | 候选文件不存在、任意一键缺失/空白、端口无效、数据库名不等于 `tradingagents` → 标记 MongoDB 为「NOT_AUTHORIZED」；AKShare 跳过 PR-0 检查 | P3-A/B/C | Pascal 或 DevOps |
+| **PR-0** | **Secret source 审计**（仅 MongoDB）：逐候选文件证明五组件键 `MONGODB_HOST`、`MONGODB_PORT`、`MONGODB_USERNAME`、`MONGODB_PASSWORD`、`MONGODB_DATABASE`（来自 **skills/.env**，复用 Phase 2 PortfolioMongoLoader 认证语义，组件式构造连接，非 URI）的文件存在、可被进程加载、全部五键声明且非空匹配。**AKShare 跳过密钥审计**——AKShare 为匿名无 token 数据源。**禁止输出值、长度、URI、用户名或全路径+键值组合** | T4 起始 | 文件存在性检查、运行时 env 探测（只读） | 候选文件不存在、任意一键缺失/空白、端口无效、数据库名不等于 `tradingagents` → 标记 MongoDB 为「NOT_AUTHORIZED」；AKShare 跳过 PR-0 检查 | P3-A/B/C | Pascal 或 DevOps |
 | **PR-1** | **MongoDB 只读连通预检**：使用 `pymongo.MongoClient` 连接 `tradingagents` 库，ping，列出所有集合，验证无三个 P3 目标集合。**不建集合、不读业务数据** | PR-0 pass | 网络 io（<1s）、MongoDB driver 加载 | 连接失败/认证拒绝/意外发现目标集合已存在 → 停止并记录 | P3-A/B/C | Dev/Agent |
 | **PR-2** | **AKShare Provider smoke：`sector.snapshot` + `sector.ranking`** — 单板块代码（`BK0489`），≤3 个交易日窗口，AKShare 匿名只读调用。**零持久化写** | PR-1 pass（AKShare smoke 不依赖 PR-0 pass） | AKShare API 调用 1-2 次、每小时配额 | API 返回错误/字段完全不匹配/json 解析异常 → 停止；差异仅记录在字段映射报告中 | P3-A | Dev/Agent |
 | **PR-3** | **AKShare Provider smoke：`flow.capital_flow_daily` + `flow.northbound_daily`** — 单标的（`600519` / `000001`），≤3 个交易日窗口，AKShare 匿名只读调用 | PR-1 pass（AKShare smoke 不依赖 PR-0 pass；可并行于 PR-2） | AKShare API 调用 2-4 次、每小时配额 | API 失败/空返回/北向字段缺失 → 停止并记录 | P3-B | Dev/Agent |
@@ -1027,6 +1030,157 @@ overall:
 | 字段映射匹配度低（<70%） | fail → 停止 → 需更新 domain object schema 后重做 smoke |
 | 限流（429） | 记录限流信息 → 标记为 rate_limited → 等待 ≥60s → **不自动重试**（留给 Pascal 判断） |
 | 网络超时 | 记录超时 → 标记为 timeout → 不自动重试 |
+
+### 14.4.5 B2 单次只读 smoke 实测映射契约冻结（V0.9 新增 — 权威可执行契约）
+
+> **权威定位**：本节是 RFC §13.4.5 所引用的**可执行契约层**。工具链设计（字段选择逻辑、reporter 实现、fixture 结构）的权威定义在 **DESIGN-03-014 §15.x（V0.16）**；本节定义业务语义、verdict 边界与禁止行为。如本节与 DESIGN 出现差异，以本节业务语义为准，DESIGN 实现须对齐本节。
+
+#### 14.4.5.1 冻结证据（只读、不可重跑）
+
+| 证据 | 路径 | 性质 |
+|---|---|---|
+| PR-2 sector | `/tmp/yquant-b2-pr234-20260726/pr2/smoke-sector-20260726.yaml` | 只读副本；不可移动/提交/复制到仓库；不可重跑 |
+| PR-3 flow | `/tmp/yquant-b2-pr234-20260726/pr3/smoke-flow-20260726.yaml` | 同上 |
+| PR-4 sentiment | `/tmp/yquant-b2-pr234-20260726/pr4/smoke-sentiment-20260726.yaml` | 同上 |
+
+**硬约束**：本阶段（Full Flow T1）不重跑任何 live-read；本次 B2 已用尽单次 live-read 预算（§14.4.5.5）。T2 Design / T3 Implement 的映射修复须基于本冻结证据 + AKShare 公开文档 + 离线 fixture，**不得**以「需要再验证」为由重跑 live-read。
+
+#### 14.4.5.2 PR-3 flow.northbound_daily 语义不匹配（关键阻断）
+
+**冻结事实**（来自 PR-3 smoke 报告）：
+- endpoint：`akshare.stock_hsgt_individual_em(symbol='600519')`
+- 网络层：success（latency ~1131ms），auth=authorized，permissions=ok
+- 返回 5 行（2017-03-16..2017-03-22），actual_fields = 9：
+  `持股日期` / `当日收盘价` / `当日涨跌幅` / `持股数量` / `持股市值` / `持股数量占A股百分比` / `今日增持股数` / `今日增持资金` / `今日持股市值变化`
+- 现有 expected（脚本 `_EXPECTED_NORTHBOUND_FIELDS`）：`date` / `stock` / `northbound_net_inflow`，外加 flow 侧 8 字段 = 11；matched 0/11；missing = `date` / `stock` / `northbound_net_inflow`。
+
+**语义判定**：该 endpoint 返回**北向持股历史（holding history）**语义，**不是**北向净流入（net inflow）。两者业务语义不同：
+- 持股历史：某标的每日北向持股数量、持股市值、占比、日增减——回答「北向持有多少」。
+- 净流入：某标的每日北向买卖差额——回答「北向今天净买了多少」。
+
+**禁止伪装（硬约束，T2/T3 必须遵守）**：
+- 禁止将 `持股数量` / `持股市值` / `今日增持资金` 等字段别名映射为 `northbound_net_inflow`。
+- 禁止在 `CapitalFlowRecord.northbound_net_inflow`（§3.2）中静默填入持股语义的值。
+- 禁止在 smoke 报告 / domain object / mapping 文档中把「北向持股历史」表述为「北向净流入」。
+
+**Pascal 决策（2026-07-26）：选 C — 放弃净流入，字段保持 None**
+
+Pascal 已明确选择 **C**：当前 Phase 3 不提供北向净流入数据，`northbound_net_inflow` 保持 None，持股历史作为辅助保留。选项 A、B 均**未被选择**。
+
+| 选项 | 落地动作 | 影响范围 | 状态 |
+|---|---|---|---|
+| **A. 分流到正确 endpoint** | T2 在 DESIGN §4.2 / §15.6 将 `flow.northbound_daily` 的 fetch 路径指向真正返回北向净流入的 endpoint（候选：`stock_hsgt_fund_flow_summary_sina` / `stock_em_hsgt_north_net_flow_in` 等，T2 须基于 AKShare 公开文档确认）；持股历史 endpoint 另立 capability 或丢弃 | 需新增/调整 capability（超出本卡范围） | **未选（Pascal 2026-07-26 明确放弃）** |
+| **B. 变更 capability 语义** | 将 `flow.northbound_daily` 语义改为「北向持股历史」；T2 须回头修订 SPEC §3.2 `CapitalFlowRecord` 的 `northbound_*` 字段定义 | 下游消费方契约变更 | **未选（Pascal 2026-07-26 明确放弃）** |
+| **C. Pascal 确认放弃净流入（已选）** | 当前 Phase 3 不提供北向净流入；`northbound_net_inflow` 保持 None；持股历史作为辅助保留 | 能力缺口（已接受） | **✅ Pascal 2026-07-26 已确认选择** |
+
+**C 选项落地约束（硬约束，T2/T3 须遵守）**：
+- `flow.northbound_daily` capability **保留**，但其 fetch 路径在当前 Phase 3 **不指向任何真实 endpoint**——`northbound_net_inflow` 恒为 None。
+- `CapitalFlowRecord.northbound_net_inflow`（§3.2）字段定义**不变**（仍为 `float | None = None`），只是当前 Phase 3 永不填充非 None 值。
+- 持股历史（B2 返回的 9 个持股字段）作为**辅助参考**，T2/T3 可在 DESIGN 工具链中以参考字段标注，但**不得**映射入 `northbound_net_inflow` 或任何 `*_net_inflow` 字段。
+- 不引入新 endpoint、新 capability、新 endpoint skeleton。
+
+#### 14.4.5.3 PR-4 sentiment 空返回语义区分
+
+**冻结事实**（来自 PR-4 smoke 报告）：
+- endpoint：`akshare.stock_market_fund_flow()` + `akshare.stock_zt_pool_em(date)`
+- 网络层：success（latency ~1525ms），auth=authorized，permissions=ok
+- row_count=0，actual_fields=0，matched 0/31，missing=[]（actual 为空，无法计算 missing）
+
+**Pascal 决策（2026-07-26）：选 X2 — 空返回语义收敛为保守 fail，移除 empty_semantics 分类**
+
+空返回维持 verdict=fail（保守）。原三分类（无交易日/schema drift/调用异常）的 `empty_semantics` reporter 字段在 X2 下**移除**——reporter 不再输出 `empty_semantics` 分类字段，空返回仅在 memo 中记录观测事实。
+
+| B2 观测事实 | X2 下的 verdict |
+|---|---|
+| row_count=0 且 actual_fields=0（本次 B2 即此） | **fail**（保守，不进一步细分原因） |
+| endpoint 抛异常、返回非 DataFrame、JSON 解析失败 | **fail**（停止该子阶段；记录异常类；不自动重试） |
+
+**本次 B2 判定（按 X2）**：verdict=fail（memo 记录 `matched_ratio=0.00 (0/31); missing=[]; row_count=0; actual_fields=0`）。后续独立 live-read（非本阶段）在交易日复验时，若返回非空数据则按正常字段匹配流程判定；reporter 不再负责区分「无交易日」与「schema drift」的空返回语义。
+
+**X2 落地约束（硬约束，T2/T3 须遵守）**：
+- reporter 账本**不输出** `empty_semantics` 字段。
+- reporter 账本**不输出** `worktree_changed` 字段（原 X1 候选的 runtime git-worktree 探测被 X2 移除）。
+- 空返回 verdict 一律 fail；不引入 verdict 篡改逻辑。
+- PR-4 的 expected 字段集仍保留（基于公开文档推断），后续独立 live-read 复验时使用。
+
+#### 14.4.5.4 PR-2 sector SSL 网络停止诊断边界
+
+**冻结事实**（来自 PR-2 smoke 报告）：
+- endpoint：`akshare.stock_board_industry_cons_em("BK0489")` ×2
+- 两调用均 SSLError（`requests.exceptions`），connectivity=failed，latency_ms=null
+- auth=authorized（AKShare 匿名），permissions=restricted
+- verdict=fail，`endpoint_status=endpoint_unreachable`
+- memo：「endpoint_unreachable: SSLError: requests.exceptions — egress restriction, not a code defect.」
+
+**判定**：PR-2 失败为**网络层 egress 限制**（SSL/TLS 握手失败或出口阻断），**不是代码 defect**，也**不是** mapping 问题。
+
+**边界（硬约束）**：
+- 停止 PR-2（sector）后续 smoke，不自动重试。
+- 禁止将 PR-2 SSL 失败与 PR-3/PR-4 mapping 修复耦合——三者独立。
+- 仅允许后续**单变量网络诊断**（切换网络出口、验证 AKShare 上游可达性、检查 TLS 版本），且须 Pascal 独立授权，不在本 T1 阶段执行。
+- PR-2 的 expected 字段集在 T2 须基于 AKShare 公开文档与离线 fixture 推断更新，并明确标注「未 live-read 验证」；**不得**以「需要 live-read 验证」为由阻塞 T2。
+
+#### 14.4.5.5 单次 live-read 精确调用预算与零写入边界
+
+**精确预算（本次 B2 已用尽）**：
+
+| PR | endpoint | 本次实际调用 | 预算上限 | 剩余 |
+|---|---|---|---|---|
+| PR-2 | `stock_board_industry_cons_em` | 2（均 SSLError） | 2 | 0 |
+| PR-3 | `stock_individual_fund_flow` ×2 + `stock_hsgt_individual_em` ×1 | 3（均成功） | 3 | 0 |
+| PR-4 | `stock_market_fund_flow` + `stock_zt_pool_em` | 2（均成功但空） | 2 | 0 |
+
+**零写入边界（本次 B2 已遵守，T2/T3 须继承）**：
+- 无重试：所有失败仅记录。
+- 无 fallback：PR-2 SSL 失败后未切换 endpoint/provider。
+- 零 Mongo 写入：无集合/索引/文档变更。
+- 零 Cache 写入：无 `CacheManager.put()`。
+- 零 AuditLogger 写入：无 `03_data_ud_query_audit` 写入。
+- 零 DDL：无 `createCollection` / `createIndex`。
+- 零 cron/systemd 注册。
+
+**T2 边界**：T2 Design / T3 Implement 不得引入上述任何写入；mapping 修复仅体现在 expected 字段集、endpoint 选择、reporter 账本字段与 fixture/test 中。
+
+#### 14.4.5.6 T2 实现最小文件范围与禁止修改清单
+
+T2 Design（task t_987fde34）须在以下最小范围内体现映射修正，**禁止无关重构**：
+
+| 文件/文档 | 允许的修改 | 禁止的修改 |
+|---|---|---|
+| `docs/design/03_data/DESIGN-03-014-*.md` §4.2 | AKShare→Canonical 映射模式（endpoint 选择、字段 alias、单位、日期窗口） | domain object 字段定义（属 SPEC §3） |
+| `docs/design/03_data/DESIGN-03-014-*.md` §15.x | 工具链：expected 字段集、endpoint 选择逻辑、reporter 账本字段（provider_attempts/实际调用数/retry_count/fallback_count/mongo_calls/write_operations） | DDL 契约（§6.4 系列）；`worktree_changed`/`empty_semantics` 字段（X2 已移除） |
+| `scripts/t4_preflight/smoke_flow.py` | `_EXPECTED_FLOW_FIELDS` / `_EXPECTED_NORTHBOUND_FIELDS`、endpoint 选择（§14.4.5.2 C 已选，northbound 恒 None） | 测试框架结构 |
+| `scripts/t4_preflight/smoke_sentiment.py` | `_EXPECTED_SENTIMENT_FIELDS` / `_EXPECTED_LIMIT_UP_FIELDS`（空返回 verdict=fail 保守） | 同上 |
+| `scripts/t4_preflight/smoke_sector.py` | expected 字段集（基于公开文档推断） | 同上 |
+| `scripts/t4_preflight/provider_client.py` | endpoint 选择、空返回保守 fail 标记 | client 安全边界（单次、限速、零写入） |
+| `scripts/t4_preflight/reporter.py` / `models.py` | 账本字段（provider_attempts/实际调用数/retry_count/fallback_count/mongo_calls/write_operations） | 脱敏规则（§15.7.2）；`worktree_changed`/`empty_semantics` 字段（X2 已移除） |
+| `skills/data/unified_data/tests/fixtures/*` | 对应 fixture 更新以反映真实字段 | fixture 框架 |
+| 对应 `test_*.py` | 断言更新 | 测试覆盖范围缩减 |
+
+**禁止修改**：
+- SPEC-03-014 §3（domain object 字段定义）——Pascal 已选 C，不采用选项 B，§3 字段定义不变。
+- SPEC/RFC 的 DDL 契约（§14.6.x / §6.4.x）。
+- `docs/*template*`、生产代码、配置、secrets、Mongo/缓存/调度。
+
+#### 14.4.5.7 T2 验收准则（7 项）
+
+T2 Design 完成时须满足：
+1. PR-3 `flow.northbound_daily` 的 endpoint 选择已落实 §14.4.5.2 Pascal 已选的 **C**（northbound_net_inflow 恒 None，不指向真实 endpoint），且在 DESIGN §4.2 / §15.6 显式标注 C 已选与依据；不引入 A/B 选项的 endpoint skeleton。
+2. PR-4 空返回语义按 §14.4.5.3 X2 收敛：reporter **不输出** `empty_semantics` 字段，空返回 verdict=fail（保守）。
+3. PR-2 的 expected 字段集已基于公开文档推断更新，且明确标注「未 live-read 验证」。
+4. 单次 live-read 预算与零写入边界在 DESIGN §15.x 显式声明，且 T2 未重跑 live-read。
+5. smoke 报告账本字段（provider_attempts/实际调用数/retry_count/fallback_count/mongo_calls/write_operations）已在 reporter 定义最小实现；**不包含** `worktree_changed` 与 `empty_semantics`（X2 已移除）。
+6. 单元/fixture 测试、离线回归、静态零写入扫描、后续独立 live-read 的验证计划已定义（不在本阶段执行 live-read）。
+7. PR-2 SSL 网络诊断仅允许后续单变量网络诊断，未混进 mapping 修复或自动重试。
+
+#### 14.4.5.8 与既有条文的关系
+
+- 本 §14.4.5 是 §14.4（真实 Provider Smoke 规程）在 B2 冻结证据上的**精确化与冻结**，不修改 §14.4.1 通用规则、§14.4.2 报告模板、§14.4.3 报告存储、§14.4.4 失败与偏差处理的既有条文。
+- 不修改 §14.6.x DDL 冻结契约（P3-A/B/C 三者仍冻结）。
+- 不修改 §3 domain object 字段定义（Pascal 已选 C，§3 字段定义不变）。
+- 不修改既有用户授权范围（PR-0 ~ PR-4、PR-DDL-* 的授权语义不变）。
+
+---
 
 ### 14.5 Zero-Persistence-Write 保证
 
