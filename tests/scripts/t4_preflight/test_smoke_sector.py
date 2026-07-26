@@ -175,15 +175,45 @@ def test_smoke_sector_yamL_parses_back(tmp_path: Path) -> None:
         "field_mapping:",
         "data_sample:",
         "vs_fixture:",
+        "ledger:",
     ):
         assert section in text, f"missing section {section!r}"
     # Roundtrip: parse the YAML and check structure.
     parsed = yaml_parse(text)
     assert "capability" in parsed
     assert "overall" in parsed
+    # Ledger must be present (DESIGN §15.14.3).
+    assert "ledger" in parsed
+    assert "provider_attempts" in parsed["ledger"]
+    assert "actual_calls" in parsed["ledger"]
 
 
 def test_smoke_sector_caps_match_design() -> None:
     """Verify the call caps match DESIGN §15.6.1."""
     assert AKSHARE_MAX_CALLS["sector.snapshot"] == 1
     assert AKSHARE_MAX_CALLS["sector.ranking"] == 1
+
+
+def test_sector_expected_fields_are_chinese_column_names() -> None:
+    """PR-2 B2 fix: expected fields use AKShare Chinese column names
+    so FieldMapper.compare() matches actual upstream columns."""
+    from scripts.t4_preflight.smoke_sector import (
+        _EXPECTED_SECTOR_SNAPSHOT_FIELDS as snap_fields,
+        _EXPECTED_SECTOR_RANKING_FIELDS as rank_fields,
+    )
+    # All expected fields must be Chinese (not ASCII-only).
+    for f in snap_fields:
+        assert not f.isascii(), f"snapshot field {f!r} is not Chinese"
+    for f in rank_fields:
+        assert not f.isascii(), f"ranking field {f!r} is not Chinese"
+    # Verify fixture columns cover all expected fields.
+    from tests.scripts.t4_preflight.fixtures.t4_akshare_fixtures import (
+        sector_snapshot_fixture,
+        sector_ranking_fixture,
+    )
+    snap_cols = set(sector_snapshot_fixture()[0].keys())
+    rank_cols = set(sector_ranking_fixture()[0].keys())
+    for f in snap_fields:
+        assert f in snap_cols, f"snapshot field {f!r} missing from fixture"
+    for f in rank_fields:
+        assert f in rank_cols, f"ranking field {f!r} missing from fixture"

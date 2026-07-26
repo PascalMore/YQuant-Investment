@@ -144,10 +144,14 @@ def test_smoke_flow_yaml_has_all_six_sections(tmp_path: Path) -> None:
         "field_mapping:",
         "data_sample:",
         "vs_fixture:",
+        "ledger:",
     ):
         assert section in text
     parsed = yaml_parse(text)
     assert "capability" in parsed
+    assert "ledger" in parsed
+    assert "provider_attempts" in parsed["ledger"]
+    assert "actual_calls" in parsed["ledger"]
 
 
 def test_smoke_flow_caps_match_design() -> None:

@@ -35,6 +35,7 @@ from .models import (
     DataSampleResult,
     FieldMappingResult,
     FixtureDeviationResult,
+    LedgerBlock,
     OverallVerdict,
     PermissionResult,
     SmokeReport,
@@ -90,18 +91,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
 # Expected fields for sector.snapshot per SPEC-03-014 §3.1 (P3-A).
 # Kept minimal and forward-compatible with downstream mapping.
 _EXPECTED_SECTOR_SNAPSHOT_FIELDS: tuple[str, ...] = (
-    "sector_code",
-    "sector_name",
-    "snapshot_date",
-    "close",
-    "pct_chg",
-    "turnover",
+    "板块代码",
+    "板块名称",
+    "最新价",
+    "涨跌幅",
+    "总市值",
+    "换手率",
 )
 
 _EXPECTED_SECTOR_RANKING_FIELDS: tuple[str, ...] = (
-    "sector_code",
-    "sector_name",
-    "pct_chg",
+    "板块代码",
+    "板块名称",
+    "涨跌幅",
 )
 
 
@@ -253,6 +254,24 @@ def run_smoke(args: argparse.Namespace) -> int:
 
     date_label = args.date or datetime.now(tz=_CST).date().isoformat()
 
+    # Ledger block (DESIGN §15.14.3 最小实现).
+    if args.live_read:
+        provider_attempts = 2  # 1 × snapshot + 1 × ranking
+        actual_calls = sum(
+            1 for c in (snapshot, ranking) if c.connectivity == "success"
+        )
+    else:
+        provider_attempts = 0
+        actual_calls = 0
+    ledger = LedgerBlock(
+        provider_attempts=provider_attempts,
+        actual_calls=actual_calls,
+        retry_count=0,
+        fallback_count=0,
+        mongo_calls=0,
+        write_operations=0,
+    )
+
     report_metadata: dict[str, object] = {
         "capability": "sector.snapshot+sector.ranking",
         "provider": "akshare",
@@ -288,6 +307,7 @@ def run_smoke(args: argparse.Namespace) -> int:
         data_sample=data_sample,
         vs_fixture=FixtureDeviationResult(()),
         overall=overall,
+        ledger=ledger,
     )
 
     yaml_text = smoke_report_to_yaml(report)
