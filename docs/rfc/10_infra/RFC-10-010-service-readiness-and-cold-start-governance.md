@@ -7,8 +7,8 @@
 | 状态 | 草稿（Draft） |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-07-26 |
-| 最后更新 | 2026-07-26 |
-| 版本号 | V0.1 |
+| 最后更新 | 2026-07-27 |
+| 版本号 | V0.3 |
 | 所属模块 | 10_infra（基础设施 / 服务治理） |
 | 依赖RFC | RFC-10-003（infra 架构）、RFC-10-008（submodule 升级器） |
 | 关联SPEC | SPEC-10-010-service-readiness-and-cold-start-governance |
@@ -21,12 +21,16 @@
 | 版本号 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
 | V0.1 | 2026-07-26 | 初始创建：定义冷启动 readiness 状态模型、四服务探针哲学、无副作用依赖等待约束与验收准则 | YQuant-Principal |
+| V0.2 | 2026-07-27 | T2.1 同步修订：DESIGN/SPEC 的 DSA 端口已按 live 证据（PID 272 监听 8888）修正，本 RFC 无实质冲突；更新元数据反映三文档一致性 | YQuant-Principal |
+| V0.3 | 2026-07-27 | T1 冷启动窗口修订：纳入 DSA 真实启动时间线；为 DSA 固定最小 readiness 时间预算与 `starting` 治理边界，消除连续失败阈值早于已测 API-ready 的误报 | YQuant-Principal |
 
 ---
 
 ## 1. 执行摘要
 
 当前 YQuant 的四项关键服务（DSA、TA-CN、Hermes Gateway yquant、Hermes Gateway yinglong）在系统冷启动（WSL 开机或 systemd --user 重启）时，均依赖 `systemd Type=simple` active 状态作为"可用"信号。实测表明 `active` 早于真实可就绪约 37-56 秒，且 `network-online.target` 在 WSL user-systemd 下不构成外部网络/飞书就绪证据。未建立统一 readiness 模型导致依赖等待不可靠、启动顺序无契约可循、降级状态不可观测。
+
+**本次 DSA 运行时证据（2026-07-27）**：在已成功完成的 Option B 恢复路径 `stop → :8888 无监听 → start` 中，当前仅 DSA MainPID `5052` 监听 `127.0.0.1:8888`，且 `GET /health=200`。最新启动 journal 显示 22:27:02 开始、22:27:12 systemd 标记 Started、22:27:16 Uvicorn/API ready，即从启动到 API ready 约 14 秒。现有单服务 `ExecStartPost=-...readiness_probe.py --service DSA --report ...` 在约 10 秒、3 次 probe 后以 `status=failed, probe_error=consecutive_failures` 结束；其前导 `-` 忽略退出失败，服务随后仍变为可用。该事实证明的是**probe 时间预算不足**，不是 probe 创建、保留或杀死进程的证据。
 
 本 RFC 定义统一的四状态模型（`starting` / `ready` / `degraded` / `failed`）、每项服务的只读探针语义和零副作用的依赖等待治理边界。目标是以最小变更面（不新增平行 wrapper、不修改 Hermes core、不涉及统一数据层/策略/风控/组合/交易执行），使 Design/Implement 阶段能以现有 user-systemd unit 和既有启动入口实现可控、可观测的冷启动编排。
 
@@ -127,7 +131,7 @@
 
 | 状态 | 定义 | 转换规则 |
 |---|---|---|
-| `starting` | 服务进程已启动，正在完成初始化或依赖就绪检查。systemd active 但真实可用性尚未确认。 | 进入此状态的时机：systemd Type=simple 标记 active 之后，首次 probe 成功之前。超时 → `failed`。 |
+| `starting` | 服务进程已启动，正在完成初始化或依赖就绪检查。systemd active 但真实可用性尚未确认。 | 进入此状态的时机：systemd Type=simple 标记 active 之后，首次 probe 成功之前。对 DSA，在其服务特定有限时间预算内，任何 probe 失败（包括连续失败计数）只能保持 `starting`，不得提前判为 `failed`；预算耗尽后才可按连续失败规则裁决。 |
 | `ready` | 服务已完全就绪，可正常处理请求。所有 probe 条件均满足。 | 由 `starting` 转换而来（首次 probe 全 PASS）。可转换到 `degraded`（部分 probe 降级）或 `failed`（全部失败）。 |
 | `degraded` | 服务运行中，但部分功能不可用或性能下降（如外部 API 不可达、依赖服务离线）。核心请求可处理，非核心功能受限。 | 由 `ready` 或 `starting` 转换而来。可恢复为 `ready`，也可转为 `failed`。 |
 | `failed` | 服务无法对外提供服务。probe 持续失败超过超时阈值。 | 最终状态。需 systemd restart 或人工介入恢复。 |
@@ -141,8 +145,10 @@
 - **readiness 判定**：必须证明以下条件全部满足：
   1. HTTP 200 on `/health`（或 `/api/health`）。
   2. 应用进程已完成 lifespan 初始化（当前 DSA 的 FastAPI lifespan 不含阻塞操作，仅 `_check_frontend_assets_consistency` 是文件系统检查）。
+  3. systemd MainPID、`127.0.0.1:8888` 的监听 PID 与该 unit cgroup 归属一致，避免以其他进程的端口/health 响应误判 ready。
 - **降级条件**：若 `/health` 返回非 200 或超时。
 - **platform_connected**：DSA 不直接连接外部消息平台，不适用。
+- **端口隔离约束**：DSA 的 readiness probe 必须以 DSA 实际监听端口（当前部署 8888）为目标，禁止使用 TA-CN 的端口（8000）进行 DSA probe。端口由 `WEBUI_PORT` 环境变量配置，probe 应从 DSA 的实际配置或运行进程动态解析。
 
 #### 4.3.2 TA-CN（`tradingagents-cn.service`）
 
@@ -241,10 +247,29 @@
 | 场景 | 行为 |
 |---|---|
 | 单次 probe 超时（> 10s） | 记录 `probe_error=timeout`，`status` 不变仍为 `starting`，继续下次轮询 |
-| 连续 N 次 probe 失败 | 标记为 `failed`，记录 `probe_error`，停止等待（Design 定义 N 值） |
+| 连续 N 次 probe 失败 | 对一般服务，按其服务预算裁决；对 DSA，必须先耗尽 RFC §5.3.1 的有限预算，随后连续 N 次失败才可标记为 `failed`。预算内仅记录失败并保持 `starting`。 |
 | 总等待超时（Design 定义） | 标记为 `failed`，记录 `elapsed_seconds`，输出最终状态 |
 | probe 返回非 200 但有辅助证明服务可用（如端口存活） | 标记为 `degraded`，记录降级原因 |
 | `platform_connected` 首次确认 | 记录确认证据的 journal 时间戳，`platform_connected=confirmed_at_boot` |
+
+#### 5.3.1 DSA 冷启动预算与 false-failed 治理
+
+DSA 的 read-only readiness probe 采用下列可计算、有限的时间预算：
+
+```text
+DSA_READINESS_BUDGET_SECONDS
+  = DSA_MEASURED_COLD_START_SECONDS + DSA_SAFETY_MARGIN_SECONDS
+  = 14 + 10
+  = 24 seconds
+```
+
+- 计时基准是本次 DSA 启动尝试的开始时间；Design 必须明确从现有 unit/probe 可获得的同一启动轮次时间戳取值，禁止混入前次启动或跨服务时间戳。
+- `14` 是上述已测 journal 中“开始 → Uvicorn/API ready”的边界，不是估计值；`10` 秒是明确的安全余量，用于正常冷启动抖动，不能被隐式缩减。
+- 在 `[0, 24s)` 内，P-DSA-1/P-DSA-2 非 200、连接拒绝、单次超时或达到连续失败阈值，都只能输出/保持 `starting` 和最近 `probe_error`，并在固定间隔继续只读 probe。
+- 到达或超过 24 秒后，只有 DSA health 备选集合仍全失败**或** PID/端口/cgroup 归属条件未满足，且达到 DSA 的连续失败阈值，才可输出 `failed`。首次成功必须立即输出 `ready`；禁止无限等待。
+- `probe fail` 是一次观察结果，不等同于应用最终 failed；最终裁决必须同时遵守时间预算、服务特定连续失败规则和现有 ready 证据。
+
+后续 Design 只能在 unit/probe 的最小参数 allowlist 内选择实现：DSA 服务特定的重试上限、固定轮询间隔、单次 timeout、总预算/截止时间和其传入方式。不得改变其他服务的语义、endpoint、端口或 `ExecStartPost=-` 的容错策略；不得新增自动 restart/kill、POST、写库、消息或交易动作。
 
 ### 5.4 冷启动验收记录格式
 
@@ -255,27 +280,22 @@ cold-start-report:
   boot_id: <UUID 或 timestamp>
   services:
     - name: DSA
-      unit_active_at: <timestamp>
-      local_ready_at: <timestamp>
       status: ready
       probe_count: 3
       elapsed: 42.5
     - name: TA-CN
-      unit_active_at: <timestamp>
-      local_ready_at: <timestamp>
+
       status: ready
       probe_count: 5
       elapsed: 51.2
     - name: gw-yquant
-      unit_active_at: <timestamp>
-      local_ready_at: <timestamp>
+
       platform_connected: confirmed_at_boot
       platform_evidence: "2026-07-26T08:15:23.456Z gateways/worker.py telethon session connected"
       probe_count: 8
       elapsed: 65.0
     - name: gw-yinglong
-      unit_active_at: <timestamp>
-      local_ready_at: <timestamp>
+
       platform_connected: unknown
       probe_count: 10
       elapsed: 70.0
@@ -338,6 +358,7 @@ cold-start-report:
 | TA-CN `start_all.sh` 默认路径含 POST sync，冷启动时误触发 | 高 | 高 — 生产数据写入副作用 | 冷启动入口强制使用 `--no-smoke` 参数；Design 阶段验证是否需新增独立冷启动入口脚本 | 人工审核每次冷启动记录验收报告的 `side_effect_free` 字段 |
 | Gateway `platform_connected` 证据在 journal 中不可靠（日志级别、轮转、跨 boot） | 中 | 中 — `platform_connected` 回退为 unknown | 使用 `journalctl --since` + 精确 log 匹配；若 journal 证据不可用则标记 unknown 而非假阳性 confirmed | 由 Pascal 手动确认首次连接 |
 | DSA `/health` 端点不足以表达真实 readiness | 中 | 低 — 状态退化而非不可用 | 现端点至少证明 `status: "ok"`，降级为 degraded 而非 blocked；允许 C 组扩展 | 保持当前 /health 定义不变，degraded 状态下人工确认 |
+| DSA 冷启动超过旧 probe 窗口但最终可用，被提前标为 failed | 已发生 | 中 — 产生 false-failed readiness，误导运维判断 | 以已测 14 秒加固定 10 秒余量形成 24 秒有限预算；预算内保持 `starting`，预算耗尽后才适用连续失败裁决 | 若 24 秒仍不足，以新增真实启动证据修订 RFC/SPEC；不得以无限重试规避裁决 |
 | WSL 环境差异导致 probe 路径不一致 | 低 | 中 — 跨环境不可复现 | 所有 probe 设计为路径无关（通过相对路径或 systemd WorkingDirectory）；不依赖 WSL 特有命令 | 在 Design 中注明 WSL 特定假设及其检测保护 |
 | systemd 运行配置修改引入生产副作用 | 低 | 高 — 意外的自动重启或配置漂移 | Design 阶段逐项固化最小变更、回滚、验证和禁止自动重启策略 | 先在 staging/systemd --user test 环境验证 |
 
@@ -377,6 +398,8 @@ cold-start-report:
 3. `platform_connected` 对于 Gateway 服务可区分 `confirmed_at_boot` 和 `unknown`。
 4. TA-CN 冷启动入口跳过 POST smoke（使用 `--no-smoke` 或等效机制）。
 5. 探针均无 POST/PUT/DELETE、无 Mongo 写、无同步、无飞书消息、无交易。
+6. 已测 DSA 冷启动边界（开始至 API ready 约 14 秒）下，readiness probe 在 API ready 前不输出最终 `failed`；API ready 后仅在 health=200、MainPID/端口/cgroup 归属一致时输出 `ready`。
+7. 单服务 `--service --report` 不写 canonical aggregate report 仍是预期行为；该行为不得被本修订改变。
 
 ### 9.2 非功能验收
 
@@ -385,6 +408,7 @@ cold-start-report:
 3. 四次服务的总等待时间在验收记录中可查询，单位秒。
 4. Design 阶段输出文件级变更清单时，无 allowlist 以外的文件被标记为待修改。
 5. 仅新建 `docs/rfc/10_infra/RFC-10-010-*.md` 和 `docs/spec/10_infra/SPEC-10-010-*.md` 两文件，不修改任何现有文件。
+6. DSA readiness 等待始终有 24 秒有限预算；不得以重试、间隔或 timeout 配置形成无限等待。
 
 ### 9.3 边界条件
 

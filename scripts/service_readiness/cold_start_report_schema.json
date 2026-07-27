@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "ColdStartReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["boot_id", "services", "total_wait_seconds", "side_effect_free"],
+  "properties": {
+    "boot_id": {"type": "string", "minLength": 1},
+    "services": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status", "probe_count", "elapsed", "side_effect_free"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["DSA", "TA-CN", "gw-yquant", "gw-yinglong"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ready", "degraded", "failed"]
+          },
+          "probe_count": {"type": "integer", "minimum": 1},
+          "elapsed": {"type": "number", "minimum": 0},
+          "platform_connected": {
+            "type": ["string", "null"],
+            "enum": ["confirmed_at_boot", "unknown", null]
+          },
+          "platform_evidence": {"type": ["string", "null"]},
+          "error": {"type": ["string", "null"]},
+          "side_effect_free": {"type": "boolean", "const": true}
+        }
+      }
+    },
+    "total_wait_seconds": {"type": "number", "minimum": 0},
+    "side_effect_free": {"type": "boolean", "const": true}
+  }
+}

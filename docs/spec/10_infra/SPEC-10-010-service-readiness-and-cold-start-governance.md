@@ -7,12 +7,20 @@
 | 状态 | Draft |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-07-26 |
-| 最后更新 | 2026-07-26 |
+| 最后更新 | 2026-07-27 |
 | 来源 RFC | RFC-10-010-service-readiness-and-cold-start-governance |
 | 目标模块 | 10_infra（基础设施 / 服务治理） |
 | 适配 Agent | YQuant-Developer-Engineer, YQuant-Test-Engineer |
 
 ---
+
+## 版本历史
+
+| 版本号 | 日期 | 更新内容 | 负责人 |
+|---|---|---|---|
+| V0.1 | 2026-07-26 | 初始创建：定义四项服务只读 probe 契约、A+B allowlist、状态输出 JSON schema、platform_connected 匹配规则、冷启动验收记录 schema、测试矩阵与零副作用规则 | YQuant-Principal |
+| V0.2 | 2026-07-27 | T2.1 修订：将 DSA probe 端口从 8000 校正为 8888（§3.2.1），与 live systemd/ss/curl 证据对齐。确凿证据：DSA PID 272 监听 127.0.0.1:8888，8000 为 TA-CN PID 366 | YQuant-Principal |
+| V0.3 | 2026-07-27 | T1 冷启动窗口修订：为 DSA 固化 `14s + 10s = 24s` 有限预算、预算内 `starting` 与预算耗尽后的连续失败裁决；限定后续 Design 的服务特定参数 allowlist | YQuant-Principal |
 
 ## 1. 需求摘要
 
@@ -62,12 +70,14 @@
 
 | 编号 | 行为 | 输入 | 输出 | 错误/边界 |
 |---|---|---|---|---|
-| R-001 | 服务进入 `starting` 状态 | systemd unit 标记 active（`systemctl --user is-active <unit> = "active"`） | `{status: "starting", ...}` | 若 `is-active` 返回非 active（inactive/failed/activating），不应进入状态机 |
+| R-001 | 服务进入 `starting` 状态 | systemd unit 标记 active（`systemctl --user is-active <unit> = "active"`） | `{status: "starting", ...}` | 若 `is-active` 返回非 active（inactive/failed/activating），不应进入状态机；DSA 另受 R-004b 的预算窗口约束 |
 | R-002 | 首次 probe 全部 PASS | 每项服务的 probe 集合执行 | `{status: "ready", ...}` | 后续 probe 降级时转为 `degraded`（见 R-005） |
 | R-003 | 单次 probe 超时 (> 10s) | probe 请求 | `{status: "starting", probe_error: "timeout"}` | 不改变当前 status；继续下次轮询 |
-| R-004 | 总等待时间超时 | 从 unit active 起计 N 秒（Design 定义 N，建议 ≤ 120s） | `{status: "failed", probe_error: "total_timeout", elapsed_seconds: N}` | N 必须 ≥ 各项服务 P99 冷启动时间的 1.5 倍 |
+| R-004 | 总等待时间超时（非 Gateway） | 从 unit active 起计 N 秒（Design 定义 N，建议 ≤ 120s） | `{status: 'failed', probe_error: 'total_timeout', elapsed_seconds: N}` | N 必须 ≥ 各项服务 P99 冷启动时间的 1.5 倍 |
+| R-004a | 总等待时间超时（Gateway） | 从 unit active 起计 N 秒（Design 定义 N，建议 ≤ 120s）；仅 P-GWY-3（platform_connected）未确认，P-GWY-1/2 正常 | `{status: 'degraded', probe_error: 'total_timeout', elapsed_seconds: N, exit: 0}` | Gateway 进程存活但连接未知时按方案 A 退出 0，降低冷启动风险 |
+| R-004b | DSA 冷启动预算 | 从同一 DSA 启动尝试开始计时：`14s` 已测 API-ready 时间 + `10s` 显式安全余量 | `0 ≤ elapsed_seconds < 24` 时 `{status: "starting", probe_error: "<last_error>"}`；首次全 PASS 时 `{status: "ready"}` | 24 秒为固定、有限预算；预算内禁止因 `consecutive_failures` 输出 `failed`；不得无限等待 |
 | R-005 | probe 返回降级条件 | 部分 probe PASS，部分 FAIL | `{status: "degraded", probe_error: "<degraded_reason>"}` | 可恢复为 ready（后续 probe 全 PASS）或转为 failed（连续失败） |
-| R-006 | 连续 N 次 probe 全部失败 | N 由 Design 定义，建议 N=3 | `{status: "failed", probe_error: "<last_error>"}` | 停止轮询，输出最终验收记录 |
+| R-006 | 连续 N 次 probe 全部失败 | N 由 Design 定义，建议 N=3 | `{status: "failed", probe_error: "<last_error>"}` | 对 DSA，只有 `elapsed_seconds ≥ 24` 且 `((P-DSA-1 AND P-DSA-2) 均 FAIL OR P-DSA-3 FAIL)` 时，本规则才可裁决 failed；预算内失败只保持 starting |
 
 ### 3.2 各服务只读 probe 契约
 
@@ -75,16 +85,27 @@
 
 | 编号 | 检查项 | 方式 | 成功条件 | 降级条件 (degraded) | 失败条件 (failed) |
 |---|---|---|---|---|---|
-| P-DSA-1 | HTTP health check | `curl -sf -o /dev/null --max-time 10 http://localhost:8000/health` | HTTP 200 | — | 非 200 或超时 |
-| P-DSA-2 | HTTP API health check (备选) | `curl -sf -o /dev/null --max-time 10 http://localhost:8000/api/health` | HTTP 200 | — | 非 200 或超时 |
+| P-DSA-1 | HTTP health check | `curl -sf -o /dev/null --max-time 10 http://127.0.0.1:8888/health` | HTTP 200 | — | 非 200 或超时 |
+| P-DSA-2 | HTTP API health check (备选) | `curl -sf -o /dev/null --max-time 10 http://127.0.0.1:8888/api/health` | HTTP 200 | — | 非 200 或超时 |
 | P-DSA-3 | PID 存活 | `ps -p "$(systemctl --user show -p MainPID daily-stock-analysis.service --value)"` | exit 0 (running) | — | 非零 (not running) |
+| P-DSA-4 | MainPID / port / cgroup 一致性 | 只读比对 unit MainPID、`:8888` 监听 PID 与该 unit cgroup 成员 | 三者归属同一 DSA unit；不接受仅端口存在或仅 PID 存活 | — | 监听 PID 不等于 MainPID 或不属于该 unit cgroup |
 
 **readiness 判定条件**：
-- ready ← (P-DSA-1 或 P-DSA-2 PASS) AND P-DSA-3 PASS
-- failed ← (P-DSA-1 AND P-DSA-2 均 FAIL) OR P-DSA-3 FAIL（超时后）
+- ready ← (P-DSA-1 或 P-DSA-2 PASS) AND P-DSA-3 PASS AND P-DSA-4 PASS
+- failed ← (P-DSA-1 AND P-DSA-2 均 FAIL) OR P-DSA-3 FAIL OR P-DSA-4 FAIL（均仅在 DSA 预算耗尽后）
 - degraded ← 不适用（DSA 无可区分降级条件）
 
 **platform_connected**：不适用（DSA 不连接外部消息平台）。
+
+**DSA 冷启动窗口与状态转换（强制）**：
+
+| 阶段 | 条件 | 必须输出/行为 |
+|---|---|---|
+| 窗口内 | `0 ≤ elapsed_seconds < 24` 且未满足 ready | `status=starting`；记录最后一次 `probe_error` 与累计 `probe_count`；即使达到连续失败上限也继续固定间隔的只读 probe |
+| 窗口内成功 | `elapsed_seconds < 24` 且 `(P-DSA-1 OR P-DSA-2) PASS AND P-DSA-3 PASS`，并确认 MainPID、`127.0.0.1:8888` 监听者与该 unit cgroup 一致 | `status=ready`，停止本次 probe |
+| 窗口耗尽后失败 | `elapsed_seconds ≥ 24`、未满足 ready，且达到 DSA 服务特定连续失败上限 | `status=failed, probe_error=<last_error>`，停止本次 probe；不得重启、杀死或等待无限长 |
+
+`24` 秒的计算必须严格为已测 API-ready 边界 `14` 秒加安全余量 `10` 秒。计时必须绑定本次 DSA 启动轮次，不得从旧 journal、其他 unit 或前次 probe 继承；Design 负责选择既有 unit/probe 参数中可观测的实现取值。
 
 #### 3.2.2 TA-CN（`tradingagents-cn.service`）
 
@@ -128,9 +149,10 @@
 | 规则 | 值 |
 |---|---|
 | 单次 probe 超时 | ≤ 10 秒 |
-| 轮询间隔 | Design 定义，建议 5-10 秒 |
-| 总等待超时 | Design 定义，建议 ≤ 120 秒 |
-| 连续失败上限（转为 failed） | Design 定义，建议 3 次 |
+| DSA 轮询间隔 | 由 Design 在服务特定 allowlist 内定义；必须为固定有限值，并使 24 秒窗口内至少可完成一次 API-ready 后 probe |
+| DSA 总等待预算 | 固定为 24 秒（`14 + 10`）；不得由全局默认值覆盖或缩短 |
+| DSA 连续失败上限（转为 failed） | 由 Design 在服务特定 allowlist 内定义；仅可在 `elapsed_seconds ≥ 24` 后裁决 |
+| 其他服务的轮询/总等待/连续失败 | 保持既有服务语义；本次 DSA 修订不授权全局调整 |
 
 ---
 
@@ -220,14 +242,7 @@
             "type": "string",
             "enum": ["DSA", "TA-CN", "gw-yquant", "gw-yinglong"]
           },
-          "unit_active_at": {
-            "type": ["string", "null"],
-            "description": "unit active 的 ISO 时间戳"
-          },
-          "local_ready_at": {
-            "type": ["string", "null"],
-            "description": "确认 readiness 的 ISO 时间戳，未就绪时为 null"
-          },
+
           "status": {
             "type": "string",
             "enum": ["ready", "degraded", "failed"]
@@ -271,6 +286,8 @@
   }
 }
 ```
+
+> **Canonical report 写入约束**：`--report` 参数仅在 `--all` 模式下写入 canonical 报告路径（`logs/cold-start-report.json`）。`--service --report` 组合禁止写入少于四服务的负载，实现应跳过文件写入并打印警告到 stderr；readiness 主结论（stdout ndJSON + exit code）不受影响。
 
 ### 4.3 `platform_connected` 证据匹配规则
 
@@ -336,6 +353,20 @@
 |---|---|---|---|
 | `scripts/service_readiness/`（新目录） | 可新增 | 新增只读 Python 脚本 | 仅当现有入口（B 组）不足以表达 readiness 时。必须满足 §3.2 和 §4.4 的探针与零副作用契约。 |
 
+### 5.4.1 DSA 冷启动窗口的最小实现参数 allowlist
+
+后续 Design/Implement 对本次 false-failed 修复仅可选择下列现有 unit/probe 参数及其**DSA 服务特定**取值：
+
+| 参数类别 | 允许目的 | 明确边界 |
+|---|---|---|
+| `--max-retries` / 等效连续失败阈值 | 在 24 秒窗口耗尽后才用于最终 failed 裁决 | 预算内不得触发 failed；不得影响 TA-CN 或 Gateway 默认值 |
+| `--interval` / 等效固定轮询间隔 | 在有限预算内重复只读 probe | 固定值；必须保证 API-ready 后仍至少有一次 probe 机会；不得指数退避或无限循环 |
+| `--timeout` / 单次请求 timeout | 限制一次 GET/PID/端口/cgroup 检查的时长 | 不得超过 RFC 单次 probe 上限 10 秒；不得改变 endpoint 或 HTTP method |
+| DSA 总预算/截止时间参数或等效本地常量 | 固化 `24s = 14s + 10s` 的窗口 | 仅 DSA；不得被通用全局默认值缩短；不得扩大为无限等待 |
+| DSA `ExecStartPost` 调用参数 | 将上述 DSA 专用参数传入既有单服务 probe | 保持现有 `ExecStartPost=-` 容错策略；不得修改 endpoint、端口、其他服务调用或 `ExecStart`/restart 语义 |
+
+除该表外，Design 不得改变任何全局服务语义；不得新增自动 restart、kill、POST、写数据库、消息发送或交易动作。任何需要超出此 allowlist 的方案必须退回 RFC/SPEC 重新裁决。
+
 ### 5.5 强制不动文件清单
 
 以下文件在本任务中绝对禁止创建、修改、删除或纳入任何变更：
@@ -373,8 +404,9 @@ docs/design/README.md                              # 全局设计模板
 
 | 编号 | 场景 | 预置条件 | 操作 | 预期结果 |
 |---|---|---|---|---|
-| S-001 | DSA 探针 PASS | DSA 正常运行 | 执行 DSA probe 集合（P-DSA-1~3） | 全部 PASS，status=ready |
+| S-001 | DSA 探针 PASS | DSA 正常运行 | 执行 DSA probe 集合（P-DSA-1~4） | 全部 PASS，status=ready |
 | S-002 | DSA 探针 FAIL | DSA 未启动 | 执行 DSA probe 集合 | status=starting，探针超时 |
+| S-002a | DSA 已测冷启动边界 | 真正 DSA 冷启动；记录同一启动轮次的开始、systemd Started、API ready | 在 API ready 前运行 DSA 单服务 probe | 对约 14 秒 API-ready 路径，24 秒预算内所有失败均为 starting，不得先输出 failed；API ready 后仅 health=200 且 MainPID/端口/cgroup 一致时 ready |
 | S-003 | TA-CN 探针 PASS | TA-CN 正常运行 | 执行 TA-CN probe 集合（P-TACN-1~4） | 全部 PASS，status=ready |
 | S-004 | TA-CN 探针降级 | TA-CN 运行但 `/api/readyz` 非 200 | 执行 TA-CN probe 集合 | status=degraded（P-TACN-1/4 PASS，P-TACN-2 FAIL） |
 | S-005 | Gateway yquant 探针 PASS | Gateway 正常运行且已连接 | 执行 Gateway probe 集合（P-GWY-1~3） | 全部 PASS，platform_connected=confirmed_at_boot |
@@ -398,6 +430,8 @@ docs/design/README.md                              # 全局设计模板
 |---|---|---|---|
 | B-001 | probe 超时（> 10s） | 向不存在的端口发请求 | probe_error=timeout，状态不切为 failed（除非连续超时达上限） |
 | B-002 | probe 目标不存在（connection refused） | 服务未启动时 probe | probe_error=connection_refused，status 保持 starting |
+| B-002a | DSA 预算内连续失败 | 模拟或注入连续失败达到阈值、但 `elapsed_seconds < 24` | 仍输出 `starting`，不得输出 `consecutive_failures` 的最终 failed |
+| B-002b | DSA 预算耗尽后连续失败 | 使 DSA 未满足 ready 且 `elapsed_seconds ≥ 24` | 仅在连续失败阈值满足后输出 failed；流程在有限窗口后停止，不无限等待 |
 | B-003 | `platform_connected` journal 跨 boot 污染 | 手动注入旧 connected 日志 | 通过 `journalctl --since` 过滤仅本次启动；旧日志不影响判定 |
 
 ---
@@ -432,7 +466,7 @@ Implement 阶段中，以下行为**绝对禁止**：
 
 ## 8. 依赖与引用
 
-- **来源**：RFC-10-010-service-readiness-and-cold-start-governance（V0.1）
+- **来源**：RFC-10-010-service-readiness-and-cold-start-governance（V0.3）
 - **关联 Design**：（尚未创建，T2 使用）DESIGN-10-010-service-readiness-and-cold-start-governance
 - **引用文件**：
   - `~/.config/systemd/user/daily-stock-analysis.service`
