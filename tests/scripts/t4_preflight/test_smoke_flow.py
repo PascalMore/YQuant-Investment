@@ -157,3 +157,73 @@ def test_smoke_flow_yaml_has_all_six_sections(tmp_path: Path) -> None:
 def test_smoke_flow_caps_match_design() -> None:
     assert AKSHARE_MAX_CALLS["flow.capital_flow_daily"] == 2
     assert AKSHARE_MAX_CALLS["flow.northbound_daily"] == 1
+
+
+# ---------------------------------------------------------------------------
+# PR-3 all-failure contract: exit code / report verdict / ledger stay in lockstep
+# ---------------------------------------------------------------------------
+
+
+def test_smoke_flow_all_failure_returns_exit_fail_and_verdict_fail(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PR-3 contract: when every live AKShare call fails, ``run_smoke`` MUST
+    return ``EXIT_FAIL`` AND the persisted YAML MUST report
+    ``overall.verdict == 'fail'``. The two signals are produced from the
+    same branch in ``smoke_flow.run_smoke`` (line 267-299) and must never
+    disagree. Historical PR-3 evidence once showed ``verdict=fail`` paired
+    with parent ``exit_code=0``; this regression test pins the lockstep.
+
+    The fake dispatcher is the sole network path — no real AKShare call
+    is made. Ledger boundaries (≤3 calls, no retry, no fallback, no
+    Mongo, no writes) are pinned in the same assertion block to guard
+    the broader contract, not just the verdict/exit pair.
+    """
+    monkeypatch.delenv("MONGO_URI", raising=False)
+    monkeypatch.delenv("AKSHARE_TOKEN", raising=False)
+    fake = FakeAkshareDispatcher()
+    # Force every PR-3 call to raise; ``set_error`` is sticky, so all
+    # three subsequent dispatches will throw RuntimeError("kaboom").
+    fake.set_error("stock_individual_fund_flow", RuntimeError("kaboom"))
+    fake.set_error("stock_hsgt_individual_em", RuntimeError("kaboom"))
+    set_call_dispatcher(fake)
+    try:
+        args = smoke_flow.build_arg_parser().parse_args(
+            ["--live-read", "--output-dir", str(tmp_path)]
+        )
+        exit_code = smoke_flow.run_smoke(args)
+
+        # (1) Return value MUST equal EXIT_FAIL.
+        assert exit_code == EXIT_FAIL, (
+            f"run_smoke returned {exit_code}, expected EXIT_FAIL={EXIT_FAIL}"
+        )
+
+        # (2) Persisted YAML MUST report overall.verdict == 'fail'.
+        report_path = next(tmp_path.glob("smoke-flow-*.yaml"))
+        parsed = yaml_parse(report_path.read_text(encoding="utf-8"))
+        assert parsed["overall"]["verdict"] == "fail", (
+            f"overall.verdict was {parsed['overall']['verdict']!r}, "
+            f"expected 'fail'"
+        )
+
+        # (3) Ledger boundaries stay consistent with the existing
+        # contract: provider_attempts caps at 3, no retry/fallback/mongo/
+        # write, and the fake dispatcher was hit exactly 3 times (one
+        # per live call) with no retry/fallback.
+        ledger = parsed["ledger"]
+        assert ledger["provider_attempts"] == 3
+        assert ledger["actual_calls"] == 0
+        assert ledger["retry_count"] == 0
+        assert ledger["fallback_count"] == 0
+        assert ledger["mongo_calls"] == 0
+        assert ledger["write_operations"] == 0
+        assert len(fake.calls) == 3
+        called_fns = [fn for fn, _ in fake.calls]
+        assert called_fns == [
+            "stock_individual_fund_flow",
+            "stock_individual_fund_flow",
+            "stock_hsgt_individual_em",
+        ]
+    finally:
+        reset_call_dispatcher()

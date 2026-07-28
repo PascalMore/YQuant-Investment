@@ -7,13 +7,13 @@
 | 状态 | Draft |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-07-20 |
-| 最后更新 | 2026-07-26（V0.10 Pascal C+X2 决策同步：§14.4.5.2 PR-3 三选一由 Pascal 2026-07-26 确定选 C（当前 Phase 3 不提供 northbound net inflow，字段保持 None，持股历史不得伪装为净流入，不引入新 endpoint/capability）；§14.4.5.3 PR-4 空返回语义按 X2 收敛（reporter 仅保留必要账本字段，移除 empty_semantics 分类与 verdict 篡改语义，空返回维持 fail）。§14.4.5.6/§14.4.5.7 同步更新。删除三选一「未选择/阻塞」失效文本。PR-2 SSL 单变量网络诊断边界与零 live-read 预算不变。不动 §3 domain object 字段定义、不动 §14.6.x DDL 冻结契约、不动既有授权范围。权威可执行契约，RFC §13.4.5 引用本节） |
-| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.11） |
+| 最后更新 | 2026-07-29（V0.11 P3-A 能力级契约增补：§5.5 新增 P3-A capability 级契约表（sector.snapshot/sector.ranking），§5.1 追加 P3-A 上游契约引用，§8.1 新增 P3-A 测试矩阵。同步更新来源 RFC 引用为 V0.12。不动 §14.4.5 Pascal C+X2 决策内容、不动 §14.6.x DDL 冻结契约、不动既有授权范围） |
+| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.12） |
 | 关联 RFC | RFC-03-007（Unified Data Layer 总纲）、RFC-03-011（Phase 2 质量与审计治理）、RFC-03-013（Phase 1E 情绪最小切片） |
 | 关联 SPEC | SPEC-03-007（Unified Data Layer 契约基线）、SPEC-03-008（Phase 1B-A 查询平面）、SPEC-03-013（Phase 1E 情绪最小切片） |
 | 关联 Design | DESIGN-03-014（Phase 3 持久化扩展详细设计，V0.17） |
 | 目标模块 | unified_data（`skills/data/unified_data/`） |
-| 版本号 | V0.10 |
+| 版本号 | V0.11 |
 | 适配 Agent | YQuant-Developer-Engineer, YQuant-Test-Engineer, YQuant-Principal（T4 阶段） |
 
 ### 版本历史
@@ -29,7 +29,8 @@
 | V0.7 | 2026-07-25 | B1-P3B DDL 契约冻结。新增 §14.6.bis（PR-DDL-P3B 精确契约：前置条件/集合/索引/写入身份/原子性/rollback 路径/audit 工件/退出码/停止条件/执行人/不授权范围），权威定义引用 DESIGN-03-014 §6.4.bis V0.14；§10 G-B-1 行停止条件列追加 §14.6.bis + DESIGN §6.4.bis 引用；§10.bis PR-DDL-P3B 行标注「P3-B 已授权冻结、P3-C 仍阻塞」并引用 §14.6.bis。退出码语义按 task 授权：0=PASS / 2=preflight target already exists / 3=collection create fail / 4=index create fail。不动既有 §3.2/§14.4/§14.5/§14.6 通用要求/§14.6.4/§14.7/§14.8 条文。 | YQuant-Principal |
 | V0.8 | 2026-07-25 | B1-P3C DDL 契约冻结。新增 §14.6.ter（PR-DDL-P3C 精确契约：前置条件/集合/索引/写入身份/原子性/rollback 路径/audit 工件/退出码/停止条件/执行人/不授权范围），权威定义引用 DESIGN-03-014 §6.4.ter V0.15；§10 G-C-1 行停止条件列追加 §14.6.ter + DESIGN §6.4.ter 引用；§10.bis PR-DDL-P3C 行标注「P3-A + P3-B + P3-C 已全部授权冻结」并引用 §14.6.ter。退出码语义按 task 授权：0=PASS / 2=preflight target already exists / 3=collection create fail / 4=index create fail。不动既有 §3.3/§14.4/§14.5/§14.6 通用要求/§14.6.4/§14.6.bis/§14.7/§14.8 条文。 | YQuant-Principal |
 | V0.9 | 2026-07-26 | B2 实测映射契约冻结。新增 §14.4.5（B2 单次只读 smoke 实测映射契约冻结）：依据 2026-07-26 B2 一次性只读 smoke 的冻结证据（真实报告只读副本位于 `/tmp/yquant-b2-pr234-20260726/`，不可移动/提交、不可重跑），冻结六项可执行契约——（1）§14.4.5.2 PR-3 `flow.northbound_daily` 经 `stock_hsgt_individual_em(symbol)` 实际返回北向**持股历史**语义（9 个持股字段），**不是**北向净流入；现有 expected 0/11，缺失 date/stock/northbound_net_inflow；禁止伪装，T2 须三选一（A 分流正确 endpoint / B 变更 capability 语义 / C Pascal 确认放弃净流入），未获选择不得自行实现。（2）§14.4.5.3 PR-4 空返回语义区分（无交易日/schema drift/调用异常），本次 row_count=0 且 actual_fields=0 判定 verdict=fail、empty_semantics=undetermined，T2 须在 reporter 定义 empty_semantics 字段，后续独立 live-read 在交易日复验；本阶段不重跑。（3）§14.4.5.4 PR-2 SSL 网络停止诊断边界（endpoint_unreachable，非代码 defect，禁止与 mapping 修复耦合，仅允许后续单变量网络诊断）。（4）§14.4.5.5 单次 live-read 精确调用预算（PR-2=2/PR-3=3/PR-4=2，本次已用尽）与零写入边界（无重试/无 fallback/零 Mongo/Cache/Audit/DDL/cron）。（5）§14.4.5.6 T2 实现最小文件范围与禁止修改清单。（6）§14.4.5.7 T2 验收准则 7 项。本节为权威可执行契约，RFC §13.4.5 引用本节，DESIGN §15.x V0.16 为工具链设计定义。不动 §3 domain object 字段定义（除非 Pascal 确认选项 B）、不动 §14.6.x DDL 冻结契约、不动既有授权范围。 | YQuant-Principal |
-| V0.10 | 2026-07-26 | **Pascal C+X2 决策同步（Recovery/T2.5）**。§14.4.5.2 PR-3 三选一由 Pascal 2026-07-26 明确选 **C**（当前 Phase 3 不提供 northbound net inflow；`northbound_net_inflow` 保持 None；持股历史不得伪装为净流入；不引入新 endpoint/capability；§3 字段定义不变）。§14.4.5.3 PR-4 空返回语义按 **X2** 收敛：移除 `empty_semantics` reporter 字段与三分类（undetermined/no_trading_data/schema_drift/call_anomaly）；空返回维持 verdict=fail（保守）；reporter 账本同步移除 `worktree_changed`（X1 候选 runtime git-worktree 探测被 X2 否决）。§14.4.5.6 T2 最小文件范围与禁止清单同步更新（移除 empty_semantics/worktree_changed）。§14.4.5.7 验收准则第 2 项移除 empty_semantics 要求。删除全部「未选择/阻塞等待 Pascal」失效文本。§14.4.5.4 PR-2 SSL 边界、§14.4.5.5 零写入边界、§3 domain object、§14.6.x DDL 冻结契约均不变。权威可执行契约，RFC §13.4.5 V0.11 引用本节，DESIGN §4.2.1/§15.14 V0.17 为工具链设计定义。 | YQuant-Principal |
+|| V0.10 | 2026-07-26 | **Pascal C+X2 决策同步（Recovery/T2.5）**。§14.4.5.2 PR-3 三选一由 Pascal 2026-07-26 明确选 **C**（当前 Phase 3 不提供 northbound net inflow；`northbound_net_inflow` 保持 None；持股历史不得伪装为净流入；不引入新 endpoint/capability；§3 字段定义不变）。§14.4.5.3 PR-4 空返回语义按 **X2** 收敛：移除 `empty_semantics` reporter 字段与三分类（undetermined/no_trading_data/schema_drift/call_anomaly）；空返回维持 verdict=fail（保守）；reporter 账本同步移除 `worktree_changed`（X1 候选 runtime git-worktree 探测被 X2 否决）。§14.4.5.6 T2 最小文件范围与禁止清单同步更新（移除 empty_semantics/worktree_changed）。§14.4.5.7 验收准则第 2 项移除 empty_semantics 要求。删除全部「未选择/阻塞等待 Pascal」失效文本。§14.4.5.4 PR-2 SSL 边界、§14.4.5.5 零写入边界、§3 domain object、§14.6.x DDL 冻结契约均不变。权威可执行契约，RFC §13.4.5 V0.11 引用本节，DESIGN §4.2.1/§15.14 V0.17 为工具链设计定义。 | YQuant-Principal |
+|| V0.11 | 2026-07-29 | **P3-A 能力级契约增补（设计与实现对齐）**。§5.5 新增 P3-A capability 级契约表（sector.snapshot/sector.ranking），覆盖 Router.query 签名、请求参数、DataResult.data 类型、空/错误语义、freshness 语义、source_trace 约束、TA-CN 覆盖、external_fallback_chain、唯一键 upsert 规则、可追溯字段、测试契约。§5.1 追加上游契约引用指向 §5.5。§8.1 新增 P3-A 测试矩阵（test_sector_snapshot.py 8 用例、test_sector_service.py 6 用例、fixtures/sector_fixtures.py）。来源 RFC 更新为 RFC-03-014 V0.12。不动 §14.4.5 Pascal C+X2 决策内容、不动 §14.6.x DDL 冻结契约、不动既有授权范围。 | YQuant-Principal |
 
 ---
 
@@ -605,6 +606,13 @@ SENTIMENT_LIMIT_UP_POOL = "sentiment.limit_up_pool"
 | sentiment | `get_market_sentiment(date=None)` | `MarketSentimentSnapshot`（单条，收盘后） | P3-C |
 | sentiment | `get_limit_up_pool(date=None)` | `list[dict]`（symbol + reason + days） | P3-C |
 
+**异常边界与默认行为**：
+
+| 方法 | 参数无效/缺失 | router 未注入 | Provider 失败 | 空返回 |
+|------|-------------|-------------|-------------|--------|
+| `get_sector_snapshot` | `sector_code` 为空 → 抛出 `InvalidSecurityIdError` 或等价 ValueError | —（`UnifiedDataClient` facade 保证 router 始终非空；若 SectorService.router is None → `ProviderUnavailableError("P3-A methods require DataRouter: not injected")`，DESIGN-03-014 §5.1） | → `DataResult.error(provider="error", source_trace=["akshare(error: ...)"])` | → `DataResult.success(data=None/is_empty, provider="akshare")` |
+| `get_sector_ranking` | `limit` ≤ 0 → 默认 20；`sector_type` 无效值 → 作为查询参数传递，由 Provider 容纳 | 同上 | 同上 | → `DataResult.success(data=[], provider="akshare")` |
+
 ### 5.2 Read Path（Internal-First）
 
 ```
@@ -649,6 +657,27 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 | 单元测试 | MockProvider 返回 fixture 数据 → 不写 MongoDB |
 | 集成测试 | mongomock 注入 → 写入/读取内存集合 |
 | Provider smoke | 真实 AKShare API 调用（Gate 授权后）→ 写真实 MongoDB（smoke 专用测试库或临时集合） |
+
+### 5.5 P3-A 能力级契约（`sector.snapshot` / `sector.ranking`）
+
+| 维度 | `sector.snapshot` | `sector.ranking` |
+|------|-------------------|-------------------|
+| **Capability** | `"sector.snapshot"` | `"sector.ranking"` |
+| **请求参数** | `security_id`（market + sector_code）、`date`（可选 str，默认最近交易日） | `date`（可选 str）、`sector_type`（可选 str，默认全部）、`limit`（可选 int，默认 20） |
+| **Router.query() 签名** | `router.query("sector", "snapshot", sid, params={"date": ...})` | `router.query("sector", "ranking", params={"date": ..., "sector_type": ..., "limit": ...})` |
+| **DataResult.data 类型** | `SectorSnapshot`（单条） | `list[SectorSnapshot]` |
+| **空返回** | 空 → `DataResult.success(data=None, provider="akshare")`；`is_empty=True` | 空 → `DataResult.success(data=[], provider="akshare")`；`is_empty=True` |
+| **错误返回** | fetch 失败 → `DataResult.error(provider="error", source_trace=["akshare(error: ...)"])` | 同上 |
+| **freshness** | query Step 4 → `"delayed"`；物化命中 → `"cached"` | 同上 |
+| **source_trace** | 不含 `"ud_materialized"`、`"cache"`（A-021） | 同上 |
+| **TA-CN 覆盖** | ❌ 注册于 `_TA_CN_NOT_COVERED` | ❌ 注册于 `_TA_CN_NOT_COVERED` |
+| **external_fallback_chain** | `["akshare"]` | `["akshare"]` |
+
+**唯一键**：`{market, sector_code, snapshot_date}`（§4.bis.1 / DESIGN §3.1）。相同键重复写入 → upsert 覆盖，不保留历史版本。
+
+**可追溯字段**：仅 `provider` + `fetched_at`。`quality_flags` / `source_record_id` / `schema_version` 均不纳入（DESIGN-03-014 §6.3）。
+
+**测试契约**：STUB_COLUMNS 双定义（`_stub_columns.py` 与 `providers/__init__.py`）须等价（§8 `test_provider_phase3.py`）。fixture 覆盖 industry + concept 板块类型及正常 + 极端行情两种场景（§8.2）。
 
 ---
 
@@ -724,7 +753,7 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 | `test_flow_service.py` | get_capital_flow/northbound_flow（mock provider）、分页、限流 | 6 | P3-B | 否 |
 | `test_market_sentiment.py` | MarketSentimentSnapshot 构造、from_dict、温度范围 | 8 | P3-C | 否 |
 | `test_sentiment_service.py` | get_market_snapshot/limit_up_pool（mock provider）、连板交叉验证 | 6 | P3-C | 否 |
-| `test_provider_phase3.py` | AKShareProvider Phase 3 新增 capability 的 stub/fake fetch、STUB_COLUMNS 验证 | 6 | 全部 | 否 |
+| `test_provider_phase3.py` | AKShareProvider Phase 3 新增 capability 的 stub/fake fetch；**STUB_COLUMNS 双定义等价性测试**（`stub_columns.STUB_COLUMNS == providers.STUB_COLUMNS`，DESIGN-03-014 §4.1） | 8 | 全部 | 否 |
 
 ### 8.2 Fixture
 

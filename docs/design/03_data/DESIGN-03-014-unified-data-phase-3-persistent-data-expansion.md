@@ -3,14 +3,14 @@
 ## 元数据
 
 | 项 | 值 |
-|---|---|
+|---|----|
 | 状态 | Draft |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-21 |
-| 最后更新 | 2026-07-26（V0.17 Pascal C+X2 决策同步 — 工具链设计收敛：依据 RFC-03-014 §13.4.5 V0.11 / SPEC-03-014 §14.4.5 V0.10 的 C+X2 决策，§4.2.1 PR-3 三选一收敛为 C（northbound_net_inflow 恒 None，不指向真实 endpoint，不引入 A/B endpoint skeleton）；§4.2.1 PR-4 空返回语义收敛为 X2（verdict=fail 保守，移除 empty_semantics 分类）；§15.14 reporter 账本移除 worktree_changed/empty_semantics，仅保留 provider_attempts/actual_calls/retry_count/fallback_count/mongo_calls/write_operations；§15.14.1 northbound 字段集标注 C 已选；§15.14.2 endpoint 选择逻辑标注 C 已选；§15.14.4/§15.14.5/§15.14.6 同步更新。删除全部「未选择/阻塞等待 Pascal」失效文本。不动 §3 domain object、不动 §6.4 DDL 契约、不动既有授权范围） |
-| 版本号 | V0.17 |
-| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.11） |
-| 来源 SPEC | SPEC-03-014（Phase 3 持久化扩展契约，V0.10） |
+| 最后更新 | 2026-07-29（V0.18 P3-A 设计固化：§17 新增 P3-A SectorSnapshot/ranking 离线实现设计闭合——实施文件边界、capability 级契约表、UDC facade 异常边界四维表、mongomock/fake 离线替换策略、排序稳定性契约、测试矩阵与显式命令。参考 RFC §5.1.5 / SPEC §5.5 上游契约闭合。不动 §3 domain object、不动 §6.4 DDL 契约、不动既有授权范围） |
+| 版本号 | V0.18 |
+| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.12） |
+| 来源 SPEC | SPEC-03-014（Phase 3 持久化扩展契约，V0.11） |
 | 关联 Design | DESIGN-03-007（Unified Data Layer 总体设计，V3.4） |
 | 关联 RFC | RFC-03-012（Phase 1D CN 日线真实外部 Provider 激活）、RFC-03-011（Phase 2 质量与审计治理）、RFC-03-013（Phase 1E 情绪最小切片） |
 | 关联 SPEC | SPEC-03-007（Unified Data Layer 契约基线）、SPEC-03-008（Phase 1B-A 查询平面）、SPEC-03-013（Phase 1E 情绪最小切片） |
@@ -2782,10 +2782,317 @@ smoke 报告 YAML 中（§13.4.2 模板）增补以下账本字段（X2 收敛�
 | R-3 | ~~PR-4 的 `empty_semantics=undetermined` 在后续交易日 live-read 后收敛为 `no_trading_data`~~ **X2 已移除 empty_semantics**：空返回 verdict=fail（保守），reporter 不再区分空返回语义 | 无影响 | X2 收敛后 reporter 不输出 empty_semantics；后续 live-read 返回非空数据时按正常字段匹配流程判定 |
 | R-4 | 零写入边界的 runtime 保证被 T3 实现意外突破 | 生产数据污染 | 通过 §15.14.5.3 静态零写入扫描 + Review RC-4/RC-5 双重防御 |
 
+---
+
+## 17. P3-A 设计闭合：SectorSnapshot / sector.ranking 离线实现
+
+> **本 § 定位**：P3-A 子阶段的离线实现设计闭合层。上游 RFC §5.1.5 / SPEC §5.5 已闭合 capability 级契约（请求参数、返回类型、空/错误/延迟语义、source_trace 约束、TA-CN 覆盖、唯一键与 upsert 规则、STUB_COLUMNS 等价性）。本 § 将这些契约落为具体实现文件边界、MongoDB 离线替换方案、调用序列与异常表、测试矩阵。不重复既有 §§3.1/5.1/4.1 的内容，仅聚焦**实现者可直接执行的精确设计**。
+>
+> 本 § 的所有设计假设**真实 MongoDB、AKShare API、网络 I/O 均不可用**——实现通过 mongomock + fake provider + 纯内存 fixture 替代。
+
+### 17.1 P3-A 实现文件边界
+
+| 文件路径 | 操作 | 类型 | 输入来源 | 说明 |
+|---------|------|------|---------|------|
+| `models/domain/sector.py` | 追加 | 现有 | SPEC §3.1 | `SectorSnapshot` dataclass + `from_dict()` 追加于现有 `SectorClassification` 之后 |
+| `models/domain/__init__.py` | 追加 | 现有 | — | `SectorSnapshot` 导出 |
+| `services/sector_service.py` | 追加 | 现有 | DESIGN §5.1 | `get_sector_snapshot()` / `get_sector_ranking()` 追加；构造器追加 `router: DataRouter \| None = None` 参数 |
+| `services/__init__.py` | 不变 | 现有 | — | SectorService 已有导出，无需变更 |
+| `client.py` | 追加 | 现有 | DESIGN §4.5 | `get_sector_snapshot()` / `get_sector_ranking()` 域方法 |
+| `router.py` | 追加 | 现有 | DESIGN §4.3 | `_TA_CN_NOT_COVERED` 追加 `sector.snapshot` / `sector.ranking` |
+| `freshness.py` | 追加 | 现有 | DESIGN §4.4 | `DEFAULT_TTLS` 追加 `\"sector\": 21600` |
+| `providers/akshare.py` | 追加 | 现有 | DESIGN §4.1 | capabilities 追加 `sector.snapshot` / `sector.ranking`；`fetch()` 分支；`_to_canonical()` 映射 |
+| `providers/_stub_columns.py` | 追加 | 现有 | SPEC §4.3 | `STUB_COLUMNS` 追加 `sector.snapshot` / `sector.ranking` 条目 |
+| `providers/__init__.py` | 追加 | 现有 | — | `STUB_COLUMNS` 孪生定义同步 |
+| `adapters/p3_persistence_writer.py` | 新建 | 新增 | DESIGN §0.4 | `P3PersistenceWriter` class（get/upsert/delete）。当前阶段使用 `mongomock` 代替真实 MongoDB |
+| `tests/test_sector_snapshot.py` | 新建 | 新增 | DESIGN §9.1 | 8 用例：SectorSnapshot 构造、from_dict()、字段边界、枚举值 |
+| `tests/test_sector_service.py` | 新建 | 新增 | DESIGN §9.1 | 6 用例：get_sector_snapshot/ranking（mock provider）、空数据、error 分支 |
+| `tests/fixtures/sector_fixtures.py` | 新建 | 新增 | DESIGN §9.3 | 2 条 SectorSnapshot：industry（白酒）+ concept（AI），正常交易日 + 极端行情 |
+| `tests/test_provider_phase3.py` | 新建 | 新增 | SPEC §8.1 | STUB_COLUMNS 双定义等价性测试（参见 §17.4） |
+| **不修改** | | | | |
+| `models/domain/flow.py` | 不改 | — | — | P3-C 范围 |
+| `models/domain/sentiment.py` | 不改 | — | — | P3-C 范围 |
+| `services/flow_service.py` | 不改 | — | — | P3-C 范围 |
+| `services/sentiment_service.py` | 不改 | — | — | P3-C 范围 |
+| `router.py query()` 逻辑 | 不改 | — | — | Router internal-first 编排不变 |
+| `DataResult` / `Capability` / `SecurityId` 签名 | 不改 | — | — | Phase 0 公共契约不变 |
+| `.env` / 配置 / requirements | 不改 | — | — | 离线阶段不接触凭据 |
+
+**总量**：P3-A 阶段涉及 15 个文件操作（10 追加 + 4 新建 + 1 新建测试 + 6 确认不改）。
+
+### 17.2 SectorSnapshot 规范数据流与离线替换策略
+
+#### 17.2.1 Canonical Data Flow（读路径·离线等价）
+
+```
+UnifiedDataClient.get_sector_snapshot("BK0489")
+  │
+  ├─ Step 1: TA-CN adapter (NOT_COVERED — 跳过)
+  │
+  ├─ Step 2: P3PersistenceWriter.get(
+  │       collection="03_data_ud_market_sector_snapshot",
+  │       filter={"sector_code": "BK0489", "snapshot_date": "2026-07-28"}
+  │   )
+  │   离线替换：P3PersistenceWriter(persistence_client=mongomock.MongoClient())
+  │       → mongomock 实例化 mock 集合 → get() 返回 list[dict]
+  │   命中 → DataResult(data=SectorSnapshot(...), provider="ud_p3_persisted", freshness="cached")
+  │   未命中 → 继续 Step 3
+  │
+  ├─ Step 3: CacheManager.get()
+  │   离线替换：CacheManager(cache_db=mongomock.MongoClient()) — mongomock 替代
+  │   命中 → DataResult(freshness="cached")
+  │   未命中 → 继续 Step 4
+  │
+  └─ Step 4: AKShareProvider.fetch("sector", "snapshot", SectorCode("BK0489"))
+       离线替换：FakeAKShareProvider() — 从 fixture 返回预置 DataFrame
+       成功 → DataResult(data=SectorSnapshot(...), provider="akshare", freshness="delayed")
+       （不写入物化集合、不写入 Cache — 查询路径全程只读）
+```
+
+**UnifiedDataClient.get_sector_ranking** — 除无 `security_id` 参数、返回值类型为 `list[SectorSnapshot]` 外，数据流与上图一致。
+
+#### 17.2.2 Idempotency Key 与版本覆盖
+
+| 维度 | 值 |
+|------|-----|
+| 唯一键 | `{market, sector_code, snapshot_date}` |
+| 覆盖语义 | 同一唯一键的后续写入通过 `update_one(filter=unique_key, update={"$set": doc}, upsert=True)` 完整覆盖先前记录 |
+| 历史版本 | **不保留**。缺省行为：每次 upsert 覆盖整条记录。如需版本跟踪属 Phase 5+ |
+| 离线验证 | `mongomock` 中构造两条同一唯一键的 `SectorSnapshot` 记录 → 第二次 upsert 后 count 仍为 1 → 字段值为第二次的值 |
+
+#### 17.2.3 Traceability 字段
+
+SectorSnapshot 包含的可追溯字段（SPEC §4.bis.1 / DESIGN §6.3 裁定）：
+
+| 字段 | 来源 | 在 SectorSnapshot 中的位置 |
+|------|------|---------------------------|
+| `provider` | fetch 时由 provider 名填充 | `SectorSnapshot.provider` |
+| `fetched_at` | fetch 完成时的 ISO-8601 时间戳 | `SectorSnapshot.fetched_at` |
+| `quality_flags` | ❌ 不纳入 | — |
+| `source_record_id` | ❌ 不纳入 | — |
+| `schema_version` | ❌ 不纳入 | — |
+
+### 17.3 SectorService 与 UnifiedDataClient 调用序列
+
+#### 17.3.1 SectorService 方法签名与 Router 路由
+
+```python
+# services/sector_service.py — 追加于 SectorService
+
+def get_sector_snapshot(
+    self,
+    sector_code: str,
+    date: str | None = None,
+    *,
+    security_id: SecurityId | None = None,
+) -> DataResult:
+    """返回单板块快照 (single SectorSnapshot)。
+    通过 Router.query("sector", "snapshot", ...) 走 external_fallback 链。
+    sector_code 直接作为查询参数（板块层面查询）。
+    若 self._router is None → ProviderUnavailableError。
+    """
+    ...
+
+def get_sector_ranking(
+    self,
+    date: str | None = None,
+    sector_type: str | None = None,
+    limit: int = 20,
+    *,
+    security_id: SecurityId | None = None,
+) -> DataResult:
+    """返回板块排名 (list[SectorSnapshot])。
+    同上，通过 Router.query("sector", "ranking", ...)。
+    limit 默认 20，≤0 时自动修正为 20（不抛异常）。
+    sector_type 无效值作为查询参数传递，由 Provider 容纳。
+    """
+    ...
+```
+
+#### 17.3.2 UnifiedDataClient Facade 异常边界表（四维）
+
+| 场景 | `get_sector_snapshot` | `get_sector_ranking` |
+|------|----------------------|----------------------|
+| **参数无效** | `sector_code` 为空/空白 → `InvalidSecurityIdError` 或 `ValueError("sector_code must not be empty")` | `limit` ≤ 0 → 默认修正为 20（不抛异常）；`sector_type` 无效值 → 作为查询参数传递，Provider 自行容纳 |
+| **router 未注入** | `SectorService._router is None` → `ProviderUnavailableError("P3-A methods require DataRouter: not injected")` | 同上 |
+| **Provider 失败** | `Router.query()` 返回 `DataResult.error(provider="error", source_trace=["akshare(error: ...)"])` | 同上 |
+| **空返回** | 空 → `DataResult.success(data=None/is_empty, provider="akshare")`；`source_trace` 不含 `"ud_materialized"` 或 `"cache"` | 空 → `DataResult.success(data=[], provider="akshare")`；`is_empty=True` |
+
+#### 17.3.3 排序稳定性（sector.ranking）
+
+| 维度 | 契约 |
+|------|------|
+| 排序字段 | 按 `pct_chg` 降序（涨幅从高到低） |
+| 平局规则 | 同 `pct_chg` 时按 `sector_code` 升序作为次级排序键 |
+| 空值处理 | `pct_chg is None` 的记录排在末尾（降序中 None 视为 -inf） |
+| 稳定性 | 同 `pct_chg` + 同 `sector_code` 的记录相对顺序由 `sector_name` 升序决定 |
+| 离线验证 | fixture 设置 3 条记录（pct_chg=2.5/2.5/None, sector_code="BK0490"/"BK0489"/"BK0500"）→ 期望顺序：BK0489(pct_chg=2.5)、BK0490(pct_chg=2.5)、BK0500(None) |
+
+#### 17.3.4 数据新鲜度语义
+
+| `freshness` 值 | 含义 | 触发条件 |
+|----------------|------|---------|
+| `"cached"` | 数据来源为持久化物化集合 | Step 2 P3PersistenceWriter.get() 命中 |
+| `"cached"` | 数据来源为 Cache | Step 3 CacheManager.get() 命中 |
+| `"delayed"` | 数据来源为外部 Provider，非物化 | Step 4 AKShareProvider.fetch() 成功 |
+| `"stale"` | 物化数据已过期 | TTL 过期（sector TTL=21600s），且未触发 refresh |
+
+### 17.4 Provider Capability/Stub 注册与 Facade 等价性断言
+
+#### 17.4.1 Capability 注册
+
+所有 P3-A capability 在 `providers/akshare.py` 的 `capabilities` 属性中声明：
+
+```python
+"skills/data/unified_data/providers/akshare.py" — capabilities 属性追加：
+"sector.snapshot",
+"sector.ranking",
+```
+
+External Fallback Chain 注册（`DataRouter(external_fallback_chains=...)`）：
+
+```python
+"sector.snapshot": ["akshare"],
+"sector.ranking": ["akshare"],
+```
+
+#### 17.4.2 STUB_COLUMNS 双定义等价性断言
+
+`providers/_stub_columns.py` 和 `providers/__init__.py` 中 `STUB_COLUMNS` 是孪生定义，必须保持等价。P3-A 实现者必须：
+
+1. 以 `_stub_columns.py` 为 canonical 源先行追加 P3-A 条目
+2. 手动同步到 `providers/__init__.py`
+3. 在 `test_provider_phase3.py` 中编写以下等价性测试（与 SPEC §8.1 一致）：
+
+```python
+def test_stub_columns_dual_definition_equivalence():
+    """STUB_COLUMNS 双定义等价性断言。
+    _stub_columns.py 与 providers/__init__.py 的 STUB_COLUMNS 必须完全一致。
+    """
+    from providers import _stub_columns
+    from providers import __init__ as providers_init
+
+    p3a_keys = {"sector.snapshot", "sector.ranking"}
+    for key in p3a_keys:
+        assert key in _stub_columns.STUB_COLUMNS, f"_stub_columns missing {key}"
+        assert key in providers_init.STUB_COLUMNS, f"providers.__init__ missing {key}"
+        assert _stub_columns.STUB_COLUMNS[key] == providers_init.STUB_COLUMNS[key], \
+            f"STUB_COLUMNS mismatch for {key}: " \
+            f"_stub_columns={_stub_columns.STUB_COLUMNS[key]} vs " \
+            f"providers.__init__={providers_init.STUB_COLUMNS[key]}"
+```
+
+#### 17.4.3 TA-CN NOT_COVERED 注册
+
+`router.py` 的 `_TA_CN_NOT_COVERED` 集合确认包含：
+
+```python
+"sector.snapshot",
+"sector.ranking",
+```
+
+离线验证：`"sector.snapshot" in Router._TA_CN_NOT_COVERED` 和 `"sector.ranking" in Router._TA_CN_NOT_COVERED` 均为 True。
+
+### 17.5 离线 MongoDB 替换方案
+
+真实 MongoDB 在离线阶段由 `mongomock` 替代。关键替换点：
+
+| 组件 | 生产实现 | 离线实现 | 注入方式 |
+|------|---------|---------|---------|
+| `P3PersistenceWriter` | `pymongo.MongoClient(tradingagents)` | `mongomock.MongoClient()` | 构造函数参数 `persistence_client` 传入 |
+| `CacheManager` | `pymongo.MongoClient(tradingagents)` | `mongomock.MongoClient()` | 构造函数参数 `cache_db` 传入 |
+| 业务集合 | `tradingagents.03_data_ud_market_sector_snapshot` | `mongomock` 自动创建 mock 集合 | `P3PersistenceWriter.get("03_data_ud_market_sector_snapshot", ...)` |
+
+```python
+# 离线测试模式
+from mongomock import MongoClient
+
+p3_writer = P3PersistenceWriter(persistence_client=MongoClient())
+# 所有 get/upsert/delete 操作均在内存 mock 集合上执行
+records = p3_writer.get("03_data_ud_market_sector_snapshot", {"sector_code": "BK0489"})
+```
+
+**P3PersistenceWriter 离线实现契约**（复用 DESIGN §0.4 接口）：
+
+| 方法 | 参数 | 返回值 | 离线替换 |
+|------|------|--------|---------|
+| `get(collection, filter)` | str, dict | `list[dict]` | `mongomock.db[collection].find(filter)` |
+| `upsert(collection, records, unique_key)` | str, list[dict], set[str] | `UpsertOutcome` | 逐记录 `update_one(filter=unique_field, update={"$set": doc}, upsert=True)` |
+| `delete(collection, filter)` | str, dict | `int` deleted count | `mongomock.db[collection].delete_many(filter).deleted_count` |
+
+### 17.6 测试矩阵
+
+#### 17.6.1 单元测试（colocated）
+
+```bash
+# P3-A 全量离线测试（无网络、无真实 MongoDB）
+.venv/bin/python -m pytest skills/data/unified_data/tests/test_sector_snapshot.py -q --tb=short
+.venv/bin/python -m pytest skills/data/unified_data/tests/test_sector_service.py -q --tb=short
+```
+
+| 测试文件 | 用例数 | 覆盖内容 |
+|---------|-------|---------|
+| `test_sector_snapshot.py` | 8 | (1) SectorSnapshot 完整构造； (2) from_dict() 必填字段； (3) from_dict() 缺失字段填 None； (4) from_dict() 额外字段忽略； (5) sector_type 有效枚举值（industry/concept/region/style）； (6) sector_type 无效值→默认为空字符串（松弛映射）； (7) advance_count + decline_count ≤ total_count 不强制校验（容忍不一致数据）； (8) members 最大长度边界（≥1000 不截断——由 Provider 质量保证） |
+| `test_sector_service.py` | 6 | (1) get_sector_snapshot 正常返回 SectorSnapshot（mock provider 有数据）； (2) get_sector_snapshot 空返回 → DataResult.success with is_empty=True； (3) get_sector_snapshot Provider 失败 → DataResult.error； (4) get_sector_ranking 正常返回 list[SectorSnapshot]； (5) get_sector_ranking 排序稳定性（参见 §17.3.3）； (6) get_sector_snapshot router=None → ProviderUnavailableError |
+| `test_provider_phase3.py` | 8 | (1~6) STUB_COLUMNS 六项 P3  capability 的 stub fetch 返回类型正确； (7) STUB_COLUMNS 双定义等价性（§17.4.2）； (8) 空 DataFrame → 返回空列表/None |
+
+#### 17.6.2 Contract 测试
+
+| 契约 | 测试场景 | 离线方法 |
+|------|---------|---------|
+| 唯一键 upsert 幂等性 | 同一 `{market, sector_code, snapshot_date}` 两次 upsert → 集合仅 1 条记录，字段值为第二次 | mongomock + P3PersistenceWriter |
+| query 路径零写入 | Router.query("sector", "snapshot", ...) 不触发 `_materialize()` | MaterializeSpy（DESIGN §15.9） |
+| source_trace 不含 materialized | `source_trace` 中无 `"ud_materialized"` / `"cache"` 条目 | Router Step 4 成功后断言 |
+| freshness 正确传播 | query Step 2 命中 → `"cached"`；Step 4 → `"delayed"` | mock P3PersistenceWriter.get() |
+| 空返回 is_empty | Provider 返回空 DataFrame → `DataResult.success(data=None, is_empty=True)` | FakeAKShareProvider 返回空 DataFrame |
+| router 未注入 | SectorService(router=None) → `ProviderUnavailableError` | 直接构造 Service 不传 router |
+| 排序稳定性 | 同 pct_chg 三条记录 → 按 sector_code 升序 | fixture 数据验证 |
+
+#### 17.6.3 离线集成测试
+
+```bash
+# P3-A 集成：P3PersistenceWriter + mongomock + Router + FakeAKShareProvider
+.venv/bin/python -m pytest skills/data/unified_data/tests/test_sector_service.py::test_get_sector_snapshot_with_mongo -q --tb=short
+.venv/bin/python -m pytest skills/data/unified_data/tests/test_sector_service.py::test_get_sector_ranking_sort_stability -q --tb=short
+
+# Regression（确认现有基线不破坏）
+.venv/bin/python -m pytest skills/data/unified_data/tests -q --tb=short
+```
+
+### 17.7 Exit/Rollback 边界与禁止项
+
+#### 17.7.1 已覆盖的退出场景
+
+| 场景 | 检测机制 | 行为 | 退出码等效 |
+|------|---------|------|-----------|
+| 文件边界越界（修改禁止文件） | git diff → 本卡 allowlist 外文件 | 验收 FAIL | exit 1 |
+| Stub/Provider STUB_COLUMNS 不一致 | `test_provider_phase3.py` 等价性测试 | 等价性断言 FAIL | exit 1 |
+| DataRouter.query() 触发 materialize | MaterializeSpy.assert_no_p3_calls() | 断言 FAIL → Review RC-4 | exit 2 |
+| 排序稳定性不符 | test_get_sector_ranking_sort_stability | 断言 FAIL | exit 1 |
+| mongomock 未替代真实 MongoDB | test 中注入 mongomock.MongoClient() 而非 pymongo | 可审计发现 | exit 1 |
+
+#### 17.7.2 禁止项（P3-A 离线实现硬边界）
+
+- ❌ **无真实 MongoDB**：P3PersistenceWriter 所有测试用例必须使用 `mongomock.MongoClient()`，不得出现 `pymongo.MongoClient`（import 本身允许用于类型标注，但运行时不得构造真实连接）
+- ❌ **无网络 I/O**：`Router.query()` 的 Step 4 必须使用 `FakeAKShareProvider`（从 fixture 返回预置 DataFrame），不得调用真实 `akshare` API
+- ❌ **无真实 AKShare**：所有 Provider fetch 路径在离线阶段由 `stub_dataframe_for()` 或 fixture 数据替代。`import akshare` 本身允许（包已安装），但 `akshare.stock_board_industry_cons_em()` 不得在测试中调用
+- ❌ **无 `.env` 读取**：不得通过 `os.getenv()`、`dotenv_values()` 或 `load_dotenv()` 读取任何环境变量或凭据文件
+- ❌ **无 DDL/DML**：`createCollection`、`createIndex`、`dropCollection` 等 MongoDB 元数据操作不在离线阶段执行。mongomock 自动创建集合，无需 DDL
+- ❌ **无真实多线程/并发**：P3-A 离线测试为单线程。批量 refresh 的并发控制属 T4+ 范围
+- ❌ **无 cron/systemd/webhook 变更**：任何调度、消息推送配置不在本阶段修改
+
+---
+
 ## 16. 版本历史
 
 | 版本号 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
+| **V0.18** | **2026-07-29** | **P3-A 设计固化**：§17 新增 P3-A SectorSnapshot/ranking 离线实现设计闭合——实施文件边界、capability 级契约表、UDC facade 异常边界四维表、mongomock/fake 离线替换策略、排序稳定性契约、测试矩阵与显式命令。参考 RFC §5.1.5 / SPEC §5.5 上游契约闭合。 | **YQuant-Principal** |
+| V0.17 | 2026-07-26 | Pascal C+X2 决策同步 — 工具链设计收敛 | **YQuant-Principal** |
+| V0.16 | 2026-07-26 | B2 实测映射契约冻结 — 工具链设计 | YQuant-Principal |
+| V0.15 | 2026-07-25 | B1-P3C DDL 契约冻结 | YQuant-Principal |
+| V0.14 | 2026-07-25 | B1-P3B DDL 契约冻结 | YQuant-Principal |
+| V0.13 | 2026-07-25 | B1-P3A DDL 契约冻结 | YQuant-Principal |
 | V0.12-T2.5 | 2026-07-24 | **Design Correction（T2.5 消除 authSource fallback 字面量与 dry-run/live-read 状态对象混淆）**。基于 T2.4 Re-Review (PASS) 的两项残余张力修正：(1) §15.5.2 `build_client()` 的 `authSource` 从 `parsed.get("MONGODB_DATABASE", "tradingagents")` 改为 `parsed["MONGODB_DATABASE"]` 直接取值——移除 fallback 字面量，键缺失时 fail-fast KeyError；同步更新 §15.5.2 不可违反复核清单对应描述。(2) §15.3.2/§15.3.3 入口分别新增状态对象语义声明——dry-run 的 `SecretProbeResult` 不含 key 级字段，live-read 的 `ResolvedConfig.*_resolved` 含 key 级布尔，两者语义隔离不重叠；同步更新 §15.4.1 SecretProbeResult docstring。V0.12 主体版本号不变，追加 T2.5 标记。 | **YQuant-Codex-Principal（T2.5）** |
 | V0.11 | 2026-07-24 | **PR-1 凭证来源契约对齐 T1 t_cafc0903**。基于 RFC-03-014 V0.6 / SPEC-03-014 V0.5 裁定，将 MongoDB 连接凭据来源从 MONGO_URI + `$(pwd)/.env` + Hermes profile `.env` 统一为复用 Phase 2 `skills/.env` 五组件键（MONGODB_HOST/PORT/USERNAME/PASSWORD/DATABASE）。具体变更：§15.3.2 Dry-Run 输出改为五组件键声明状态；§15.3.3 Live-Read 门槛改为检查五键全部 authorized；§15.4.2 审计矩阵重写——候选源从 3 路径缩为单一 `skills/.env`，`MONGO_URI` 全部标为 superseded；§15.5.2 重写——新增 `LegacyConfigResolver` 组件式解析 + `PreflightRunner` 预检流程，消除 `MongoClientFactory` URI 构造模式；§15.5.4 新增 `env_missing` 失败分类；§15.10.2/§15.10.3 验收命令预期输出同步更新。 | **YQuant-Codex-Principal** |
 | V0.9 | 2026-07-22 | **Principal 正式裁定收口（本卡 T5C2）**。正式确认 §15.2 allowlist 的 `scripts/__init__.py` package marker 进入正式契约；§15.12 重写为分类治理边界：`tmp_out_mongo/` 推荐 Implement 阶段迁移至 `tmp_path`（`docs/**/smoke_reports/` 保持 `.gitignore`）。V0.8 由 Developer 临时落地，本版由 Principal 正式裁决。RFC-03-014 / SPEC-03-014 不变（allowlist 属 DESIGN 级实现细节）。 | **YQuant-Principal** |

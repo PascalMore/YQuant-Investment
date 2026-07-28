@@ -7,8 +7,8 @@
 | 状态 | 草稿（Draft） |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-07-20 |
-| 最后更新 | 2026-07-26（V0.11 Pascal C+X2 决策同步：§13.4.5.2 PR-3 三选一由 Pascal 2026-07-26 确定选 C（当前 Phase 3 不提供 northbound net inflow，字段保持 None，持股历史不得伪装为净流入）；§13.4.5.3 PR-4 空返回语义收敛为 X2（reporter 仅保留必要账本字段，移除 empty_semantics 分类与 verdict 篡改语义）。删除三选一「未选择/阻塞」失效文本。PR-2 SSL 单变量网络诊断边界与零 live-read 预算不变。不动 §13.6 DDL 冻结状态、不动 §3 domain object、不动既有授权范围。权威契约引用 SPEC-03-014 §14.4.5 V0.10 / DESIGN-03-014 §4.2.1/§15.14 V0.17） |
-| 版本号 | V0.11 |
+| 最后更新 | 2026-07-29（V0.12 P3-A capability 级契约表增补：§5.1.5 新增 SectorSnapshot/sector.ranking 能力级契约表——唯一键、空/错误语义、freshness、source_trace 约束、TA-CN 覆盖、upsert 规则、测试契约。不动 §13.4.5 Pascal C+X2 决策内容、不动 §13.6 DDL 冻结状态、不动既有授权范围） |
+| 版本号 | V0.12 |
 | 所属模块 | 03_data（数据层） |
 | 依赖 RFC | RFC-03-007（Unified Data Layer 总纲）、RFC-03-011（Phase 2 质量与审计治理） |
 | 依赖 SPEC | SPEC-03-007（Unified Data Layer 契约）、SPEC-03-014（Phase 3 持久化扩展契约，本文件对应之 SPEC） |
@@ -31,7 +31,8 @@
 | V0.8 | 2026-07-25 | B1-P3B 轻量更新。§13.6 冻结状态说明更新为「PR-DDL-P3A 与 PR-DDL-P3B 均已冻结」（权威契约见 DESIGN-03-014 §6.4/§6.4.bis V0.14 / SPEC-03-014 §14.6.4/§14.6.bis V0.7），PR-DDL-P3C 尚未冻结。不动 §13.6 既有 DDL Gate 授权要求 1-5、不动其它章节。 | YQuant-Principal |
 | V0.9 | 2026-07-25 | B1-P3C 轻量更新。§13.6 冻结状态说明更新为「PR-DDL-P3A / PR-DDL-P3B / PR-DDL-P3C 三者均已冻结」（权威契约见 DESIGN-03-014 §6.4/§6.4.bis/§6.4.ter V0.15 / SPEC-03-014 §14.6.4/§14.6.bis/§14.6.ter V0.8），Phase 3 三子阶段 DDL 全部授权。不动 §13.6 既有 DDL Gate 授权要求 1-5、不动其它章节。 | YQuant-Principal |
 | V0.10 | 2026-07-26 | B2 实测映射证据冻结。新增 §13.4.5：依据 2026-07-26 B2 一次性只读 smoke 的冻结证据（真实报告只读副本位于 `/tmp/yquant-b2-pr234-20260726/`，不可移动/提交、不可重跑），冻结六项可执行契约——PR-3 `flow.northbound_daily` 实际 endpoint 搭载「北向持股历史」语义而非「北向净流入」（禁止伪装）、PR-4 空返回语义区分与 verdict 边界、PR-2 SSL 网络停止诊断边界、单次 live-read 精确调用预算与零写入边界、T2 实现最小范围。新增 §13.4.5 引用 SPEC §14.4.5（权威可执行契约）与 DESIGN §15.x V0.16（权威设计定义）。不动 §13.6 DDL 冻结状态（三者仍冻结）、不动既有授权范围、不动用户授权。 | YQuant-Principal |
-| V0.11 | 2026-07-26 | **Pascal C+X2 决策同步（Recovery/T2.5）**。§13.4.5.2 PR-3 三选一由 Pascal 2026-07-26 明确选 **C**（当前 Phase 3 不提供 northbound net inflow；`northbound_net_inflow` 保持 None；持股历史不得伪装为净流入；不引入新 endpoint/capability）。§13.4.5.3 PR-4 空返回语义按 **X2** 收敛：reporter 仅保留必要账本字段，移除 `empty_semantics` 分类与 verdict 篡改语义；空返回维持 fail（保守）。删除全部三选一「未选择/阻塞等待 Pascal」失效文本。PR-2 SSL 单变量网络诊断边界与零 live-read 预算不变；§3 domain object 与 §13.6 DDL 冻结状态不变。 | YQuant-Principal |
+|| V0.11 | 2026-07-26 | **Pascal C+X2 决策同步（Recovery/T2.5）**。§13.4.5.2 PR-3 三选一由 Pascal 2026-07-26 明确选 **C**（当前 Phase 3 不提供 northbound net inflow；`northbound_net_inflow` 保持 None；持股历史不得伪装为净流入；不引入新 endpoint/capability）。§13.4.5.3 PR-4 空返回语义按 **X2** 收敛：reporter 仅保留必要账本字段，移除 `empty_semantics` 分类与 verdict 篡改语义；空返回维持 fail（保守）。删除全部三选一「未选择/阻塞等待 Pascal」失效文本。PR-2 SSL 单变量网络诊断边界与零 live-read 预算不变；§3 domain object 与 §13.6 DDL 冻结状态不变。 | YQuant-Principal |
+|| V0.12 | 2026-07-29 | **P3-A capability 级契约表增补**。§5.1.5 新增 SectorSnapshot/sector.ranking 能力级契约表——请求参数、返回类型、空/错误语义、freshness 语义、source_trace 约束、TA-CN 覆盖、唯一键 upsert 覆盖规则、测试契约（STUB_COLUMNS 双定义等价性/fixture 覆盖范围）。权威契约引用 SPEC-03-014 §5.5 V0.11 / DESIGN-03-014 §17 V0.18。不动 §13.4.5 Pascal C+X2 决策内容、不动 §13.6 DDL 冻结状态、不动既有授权范围。 | YQuant-Principal |
 
 ---
 
@@ -183,6 +184,26 @@ Phase 1E 聚焦个股级 `sentiment.stock_score` 标准化情绪分数（不持�
 "sector.snapshot": ["akshare"],   # [假设] 仅 AKShare，无 fallback
 "sector.ranking": ["akshare"],    # [假设] 同上
 ```
+
+#### 5.1.5 公共能力级契约
+
+`SectorSnapshot` 的唯一键为 `{market, sector_code, snapshot_date}`（SPEC-03-014 §4.bis.1 / DESIGN-03-014 §3.1）。同一唯一键的重复写入通过 upsert（`update_one` with `$set`）覆盖，不保留历史版本。`SectorSnapshot` 不包含 `schema_version`、`quality_flags` 或 `source_record_id` 字段（DESIGN-03-014 §6.3 裁定不纳入）。可追溯字段仅 `provider` 与 `fetched_at`。
+
+| 维度 | `sector.snapshot` | `sector.ranking` |
+|------|-------------------|-------------------|
+| **Capability** | `sector.snapshot` | `sector.ranking` |
+| **请求参数** | `security_id`（含 market + sector_code 或等价）、`date`（可选，默认最近交易日） | `date`（可选，默认最近交易日）、`sector_type`（可选，默认全部）、`limit`（默认 20） |
+| **返回 DataResult.data 类型** | `SectorSnapshot`（单条） | `list[SectorSnapshot]` |
+| **空返回语义** | Provider 返回空 DataFrame → `DataResult.success(data=None/is_empty, provider="akshare")`；`source_trace` 不含 `"ud_materialized"` 或 `"cache"` | Provider 返回空 DataFrame → `DataResult.success(data=[], provider="akshare")`；`source_trace` 不含 `"ud_materialized"` 或 `"cache"` |
+| **错误语义** | Provider fetch 失败 → `DataResult.error(provider="error", source_trace=["akshare(error: ...)"])` | 同上 |
+| **freshness 语义** | query 路径 Step 4 成功 → `freshness="delayed"`（未物化）；物化命中 → `freshness="cached"` | query 路径 Step 4 成功 → `freshness="delayed"`；物化命中 → `freshness="cached"` |
+| **查询只读保证** | Zero-Persistence-Write：query 路径不写入物化集合、不写入 Cache、不写入 AuditLogger（SPEC-03-014 §14.5 / DESIGN-03-014 §2.1） | 同上 |
+| **source_trace 约束** | query 路径的 `source_trace` 不包含 `"ud_materialized"` 或 `"cache"` 条目（SPEC-03-014 A-021） | 同上 |
+| **TA-CN 覆盖** | ❌ 注册于 `_TA_CN_NOT_COVERED`—不走 TA-CN Step 1（DESIGN-03-014 §4.3） | ❌ 同上 |
+
+**唯一键覆盖规则**：`{market, sector_code, snapshot_date}` 唯一键的后续写入通过 upsert 完整覆盖先前记录，不保留历史版本。如需版本跟踪属 Phase 5+（SPEC-03-014 §4.bis.1 / DESIGN-03-014 §6.1）。
+
+**测试契约**：stub 等价性测试必须断言 `stub_columns.STUB_COLUMNS["sector.snapshot"]` 与 `providers.__init__` 中的孪生定义完全等价（DESIGN-03-014 §4.1 STUB_COLUMNS 双定义约束）。fixture 覆盖 industry + concept 两种板块类型以及正常交易日 + 极端行情两种场景（SPEC-03-014 §8.2）。
 
 ### 5.2 P3-B：个股资金流
 
