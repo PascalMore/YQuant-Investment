@@ -627,3 +627,134 @@ def test_dsa_ut_05b_deadline_under_threshold_no_fake_failed(
         f"expected exactly 3 _probe_round_dsa calls, got {len(round_spy)}"
     )
     assert final["side_effect_free"] is True
+
+
+# ---------------------------------------------------------------------------
+# GWY-UT-06: _journal() queries the user-systemd field, not the system one
+# ---------------------------------------------------------------------------
+
+
+def test_journal_queries_user_systemd_unit_selector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_journal() must select the user-systemd journal field.
+
+    All four readiness targets (DSA, TA-CN, both Hermes Gateways) are
+    started under ``systemd --user``. The journal records their entries
+    under ``_SYSTEMD_USER_UNIT``; querying ``_SYSTEMD_UNIT`` returns
+    empty stdout, which silently masks the real readiness evidence and
+    drives the boot audit to ``unknown`` until the 90-second total_wait
+    expires. This test pins the selector so a future regression to the
+    system-wide field would be caught locally.
+
+    Read-only journal query contract is preserved: ``journalctl``
+    (read-only invocation), ``--since=@<since_ts>``, the matching unit
+    selector, ``--output=short-iso`` and ``--no-pager`` are all
+    unchanged.
+    """
+
+    captured: list[list[str]] = []
+
+    def runner(
+        cmd: list[str],
+        *,
+        timeout: float | None = None,
+        capture: bool = False,
+        text: bool | None = None,
+        check: bool = False,
+    ) -> _FakeCompletedProcess:
+        captured.append(list(cmd))
+        # Mimic ``journalctl`` returning the selected unit's records.
+        return _FakeCompletedProcess(0, "", "")
+
+    monkeypatch.setattr(rp, "_run", runner)
+
+    result = rp._journal("hermes-gateway-yquant.service", since_ts=1_700_000_000)
+
+    assert result.returncode == 0
+    assert len(captured) == 1, f"expected exactly one _run call, got {len(captured)}"
+    cmd = captured[0]
+    assert cmd[0] == "journalctl", f"first arg must be 'journalctl', got {cmd[0]!r}"
+    assert "--no-pager" in cmd, "must keep '--no-pager' so the query stays read-only"
+    assert "--output=short-iso" in cmd, "must keep '--output=short-iso'"
+    assert f"--since=@{1_700_000_000}" in cmd, "must forward since_ts as '--since=@<ts>'"
+
+    user_selectors = [arg for arg in cmd if arg.startswith("_SYSTEMD_USER_UNIT=")]
+    sys_selectors = [arg for arg in cmd if arg.startswith("_SYSTEMD_UNIT=")]
+    assert user_selectors == [
+        "_SYSTEMD_USER_UNIT=hermes-gateway-yquant.service"
+    ], (
+        "Gateway is a user-systemd unit; _journal must use "
+        f"_SYSTEMD_USER_UNIT=<unit>, got {user_selectors!r}"
+    )
+    assert sys_selectors == [], (
+        "_SYSTEMD_UNIT=... would always return empty stdout for user units "
+        f"and silently mask readiness evidence; got {sys_selectors!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# GWY-UT-07: Gateway still surfaces Lark connected evidence via the new selector
+# ---------------------------------------------------------------------------
+
+
+def test_probe_gwy_p3_still_extracts_lark_connected_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Gateway P-GWY-3 must still recover ``[Lark] connected`` evidence.
+
+    The user-unit selector change MUST NOT relax the connection-evidence
+    redactor. When the underlying ``journalctl`` (driven here via the
+    real ``_journal`` path) emits ``[Lark] connected``, the probe must
+    yield a successful match plus a sanitized evidence string that:
+
+    * preserves a bounded timestamp prefix from the journal line,
+    * collapses the message into the redacted ``[connected]`` category
+      because the Gateway ``[Lark] connected`` log line is not (yet)
+      surfaced under one of the more specific categories, and
+    * remains shorter than the existing 128-char cap.
+    """
+
+    journal_line = (
+        "2026-07-28T07:30:01+08:00 hermes-gateway-yquant[1234]: "
+        "[Lark] connected with session_id=abc123\n"
+    )
+
+    captured: list[list[str]] = []
+
+    def runner(
+        cmd: list[str],
+        *,
+        timeout: float | None = None,
+        capture: bool = False,
+        text: bool | None = None,
+        check: bool = False,
+    ) -> _FakeCompletedProcess:
+        captured.append(list(cmd))
+        # Only the journalctl invocation should reach _run; any other
+        # command means the probe leaked past the journal layer.
+        if cmd and cmd[0] == "journalctl":
+            return _FakeCompletedProcess(0, journal_line, "")
+        return _FakeCompletedProcess(0, "", "")
+
+    monkeypatch.setattr(rp, "_run", runner)
+    monkeypatch.setattr(rp, "UNIT_ACTIVE_TS_OVERRIDE", 1_700_000_000)
+
+    matched, timestamp, evidence, error = rp.probe_gwy_p3(
+        "hermes-gateway-yquant.service", unit_active_ts=1_700_000_000
+    )
+
+    assert matched is True, "the `[Lark] connected` line must match the platform_connected pattern"
+    assert error is None
+    assert timestamp is not None and timestamp.strip()
+    assert evidence is not None
+    assert "[connected]" in evidence, (
+        f"evidence must carry the redacted `[connected]` category, got {evidence!r}"
+    )
+    assert len(evidence) <= 128, (
+        f"evidence stays bounded to 128 chars, got {len(evidence)} (>128) in {evidence!r}"
+    )
+    # The journalctl invocation used the user-unit selector.
+    assert any(
+        arg == "_SYSTEMD_USER_UNIT=hermes-gateway-yquant.service" for arg in captured[0]
+    ), f"journalctl must use _SYSTEMD_USER_UNIT=..., got {captured[0]!r}"

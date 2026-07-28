@@ -114,13 +114,23 @@ def _run(
 
 
 def _journal(unit_name: str, since_ts: int) -> _CompletedProcess:
-    """Read only the selected unit's journal since its active timestamp."""
+    """Read only the selected user unit's journal since its active timestamp.
+
+    All YQuant readiness targets (DSA, TA-CN, both Hermes Gateways) are
+    started under ``systemd --user``. The systemd journal records their
+    records under the ``_SYSTEMD_USER_UNIT`` field, NOT the
+    system-wide ``_SYSTEMD_UNIT`` field — querying the latter would
+    always return empty output and silently mask the real readiness
+    evidence. This helper is the single chokepoint for every caller
+    that consumes unit journal entries (currently only
+    ``probe_gwy_p3``).
+    """
 
     return _run(
         [
             "journalctl",
             f"--since=@{since_ts}",
-            f"_SYSTEMD_UNIT={unit_name}",
+            f"_SYSTEMD_USER_UNIT={unit_name}",
             "--output=short-iso",
             "--no-pager",
         ],
