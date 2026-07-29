@@ -31,6 +31,8 @@ from __future__ import annotations
 
 import dataclasses
 
+import pytest
+
 from skills.data.unified_data.models.domain.flow import CapitalFlowRecord
 
 
@@ -291,3 +293,79 @@ class TestCapitalFlowRecordTradeDateShape:
             }
         )
         assert record.trade_date == "20260721"
+
+
+# ---------------------------------------------------------------------------
+# P3-B northbound fail-stop: from_northbound_dict must force all 3
+# northbound fields to None, regardless of source dict.
+# ---------------------------------------------------------------------------
+
+
+class TestCapitalFlowRecordNorthboundFailStop:
+    """P3-B: from_northbound_dict forces northbound_* to None.
+
+    Per the P3-B T3-Implement contract:
+    ``flow.northbound_daily`` fail-stop: output record's
+    ``northbound_net_inflow``, ``northbound_hold_shares``,
+    ``northbound_hold_ratio`` are all ``None`` — even when the
+    source dict intentionally carries non-None values.
+    """
+
+    def test_from_northbound_dict_forces_all_northbound_fields_to_none(
+        self,
+    ):
+        """Non-None northbound values in source → output northbound all None."""
+        source = {
+            "symbol": "600519",
+            "market": "CN",
+            "trade_date": "2026-07-21",
+            "northbound_net_inflow": 250_000.0,
+            "northbound_hold_shares": 9_500_000.0,
+            "northbound_hold_ratio": 7.55,
+            "fetched_at": "2026-07-21T18:30:00",
+            "provider": "akshare",
+        }
+        record = CapitalFlowRecord.from_northbound_dict(source)
+        assert record.northbound_net_inflow is None
+        assert record.northbound_hold_shares is None
+        assert record.northbound_hold_ratio is None
+
+    def test_from_northbound_dict_preserves_business_key_and_metadata(
+        self,
+    ):
+        """Business key, fetched_at, provider survive the northbound projection."""
+        source = {
+            "symbol": "600519",
+            "market": "CN",
+            "trade_date": "2026-07-21",
+            "northbound_net_inflow": 250_000.0,
+            "fetched_at": "2026-07-21T18:30:00",
+            "provider": "akshare",
+        }
+        record = CapitalFlowRecord.from_northbound_dict(source)
+        assert record.symbol == "600519"
+        assert record.market == "CN"
+        assert record.trade_date == "2026-07-21"
+        assert record.fetched_at == "2026-07-21T18:30:00"
+        assert record.provider == "akshare"
+
+    def test_from_dict_still_preserves_non_none_northbound(self):
+        """``from_dict`` is NOT affected — it still preserves northbound values.
+
+        Regression guard: only ``from_northbound_dict`` applies the
+        fail-stop; ``from_dict`` (used by ``get_capital_flow``) must
+        continue to pass through whatever the source carries.
+        """
+        source = {
+            "symbol": "600519",
+            "market": "CN",
+            "trade_date": "2026-07-21",
+            "northbound_net_inflow": 250_000.0,
+            "northbound_hold_shares": 9_500_000.0,
+            "northbound_hold_ratio": 7.55,
+            "provider": "akshare",
+        }
+        record = CapitalFlowRecord.from_dict(source)
+        assert record.northbound_net_inflow == 250_000.0
+        assert record.northbound_hold_shares == 9_500_000.0
+        assert record.northbound_hold_ratio == 7.55

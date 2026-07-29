@@ -131,6 +131,20 @@ class DataRouter:
             "calendar.trading_days",
             "calendar.is_trading_day",
             "metadata.index_members",
+            # Phase 3 P3-A (T3-C): sector.snapshot / sector.ranking
+            # are sector/industry aggregates — TA-CN MongoDB
+            # collections hold per-stock data and have no sector-wide
+            # aggregate surface. Both capabilities route to the
+            # same P3-A collection
+            # ``03_data_ud_market_sector_snapshot`` via
+            # :data:`P3_COLLECTION_BY_CAPABILITY` (V0.5 §0.4). Mark
+            # both as NOT_COVERED so the router skips Step 1 (DESIGN-
+            # 03-014 §2.1 Step 1 P3-A skip rule). Capability names
+            # match the frozen ``P3_COLLECTION_BY_CAPABILITY`` keys
+            # from the T3-A P3PersistenceWriter deliverable — keeping
+            # the capability naming aligned across the P3 surface.
+            "sector.snapshot",
+            "sector.ranking",
             # Phase 3 P3-B (T3-B): sentiment.market_snapshot is a
             # market-level aggregate — TA-CN MongoDB collections hold
             # per-stock data and have no market-wide sentiment surface.
@@ -924,8 +938,8 @@ class DataRouter:
         if result_data is None:
             return self._build_error_result(security_id, domain, operation, ts, trace)
         trace.append(f"{provider_name}(ok)")
-        freshness_label = self._freshness.label(
-            ts, _data_date_signal(result_data), domain, False
+        freshness_label = self._resolve_external_freshness_label(
+            capability, ts, _data_date_signal(result_data), domain
         )
         # NOTE: we bypass ``DataResult.success`` here because its
         # ``**kwargs`` design conflicts with ``DataResult``'s explicit
@@ -1004,8 +1018,8 @@ class DataRouter:
             )
             if result_data is not None:
                 trace.append(f"{name}(ok)")
-                freshness_label = self._freshness.label(
-                    ts, _data_date_signal(result_data), domain, False
+                freshness_label = self._resolve_external_freshness_label(
+                    capability, ts, _data_date_signal(result_data), domain
                 )
                 return DataResult(
                     data=result_data,
@@ -1081,6 +1095,41 @@ class DataRouter:
                 continue
             healthy_chain.append(name)
         return healthy_chain
+
+    def _resolve_external_freshness_label(
+        self,
+        capability: str,
+        ts: datetime,
+        data_signal: str | None,
+        domain: str,
+    ) -> Any:
+        """Resolve the freshness label for a successful external fetch.
+
+        Wrapper around :meth:`FreshnessPolicy.label` that enforces the
+        D2 contract (SPEC-03-014 §5.5 / DESIGN-03-014 §17.6.2):
+        external Provider Step-4 success **must** produce
+        ``freshness_label == "delayed"`` for every Phase 3 capability
+        (the six entries of :data:`P3_COLLECTION_BY_CAPABILITY`),
+        regardless of how recent ``ts`` is. Non-P3 capabilities keep
+        the age-based ``"realtime"`` / ``"delayed"`` semantics so
+        nothing else about the broader fetch path changes.
+
+        The capability check is O(1) via the frozen dict; when the
+        module-local :data:`P3_COLLECTION_BY_CAPABILITY` import
+        failed (very early init) we silently degrade to the age-based
+        label — mirrors the existing defensive pattern used by Step 1
+        P3-B / P3-C branches.
+        """
+        if data_signal is None:
+            # Empty payload → ``"empty"``, same as the legacy branch.
+            # We do not override this: freshness carries the
+            # empty/non-empty signal regardless of capability scope.
+            return self._freshness.label(ts, data_signal, domain, False)
+        if capability in P3_COLLECTION_BY_CAPABILITY:
+            # D2 contract — external Step-4 success for P3 capability
+            # is always reported as ``"delayed"``.
+            return "delayed"
+        return self._freshness.label(ts, data_signal, domain, False)
 
     @staticmethod
     def _attempt_provider_fetch(

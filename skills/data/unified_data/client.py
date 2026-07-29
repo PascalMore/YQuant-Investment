@@ -198,7 +198,16 @@ class UnifiedDataClient:
 
     def _sector(self) -> SectorService:
         if self._sector_service is None:
-            self._sector_service = SectorService(self._require_ta_cn())
+            # D3: the SectorService router is wired at construction
+            # time via the ``router`` kwarg (no setter, no lazy
+            # attribute). We forward the client's own router so the
+            # P3-A ``get_sector_snapshot`` / ``get_sector_ranking``
+            # methods consult the same external-fallback chain
+            # already used by the Phase 0 ``query`` surface.
+            self._sector_service = SectorService(
+                self._require_ta_cn(),
+                router=self._router,
+            )
         return self._sector_service
 
     def _event(self) -> EventService:
@@ -377,6 +386,29 @@ class UnifiedDataClient:
         return self._sector().get_stocks_by_sector(
             sector_code,
             classify_system=classify_system,
+        )
+
+    # ------------------------------------------------------------------
+    # Phase 3 P3-A entry methods (DESIGN-03-014 §4.5 / SPEC-03-014 §5.1)
+    # ------------------------------------------------------------------
+
+    def get_sector_snapshot(
+        self,
+        sector_code: str,
+        date: str | None = None,
+    ) -> DataResult:
+        return self._sector().get_sector_snapshot(sector_code, date=date)
+
+    def get_sector_ranking(
+        self,
+        date: str | None = None,
+        sector_type: str | None = None,
+        limit: int = 20,
+    ) -> DataResult:
+        return self._sector().get_sector_ranking(
+            date=date,
+            sector_type=sector_type,
+            limit=limit,
         )
 
     # ------------------------------------------------------------------

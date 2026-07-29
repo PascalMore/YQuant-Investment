@@ -40,10 +40,12 @@ from transformers.portfolio_excel_transformer import PortfolioExcelTransformer
 from transformers.trade_excel_transformer import TradeExcelTransformer
 from transformers.a_share_name_corrector import AUDIT_ATTR
 from transformers.asset_identity_review import (
+    OCR_JOINT_AUDIT_ATTR,
     apply_asset_identity_review,
     build_review_summary,
     correct_stock_names,
     filter_pending_normalized_records,
+    get_ocr_joint_audit,
     high_risk_asset_name_issues,
     save_pending_review,
     split_review_rows,
@@ -253,6 +255,10 @@ async def run_pipeline(
     excel_path = save_excel(df, folder_date, source_root, base_name, "image")
     logger.info(f"[Step1] Saved: {new_path}, {excel_path}")
     accepted_df, pending_df = split_review_rows(df)
+    # V1.2 (SPEC-03-004 §4.1.4): joint correction audit goes to BOTH
+    # review.audit_items[] (always present) and pending.json.audit_items
+    # (only when there are pending rows AND joint audit is non-empty).
+    joint_audit = get_ocr_joint_audit(df)
     pending = save_pending_review(
         pending_df=pending_df,
         audit=asset_name_issues,
@@ -264,6 +270,7 @@ async def run_pipeline(
         source_path=str(new_path),
         excel_path=str(excel_path),
         provider_status=provider_status,
+        joint_audit=joint_audit,
     )
     review = build_review_summary(
         total_rows=len(df),
@@ -272,6 +279,10 @@ async def run_pipeline(
         audit=df.attrs.get(AUDIT_ATTR, []),
         pending=pending,
     )
+    # V1.2 (SPEC-03-004 §4.1.4): review.audit_items[] ALWAYS carries the
+    # joint correction audit, even when the batch has zero pending rows.
+    # Empty list is acceptable here; the field must always exist.
+    review["audit_items"] = joint_audit
 
     if dry_run:
         return {

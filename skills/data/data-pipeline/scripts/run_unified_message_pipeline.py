@@ -26,6 +26,7 @@ from transformers.asset_identity_review import (
     apply_asset_identity_review,
     build_review_summary,
     filter_pending_normalized_records,
+    get_ocr_joint_audit,
     high_risk_asset_name_issues,
     save_pending_review,
     split_review_rows,
@@ -147,6 +148,10 @@ async def run_pipeline(raw_text: str, date_str: str, source_root: Path, folder_d
     excel_path = save_excel(df, folder_date, source_root, prefix, timestamp)
     logger.info(f"[Step1] Saved: {txt_path}, {excel_path}")
     accepted_df, pending_df = split_review_rows(df)
+    # V1.2 (SPEC-03-004 §4.1.4): joint correction audit to BOTH review
+    # (always) and pending.json.audit_items (when pending exists + joint
+    # audit non-empty).
+    joint_audit = get_ocr_joint_audit(df)
     pending = save_pending_review(
         pending_df=pending_df,
         audit=asset_name_issues,
@@ -157,6 +162,7 @@ async def run_pipeline(raw_text: str, date_str: str, source_root: Path, folder_d
         fmt=fmt,
         source_path=str(txt_path),
         excel_path=str(excel_path),
+        joint_audit=joint_audit,
     )
     review = build_review_summary(
         total_rows=len(df),
@@ -165,6 +171,8 @@ async def run_pipeline(raw_text: str, date_str: str, source_root: Path, folder_d
         audit=df.attrs.get(AUDIT_ATTR, []),
         pending=pending,
     )
+    # V1.2 (SPEC-03-004 §4.1.4): review.audit_items[] ALWAYS present.
+    review["audit_items"] = joint_audit
 
     if fmt == "trade":
         # --- Trade Pipeline ---

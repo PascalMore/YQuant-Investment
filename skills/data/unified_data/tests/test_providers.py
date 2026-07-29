@@ -124,9 +124,15 @@ class TestAKShareProvider:
         assert AKShareProvider().name == "akshare"
 
     def test_akshare_capabilities(self):
-        """AK-102: 7-capability subset (AKShare does not expose the full set)."""
+        """AK-102: 9-capability subset (Phase 1D 7 + Phase 3 P3-A 2 sector).
+
+        AKShare does not expose the full set: ``adj_factor``, the three
+        financial statements, ``index_members`` and ``stock_news``
+        remain excluded (Design §3.3.6). Phase 3 P3-A adds the two
+        ``sector.*`` capabilities per DESIGN-03-014 §17.4.1.
+        """
         caps = AKShareProvider().capabilities
-        assert len(caps) == 7
+        assert len(caps) == 9
         # ``adj_factor``, the three financial statements, ``index_members`` and
         # ``stock_news`` must NOT appear (Design §3.3.6).
         assert "market_data.kline_daily" in caps
@@ -134,6 +140,9 @@ class TestAKShareProvider:
         assert "market_data.adj_factor" not in caps
         assert "financial.income_statement" not in caps
         assert "news.stock_news" not in caps
+        # Phase 3 P3-A sector additions (DESIGN-03-014 §17.4.1).
+        assert "sector.snapshot" in caps
+        assert "sector.ranking" in caps
 
     def test_akshare_markets(self):
         """AK-103: AKShare is A-share (CN) only in 1B-A."""

@@ -185,8 +185,9 @@ class TestCapitalFlowRefreshReserved:
     """
 
     def test_refresh_without_writer_raises(self):
+        """p3_writer=None → ProviderUnavailableError; no fetch/upsert called."""
         registry = ProviderRegistry()
-        _register_stub(registry)
+        stub = _register_stub(registry)
         router = DataRouter(registry=registry)
         svc = FlowService(adapter=None, router=router)
         sid = SecurityId(market=Market.CN, symbol="600519")
@@ -194,35 +195,30 @@ class TestCapitalFlowRefreshReserved:
         with pytest.raises(ProviderUnavailableError) as excinfo:
             svc.refresh_capital_flow(security_id=sid, date="2026-07-21")
         assert "no P3PersistenceWriter" in str(excinfo.value)
+        # P3-B: no fetch called when writer is absent
+        assert len(stub.call_log) == 0
 
     def test_refresh_with_writer_raises_not_implemented(self):
-        """When ``p3_writer`` is wired, refresh raises NotImplementedError.
+        """P3-B three-state guard: wired writer → NotImplementedError.
 
-        T3-P3B m4 alignment: refresh kwargs use ``date=`` (single-day
-        filter). The ``NotImplementedError`` assertion below is a
-        placeholder for the M3 happy-path branch — once M3 lands, the
-        assertion flips to ``status == "ok"``. Per the M3 scope, the
-        happy-path IS implemented; this test stays as a regression
-        guard for the "writer not wired" branch only.
+        ``p3_writer`` injected (even a real one) raises
+        :class:`NotImplementedError` because T3-P3B does not ship
+        the full refresh happy-path; that path is deferred to a
+        Gate-authorised sub-stage (T3-P3B M5). No provider.fetch
+        and no writer.upsert fire.
         """
         registry = ProviderRegistry()
-        _register_stub(registry)
+        stub = _register_stub(registry)
         router = DataRouter(registry=registry)
         writer = P3PersistenceWriter(_make_db())
         svc = FlowService(adapter=None, router=router, p3_writer=writer)
         sid = SecurityId(market=Market.CN, symbol="600519")
 
-        # M3 happy-path: with the stub + writer wired the refresh
-        # path now returns a ``PersistenceResult(status="ok", ...)``
-        # rather than raising ``NotImplementedError``. The
-        # M3-task-body documents this as the "write-path
-        # implementation" landing in T3-P3B itself (not a deferred
-        # sub-stage). The result is the documented surface; the test
-        # is the regression guard.
-        from skills.data.unified_data.services import PersistenceResult
-
-        result = svc.refresh_capital_flow(security_id=sid, date="2026-07-21")
-        assert isinstance(result, PersistenceResult)
+        with pytest.raises(NotImplementedError) as excinfo:
+            svc.refresh_capital_flow(security_id=sid, date="2026-07-21")
+        assert "refresh" in str(excinfo.value).lower()
+        # P3-B: no fetch called when writer is present but gate is closed
+        assert len(stub.call_log) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -509,12 +505,13 @@ class TestCapitalFlowCanonicalShaping:
         assert all(
             isinstance(r, CapitalFlowRecord) for r in result.data
         )
-        # 600519 is 沪股通 — northbound fields populated; the five
-        # band fields + margin_* are None per the projection.
+        # 600519 is 沪股通 — northbound fields are now None per the
+        # P3-B fail-stop contract (northbound projection forces all
+        # northbound_* to None regardless of source payload).
         record_600519 = next(r for r in result.data if r.symbol == "600519")
-        assert record_600519.northbound_net_inflow == 250_000.0
-        assert record_600519.northbound_hold_shares == 9_500_000.0
-        assert record_600519.northbound_hold_ratio == 7.55
+        assert record_600519.northbound_net_inflow is None
+        assert record_600519.northbound_hold_shares is None
+        assert record_600519.northbound_hold_ratio is None
         # The five flow bands are explicitly None — the projection
         # redacts them regardless of what the source dict carries.
         assert record_600519.main_net_inflow is None
@@ -668,20 +665,40 @@ class TestCapitalFlowNorthboundSignatureV05:
 # ---------------------------------------------------------------------------
 
 
-class TestCapitalFlowRefreshHappyPath:
-    """M3 — ``refresh_capital_flow`` returns ``PersistenceResult``.
+class TestCapitalFlowRefreshGateGuard:
+    """P3-B three-state refresh guard — all writer-injection paths raise.
 
-    Pins the T3-P3B Review #3 contract: refresh must call
-    ``p3_writer.upsert(...)`` end-to-end, **not** raise
-    :class:`NotImplementedError`. The skip / partial_failure /
-    write_forbidden branches are covered in dedicated classes below
-    — this class is the happy-path regression guard.
+    Under the P3-B fail-stop contract, ``refresh_capital_flow`` raises
+    ``NotImplementedError`` whenever a writer is injected, regardless of
+    payload shape. No provider.fetch or writer.upsert fires. The previous
+    five-branch contract (happy_path / partial_failure / skip_empty /
+    write_forbidden / already_written) is deferred to a Gate-authorised
+    sub-stage (T3-P3B M5) and is NOT testable in this phase.
+
+    Two states covered here:
+    1. ``p3_writer=None`` → ``ProviderUnavailableError`` (tested via
+       ``TestCapitalFlowRefreshReserved``)
+    2. ``p3_writer`` injected → ``NotImplementedError`` (this class)
     """
 
-    def test_refresh_happy_path_returns_persistence_result(self):
-        """With stub + mongomock writer wired, refresh returns ok/2 persisted."""
-        from skills.data.unified_data.services import PersistenceResult
+    def test_refresh_with_writer_raises_not_implemented_no_fetch(
+        self,
+    ):
+        """Wired writer raises NotImplementedError; provider.fetch count=0."""
+        registry = ProviderRegistry()
+        stub = _register_stub(registry)
+        router = DataRouter(registry=registry)
+        writer = P3PersistenceWriter(_make_db())
+        svc = FlowService(adapter=None, router=router, p3_writer=writer)
+        sid = SecurityId(market=Market.CN, symbol="600519")
 
+        with pytest.raises(NotImplementedError):
+            svc.refresh_capital_flow(security_id=sid, date="2026-07-21")
+        # No provider fetch or writer upsert fires
+        assert len(stub.call_log) == 0
+
+    def test_refresh_with_writer_no_upsert_called(self):
+        """Wired writer raises NotImplementedError; writer.upsert count=0."""
         registry = ProviderRegistry()
         _register_stub(registry)
         router = DataRouter(registry=registry)
@@ -689,161 +706,19 @@ class TestCapitalFlowRefreshHappyPath:
         svc = FlowService(adapter=None, router=router, p3_writer=writer)
         sid = SecurityId(market=Market.CN, symbol="600519")
 
-        result = svc.refresh_capital_flow(security_id=sid, date="2026-07-21")
-
-        assert isinstance(result, PersistenceResult)
-        assert result.status == "ok"
-        # Default stub payload is 4 records (m4 expansion).
-        assert result.persisted >= 2
-        assert result.failed == 0
-        assert result.skipped is False
-        assert result.capability == "flow.capital_flow_daily"
-        assert result.collection == "03_data_ud_stock_capital_flow"
-        # Writer upsert outcome is preserved for audit logging.
-        assert result.writer_outcome is not None
-        assert isinstance(result.writer_outcome.persisted, int)
-
-    def test_refresh_persisted_to_writer_collection(self):
-        """Happy-path refresh actually upserts into the P3 collection.
-
-        Distinct from the regression guard above — this test reads
-        back the documents via ``writer.get(...)`` to prove the
-        data was persisted end-to-end (not just ``upsert`` was
-        called). V0.5 §5.4 happy-path contract.
-        """
-        writer = P3PersistenceWriter(_make_db())
-        registry = ProviderRegistry()
-        _register_stub(registry)
-        router = DataRouter(registry=registry)
-        svc = FlowService(adapter=None, router=router, p3_writer=writer)
-        sid = SecurityId(market=Market.CN, symbol="600519")
-
-        result = svc.refresh_capital_flow(security_id=sid, date="2026-07-21")
-
-        assert result.persisted >= 2
-        # Read back at least one of the persisted documents.
-        docs_600519 = writer.get(
-            "03_data_ud_stock_capital_flow",
-            {"market": "CN", "symbol": "600519"},
-        )
-        assert len(docs_600519) >= 1
-        assert docs_600519[0]["trade_date"] == "2026-07-21"
-
-
-class TestCapitalFlowRefreshSkipEmpty:
-    """M3 ``skip_empty``: provider returns an empty list → writer not called."""
-
-    def test_skip_empty_returns_persistence_result(self):
-        from skills.data.unified_data.services import PersistenceResult
-
-        registry = ProviderRegistry()
-        _register_stub(registry)
-        router = DataRouter(registry=registry)
-
-        # A FakeProvider-style inline stub returning ``[]``.
-        class _EmptyProvider:
-            name = "empty_provider"
-            capabilities = {"flow.capital_flow_daily"}
-            markets = {Market.CN}
-
-            def __init__(self) -> None:
-                self.call_count = 0
-
-            def is_available(self) -> bool:
-                return True
-
-            def fetch(self, *args, **kwargs) -> list[dict]:
-                self.call_count += 1
-                return []
-
-        empty = _EmptyProvider()
-        writer = P3PersistenceWriter(_make_db())
-        svc = FlowService(
-            adapter=None, router=router, p3_writer=writer
-        )
-        sid = SecurityId(market=Market.CN, symbol="600519")
-
-        result = svc.refresh_capital_flow(
-            security_id=sid, date="2026-07-21", provider=empty
-        )
-
-        assert isinstance(result, PersistenceResult)
-        assert result.status == "skipped"
-        assert result.skipped is True
-        assert result.reason == "empty_payload"
-        assert result.persisted == 0
-        assert result.failed == 0
-        assert result.writer_outcome is None
-        # Provider was still called (we just skipped the writer).
-        assert empty.call_count == 1
-
-
-class TestCapitalFlowRefreshWriteForbidden:
-    """M3 ``write_forbidden``: ``_write_disabled_flag`` set → writer not called."""
-
-    def test_write_disabled_returns_skipped(self):
-        from skills.data.unified_data.services import PersistenceResult
-
-        registry = ProviderRegistry()
-        _register_stub(registry)
-        router = DataRouter(registry=registry)
-        writer = P3PersistenceWriter(_make_db())
-        svc = FlowService(adapter=None, router=router, p3_writer=writer)
-        sid = SecurityId(market=Market.CN, symbol="600519")
-
-        # Flip the production guard via monkey-patch.
-        svc._write_disabled_flag = True
-
-        result = svc.refresh_capital_flow(security_id=sid, date="2026-07-21")
-
-        assert isinstance(result, PersistenceResult)
-        assert result.status == "skipped"
-        assert result.skipped is True
-        assert result.reason == "write_forbidden"
-        # Writer was NOT invoked.
-        assert result.writer_outcome is None
-        # Collection was empty post-refresh (writer never called).
+        with pytest.raises(NotImplementedError):
+            svc.refresh_capital_flow(security_id=sid, date="2026-07-21")
+        # Collection is empty — no upsert ever fired
         docs = writer.get("03_data_ud_stock_capital_flow", {"market": "CN"})
         assert docs == []
 
+    def test_refresh_with_writer_does_not_skip_or_persist(self):
+        """The NotImplementedError is raised before any branch logic (stats proof).
 
-class TestCapitalFlowRefreshAlreadyWritten:
-    """M3 ``already_written``: re-running refresh is idempotent (doc count stable)."""
-
-    def test_refresh_twice_does_not_increase_doc_count(self):
-        from skills.data.unified_data.services import PersistenceResult
-
-        writer = P3PersistenceWriter(_make_db())
-        registry = ProviderRegistry()
-        _register_stub(registry)
-        router = DataRouter(registry=registry)
-        svc = FlowService(adapter=None, router=router, p3_writer=writer)
-        sid = SecurityId(market=Market.CN, symbol="600519")
-
-        first = svc.refresh_capital_flow(security_id=sid, date="2026-07-21")
-        second = svc.refresh_capital_flow(security_id=sid, date="2026-07-21")
-
-        assert isinstance(first, PersistenceResult) and first.status == "ok"
-        assert isinstance(second, PersistenceResult) and second.status == "ok"
-        assert first.persisted >= 2 and second.persisted >= 2
-        # Doc count stays at the first refresh's level — the
-        # business-key upsert is idempotent.
-        docs = writer.get("03_data_ud_stock_capital_flow", {"market": "CN"})
-        symbols = sorted({d["symbol"] for d in docs})
-        # Same set of symbols — no duplicates introduced.
-        assert "600519" in symbols
-        # All four fixture symbols survive across both refreshes
-        # without doc-count doubling.
-        assert len(docs) == len(set((d["symbol"], d["trade_date"]) for d in docs))
-
-
-class TestCapitalFlowRefreshPartialFailure:
-    """M3 ``partial_failure``: malformed records fail at the writer."""
-
-    def test_partial_failure_returns_status_and_counts(self):
-        """A mixed-payload provider triggers ``partial_failure``."""
-        from skills.data.unified_data.services import PersistenceResult
-
+        Document collection stays at 0 documents, proving that none of
+        the five T3-P3B M3 branches (happy_path / partial_failure /
+        skip_empty / write_forbidden / already_written) were reached.
+        """
         registry = ProviderRegistry()
         _register_stub(registry)
         router = DataRouter(registry=registry)
@@ -851,63 +726,39 @@ class TestCapitalFlowRefreshPartialFailure:
         svc = FlowService(adapter=None, router=router, p3_writer=writer)
         sid = SecurityId(market=Market.CN, symbol="600519")
 
-        # Build a "mixed" provider payload: two well-formed rows +
-        # one row missing the ``trade_date`` business key. The
-        # P3PersistenceWriter's per-record upsert should catch the
-        # missing-key case and surface it through ``failed``.
-        mixed_payload = [
-            {  # valid
-                "symbol": "600519",
-                "market": "CN",
-                "trade_date": "2026-07-21",
-                "main_net_inflow": 1_000_000.0,
-                "provider": "mixed_stub",
-            },
-            {  # missing trade_date key
-                "symbol": "000001",
-                "market": "CN",
-                "main_net_inflow": 500_000.0,
-                "provider": "mixed_stub",
-            },
-            {  # valid
-                "symbol": "300999",
-                "market": "CN",
-                "trade_date": "2026-07-21",
-                "main_net_inflow": -200_000.0,
-                "provider": "mixed_stub",
-            },
-        ]
+        with pytest.raises(NotImplementedError):
+            svc.refresh_capital_flow(security_id=sid, date="2026-07-21")
 
-        class _MixedProvider:
-            name = "mixed_provider"
-            capabilities = {"flow.capital_flow_daily"}
-            markets = {Market.CN}
-
-            def is_available(self) -> bool:
-                return True
-
-            def fetch(self, *args, **kwargs) -> list[dict]:
-                return mixed_payload
-
-        mixed = _MixedProvider()
-        result = svc.refresh_capital_flow(
-            security_id=sid, date="2026-07-21", provider=mixed
+        total = len(writer.get("03_data_ud_stock_capital_flow", {}))
+        assert total == 0, (
+            f"P3-B gate guard: expected 0 documents after refresh "
+            f"with NotImplementedError, got {total}"
         )
 
-        assert isinstance(result, PersistenceResult)
-        assert result.status == "partial_failure"
-        # Two valid rows persisted; one row failed.
-        assert result.persisted == 2
-        assert result.failed == 1
-        assert result.skipped is False
+    def test_refresh_with_writer_does_not_call_fetch_via_registry(self):
+        """Registry-backed fetch is never invoked when gate guard fires."""
+        registry = ProviderRegistry()
+        stub = _register_stub(registry)
+        router = DataRouter(registry=registry)
+        writer = P3PersistenceWriter(_make_db())
+        svc = FlowService(adapter=None, router=router, p3_writer=writer)
+        sid = SecurityId(market=Market.CN, symbol="600519")
+
+        with pytest.raises(NotImplementedError):
+            svc.refresh_capital_flow(security_id=sid, date="2026-07-21")
+
+        # Neither the direct provider.fetch nor the registry-back fetch
+        # was called — the full call_log stays empty.
+        assert len(stub.call_log) == 0
 
 
 class TestCapitalFlowRefreshMissingWriter:
     """M3 — when ``p3_writer`` is None the refresh raises ProviderUnavailable."""
 
-    def test_no_writer_raises(self):
+    def test_no_writer_raises_and_no_fetch(self):
+        """p3_writer=None → ProviderUnavailableError; no fetch call."""
         registry = ProviderRegistry()
-        _register_stub(registry)
+        stub = _register_stub(registry)
         router = DataRouter(registry=registry)
         svc = FlowService(adapter=None, router=router)  # no p3_writer
         sid = SecurityId(market=Market.CN, symbol="600519")
@@ -915,6 +766,74 @@ class TestCapitalFlowRefreshMissingWriter:
         with pytest.raises(ProviderUnavailableError) as excinfo:
             svc.refresh_capital_flow(security_id=sid, date="2026-07-21")
         assert "no P3PersistenceWriter" in str(excinfo.value)
+        # P3-B: no fetch fires when writer is absent
+        assert len(stub.call_log) == 0
+
+
+# ---------------------------------------------------------------------------
+# P3-B northbound fail-stop: get_northbound_flow must zero northbound
+# fields even when the stub payload carries intentional non-None values.
+# ---------------------------------------------------------------------------
+
+
+class TestCapitalFlowNorthboundFailStop:
+    """P3-B: ``get_northbound_flow`` zeroes all northbound fields.
+
+    The northbound fail-stop contract says the service-layer
+    ``get_northbound_flow`` must return records where all three
+    ``northbound_*`` fields are ``None`` — even when the underlying
+    stub provider returns payloads with intentional non-None values
+    for those fields.
+    """
+
+    def test_get_northbound_flow_zeroes_northbound_with_intentional_non_none_input(
+        self,
+    ):
+        """Custom stub payload with non-None NB → output northbound all None."""
+        registry = ProviderRegistry()
+        custom_payload = [
+            {
+                "symbol": "600519",
+                "market": "CN",
+                "trade_date": "2026-07-21",
+                "northbound_net_inflow": 999_999.0,
+                "northbound_hold_shares": 99_999_999.0,
+                "northbound_hold_ratio": 99.99,
+                "main_net_inflow": 1_000_000.0,
+                "super_large_net_inflow": 500_000.0,
+                "large_net_inflow": 300_000.0,
+                "medium_net_inflow": -100_000.0,
+                "small_net_inflow": -200_000.0,
+                "main_net_inflow_ratio": 5.0,
+                "margin_buy": 10_000_000.0,
+                "margin_sell": 8_000_000.0,
+                "margin_balance": 15_000_000.0,
+                "fetched_at": "2026-07-21T18:30:00",
+                "provider": "flow_stub",
+            }
+        ]
+        _register_stub(registry, payload=custom_payload)
+        router = DataRouter(registry=registry)
+        svc = FlowService(adapter=None, router=router)
+        sid = SecurityId(market=Market.CN, symbol="600519")
+
+        result = svc.get_northbound_flow(security_id=sid, date="2026-07-21")
+
+        assert result.succeeded
+        records = result.data
+        assert len(records) == 1
+        r = records[0]
+        # All three northbound fields are None — the fail-stop
+        # overrides the intentional non-None stub payload.
+        assert r.northbound_net_inflow is None
+        assert r.northbound_hold_shares is None
+        assert r.northbound_hold_ratio is None
+        # Flow bands are also None per northbound projection.
+        assert r.main_net_inflow is None
+        # Business key preserved.
+        assert r.symbol == "600519"
+        assert r.market == "CN"
+        assert r.trade_date == "2026-07-21"
 
 
 # ---------------------------------------------------------------------------

@@ -556,6 +556,15 @@ class FlowService:
                 "wired; refresh path is opt-in until the Gate-"
                 "authorised sub-stage."
             )
+        # P3-B three-state refresh guard: a wired writer but no
+        # Gate-authorised sub-stage → NotImplementedError. This
+        # prevents any provider.fetch or writer.upsert from firing
+        # until the Gate-authorised sub-stage (T3-P3B M5) lands.
+        raise NotImplementedError(
+            "FlowService.refresh_capital_flow is gated behind a "
+            "Gate-authorised sub-stage (P3-B T3-Implement). Wire "
+            "the sub-stage first."
+        )
         # Defensive: capability map is the single source of truth for
         # collection routing. We assert here so a future refresh-path
         # tweak fails loudly rather than silently routing to the wrong

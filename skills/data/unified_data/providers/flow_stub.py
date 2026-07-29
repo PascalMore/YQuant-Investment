@@ -76,7 +76,7 @@ def _build_default_payload() -> tuple[dict, ...]:
     custom fixtures.
     """
     return (
-        # Record A: 600519 (沪股通) — full bands + northbound + margin
+        # Record A: 600519 (沪股通) — full bands + northbound zeroed + margin
         {
             "symbol": "600519",
             "market": "CN",
@@ -87,9 +87,9 @@ def _build_default_payload() -> tuple[dict, ...]:
             "medium_net_inflow": -50_000.0,
             "small_net_inflow": -120_000.0,
             "main_net_inflow_ratio": 8.5,
-            "northbound_net_inflow": 250_000.0,
-            "northbound_hold_shares": 9_500_000.0,
-            "northbound_hold_ratio": 7.55,
+            "northbound_net_inflow": None,
+            "northbound_hold_shares": None,
+            "northbound_hold_ratio": None,
             "margin_buy": 12_000_000.0,
             "margin_sell": 9_500_000.0,
             "margin_balance": 18_000_000.0,
@@ -116,8 +116,8 @@ def _build_default_payload() -> tuple[dict, ...]:
             "fetched_at": "2026-07-21T18:30:00",
             "provider": "flow_stub",
         },
-        # Record C: 000001 (深港通 / HK Connect) — northbound fields
-        # with HK-side precision convention.
+        # Record C: 000001 (深港通 / HK Connect) — full bands + northbound
+        # zeroed + margin.
         {
             "symbol": "000001",
             "market": "CN",
@@ -128,9 +128,9 @@ def _build_default_payload() -> tuple[dict, ...]:
             "medium_net_inflow": -10_000.0,
             "small_net_inflow": 10_000.0,
             "main_net_inflow_ratio": 3.4,
-            "northbound_net_inflow": 480_000.0,
-            "northbound_hold_shares": 4_750_000.0,
-            "northbound_hold_ratio": 4.2,
+            "northbound_net_inflow": None,
+            "northbound_hold_shares": None,
+            "northbound_hold_ratio": None,
             "margin_buy": 8_500_000.0,
             "margin_sell": 7_900_000.0,
             "margin_balance": 12_400_000.0,
@@ -138,8 +138,7 @@ def _build_default_payload() -> tuple[dict, ...]:
             "provider": "flow_stub",
         },
         # Record D: AAPL (US, not on Stock Connect) — full bands +
-        # None NB / margin. Pins "US-shaped" northbound row so the
-        # ``record_scope`` projection still holds for non-CN markets.
+        # None NB / margin.
         {
             "symbol": "AAPL",
             "market": "US",

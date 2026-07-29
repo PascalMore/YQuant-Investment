@@ -1,9 +1,15 @@
-"""AKShareProvider — Phase 1B-A stub + Phase 1D ``kline_daily`` activation.
+"""AKShareProvider — Phase 1B-A stub + Phase 1D ``kline_daily`` activation
++ Phase 3 P3-A sector capability registration.
 
 Phase 1B-A shipped AKShareProvider as a stub returning canonical empty
 ``pd.DataFrame`` shapes for every declared capability. Phase 1D
 (DESIGN-03-012) activates the ``market_data.kline_daily`` real call
-path while keeping the other 6 capabilities on the stub path.
+path while keeping the other 6 capabilities on the stub path. Phase 3
+P3-A (DESIGN-03-014 §17.4.1) registers the two sector capabilities
+(``sector.snapshot`` / ``sector.ranking``) and routes them through the
+canonical schema-level stub path — the offline T3-C-B implementation
+deliberately avoids any real AKShare call (the production real call
+path is owned by T4, out of scope here).
 
 Activated behaviour (Phase 1D, ``kline_daily`` only):
 
@@ -19,7 +25,7 @@ Activated behaviour (Phase 1D, ``kline_daily`` only):
      use (http_client=None); a caller-injected :class:`KlineClient` is
      used as-is.
   3. Calls the client which performs the real
-     ``ak.stock_zh_a_hist(symbol, period=\"daily\", adjust=\"\")``
+     ``ak.stock_zh_a_hist(symbol, period="daily", adjust="")``
      HTTP round-trip and normalises exceptions into
      :class:`ProviderUnavailableError` / :class:`ProviderError`.
   4. Maps the raw Chinese-named DataFrame to ``list[DailyBar]`` via
@@ -31,10 +37,30 @@ Activated behaviour (Phase 1D, ``kline_daily`` only):
   6. Raises :class:`ProviderUnavailableError` on empty payload so the
      Router falls back to the next provider (DESIGN §3.6).
 
-Capability set (7 entries, from SPEC-03-008 §4.5):
+Phase 3 P3-A sector route (T3-C-B, offline only):
+
+* :meth:`fetch` for ``sector.snapshot`` / ``sector.ranking``:
+  1. Calls :func:`stub_dataframe_for` to obtain the canonical
+     schema-level stub DataFrame — 12 columns for ``sector.snapshot``
+     and 8 columns for ``sector.ranking`` in the exact order frozen by
+     SPEC-03-014 §4.3 (carried by ``providers/_stub_columns.py`` and
+     mirrored by ``providers/__init__.py``).
+  2. Returns the empty (0-row) DataFrame unchanged — no canonical
+     mapping is performed because the T3-C-B offline implementation
+     does not consume row data. Consumers that need rows must use the
+     T4 real call path (out of T3 scope).
+  3. Capability validation uses the same
+     :meth:`_check_capability` path as the kline_daily branch — an
+     undeclared capability raises
+     :class:`UnsupportedCapabilityError` regardless of whether it
+     targets a sector or market_data operation.
+
+Capability set (9 entries — Phase 1D 7 + Phase 3 P3-A 2, from
+SPEC-03-008 §4.5 and DESIGN-03-014 §17.4.1):
     market_data.kline_daily, market_data.kline_weekly,
     market_data.realtime_quote, valuation.daily_basic,
-    calendar.trading_days, calendar.is_trading_day, metadata.stock_list
+    calendar.trading_days, calendar.is_trading_day, metadata.stock_list,
+    sector.snapshot, sector.ranking
 """
 
 from __future__ import annotations
@@ -56,10 +82,13 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 KLINE_DAILY_CAPABILITY = "market_data.kline_daily"
+SECTOR_SNAPSHOT_CAPABILITY = "sector.snapshot"
+SECTOR_RANKING_CAPABILITY = "sector.ranking"
 
 
 class AKShareProvider(BaseExternalProvider):
-    """AKShare provider with the 7-capability subset (Phase 1D: kline_daily active).
+    """AKShare provider with the 7-capability subset + Phase 3 P3-A sector
+    capabilities (``sector.snapshot`` / ``sector.ranking``).
 
     Args:
         rate_limit_rpm: Per-minute budget (defaults to ``200``). Forwarded
@@ -87,7 +116,16 @@ class AKShareProvider(BaseExternalProvider):
 
     @property
     def capabilities(self) -> set[str]:
-        """7-capability subset per SPEC-03-008 §4.5."""
+        """9-capability set: Phase 1D 7 + Phase 3 P3-A 2.
+
+        The Phase 1D 7-capability subset comes from SPEC-03-008 §4.5
+        (AKShare does not expose ``adj_factor``, the three financial
+        statements, ``index_members`` or ``stock_news``). The Phase 3
+        P3-A two additions — ``sector.snapshot`` and
+        ``sector.ranking`` — come from DESIGN-03-014 §17.4.1 and
+        correspond to the sector collection
+        ``03_data_ud_market_sector_snapshot`` (V0.5 §0.4).
+        """
         return {
             "market_data.kline_daily",
             "market_data.kline_weekly",
@@ -96,6 +134,8 @@ class AKShareProvider(BaseExternalProvider):
             "calendar.trading_days",
             "calendar.is_trading_day",
             "metadata.stock_list",
+            "sector.snapshot",
+            "sector.ranking",
         }
 
     @property
@@ -152,14 +192,21 @@ class AKShareProvider(BaseExternalProvider):
         """Return data for ``domain.operation``.
 
         Phase 1D activates the ``market_data.kline_daily`` capability
-        (see class docstring). Every other capability remains on the
+        (see class docstring). Phase 3 P3-A adds
+        ``sector.snapshot`` / ``sector.ranking`` (T3-C-B, offline
+        schema-level stub). Every other capability remains on the
         Phase 1B-A stub path.
 
         Raises:
             UnsupportedCapabilityError: When the requested capability
                 is not in :attr:`capabilities`.
             ProviderUnavailableError: kline_daily path: client
-                unavailable / network / timeout / empty payload.
+                unavailable / network / timeout / empty payload. **Not**
+                raised on the sector stub path — the sector
+                capabilities return a canonical empty DataFrame and
+                the caller decides how to interpret the empty payload
+                (DESIGN-03-014 §17.6.2: empty → ``DataResult.success(
+                data=None/is_empty, provider="akshare")``).
             ProviderError: kline_daily path: API internal error /
                 missing required column / non-numeric cell.
         """
@@ -167,6 +214,20 @@ class AKShareProvider(BaseExternalProvider):
 
         if capability == KLINE_DAILY_CAPABILITY:
             return self._fetch_kline_daily(security_id, params)
+
+        # Phase 3 P3-A sector route (T3-C-B, offline only).
+        # Returns the canonical schema-level stub DataFrame from
+        # ``_stub_columns.py`` (mirrored byte-for-byte in
+        # ``providers/__init__.py``). The 0-row schema is the
+        # entire deliverable of T3-C-B — no canonical mapping,
+        # no row contents. The real AKShare sector call path is
+        # owned by T4 (out of scope).
+        if capability in (
+            SECTOR_SNAPSHOT_CAPABILITY,
+            SECTOR_RANKING_CAPABILITY,
+        ):
+            df = stub_dataframe_for(capability)
+            return self._to_canonical(df, capability)
 
         # Stub path for the remaining 6 capabilities (EP-103).
         df = stub_dataframe_for(capability)

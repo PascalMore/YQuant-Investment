@@ -7,13 +7,13 @@
 | 状态 | Draft |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-07-20 |
-| 最后更新 | 2026-07-29（V0.11 P3-A 能力级契约增补：§5.5 新增 P3-A capability 级契约表（sector.snapshot/sector.ranking），§5.1 追加 P3-A 上游契约引用，§8.1 新增 P3-A 测试矩阵。同步更新来源 RFC 引用为 V0.12。不动 §14.4.5 Pascal C+X2 决策内容、不动 §14.6.x DDL 冻结契约、不动既有授权范围） |
-| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.12） |
+| 最后更新 | 2026-07-29（V0.14 R0 冲突修正契约：新增 §14.4.5.11（4 项冲突的 SPEC 级精确代码坐标、契约修正、验收断言、allowlist/blocklist）。修正 B2 冻结契约与既有实现偏差。不动 §14.4.5.9-§14.4.5.10 B2 裁决内容、不动 §14.6.x DDL 冻结契约、不动既有授权范围） |
+| 版本号 | V0.14 |
+| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.15） |
 | 关联 RFC | RFC-03-007（Unified Data Layer 总纲）、RFC-03-011（Phase 2 质量与审计治理）、RFC-03-013（Phase 1E 情绪最小切片） |
 | 关联 SPEC | SPEC-03-007（Unified Data Layer 契约基线）、SPEC-03-008（Phase 1B-A 查询平面）、SPEC-03-013（Phase 1E 情绪最小切片） |
-| 关联 Design | DESIGN-03-014（Phase 3 持久化扩展详细设计，V0.17） |
+| 关联 Design | DESIGN-03-014（Phase 3 持久化扩展详细设计，V0.21） |
 | 目标模块 | unified_data（`skills/data/unified_data/`） |
-| 版本号 | V0.11 |
 | 适配 Agent | YQuant-Developer-Engineer, YQuant-Test-Engineer, YQuant-Principal（T4 阶段） |
 
 ### 版本历史
@@ -30,7 +30,8 @@
 | V0.8 | 2026-07-25 | B1-P3C DDL 契约冻结。新增 §14.6.ter（PR-DDL-P3C 精确契约：前置条件/集合/索引/写入身份/原子性/rollback 路径/audit 工件/退出码/停止条件/执行人/不授权范围），权威定义引用 DESIGN-03-014 §6.4.ter V0.15；§10 G-C-1 行停止条件列追加 §14.6.ter + DESIGN §6.4.ter 引用；§10.bis PR-DDL-P3C 行标注「P3-A + P3-B + P3-C 已全部授权冻结」并引用 §14.6.ter。退出码语义按 task 授权：0=PASS / 2=preflight target already exists / 3=collection create fail / 4=index create fail。不动既有 §3.3/§14.4/§14.5/§14.6 通用要求/§14.6.4/§14.6.bis/§14.7/§14.8 条文。 | YQuant-Principal |
 | V0.9 | 2026-07-26 | B2 实测映射契约冻结。新增 §14.4.5（B2 单次只读 smoke 实测映射契约冻结）：依据 2026-07-26 B2 一次性只读 smoke 的冻结证据（真实报告只读副本位于 `/tmp/yquant-b2-pr234-20260726/`，不可移动/提交、不可重跑），冻结六项可执行契约——（1）§14.4.5.2 PR-3 `flow.northbound_daily` 经 `stock_hsgt_individual_em(symbol)` 实际返回北向**持股历史**语义（9 个持股字段），**不是**北向净流入；现有 expected 0/11，缺失 date/stock/northbound_net_inflow；禁止伪装，T2 须三选一（A 分流正确 endpoint / B 变更 capability 语义 / C Pascal 确认放弃净流入），未获选择不得自行实现。（2）§14.4.5.3 PR-4 空返回语义区分（无交易日/schema drift/调用异常），本次 row_count=0 且 actual_fields=0 判定 verdict=fail、empty_semantics=undetermined，T2 须在 reporter 定义 empty_semantics 字段，后续独立 live-read 在交易日复验；本阶段不重跑。（3）§14.4.5.4 PR-2 SSL 网络停止诊断边界（endpoint_unreachable，非代码 defect，禁止与 mapping 修复耦合，仅允许后续单变量网络诊断）。（4）§14.4.5.5 单次 live-read 精确调用预算（PR-2=2/PR-3=3/PR-4=2，本次已用尽）与零写入边界（无重试/无 fallback/零 Mongo/Cache/Audit/DDL/cron）。（5）§14.4.5.6 T2 实现最小文件范围与禁止修改清单。（6）§14.4.5.7 T2 验收准则 7 项。本节为权威可执行契约，RFC §13.4.5 引用本节，DESIGN §15.x V0.16 为工具链设计定义。不动 §3 domain object 字段定义（除非 Pascal 确认选项 B）、不动 §14.6.x DDL 冻结契约、不动既有授权范围。 | YQuant-Principal |
 || V0.10 | 2026-07-26 | **Pascal C+X2 决策同步（Recovery/T2.5）**。§14.4.5.2 PR-3 三选一由 Pascal 2026-07-26 明确选 **C**（当前 Phase 3 不提供 northbound net inflow；`northbound_net_inflow` 保持 None；持股历史不得伪装为净流入；不引入新 endpoint/capability；§3 字段定义不变）。§14.4.5.3 PR-4 空返回语义按 **X2** 收敛：移除 `empty_semantics` reporter 字段与三分类（undetermined/no_trading_data/schema_drift/call_anomaly）；空返回维持 verdict=fail（保守）；reporter 账本同步移除 `worktree_changed`（X1 候选 runtime git-worktree 探测被 X2 否决）。§14.4.5.6 T2 最小文件范围与禁止清单同步更新（移除 empty_semantics/worktree_changed）。§14.4.5.7 验收准则第 2 项移除 empty_semantics 要求。删除全部「未选择/阻塞等待 Pascal」失效文本。§14.4.5.4 PR-2 SSL 边界、§14.4.5.5 零写入边界、§3 domain object、§14.6.x DDL 冻结契约均不变。权威可执行契约，RFC §13.4.5 V0.11 引用本节，DESIGN §4.2.1/§15.14 V0.17 为工具链设计定义。 | YQuant-Principal |
-|| V0.11 | 2026-07-29 | **P3-A 能力级契约增补（设计与实现对齐）**。§5.5 新增 P3-A capability 级契约表（sector.snapshot/sector.ranking），覆盖 Router.query 签名、请求参数、DataResult.data 类型、空/错误语义、freshness 语义、source_trace 约束、TA-CN 覆盖、external_fallback_chain、唯一键 upsert 规则、可追溯字段、测试契约。§5.1 追加上游契约引用指向 §5.5。§8.1 新增 P3-A 测试矩阵（test_sector_snapshot.py 8 用例、test_sector_service.py 6 用例、fixtures/sector_fixtures.py）。来源 RFC 更新为 RFC-03-014 V0.12。不动 §14.4.5 Pascal C+X2 决策内容、不动 §14.6.x DDL 冻结契约、不动既有授权范围。 | YQuant-Principal |
+|| V0.12 | 2026-07-29 | **D1/D2/D3 文档同步**。§5.5/A-021/§14.5 source_trace 约束从 blanket 子串匹配修正为精确 `(ok)` 后缀匹配——不允许 `"ud_materialized(ok)"` 或 `"cache(ok)"` 条目；允许 `"ud_materialized(skipped: ...)"`、`"cache(miss)"`。与 D1 裁定对齐，不动 §14.4.5 Pascal C+X2 决策内容、不动 §14.6.x DDL 冻结契约、不动既有授权范围。 | YQuant-Principal |
+|| V0.14 | 2026-07-29 | **R0 冲突修正契约**。新增 §14.4.5.11：4 项冲突的 SPEC 级精确坐标（flow_stub northbound 字段恒 None 契约与验收断言 / refresh 三态守卫代码模板 / docstring 修正 / StubFlowProvider northbound 投影过滤），allowlist/blocklist 表，最小验收命令。不动 §14.4.5.9-§14.4.5.10 B2 裁决内容、不动 §14.6.x DDL 冻结契约、不动既有授权范围。 | YQuant-Principal |
 
 ---
 
@@ -669,7 +670,7 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 | **空返回** | 空 → `DataResult.success(data=None, provider="akshare")`；`is_empty=True` | 空 → `DataResult.success(data=[], provider="akshare")`；`is_empty=True` |
 | **错误返回** | fetch 失败 → `DataResult.error(provider="error", source_trace=["akshare(error: ...)"])` | 同上 |
 | **freshness** | query Step 4 → `"delayed"`；物化命中 → `"cached"` | 同上 |
-| **source_trace** | 不含 `"ud_materialized"`、`"cache"`（A-021） | 同上 |
+| **source_trace** | 不含 `"ud_materialized(ok)"`、`"cache(ok)"`；允许 `ud_materialized(skipped: ...)`、`cache(miss)`（A-021） | 同上 |
 | **TA-CN 覆盖** | ❌ 注册于 `_TA_CN_NOT_COVERED` | ❌ 注册于 `_TA_CN_NOT_COVERED` |
 | **external_fallback_chain** | `["akshare"]` | `["akshare"]` |
 
@@ -733,7 +734,7 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 | **A-018** | **PR-2 smoke sector**：单板块代码 ≤3 交易日，零持久化写，产出 YAML 报告包含 connectivity/auth/permissions/field_mapping/data_sample/vs_fixture | 检查报告文件存在且包含全部六节 | T4 P3-A |
 | **A-019** | **PR-3 smoke flow**：单标的 ≤3 交易日，零持久化写，产出 YAML 报告同上 | 同上 | T4 P3-B |
 | **A-020** | **PR-4 smoke sentiment**：单日期，零持久化写，产出 YAML 报告同上 | 同上 | T4 P3-C |
-| **A-021** | **T4 零持久化写验证**：DataRouter.query() 对 P3 capability 的 source_trace 不包含 `materialized`/`cache` 条目；force_refresh 也不产生产生持久化副作用 | Python spy/mock 验证 | T4 P3-A/B/C |
+| **A-021** | **T4 零持久化写验证**：DataRouter.query() 对 P3 capability 的 source_trace 不包含 `"ud_materialized(ok)"` 或 `"cache(ok)"` 条目；允许 `ud_materialized(skipped: ...)` 和 `cache(miss)`；force_refresh 也不产生产生持久化副作用 | Python spy/mock 验证 | T4 P3-A/B/C |
 | **A-022** | **连通性/认证/权限/数据合理性四条独立记录**：每条 smoke 报告的 connectivity/auth/permissions 节必须独立、不可互相推导 | 检查 YAML 报告结构 | T4 P3-A/B/C |
 | **A-023** | **Secret source 非泄露三布尔检查**：审计输出仅包含存在/不存在/可加载/不可加载/键声明/缺失的布尔结论，不含值/长度/URI/用户名 | 终端输出审计 | T4 P3-A/B/C |
 | **A-024** | **失败后不自动重试、不切换写入**：smoke 失败仅记录报告，不写入物化/Cache，不自动重试，不自动回退 | 检查 smoke 报告输出 + 无 MongoDB 变更 | T4 P3-A/B/C |
@@ -1209,6 +1210,166 @@ T2 Design 完成时须满足：
 - 不修改 §3 domain object 字段定义（Pascal 已选 C，§3 字段定义不变）。
 - 不修改既有用户授权范围（PR-0 ~ PR-4、PR-DDL-* 的授权语义不变）。
 
+#### 14.4.5.9 B2 全 capability 映射裁决总表
+
+每项 capability 的三态裁决（可真实映射/保持线下 stub/明确 fail-stop），AKShareProvider 注册状态取自当前代码基线（截至 2026-07-29）：
+
+| Capability | B2 实测状态 | AKShareProvider 注册状态 | 映射裁决 | 依据 |
+|---|---|---|---|---|
+| `sector.snapshot` | SSL 失败（SSLError） | ✅ P3-A stub（注册，无真实调用路径） | **offline stub** — 预期字段集基于 AKShare 公开文档推断，标注「未 live-read 验证」 | §14.4.5.4 PR-2 |
+| `sector.ranking` | SSL 失败（同 endpoint） | ✅ P3-A stub | **offline stub** — 同 sector.snapshot | §14.4.5.4 |
+| `flow.capital_flow_daily` | 成功（`stock_individual_fund_flow`，均 success） | ❌ 未注册（当前代码仅含 9 项 capability，缺 flow + sentiment 4 项） | **real-mappable** — B2 已验证 endpoint 返回数据；T3 须注册到 AKShareProvider | §14.4.5.2 PR-3 |
+| `flow.northbound_daily` | success 但语义不匹配（持股历史≠净流入） | ❌ 未注册 | **fail-stop（Pascal C）** — capability 保留但 fetch 路径不指向真实 endpoint；`northbound_net_inflow` 恒 None | §14.4.5.2 Pascal C |
+| `sentiment.market_snapshot` | success 但空返回（row_count=0） | ❌ 未注册 | **offline stub** — verdict=fail（X2 保守）；须交易日 live-read 复验 | §14.4.5.3 Pascal X2 |
+| `sentiment.limit_up_pool` | success 但空返回（row_count=0） | ❌ 未注册 | **offline stub** — 同 market_snapshot | §14.4.5.3 |
+
+**AKShareProvider 注册缺口**：当前 `AKShareProvider`（`akshare.py`）仅声明 9 项 capability（7 项 Phase 1D + 2 项 P3-A sector）。`flow.capital_flow_daily`、`flow.northbound_daily`、`sentiment.market_snapshot`、`sentiment.limit_up_pool` 四项**未注册**。T3 须按映射裁决逐项注册：real-mappable 的 `flow.capital_flow_daily` 须注册真实调用路径；offline stub 的 sentiment 和 fail-stop 的 northbound 可注册 stub 路径或暂不注册。
+
+#### 14.4.5.10 Refresh 授权前状态机
+
+`refresh_xxx()` 方法在对应 Gate 授权前的行为契约：
+
+| 状态 | 条件 | `refresh_xxx()` 行为 | 信令 |
+|---|---|---|---|
+| **未授权（unauthorized）** | `p3_writer=None` | 抛出 `ProviderUnavailableError`；不执行 Provider fetch、不写物化 | 异常 |
+| **已注入但未实现（injected-not-implemented）** | `p3_writer` 已注入但 refresh happy-path 未实现 | 抛出 `NotImplementedError` | 异常 |
+| **已授权可写入（authorized）** | Gate 授权 + refresh 完整实现 | Provider fetch → upsert → 返回 `PersistenceResult` | 正常返回 |
+
+**每 capability 约束**：
+- `sector.snapshot`/`sector.ranking`（offline stub）：refresh 路径仅在 SSL 诊断通过后评估——当前保持在「未授权」或「已注入但未实现」。
+- `flow.capital_flow_daily`（real-mappable）：T3 可实现为「已授权可写入」（须对应 G-B-2 授权）。
+- `flow.northbound_daily`（fail-stop/C）：**不得**进入「已授权可写入」——恒 None 无数据可写。
+- `sentiment.market_snapshot`/`sentiment.limit_up_pool`（offline stub）：保持在「已注入但未实现」直到交易日 live-read 复验。
+
+#### 14.4.5.11 既有实现冲突坐标与修正契约
+
+本节基于 RFC §13.4.5.10 的冲突判定，给出每项冲突在 SPEC 层的精确契约。Developer 按此契约执行代码修复；Verify 按此契约逐项验收。
+
+##### 14.4.5.11.1 冲突 A：`flow_stub.py` 默认 payload northbound 字段
+
+**来源**：`providers/flow_stub.py` 第 78-98 行（Record A 600519）、第 119-139 行（Record C 000001）。
+
+**契约修正**：以下三个 dict key 在 Record A 和 Record C 中**必须为 `None`**（值非 `None` 视为修正不完整）：
+- `"northbound_net_inflow": None`
+- `"northbound_hold_shares": None`
+- `"northbound_hold_ratio": None`
+
+**允许保留**：这三对 key 本身（允许 dict 中带 `None` 值的 key）。Record B（300999）和 Record D（AAPL）的 `None` northbound 值不变。
+
+**验收断言**：
+```python
+records = _build_default_payload()
+for r in records:
+    assert r.get("northbound_net_inflow") is None
+    assert r.get("northbound_hold_shares") is None
+    assert r.get("northbound_hold_ratio") is None
+```
+即四条记录全部通过（B/D 已经 None，A/C 由非 None 改为 None）。
+
+**不修改**：非 northbound 字段、Record B/D、`_DEFAULT_CAPABILITIES`、`StubFlowProvider` 的 capability/market 声明。
+
+##### 14.4.5.11.2 冲突 B：`flow_service.py` refresh 未授权 fetch→upsert
+
+**来源**：`services/flow_service.py` 第 488-641 行 `refresh_capital_flow()`。
+
+**契约修正**：refresh 行为改为三态守卫：
+1. `p3_writer is None` → 抛 `ProviderUnavailableError`（已有，不改）
+2. `p3_writer is not None and not self._is_refresh_authorized()` → 抛 `NotImplementedError("Refresh not yet authorized for P3-B flow.capital_flow_daily")`（新增，本卡实现）
+3. `p3_writer is not None and self._is_refresh_authorized()` → 现有 happy-path fetch→upsert（未来 G-B-2 Gate 授权后启用）
+
+**新增方法**（`FlowService`）：
+```python
+def _is_refresh_authorized(self) -> bool:
+    """Return True when the refresh path is Gate-authorized.
+
+    Default ``False`` (offline-only safety). The flag is toggled by
+    the G-B-2 Gate process after Pascal confirms readiness.
+    """
+    return False  # T3-P3B offline default — override only via Gate
+```
+
+`refresh_capital_flow()` 第 553-558 行（`p3_writer is None` 守卫）之后、第 559 行（capability 断言）之前，插入上述守卫。
+
+**北向 refresh fail path**（本卡范围）：
+- `FlowService` 新增 `_northbound_refresh_disallowed()` 返回 `True` + docstring「Pascal C: northbound 永不授权写入」
+- `refresh_capital_flow()` 在 capability 断言后检查 `capability == flow.northbound_daily` 时抛 `NotImplementedError`（显式 fail-stop，不进入 fetch/upsert 路径）
+
+**不修改**：`PersistenceResult` dataclass、`_fetch_for_refresh()`、`write_disabled()`、read path `get_capital_flow()` / `get_northbound_flow()`。
+
+**验收断言**：
+```python
+svc = FlowService(p3_writer=MagicMock())
+with pytest.raises(NotImplementedError):
+    svc.refresh_capital_flow()
+svc._p3_writer.upsert.assert_not_called()  # 未 upsert
+```
+
+##### 14.4.5.11.3 冲突 C：文档字符串 northbound 语义
+
+**来源**：
+- `models/domain/flow.py` 第 23-24 行 `CapitalFlowRecord` 类 docstring：`northbound_* — only populated for 沪/深港通标的`
+- `services/flow_service.py` 第 256-260 行 `get_northbound_flow()` docstring：`only the three northbound_* fields ... are populated`
+
+**契约修正**：上述两处 docstring 追加：
+```
+(Pascal C — Phase 3: northbound_* fields are ALWAYS None.
+ The type signature (float | None) is preserved but no non-None value
+ is ever populated in this Phase.)
+```
+
+不修改 docstring 以外的任何内容。
+
+##### 14.4.5.11.4 冲突 D：`StubFlowProvider` northbound 投影过滤
+
+**来源**：`providers/flow_stub.py` 第 241-268 行 `StubFlowProvider.fetch()`。
+
+**契约修正**：`fetch()` 在 `operation == "northbound_daily"` 时，对返回列表的每个 dict 执行：
+```python
+for record in payload:
+    record["northbound_net_inflow"] = None
+    record["northbound_hold_shares"] = None
+    record["northbound_hold_ratio"] = None
+```
+（类似 `CapitalFlowRecord.from_northbound_dict` 的投影逻辑。）
+
+**不修改**：`flow.capital_flow_daily` 的 fetch 路径、`call_log` 记录、`raise_on_fetch` 逻辑。
+
+**验收断言**：
+```python
+stub = StubFlowProvider()
+result = stub.fetch("flow", "northbound_daily", SecurityId(market="CN", symbol="600519"))
+for r in result:
+    assert r["northbound_net_inflow"] is None
+# capital_flow_daily 不受影响
+result2 = stub.fetch("flow", "capital_flow_daily", SecurityId(market="CN", symbol="600519"))
+assert result2[0]["main_net_inflow"] is not None  # 非 northbound 字段无影响
+```
+
+##### 开发者允许路径与禁止路径
+
+同 RFC §13.4.5.10 Developer allowlist 表。严格按此表执行，越界修改视为验收 FAIL。
+
+##### 最小验收命令
+
+```bash
+PYTHONPATH=. python -m pytest tests/data/unified_data/ \
+  -k "northbound or refresh_capital_flow or capital_flow" \
+  -q --tb=short 2>&1 | tail -20
+```
+
+此外独立运行：
+```bash
+PYTHONPATH=. python -c "
+from skills.data.unified_data.providers.flow_stub import _build_default_payload
+records = _build_default_payload()
+for i, r in enumerate(records):
+    assert r.get('northbound_net_inflow') is None, f'Record {i} northbound_net_inflow={r.get(\"northbound_net_inflow\")}'
+    assert r.get('northbound_hold_shares') is None
+    assert r.get('northbound_hold_ratio') is None
+print('OK: ALL 4 records have None northbound fields')
+"
+```
+
 ---
 
 ### 14.5 Zero-Persistence-Write 保证
@@ -1227,7 +1388,7 @@ T2 Design 完成时须满足：
 - CANARY 之前的任何 refresh 路径调用返回未授权错误，不执行 Provider fetch 和 MongoDB 写入
 
 **验证方式**（A-021）：
-- 通过 spy/source trace 验证：`DataResult.source_trace` 中不包含 `"ud_materialized"` 或 `"cache"` 条目
+- 通过 spy/source trace 验证：`DataResult.source_trace` 中不包含 `"ud_materialized(ok)"` 或 `"cache(ok)"` 条目（允许 `ud_materialized(skipped: ...)`、`cache(miss)`）
 - 通过 mock Router 验证：`_materialize()` 方法在 P3 capability 的 query 路径中不被调用
 
 ### 14.6 DDL/DML 独立 Gate 细则

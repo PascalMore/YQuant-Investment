@@ -55,9 +55,7 @@ from skills.data.unified_data import DataProvider, Market
 #                     in real data, but the schema carries the same
 #                     ``None`` slot.
 _SAMPLE_FLOW_RECORDS: tuple[dict, ...] = (
-    # Record A: 600519 (沪股通) — main flow populated AND northbound
-    # populated (positive net buy, share balance, ratio). ``provider``
-    # field is non-empty per V0.5 §6.1 V-GEN-5 traceability check.
+    # Record A: 600519 (沪股通) — northbound fields zeroed (P3-B fail-stop).
     {
         "symbol": "600519",
         "market": "CN",
@@ -68,19 +66,16 @@ _SAMPLE_FLOW_RECORDS: tuple[dict, ...] = (
         "medium_net_inflow": -50_000.0,
         "small_net_inflow": -120_000.0,
         "main_net_inflow_ratio": 8.5,
-        "northbound_net_inflow": 250_000.0,
-        "northbound_hold_shares": 9_500_000.0,
-        "northbound_hold_ratio": 7.55,
+        "northbound_net_inflow": None,
+        "northbound_hold_shares": None,
+        "northbound_hold_ratio": None,
         "margin_buy": 12_000_000.0,
         "margin_sell": 9_500_000.0,
         "margin_balance": 18_000_000.0,
         "fetched_at": "2026-07-21T18:30:00",
         "provider": "flow_stub",
     },
-    # Record B: 300999 (非沪/深港通) — main flow populated but
-    # ``northbound_*`` and ``margin_*`` fields explicitly ``None``.
-    # The fixture exercises the V0.5 §2.3 "部分字段不可用" branch
-    # (records still persist when only some fields are unavailable).
+    # Record B: 300999 (非沪/深港通) — northbound / margin explicitly None.
     {
         "symbol": "300999",
         "market": "CN",
@@ -100,12 +95,7 @@ _SAMPLE_FLOW_RECORDS: tuple[dict, ...] = (
         "fetched_at": "2026-07-21T18:30:00",
         "provider": "flow_stub",
     },
-    # Record C: 000001 (深港通 / HK Connect) — same date; full bands
-    # populated, northbound fields populated with the HK-side
-    # precision convention (4-decimal ratio, smaller share count
-    # scale). The fixture makes the shape distinction explicit so
-    # the ``_project_northbound`` test can pin "mainland / HK / US"
-    # without the per-market differences being conflated.
+    # Record C: 000001 (深港通 / HK Connect) — northbound fields zeroed.
     {
         "symbol": "000001",
         "market": "CN",
@@ -116,22 +106,16 @@ _SAMPLE_FLOW_RECORDS: tuple[dict, ...] = (
         "medium_net_inflow": -10_000.0,
         "small_net_inflow": 10_000.0,
         "main_net_inflow_ratio": 3.4,
-        "northbound_net_inflow": 480_000.0,
-        "northbound_hold_shares": 4_750_000.0,
-        "northbound_hold_ratio": 4.2,
+        "northbound_net_inflow": None,
+        "northbound_hold_shares": None,
+        "northbound_hold_ratio": None,
         "margin_buy": 8_500_000.0,
         "margin_sell": 7_900_000.0,
         "margin_balance": 12_400_000.0,
         "fetched_at": "2026-07-21T18:30:00",
         "provider": "flow_stub",
     },
-    # Record D: AAPL (US stock, not on Stock Connect) — northbound
-    # fields are present in the dataclass schema but the US market
-    # does not carry them in production; they are explicitly None.
-    # The fixture pins "US-shaped" northbound row as an outlier so
-    # ``_project_northbound`` projections still hold even when the
-    # record's market label does not match the canonical CN/HK
-    # stock-connect set.
+    # Record D: AAPL (US) — northbound fields absent in real data; None slot.
     {
         "symbol": "AAPL",
         "market": "US",

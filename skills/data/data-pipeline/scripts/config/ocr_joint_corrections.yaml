@@ -1,0 +1,20 @@
+# skills/data/data-pipeline/scripts/config/ocr_joint_corrections.yaml
+# OCR 代码/名称联合修正映射（SPEC-03-004 F-011 / RFC-03-004 §5.4 / DESIGN-03-004 §3.3）
+#
+# 当 OCR/解析输出的 Wind 代码和资产名称同时匹配 source 值时，联合修正为 target 值。
+# 触发条件（精确匹配 + 名称包含）：
+#   1) `Wind代码` 精确等于 `source_code`（exact string match）
+#   2) 名称标准化后的 `资产名称` 包含 `source_name_pattern`
+#   两个条件同时满足；仅 code 或仅 name 不会触发；禁用 fuzzy/substring/前缀匹配 code。
+#
+# Fail-closed 行为（SPEC §4.2）：文件不存在/格式错误/为空 → 跳过联合修正（不 crash pipeline）。
+# 单条目字段缺失或为空 → 跳过该条目；其他条目继续生效。
+#
+# 变更必须经过代码审查；条目达 50 条时评估升级策略。
+# 累积治理：每次新增映射必须经用户确认的 OCR 误读模式 + 显式配置。
+
+- source_code: "688008.SH"
+  source_name_pattern: "联讯仪器"
+  target_code: "688808.SH"
+  target_name: "联讯仪器"
+  reason: "ocr_code_name_joint_correction"

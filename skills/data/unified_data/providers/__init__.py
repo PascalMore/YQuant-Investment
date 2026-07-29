@@ -150,6 +150,43 @@ STUB_COLUMNS: dict[str, list[str]] = {
         "source",
         "publish_time",
     ],
+    # Phase 3 P3-A (T3-C Repair-R2): sector snapshot / ranking columns
+    # are constrained to the frozen contract in SPEC-03-014 §4.3:
+    # ``sector.snapshot`` = 12 columns, ``sector.ranking`` = 8 columns,
+    # in the exact order documented below. Twin definition of
+    # :data:`skills.data.unified_data.providers._stub_columns.STUB_COLUMNS`
+    # (DESIGN §17.1 / §17.4.2 — both copies MUST stay equivalent; only
+    # :mod:`._stub_columns` is the canonical source, this file mirrors
+    # it for legacy imports). The contract is purely schema-level —
+    # ``stub_dataframe_for`` returns 0 rows.
+    "sector.snapshot": [
+        "sector_code",
+        "sector_name",
+        "sector_type",
+        "snapshot_date",
+        "rank",
+        "pct_chg",
+        "leading_stock",
+        "advance_count",
+        "decline_count",
+        "total_count",
+        "turnover_rate",
+        "main_net_inflow",
+    ],
+    # Same §4.3 frozen contract, narrower 8-column ranking shape.
+    # Twin of :data:`skills.data.unified_data.providers._stub_columns.STUB_COLUMNS`
+    # (DESIGN §17.4.2). The two capabilities address the same P3-A
+    # collection per :data:`P3_COLLECTION_BY_CAPABILITY` (V0.5 §0.4).
+    "sector.ranking": [
+        "sector_code",
+        "sector_name",
+        "sector_type",
+        "snapshot_date",
+        "rank",
+        "pct_chg",
+        "advance_count",
+        "decline_count",
+    ],
 }
 
 

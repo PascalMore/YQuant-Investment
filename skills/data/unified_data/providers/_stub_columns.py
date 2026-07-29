@@ -104,6 +104,48 @@ STUB_COLUMNS: dict[str, list[str]] = {
         "source",
         "publish_time",
     ],
+    # Phase 3 P3-A (T3-C Repair-R2): sector snapshot / ranking columns
+    # are constrained to the frozen contract in SPEC-03-014 §4.3:
+    # ``sector.snapshot`` = 12 columns, ``sector.ranking`` = 8 columns,
+    # in the exact order documented below. These column sets are
+    # deliberately **narrower** than the SectorSnapshot dataclass field
+    # set in :mod:`models.domain.sector` (SPEC §3.1 / DESIGN §3.1):
+    # the stub schema only carries the columns that the contract §4.3
+    # freezes, not every dataclass field. Provider / market /
+    # leading_stock_name / leading_pct_chg / members / fetched_at /
+    # raw_payload and similar dataclass-only fields belong to the
+    # dataclass round-trip, not to the canonical stub columns.
+    # The contract is purely schema-level — ``stub_dataframe_for``
+    # returns 0 rows so consumers see only the column set, never the
+    # row contents.
+    "sector.snapshot": [
+        "sector_code",
+        "sector_name",
+        "sector_type",
+        "snapshot_date",
+        "rank",
+        "pct_chg",
+        "leading_stock",
+        "advance_count",
+        "decline_count",
+        "total_count",
+        "turnover_rate",
+        "main_net_inflow",
+    ],
+    # Same §4.3 frozen contract, narrower 8-column ranking shape.
+    # The two capabilities address the same P3-A collection
+    # ``03_data_ud_market_sector_snapshot`` per
+    # :data:`P3_COLLECTION_BY_CAPABILITY` (V0.5 §0.4).
+    "sector.ranking": [
+        "sector_code",
+        "sector_name",
+        "sector_type",
+        "snapshot_date",
+        "rank",
+        "pct_chg",
+        "advance_count",
+        "decline_count",
+    ],
 }
 
 
