@@ -34,7 +34,14 @@ side-effects are exercised.
 from __future__ import annotations
 
 import inspect
+from typing import Any
 
+import mongomock
+import pytest
+
+from skills.data.unified_data.adapters.p3_persistence_writer import (
+    P3PersistenceWriter,
+)
 from skills.data.unified_data.services.sector_service import SectorService
 
 
@@ -72,6 +79,11 @@ class _StubTA_CNAdapter:
         return []
 
 
+def _make_db() -> Any:
+    """Return a fresh mongomock database handle (offline only)."""
+    return mongomock.MongoClient().get_database("tradingagents")
+
+
 class TestSectorServiceInjection:
     """P3-A ``SectorService`` injection boundary."""
 
@@ -98,7 +110,8 @@ class TestSectorServiceInjection:
             assert callable(getattr(SectorService, name))
 
     def test_constructor_signature_is_phase_1a_plus_router(self):
-        """T3-A + D3 locks the constructor signature.
+        """T3-A + D3 locks the constructor signature; P1 widens the
+        kw-only tail with refresh-path injection.
 
         ``adapter`` is required (Phase 1A regression guard, T3-A) and
         has no default — dropping it would silently break every
@@ -106,19 +119,32 @@ class TestSectorServiceInjection:
         gained a ``None`` default at D3 so offline / Phase 1A-only
         callers keep working; the router is the only D3 widening of
         the signature, and there is no setter (the lazy ``router``
-        attribute was removed). Keep this test in sync with the
-        SectorService ``__init__`` source of truth.
+        attribute was removed). P1 widens the constructor with two
+        kw-only kwargs — ``p3_writer`` and ``audit_logger`` — so the
+        refresh happy-path can be exercised without breaking Phase 1A
+        callers. Keep this test in sync with the SectorService
+        ``__init__`` source of truth.
         """
         sig = inspect.signature(SectorService.__init__)
         params = list(sig.parameters)
-        # ``self`` plus ``adapter`` (required) and ``router`` (D3
-        # added kwarg with ``None`` default). No other kwargs.
-        assert params == ["self", "adapter", "router"]
+        # P1 widening: ``p3_writer`` / ``audit_logger`` are the new
+        # kw-only refresh-path injection points. ``adapter`` stays
+        # required; ``router`` keeps its ``None`` default.
+        assert params == ["self", "adapter", "router", "p3_writer", "audit_logger", "cache_manager"]
         assert sig.parameters["adapter"].default is inspect.Parameter.empty
         # ``router`` defaults to ``None`` — offline callers build the
         # service without a router and the P3-A methods then raise
         # ``ProviderUnavailableError``.
         assert sig.parameters["router"].default is None
+        # P1 refresh-path kwargs are keyword-only and default to ``None``.
+        assert sig.parameters["p3_writer"].default is None
+        assert sig.parameters["audit_logger"].default is None
+        assert (
+            sig.parameters["p3_writer"].kind is inspect.Parameter.KEYWORD_ONLY
+        )
+        assert (
+            sig.parameters["audit_logger"].kind is inspect.Parameter.KEYWORD_ONLY
+        )
 
     def test_can_be_constructed_multiple_times_independently(self):
         """Two SectorService instances share no mutable state."""
@@ -748,3 +774,195 @@ class TestP3ExternalFreshnessDelayed:
             "Non-P3 capabilities must keep the age-based "
             f"realtime/delayed split; got {result.freshness!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Test ⑥ — P1 Step 4 CacheManager.put (SPEC §P1.5.2.bis)
+# ---------------------------------------------------------------------------
+
+
+class _MockCacheManager:
+    """Records every CacheManager.put call for test assertions."""
+
+    def __init__(self) -> None:
+        self.put_calls: list[tuple[str, list]] = []
+
+    def put(self, key: str, records: list) -> None:
+        self.put_calls.append((key, records))
+
+
+class _SectorTestStubProvider:
+    """Minimal inline stub provider for sector refresh tests."""
+
+    def __init__(
+        self,
+        *,
+        payload: list[dict] | None = None,
+        capabilities: frozenset[str] | None = None,
+    ) -> None:
+        self._payload = payload or [
+            {"market": "CN", "sector_code": "BK0489", "snapshot_date": "2026-07-21", "pct_chg": 2.5}
+        ]
+        self._capabilities = capabilities or frozenset({"sector.snapshot", "sector.ranking"})
+        self.call_log: list[str] = []
+
+    def fetch(self, domain: str, operation: str, **params: Any) -> list[dict]:
+        self.call_log.append(f"{domain}.{operation}")
+        return list(self._payload)
+
+    @property
+    def capabilities(self) -> frozenset[str]:
+        return self._capabilities
+
+
+class TestSectorServiceCachePut:
+    """P1 Step 4 CacheManager.put — mock-only in P1; catch-and-log fail-open.
+
+    Each test constructs a fresh SectorService with a mongomock-backed
+    ``P3PersistenceWriter``, enables the per-instance refresh flag, and
+    drives the refresh happy-path through :meth:`refresh_sector_snapshot`
+    or :meth:`refresh_sector_ranking`.
+    """
+
+    CAP_SNAPSHOT = "sector.snapshot"
+    CAP_RANKING = "sector.ranking"
+
+    def test_refresh_snapshot_authorized_calls_cache_put(self):
+        """Authorised snapshot refresh → CacheManager.put called once after upsert."""
+        writer = P3PersistenceWriter(_make_db())
+        cache = _MockCacheManager()
+        svc = SectorService(
+            adapter=_StubTA_CNAdapter(),
+            p3_writer=writer,
+            cache_manager=cache,
+        )
+        svc.enable_refresh()
+        provider = _SectorTestStubProvider(capabilities=frozenset({self.CAP_SNAPSHOT}))
+
+        outcome = svc.refresh_sector_snapshot(
+            provider=provider, sector_code="BK0489", snapshot_date="2026-07-21"
+        )
+
+        assert outcome.status == "ok"
+        assert len(cache.put_calls) == 1
+        key, records = cache.put_calls[0]
+        assert key == "sector:snapshot:BK0489:2026-07-21"
+        assert len(records) >= 1
+
+    def test_refresh_ranking_authorized_calls_cache_put(self):
+        """Authorised ranking refresh → CacheManager.put called once after upsert."""
+        writer = P3PersistenceWriter(_make_db())
+        cache = _MockCacheManager()
+        svc = SectorService(
+            adapter=_StubTA_CNAdapter(),
+            p3_writer=writer,
+            cache_manager=cache,
+        )
+        svc.enable_refresh()
+        provider = _SectorTestStubProvider(capabilities=frozenset({self.CAP_RANKING}))
+
+        outcome = svc.refresh_sector_ranking(provider=provider, date="2026-07-21")
+
+        assert outcome.status == "ok"
+        assert len(cache.put_calls) == 1
+        key, records = cache.put_calls[0]
+        assert "sector:ranking:" in key
+        assert "2026-07-21" in key
+
+    def test_refresh_cache_put_fail_open(self):
+        """CacheManager.put exception does NOT block the refresh happy-path."""
+
+        class _FailingCache:
+            def put(self, key: str, records: list) -> None:
+                raise RuntimeError("simulated cache write failure")
+
+        writer = P3PersistenceWriter(_make_db())
+        svc = SectorService(
+            adapter=_StubTA_CNAdapter(),
+            p3_writer=writer,
+            cache_manager=_FailingCache(),
+        )
+        svc.enable_refresh()
+        provider = _SectorTestStubProvider(capabilities=frozenset({self.CAP_SNAPSHOT}))
+
+        outcome = svc.refresh_sector_snapshot(
+            provider=provider, sector_code="BK0489", snapshot_date="2026-07-21"
+        )
+
+        # Refresh happy-path succeeds despite the cache write failure.
+        assert outcome.status == "ok"
+
+    def test_refresh_cache_put_skipped_when_no_cache(self):
+        """cache_manager=None → put skipped, refresh still succeeds."""
+        writer = P3PersistenceWriter(_make_db())
+        svc = SectorService(
+            adapter=_StubTA_CNAdapter(),
+            p3_writer=writer,
+            cache_manager=None,
+        )
+        svc.enable_refresh()
+        provider = _SectorTestStubProvider(capabilities=frozenset({self.CAP_SNAPSHOT}))
+
+        outcome = svc.refresh_sector_snapshot(
+            provider=provider, sector_code="BK0489", snapshot_date="2026-07-21"
+        )
+
+        assert outcome.status == "ok"
+        # No cache manager → no way a put could have been called.
+
+    def test_refresh_default_deny_no_cache_call(self):
+        """Without enable_refresh(), NotImplementedError is raised; no put call."""
+        writer = P3PersistenceWriter(_make_db())
+        cache = _MockCacheManager()
+        svc = SectorService(
+            adapter=_StubTA_CNAdapter(),
+            p3_writer=writer,
+            cache_manager=cache,
+        )
+        # Deliberately do NOT call enable_refresh() — default-deny.
+        provider = _SectorTestStubProvider(capabilities=frozenset({self.CAP_SNAPSHOT}))
+
+        with pytest.raises(NotImplementedError):
+            svc.refresh_sector_snapshot(
+                provider=provider, sector_code="BK0489", snapshot_date="2026-07-21"
+            )
+
+        assert len(cache.put_calls) == 0
+
+    def test_cache_key_snapshot_format(self):
+        """Cache key for sector.snapshot follows SPEC §P1.5.2.bis format."""
+        writer = P3PersistenceWriter(_make_db())
+        cache = _MockCacheManager()
+        svc = SectorService(
+            adapter=_StubTA_CNAdapter(),
+            p3_writer=writer,
+            cache_manager=cache,
+        )
+        svc.enable_refresh()
+        provider = _SectorTestStubProvider(capabilities=frozenset({self.CAP_SNAPSHOT}))
+
+        svc.refresh_sector_snapshot(
+            provider=provider, sector_code="BK0489", snapshot_date="2026-07-21"
+        )
+
+        assert len(cache.put_calls) == 1
+        key = cache.put_calls[0][0]
+        assert key == "sector:snapshot:BK0489:2026-07-21"
+
+    def test_cache_key_ranking_format(self):
+        """Cache key for sector.ranking follows SPEC §P1.5.2.bis format."""
+        writer = P3PersistenceWriter(_make_db())
+        cache = _MockCacheManager()
+        svc = SectorService(
+            adapter=_StubTA_CNAdapter(),
+            p3_writer=writer,
+            cache_manager=cache,
+        )
+        svc.enable_refresh()
+        provider = _SectorTestStubProvider(capabilities=frozenset({self.CAP_RANKING}))
+
+        svc.refresh_sector_ranking(provider=provider, date="2026-07-21")
+
+        assert len(cache.put_calls) == 1
+        key = cache.put_calls[0][0]
+        assert key == "sector:ranking:2026-07-21"

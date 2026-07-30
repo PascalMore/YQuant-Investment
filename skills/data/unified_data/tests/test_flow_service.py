@@ -11,12 +11,13 @@ Covers the V0.5 §5.2 contract for :class:`FlowService`:
 * The read path is **read-only** — :meth:`DataRouter.query` is the only
   call the service makes; no Step-2 / P3 writer / cache write fires
   during a read (``source_trace`` stays free of ``ud_materialized``).
-* The refresh path implements the full five-branch contract
-  (happy_path / partial_failure / skip_empty / write_forbidden /
-  already_written) via T3-P3B M3 — not a stub.
+* The refresh path is **reserved** under the P3-B three-state guard.
   ``refresh_capital_flow`` raises :class:`ProviderUnavailableError`
-  when ``p3_writer is None``; when wired it fetches, validates,
-  upserts, and returns a :class:`PersistenceResult`.
+  when ``p3_writer is None``; when wired it raises
+  :class:`NotImplementedError` (zero provider.fetch / zero
+  writer.upsert). The five-branch contract (happy_path /
+  partial_failure / skip_empty / write_forbidden / already_written)
+  is deferred to a future Gate-authorised sub-stage (T3-P3B M5).
 * The :class:`UnifiedDataClient` facade exposes a lazy
   ``_get_flow_service`` loader plus ``get_capital_flow`` and
   ``get_northbound_flow`` domain methods that route through the
@@ -661,7 +662,7 @@ class TestCapitalFlowNorthboundSignatureV05:
 
 
 # ---------------------------------------------------------------------------
-# Test ⑩ — T3-P3B M3 refresh-path happy-path + 5 branches
+# Test ⑩ — P3-B three-state refresh guard (0 fetch / 0 upsert)
 # ---------------------------------------------------------------------------
 
 
@@ -869,3 +870,189 @@ class TestCapitalFlowPackageExports:
         )
 
         assert PR1 is PR2
+
+
+# ---------------------------------------------------------------------------
+# Test ⑫ — P1 Step 4 CacheManager.put (SPEC §P1.5.2.bis)
+# ---------------------------------------------------------------------------
+
+
+class _FakeFlowStub:
+    """Minimal inline stub for flow refresh tests."""
+
+    def __init__(
+        self,
+        *,
+        payload: list[dict] | None = None,
+        capabilities: frozenset[str] | None = None,
+    ) -> None:
+        self._payload = payload or [
+            {
+                "symbol": "600519",
+                "market": "CN",
+                "trade_date": "2026-07-21",
+                "main_net_inflow": 1_000_000.0,
+                "super_large_net_inflow": 500_000.0,
+                "large_net_inflow": 300_000.0,
+                "medium_net_inflow": -100_000.0,
+                "small_net_inflow": -200_000.0,
+                "main_net_inflow_ratio": 5.0,
+                "provider": "flow_stub",
+            }
+        ]
+        self._capabilities = capabilities or frozenset({CAP_FLOW_DAILY, CAP_FLOW_NORTHBOUND})
+        self.call_log: list[str] = []
+
+    def fetch(
+        self, domain: str, operation: str, security_id: SecurityId | None = None, **params: Any
+    ) -> list[dict]:
+        self.call_log.append(f"{domain}.{operation}")
+        return list(self._payload)
+
+
+class _MockCacheManager:
+    """Records every CacheManager.put call for test assertions."""
+
+    def __init__(self) -> None:
+        self.put_calls: list[tuple[str, list]] = []
+
+    def put(self, key: str, records: list) -> None:
+        self.put_calls.append((key, records))
+
+
+class TestFlowServiceCachePut:
+    """P1 Step 4 CacheManager.put — mock-only in P1; catch-and-log fail-open."""
+
+    def test_refresh_authorized_calls_cache_put(self):
+        """Authorised capital_flow refresh → CacheManager.put called once after upsert."""
+        writer = P3PersistenceWriter(_make_db())
+        cache = _MockCacheManager()
+        svc = FlowService(
+            adapter=None,
+            router=DataRouter(registry=ProviderRegistry()),
+            p3_writer=writer,
+            cache_manager=cache,
+        )
+        svc.enable_refresh()
+        sid = SecurityId(market=Market.CN, symbol="600519")
+        provider = _FakeFlowStub()
+
+        outcome = svc.refresh_capital_flow(
+            security_id=sid, date="2026-07-21", provider=provider,
+        )
+
+        assert outcome.status == "ok"
+        assert len(cache.put_calls) == 1
+        key, records = cache.put_calls[0]
+        assert "flow:capital_flow:" in key
+        assert "600519" in key
+        assert "2026-07-21" in key
+        assert len(records) >= 1
+
+    def test_refresh_cache_put_fail_open(self):
+        """CacheManager.put exception does NOT block the refresh happy-path."""
+
+        class _FailingCache:
+            def put(self, key: str, records: list) -> None:
+                raise RuntimeError("simulated cache write failure")
+
+        writer = P3PersistenceWriter(_make_db())
+        svc = FlowService(
+            adapter=None,
+            router=DataRouter(registry=ProviderRegistry()),
+            p3_writer=writer,
+            cache_manager=_FailingCache(),
+        )
+        svc.enable_refresh()
+        sid = SecurityId(market=Market.CN, symbol="600519")
+        provider = _FakeFlowStub()
+
+        outcome = svc.refresh_capital_flow(
+            security_id=sid, date="2026-07-21", provider=provider,
+        )
+
+        assert outcome.status == "ok"
+
+    def test_refresh_cache_put_skipped_when_no_cache(self):
+        """cache_manager=None → put skipped, refresh still succeeds."""
+        writer = P3PersistenceWriter(_make_db())
+        svc = FlowService(
+            adapter=None,
+            router=DataRouter(registry=ProviderRegistry()),
+            p3_writer=writer,
+            cache_manager=None,
+        )
+        svc.enable_refresh()
+        sid = SecurityId(market=Market.CN, symbol="600519")
+        provider = _FakeFlowStub()
+
+        outcome = svc.refresh_capital_flow(
+            security_id=sid, date="2026-07-21", provider=provider,
+        )
+
+        assert outcome.status == "ok"
+
+    def test_refresh_default_deny_no_cache_call(self):
+        """Without enable_refresh(), NotImplementedError is raised; no put call."""
+        writer = P3PersistenceWriter(_make_db())
+        cache = _MockCacheManager()
+        svc = FlowService(
+            adapter=None,
+            router=DataRouter(registry=ProviderRegistry()),
+            p3_writer=writer,
+            cache_manager=cache,
+        )
+        # Do NOT call enable_refresh().
+        sid = SecurityId(market=Market.CN, symbol="600519")
+        provider = _FakeFlowStub()
+
+        with pytest.raises(NotImplementedError):
+            svc.refresh_capital_flow(
+                security_id=sid, date="2026-07-21", provider=provider,
+            )
+
+        assert len(cache.put_calls) == 0
+
+    def test_northbound_refresh_never_calls_cache(self):
+        """Northbound refresh returns skipped status; CacheManager.put never called."""
+        writer = P3PersistenceWriter(_make_db())
+        cache = _MockCacheManager()
+        svc = FlowService(
+            adapter=None,
+            router=DataRouter(registry=ProviderRegistry()),
+            p3_writer=writer,
+            cache_manager=cache,
+        )
+        # enable_refresh() does NOT affect northbound — it's permanently disallowed.
+        svc.enable_refresh()
+        sid = SecurityId(market=Market.CN, symbol="600519")
+
+        outcome = svc.refresh_northbound_flow(
+            security_id=sid, date="2026-07-21",
+        )
+
+        assert outcome.status == "skipped"
+        assert outcome.reason == "northbound_refresh_disallowed (Pascal C)"
+        assert len(cache.put_calls) == 0
+
+    def test_cache_key_format(self):
+        """Cache key follows flow:capital_flow:{symbol}:{trade_date} format."""
+        writer = P3PersistenceWriter(_make_db())
+        cache = _MockCacheManager()
+        svc = FlowService(
+            adapter=None,
+            router=DataRouter(registry=ProviderRegistry()),
+            p3_writer=writer,
+            cache_manager=cache,
+        )
+        svc.enable_refresh()
+        sid = SecurityId(market=Market.CN, symbol="600519")
+        provider = _FakeFlowStub()
+
+        svc.refresh_capital_flow(
+            security_id=sid, date="2026-07-21", provider=provider,
+        )
+
+        assert len(cache.put_calls) == 1
+        key = cache.put_calls[0][0]
+        assert key == "flow:capital_flow:600519:2026-07-21"

@@ -20,9 +20,12 @@ re-pinned at DESIGN-03-014 V0.5 §3.2. Field semantics:
   medium/small net flow. Sign convention: **positive = net inflow,
   negative = net outflow** (SPEC §3.2 表 footnote).
 * ``main_net_inflow_ratio`` — main-flow-as-percentage. Optional.
-* ``northbound_*`` — only populated for 沪/深港通标的. Non-港通标的 the
-  three fields are ``None`` and the record still persists (V0.5 §2.3
-  "部分字段不可用").
+* ``northbound_*`` — all three fields (``northbound_net_inflow``,
+  ``northbound_hold_shares``, ``northbound_hold_ratio``) are **always**
+  ``None`` for every symbol, regardless of source input. No source
+  maps these fields in Phase 3 (P3-B T3-Implement). They exist in the
+  schema as a forward reference for a future Gate-authorised sub-stage
+  (T3-P3B M5) that will populate them.
 * ``margin_*`` — 融资融券 fields. ``None`` when the symbol is not a
   融资融券标的 (SPEC §3.2 表 [待验证]).
 * ``fetched_at`` — ISO-8601 fetch timestamp.
@@ -48,12 +51,17 @@ class CapitalFlowRecord:
 
     本数据为辅助研究数据，不构成交易指令或投资建议。
 
-    ``record_scope`` 说明：
+    ``record_scope`` 说明（P3-B T3-Implement 冻结契约）：
 
-    * ``flow.capital_flow_daily`` 查询填充全部资金流字段
-      （主力/大单/中单/小单/北向/融资融券）。
-    * ``flow.northbound_daily`` 查询仅填充 ``northbound_*`` 字段
-      （``symbol``/``market``/``trade_date`` 必有，其余资金流字段为空）。
+    * ``flow.capital_flow_daily`` 查询填充主力/大单/中单/小单/融资融券字段。
+      北向三字段（``northbound_net_inflow`` / ``hold_shares`` /
+      ``hold_ratio``）恒为 ``None``。
+    * ``flow.northbound_daily`` 查询仅返回业务键（``symbol`` / ``market`` /
+      ``trade_date``）+ 元数据（``fetched_at`` / ``provider``）。
+      北向三字段及所有其他资金流/融资融券字段恒为 ``None``。
+
+    ``northbound_*`` 三字段在 Phase 3 中不映射任何数据源，为未来
+    Gate-authorised sub-stage (T3-P3B M5) 保留。
 
     两者共享同一集合 ``03_data_ud_stock_capital_flow`` 和同一 domain
     object，但查询时填充的字段子集不同。
@@ -117,17 +125,14 @@ class CapitalFlowRecord:
 
     @classmethod
     def from_northbound_dict(cls, d: dict) -> "CapitalFlowRecord":
-        """Construct a record with the northbound field projection.
+        """Construct a record from the northbound field projection.
 
-        Implements the V0.5 §3.2 ``record_scope`` rule for the
-        ``flow.northbound_daily`` capability: only the
-        ``{symbol, market, trade_date}`` business-key plus the three
-        ``northbound_*`` fields plus the ``fetched_at`` / ``provider``
-        metadata fields are populated. The five flow bands
-        (``main_net_inflow`` etc.) plus the three ``margin_*`` fields
-        are **explicitly** set to ``None`` regardless of what the
-        source dict carries, so downstream code can rely on the
-        scope contract.
+        Implements the P3-B fail-stop contract: all flow-band
+        (``main_net_inflow`` etc.), all ``margin_*``, AND all three
+        ``northbound_*`` fields are **explicitly** set to ``None``
+        regardless of what the source dict carries. Only the business
+        key (``{symbol, market, trade_date}``) and metadata
+        (``fetched_at``, ``provider``) are read from the dict.
 
         This is the **canonical** projection factory for northbound
         payloads and is the public entry point the

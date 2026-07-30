@@ -38,6 +38,14 @@ from .kline_client import AKShareKlineClient, FakeKlineClient, KlineClient, Tush
 from .rate_limiter import RateLimiter, with_retry
 from .tushare import TushareProvider
 from .akshare import AKShareProvider
+from ._stub_columns import (  # noqa: F401  (re-exported for twin equivalence tests)
+    _EXPECTED_FLOW_FIELDS,
+    _EXPECTED_LIMIT_UP_FIELDS,
+    _EXPECTED_NORTHBOUND_FIELDS,
+    _EXPECTED_SECTOR_RANKING_FIELDS,
+    _EXPECTED_SECTOR_SNAPSHOT_FIELDS,
+    _EXPECTED_SENTIMENT_FIELDS,
+)
 
 __all__ = [
     "AKShareKlineClient",
@@ -49,6 +57,12 @@ __all__ = [
     "STUB_COLUMNS",
     "TushareKlineClient",
     "TushareProvider",
+    "_EXPECTED_FLOW_FIELDS",
+    "_EXPECTED_LIMIT_UP_FIELDS",
+    "_EXPECTED_NORTHBOUND_FIELDS",
+    "_EXPECTED_SECTOR_RANKING_FIELDS",
+    "_EXPECTED_SECTOR_SNAPSHOT_FIELDS",
+    "_EXPECTED_SENTIMENT_FIELDS",
     "stub_dataframe_for",
     "with_retry",
 ]

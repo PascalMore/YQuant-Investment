@@ -544,6 +544,70 @@ class DataRouter:
     # Step 2 / Step 3 / materialization (Phase 1B-B)
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # P3 helper methods (SPEC §P1.6) — canonical interface for P3
+    # capability dispatch. Implemented as thin wrappers around the
+    # frozen :data:`P3_COLLECTION_BY_CAPABILITY` dict.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_p3_capability(domain: str, operation: str) -> bool:
+        """Return ``True`` when ``f\"{domain}.{operation}\"`` is a
+        known P3 capability registered in ``P3_COLLECTION_BY_CAPABILITY``.
+
+        Args:
+            domain: The P3 domain (e.g. ``\"sector\"``, ``\"flow\"``).
+            operation: The P3 operation (e.g. ``\"snapshot\"``).
+
+        Returns:
+            ``True`` if the composed capability string is a registered
+            P3 capability key.
+        """
+        capability = f"{domain}.{operation}"
+        return capability in P3_COLLECTION_BY_CAPABILITY
+
+    @staticmethod
+    def _p3_collection_for(domain: str, operation: str) -> str:
+        """Return the P3 collection name for the given capability.
+
+        Args:
+            domain: The P3 domain (e.g. ``\"sector\"``).
+            operation: The P3 operation (e.g. ``\"snapshot\"``).
+
+        Returns:
+            The collection name (e.g. ``\"03_data_ud_market_sector_snapshot\"``).
+
+        Raises:
+            KeyError: When the capability is not registered.
+        """
+        capability = f"{domain}.{operation}"
+        return P3_COLLECTION_BY_CAPABILITY[capability]
+
+    @staticmethod
+    def _p3_filter_for(
+        security_id: SecurityId,
+        domain: str,
+        operation: str,
+        params: Mapping[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Build a business-key filter dict for ``P3PersistenceWriter.get()``.
+
+        For P1 offline mode, the filter is a simple passthrough of
+        ``params`` (the same dict the caller passes into the router).
+        Future sub-stages may enrich it with additional business-key
+        fields derived from ``security_id``.
+
+        Args:
+            security_id: The :class:`SecurityId` being queried.
+            domain: The P3 domain.
+            operation: The P3 operation.
+            params: Caller-supplied query parameters.
+
+        Returns:
+            A ``dict`` suitable as a filter for ``P3PersistenceWriter.get()``.
+        """
+        return dict(params or {})
+
     def _try_materialized(
         self,
         security_id: SecurityId,
@@ -595,7 +659,7 @@ class DataRouter:
         # non-Phase-3 callers keep their behaviour.
         if (
             capability is not None
-            and capability in P3_COLLECTION_BY_CAPABILITY
+            and self._is_p3_capability(domain, operation)
             and p3_writer is not None
         ):
             if force_refresh:
@@ -608,7 +672,7 @@ class DataRouter:
                 # Capability→collection resolution is hoisted out
                 # of the try/except so the exception handler can
                 # reference ``collection`` for the audit call below.
-                collection = P3_COLLECTION_BY_CAPABILITY[capability]
+                collection = self._p3_collection_for(domain, operation)
                 # Convert the Step-2 ``params`` (which describe the
                 # query) into a business-key filter. When ``params``
                 # is empty we use an empty filter — the writer
@@ -617,7 +681,10 @@ class DataRouter:
                 # the future refresh path (T3-B+) which will own
                 # the canonical filter derivation; T3-A only needs
                 # the *dispatch* to be observable in the trace.
-                rows = p3_writer.get(collection, dict(params or {}))
+                rows = p3_writer.get(
+                    collection,
+                    self._p3_filter_for(security_id, domain, operation, params),
+                )
             except Exception as exc:
                 logger.warning(
                     "P3PersistenceWriter.get failed in router: %s", exc
@@ -767,9 +834,8 @@ class DataRouter:
         # Phase 3 read-only invariant — six P3 capabilities never
         # trigger _materialize. The kw-only ``capability`` is the
         # discriminator; an explicit ``None`` keeps backward
-        # compatibility with the Phase 1B-B call sites. The check is
-        # O(1) via the frozen capability map.
-        if capability is not None and capability in P3_COLLECTION_BY_CAPABILITY:
+        # compatibility with the Phase 1B-B call sites.
+        if capability is not None and self._is_p3_capability(domain, operation):
             # P3 read is read-only by SPEC §537-546 — no Step-2 put,
             # no Step-3 cache put.
             return
@@ -826,7 +892,7 @@ class DataRouter:
         # P3 capabilities (V0.5 §2.1 / SPEC §537-546 / DESIGN
         # §228-233). Non-P3 capabilities keep their Phase 1B-B
         # behaviour — including cache writes.
-        is_p3_capability = capability in P3_COLLECTION_BY_CAPABILITY
+        is_p3_capability = self._is_p3_capability(domain, operation)
 
         # Step 2 (UD materialised). The helper self-manages the
         # ``force_refresh`` trace (``(skipped: force_refresh)``) and
@@ -886,7 +952,7 @@ class DataRouter:
             # circuits ``force_refresh=True`` paths because the
             # short-circuit happens before the call, not inside
             # ``_materialize`` (V0.5 §2.1 read-only invariant).
-            if capability not in P3_COLLECTION_BY_CAPABILITY:
+            if not self._is_p3_capability(domain, operation):
                 self._materialize(
                     security_id,
                     domain,

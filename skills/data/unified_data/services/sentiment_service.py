@@ -1,48 +1,48 @@
-"""Market-level sentiment domain service (Phase 3 P3-C content, delivered
-under the T3-B kanban task label).
+"""Market-level sentiment domain service (Phase 3 P3-C canonical).
 
 The V0.5 design splits Phase 3 into three independently authorised
 sub-stages (DESIGN-03-014 §1.1):
 
-* **P3-A** — `sector.snapshot` / `sector.ranking`
+* **P3-A** — ``sector.snapshot`` / ``sector.ranking``
   → ``03_data_ud_market_sector_snapshot``
-* **P3-B** — `flow.capital_flow_daily` / `flow.northbound_daily`
+* **P3-B** — ``flow.capital_flow_daily`` / ``flow.northbound_daily``
   → ``03_data_ud_stock_capital_flow``
-* **P3-C** — `sentiment.market_snapshot` / `sentiment.limit_up_pool`
+* **P3-C** — ``sentiment.market_snapshot`` / ``sentiment.limit_up_pool``
   → ``03_data_ud_market_sentiment_snapshot``
 
-The P3-C sentiment slice was implemented ahead of P3-B (capital flow)
-under the T3-B kanban task; the title keeps the original P3-B label
-for historical reasons. The capability name and collection routed
-through :data:`P3_COLLECTION_BY_CAPABILITY` still resolve to
-``sentiment.market_snapshot`` and
-``03_data_ud_market_sentiment_snapshot`` per V0.5 §0.4 — the
-:attr:`capability` property reflects this verbatim.
+The P3-C sentiment slice was originally implemented ahead of P3-B
+(capital flow) under the T3-B kanban task label; the title kept the
+original P3-B label for historical reasons. As of V0.23 / RFC V0.16 /
+SPEC V0.15, the canonical contract for :class:`MarketSentimentSnapshot`
+is the **22-field full-market multi-dimensional snapshot** with unique
+key ``{market, snapshot_date, snapshot_time}`` — Pascal ratified this
+on 2026-07-30.
 
 Sibling of :class:`SectorService` (P3-A / T3-A) — same shape, same
 ``DataResult`` contract, different capability.
 
-* **Query path** — :meth:`get_market_sentiment_snapshot` goes
-  through the router (standard ``TA-CN → P3 → cache → external``
-  chain). Step 1 is skipped via ``_TA_CN_NOT_COVERED``. The service
-  never touches the writer on read — keeping the V0.5 §2.1
-  internal-first invariant intact.
+* **Query path** — :meth:`get_market_sentiment_snapshot` goes through
+  the router (standard ``TA-CN → P3 → cache → external`` chain).
+  Step 1 is skipped via ``_TA_CN_NOT_COVERED``. The service never
+  touches the writer on read — keeping the V0.5 §2.1 internal-first
+  invariant intact. The signature uses ``snapshot_date`` /
+  ``snapshot_time`` (no ``sentiment_type`` — that field is no longer
+  part of the canonical contract).
 * **Refresh path** — :meth:`refresh_market_sentiment_snapshot` is
-  wired but **not invoked** by T3-B (full happy-path lands in T3-C
-  proper, alongside ``sentiment.limit_up_pool``). When ``p3_writer``
-  is ``None`` (T3-B default) it raises
+  wired but **not invoked** (full happy-path lands in a Gate-authorised
+  sub-stage, alongside ``sentiment.limit_up_pool``). When
+  ``p3_writer`` is ``None`` (default) it raises
   :class:`ProviderUnavailableError` so callers cannot silently lose
-  data. When ``p3_writer`` is wired, the method asserts membership
-  in :data:`P3_COLLECTION_BY_CAPABILITY` and then explicitly raises
-  :class:`NotImplementedError` — intentionally, so T3-C owns the
-  full write contract without T3-B silently shipping an incomplete
-  implementation. Refresh-path verification is therefore deferred
-  to T3-C.
+  data. When ``p3_writer`` is wired, the method asserts membership in
+  :data:`P3_COLLECTION_BY_CAPABILITY` and then explicitly raises
+  :class:`NotImplementedError` — intentionally, so the future
+  Gate-authorised sub-stage owns the full write contract without
+  silently shipping an incomplete implementation. Refresh-path
+  verification is therefore deferred.
 
-Scope (T3-B kanban task body): offline-only, mongomock or no writer,
-no real Provider / AuditLogger / QualitySummary writes. ``adapter``
-kwarg is reserved for future cross-validation — unused on the read
-path.
+Scope: offline-only, mongomock or no writer, no real Provider /
+AuditLogger / QualitySummary writes. ``adapter`` kwarg is reserved for
+future cross-validation — unused on the read path.
 """
 
 from __future__ import annotations
@@ -53,13 +53,11 @@ from typing import Any
 from ..adapters import TA_CNMongoAdapter
 from ..adapters.p3_persistence_writer import (
     P3_COLLECTION_BY_CAPABILITY,
+    P3_UNIQUE_KEYS_BY_CAPABILITY,
     P3PersistenceWriter,
 )
 from ..exceptions import ProviderUnavailableError
 from ..models import DataResult, Market, SecurityId
-# NOTE: T3-B scope forbids editing ``models/domain/__init__.py`` (the
-# Domain Object is intentionally *not* re-exported at the package level
-# for P3-B). Import the dataclass directly from its submodule.
 from ..models.domain.sentiment import (
     LimitUpPoolRecord,
     MarketSentimentSnapshot,
@@ -70,11 +68,11 @@ logger = logging.getLogger(__name__)
 
 
 class MarketSentimentService:
-    """Market-level sentiment snapshot service (Phase 3 P3-B / T3-B).
+    """Market-level sentiment snapshot service (Phase 3 P3-C canonical).
 
     Carries the ``sentiment.market_snapshot`` capability only — the
     sister ``sentiment.limit_up_pool`` capability from V0.5 §2.2
-    **is implemented** in T3-C on the same service class.
+    **is implemented** on the same service class.
     ``DOMAIN`` + ``OPERATION`` / ``LIMIT_UP_OPERATION`` = the frozen
     :data:`P3_COLLECTION_BY_CAPABILITY` keys.
     """
@@ -94,6 +92,7 @@ class MarketSentimentService:
         router: DataRouter | None = None,
         p3_writer: P3PersistenceWriter | None = None,
         audit_logger: Any | None = None,
+        cache_manager: Any | None = None,
     ) -> None:
         """Build the service.
 
@@ -104,14 +103,23 @@ class MarketSentimentService:
                 omitted the query raises
                 :class:`ProviderUnavailableError`.
             p3_writer: :class:`P3PersistenceWriter` for the refresh
-                path. ``None`` keeps refresh opt-in (T3-B scope).
-            audit_logger: Reserved — T3-B relies on the writer's
-                built-in fail-open audit logger (B.b P0.1 patch).
+                path. ``None`` keeps refresh opt-in.
+            audit_logger: Reserved — relies on the writer's built-in
+                fail-open audit logger.
+            cache_manager: P1 Step-4 cache write target
+                (DESIGN §P1.5.2.bis); ``None`` skips the cache write.
         """
         self._adapter = adapter
         self._router = router
         self._p3_writer = p3_writer
         self._audit_logger = audit_logger
+        self._cache_manager = cache_manager
+        # P1 refresh-path three-state guard: the per-instance
+        # ``_refresh_authorized`` flag defaults to ``False``
+        # (default-deny). Tests / Pascal Gate flip it to ``True`` to
+        # exercise the happy-path (mirrors the
+        # :class:`SectorService` and :class:`FlowService` contract).
+        self._refresh_authorized: bool = False
 
     # ------------------------------------------------------------------
     # Public properties
@@ -145,14 +153,13 @@ class MarketSentimentService:
         return self._p3_writer
 
     # ------------------------------------------------------------------
-    # Read path
+    # Read path — canonical 22-field schema
     # ------------------------------------------------------------------
 
     def get_market_sentiment_snapshot(
         self,
-        market: str,
-        sentiment_type: str,
-        market_date: str,
+        snapshot_date: str,
+        snapshot_time: str = "close",
     ) -> DataResult:
         """Look up a single ``MarketSentimentSnapshot`` via the router.
 
@@ -160,10 +167,18 @@ class MarketSentimentService:
         market level. The router is the single source of truth on
         the read path; this service never touches the writer here.
 
+        The signature uses the **22-field canonical contract** keys:
+        ``snapshot_date`` + ``snapshot_time`` (no ``sentiment_type`` —
+        that field was part of the superseded T3-B 10-field offline
+        schema).
+
         Args:
-            market:         Market identifier (e.g. ``"CN"``).
-            sentiment_type: Aggregate type (e.g. ``"market_sentiment"``).
-            market_date:    Calendar date (``"YYYY-MM-DD"``).
+            snapshot_date: Calendar date the snapshot covers
+                (``"YYYY-MM-DD"``). Part of the unique key
+                ``{market, snapshot_date, snapshot_time}``.
+            snapshot_time: Observation time (``"HH:MM:SS"`` or
+                ``"close"``). Defaults to ``"close"``. Part of the
+                unique key.
 
         Returns:
             A :class:`DataResult`. ``provider == "empty"`` when the
@@ -180,16 +195,15 @@ class MarketSentimentService:
                 "`router=...` at construction time to enable reads."
             )
         # The router requires a SecurityId even for market-level
-        # queries. We synthesise a placeholder using the
-        # ``Market.SENTINEL`` pattern documented in DESIGN-03-014
-        # §4.5: ``security_id=None`` is the documented market-level
-        # signal, but the router currently still wants *some*
-        # SecurityId. Use ``Market.INDEX`` + a composite symbol so
-        # downstream tooling has a unique canonical string to log
-        # against.
-        placeholder_symbol = f"{market}:{sentiment_type}:{market_date}"
+        # queries. Synthesise a placeholder using the
+        # ``Market.INDEX`` pattern documented in DESIGN-03-014 §4.5:
+        # ``security_id=None`` is the documented market-level signal,
+        # but the router currently still wants *some* SecurityId.
+        # Use ``Market.INDEX`` + a composite symbol so downstream
+        # tooling has a unique canonical string to log against.
+        placeholder_symbol = f"CN:{snapshot_date}:{snapshot_time}"
         placeholder = SecurityId(market=Market.INDEX, symbol=placeholder_symbol)
-        # Surface the market level explicitly in metadata so
+        # Surface the market level explicitly in source_trace so
         # downstream callers can distinguish "no security_id" from
         # "security_id is a placeholder". The router leaves the
         # DataResult untouched on this path; we add the marker post-hoc.
@@ -197,20 +211,12 @@ class MarketSentimentService:
             domain=self.DOMAIN,
             operation=self.OPERATION,
             security_id=placeholder,
-            market=market,
+            market="CN",
             params={
-                "sentiment_type": sentiment_type,
-                "market_date": market_date,
+                "snapshot_date": snapshot_date,
+                "snapshot_time": snapshot_time,
             },
         )
-        # Surface the market-level nature of the query in the result
-        # itself — ``DataResult`` does not carry a ``metadata`` field
-        # in Phase 0 (and adding one is out of T3-B scope), so the
-        # signal rides on the existing ``source_trace`` list. The
-        # marker is added only when the router did not already record
-        # an equivalent entry, so duplicate markers do not accumulate
-        # on the hot path. The marker is consumed by the test suite
-        # via the acceptance check (test #④).
         marker = "market_level_query(security_id=None)"
         if not result.source_trace or marker not in result.source_trace:
             result.source_trace.append(marker)
@@ -222,79 +228,92 @@ class MarketSentimentService:
 
     def refresh_market_sentiment_snapshot(
         self,
-        market: str,
-        sentiment_type: str,
-        market_date: str,
+        snapshot_date: str,
+        snapshot_time: str = "close",
         *,
         provider: Any | None = None,
     ) -> Any:
-        """Refresh path — **reserved for T3-C** (per DESIGN-03-014 §2.1 l.207).
+        """Refresh path — three-state guard (P0) + happy-path (P1).
 
-        The contract has two clearly separated failure modes and **both
-        are intentional**; T3-B does not silently ship an incomplete
-        write-path implementation:
+        P0 pinned the two terminal states
+        (``p3_writer is None`` → :class:`ProviderUnavailableError`,
+        writer wired → :class:`NotImplementedError`). P1 widens
+        with an **authorised** state that walks the 22-field
+        canonical happy-path:
 
-        1. When ``p3_writer`` is ``None`` (T3-B default; offline /
-           mongomock-only scope) → raises
-           :class:`ProviderUnavailableError`. This keeps the refresh
-           path opt-in and prevents callers from accidentally dropping
-           data into a missing writer.
-        2. When ``p3_writer`` is wired → asserts the capability is
-           registered in :data:`P3_COLLECTION_BY_CAPABILITY`, then
-           raises :class:`NotImplementedError`. The full happy-path
-           (provider fetch → validate → ``self._p3_writer.upsert(...)``
-           → return result) lands in T3-C together with
-           ``sentiment.limit_up_pool``, where the persistence contract
-           can be designed against the actual write workload rather
-           than sketched speculatively here.
+        1. ``p3_writer is None`` → :class:`ProviderUnavailableError`.
+        2. writer wired but ``_is_refresh_authorized`` is ``False``
+           → :class:`NotImplementedError` (default-deny; P0 contract
+           preserved).
+        3. authorised → fetch via Provider → upsert via writer
+           using the ``{market, snapshot_date, snapshot_time}``
+           business unique key (V0.23 §3.3).
 
-        Refresh-path verification (test coverage of the write path)
-        is therefore deferred to T3-C; T3-B only verifies the read
-        path and the two pre-conditions above.
+        The 22-field canonical contract is the **only** persistence
+        schema. Legacy 10-field ``sentiment_type`` / ``market_date``
+        schemas are forbidden by P1.2 — the writer.upsert call
+        refuses records missing the canonical key fields.
 
         Args:
-            market:         Market identifier.
-            sentiment_type: Aggregate type.
-            market_date:    Calendar date.
-            provider:       Optional external provider. ``None`` falls
-                back to the router's external chain.
+            snapshot_date: Calendar date (``"YYYY-MM-DD"``).
+            snapshot_time: Observation time (``"HH:MM:SS"`` or
+                ``"close"``). Defaults to ``"close"``.
+            provider: Optional external provider. ``None`` falls back
+                to the router's external chain.
 
         Raises:
             ProviderUnavailableError: When ``p3_writer`` not injected
-                (T3-B default).
+                (default).
             ValueError: When capability is not registered in
                 :data:`P3_COLLECTION_BY_CAPABILITY` (defensive guard
-                against a future T3-C capability-map edit silently
-                routing writes to the wrong collection).
-            NotImplementedError: T3-C owns the refresh happy-path;
-                this stub deliberately refuses to ship partial work.
+                against a future capability-map edit silently routing
+                writes to the wrong collection).
+            NotImplementedError: The Gate-authorised sub-stage owns
+                the refresh happy-path; this stub deliberately refuses
+                to ship partial work. P1 widens the guard to a
+                per-instance ``_refresh_authorized`` flag.
         """
+        if self._p3_writer is not None and self._is_refresh_authorized(
+            capability=self.capability
+        ):
+            return self._run_refresh(
+                snapshot_date=snapshot_date,
+                snapshot_time=snapshot_time,
+                provider=provider,
+                capability=self.capability,
+            )
         if self._p3_writer is None:
             raise ProviderUnavailableError(
                 "MarketSentimentService has no P3PersistenceWriter "
-                "wired; refresh path is opt-in until T3-C."
+                "wired; refresh path is opt-in until Gate authorisation."
             )
         # Defensive: capability map is the single source of truth for
-        # collection routing. We assert here so a future T3-C tweak
-        # fails loudly rather than silently routing to the wrong
-        # collection.
+        # collection routing. We assert here so a future tweak fails
+        # loudly rather than silently routing to the wrong collection.
         if self.capability not in P3_COLLECTION_BY_CAPABILITY:
             raise ValueError(
                 f"capability {self.capability!r} is not registered in "
                 "P3_COLLECTION_BY_CAPABILITY"
             )
-        # Refresh skeleton — T3-C will:
-        #   1. fetch via provider (or router fallback chain)
-        #   2. validate / shape into MarketSentimentSnapshot(s)
-        #   3. call self._p3_writer.upsert(...) with the right
-        #      unique_key set
-        #   4. return the resulting UpsertOutcome (or a richer
-        #      PersistenceResult dataclass)
-        # Returning NotImplemented keeps T3-B honest about the
-        # scope without forcing T3-C to redesign the contract.
+        # P1 widening: instead of unconditionally refusing, raise
+        # ``NotImplementedError`` only when the per-instance flag is
+        # still ``False``. The flag defaults to ``False`` so the P0
+        # contract is preserved for every existing test.
+        if not self._refresh_authorized:
+            raise NotImplementedError(
+                "MarketSentimentService.refresh_market_sentiment_snapshot "
+                "is gated behind the per-instance ``_refresh_authorized`` "
+                "flag (P1 default-deny); call ``enable_refresh()`` or "
+                "wait for the Gate-authorised sub-stage to flip the toggle."
+            )
+        # Unreachable: the early return above covers the authorised
+        # branch. ``NotImplementedError`` is the only path that
+        # reaches here. Keep a defensive fallback raise so a future
+        # guard edit cannot silently drop the gate.
         raise NotImplementedError(
             "MarketSentimentService.refresh_market_sentiment_snapshot "
-            "is reserved for T3-C; T3-B does not exercise the write path."
+            "is reserved for Gate-authorised sub-stage; happy-path "
+            "ownership is deferred."
         )
 
     # ------------------------------------------------------------------
@@ -363,33 +382,44 @@ class MarketSentimentService:
         self,
         *,
         p3_writer: Any | None = None,
+        provider: Any | None = None,
     ) -> Any:
-        """Refresh path for ``sentiment.limit_up_pool``.
+        """Refresh path for ``sentiment.limit_up_pool`` — three-state guard (P1).
 
-        T3-C offline contract:
+        Three branches:
 
-        1. When ``p3_writer`` is ``None`` (default) →
-           raises :class:`ProviderUnavailableError`. This keeps the
-           refresh path opt-in and prevents callers from accidentally
-           dropping data into a missing writer.
-        2. When ``p3_writer`` is wired → asserts the capability is
-           registered in :data:`P3_COLLECTION_BY_CAPABILITY`, then
-           raises :class:`NotImplementedError`. The full happy-path
-           (provider fetch → validate → upsert → return result)
-           is reserved for a future Gate-authorised sub-stage.
+        1. ``p3_writer is None`` → :class:`ProviderUnavailableError`.
+        2. writer wired but ``_is_refresh_authorized`` is ``False``
+           → :class:`NotImplementedError` (default-deny; P0 contract
+           preserved).
+        3. authorised → fetch via Provider → upsert via writer
+           using the ``{market, symbol, trade_date}`` business
+           unique key (V0.5 §2.2).
 
         Args:
             p3_writer: :class:`P3PersistenceWriter` for the refresh
-                path. ``None`` keeps refresh opt-in (T3-C offline
-                scope).
+                path. ``None`` keeps refresh opt-in (offline scope).
+                When supplied, it overrides the writer wired at
+                construction time (forward-compat hook).
+            provider: Optional :class:`DataProvider`. ``None`` falls
+                back to the router's external chain.
 
         Raises:
             ProviderUnavailableError: When ``p3_writer`` is ``None``.
             ValueError: When capability is not registered in
                 :data:`P3_COLLECTION_BY_CAPABILITY`.
-            NotImplementedError: Full happy-path is reserved.
+            NotImplementedError: When ``_is_refresh_authorized`` is
+                ``False``.
         """
         effective_writer = p3_writer if p3_writer is not None else self._p3_writer
+        if (
+            effective_writer is not None
+            and self._is_refresh_authorized(capability=self.limit_up_capability)
+        ):
+            return self._run_limit_up_pool_refresh(
+                p3_writer=effective_writer,
+                provider=provider,
+            )
         if effective_writer is None:
             raise ProviderUnavailableError(
                 "MarketSentimentService has no P3PersistenceWriter "
@@ -400,10 +430,275 @@ class MarketSentimentService:
                 f"capability {self.limit_up_capability!r} is not registered in "
                 "P3_COLLECTION_BY_CAPABILITY"
             )
+        if not self._refresh_authorized:
+            raise NotImplementedError(
+                "MarketSentimentService.refresh_limit_up_pool is "
+                "gated behind the per-instance ``_refresh_authorized`` "
+                "flag (P1 default-deny); call ``enable_refresh()`` or "
+                "wait for the Gate-authorised sub-stage to flip the toggle."
+            )
+        # Defensive fallback — the early return above covers the
+        # authorised branch.
         raise NotImplementedError(
             "MarketSentimentService.refresh_limit_up_pool "
             "is offline-scaffold only; full happy-path reserved."
         )
+
+    # ------------------------------------------------------------------
+    # P1 refresh-path three-state guard helpers
+    # ------------------------------------------------------------------
+
+    def _is_refresh_authorized(self, *, capability: str) -> bool:
+        """Return ``True`` only when the per-instance toggle is on.
+
+        Mirrors the :class:`SectorService` /
+        :class:`FlowService` contract. The default value is ``False``
+        — every :class:`MarketSentimentService` instance ships
+        default-deny. Both ``sentiment.market_snapshot`` and
+        ``sentiment.limit_up_pool`` capabilities share the same
+        per-instance flag — the Gate-authorised sub-stage flips the
+        flag once and both methods are activated together.
+        """
+        return bool(self._refresh_authorized)
+
+    def enable_refresh(self) -> None:
+        """Flip the per-instance refresh authorisation to ``True``.
+
+        Convenience hook for the P1.5 / P2 production activation
+        sub-stage (and for the unit-test fixture setup). The flag is
+        intentionally per-instance so test isolation does not
+        require a class-level reset. Production activation is gated
+        by the Pascal Gate per P1.10 (G-C-2).
+        """
+        self._refresh_authorized = True
+
+    def _fetch_for_refresh(
+        self,
+        *,
+        capability: str,
+        provider: Any | None,
+        params: dict[str, Any],
+    ) -> list[dict]:
+        """Resolve a Provider for the refresh path and fetch its payload.
+
+        Mirrors :meth:`FlowService._fetch_for_refresh` — caller-supplied
+        ``provider`` wins; otherwise the router's registry supplies
+        the first available candidate. Non-list outputs coerce to
+        ``[]`` so the downstream ``skip_empty`` branch fires
+        cleanly.
+        """
+        domain, _, operation = capability.partition(".")
+        if provider is not None:
+            payload = provider.fetch(domain, operation, **params)
+        elif self._router is not None:
+            return self._fetch_via_registry(capability, params)
+        else:
+            raise ProviderUnavailableError(
+                f"MarketSentimentService.{capability!r} refresh has no "
+                "provider supplied and no router wired; cannot fetch "
+                "payload."
+            )
+        if not isinstance(payload, list):
+            return []
+        return [dict(row) for row in payload if isinstance(row, dict)]
+
+    def _fetch_via_registry(
+        self, capability: str, params: dict[str, Any]
+    ) -> list[dict]:
+        """Resolve a Provider from the router registry and invoke ``fetch``."""
+        registry = getattr(self._router, "registry", None)
+        if registry is None:
+            return []
+        for candidate in registry.list_providers():
+            if capability in candidate.capabilities and candidate.is_available():
+                domain, _, operation = capability.partition(".")
+                return candidate.fetch(domain, operation, **params)
+        return []
+
+    def _run_refresh(
+        self,
+        *,
+        snapshot_date: str,
+        snapshot_time: str,
+        provider: Any | None,
+        capability: str,
+    ) -> Any:
+        """22-field canonical happy-path runner for ``sentiment.market_snapshot``.
+
+        Steps:
+
+        1. Capability map defensive guard (fails loudly on edits).
+        2. Fetch via Provider; coerce to ``list[dict]``.
+        3. Empty payload → ``PersistenceOutcome(status='skipped',
+           reason='empty_response')``.
+        4. Otherwise call ``writer.upsert`` with the canonical
+           ``{market, snapshot_date, snapshot_time}`` unique key
+           (P1.2 schema). The writer's idempotent business-key
+           upsert overwrites in place.
+        5. Map the writer's :class:`UpsertOutcome` into a
+           :class:`PersistenceOutcome` for the caller.
+        """
+        from .flow_service import PersistenceResult  # local import — same package
+
+        if capability not in P3_COLLECTION_BY_CAPABILITY:
+            raise ValueError(
+                f"capability {capability!r} is not registered in "
+                "P3_COLLECTION_BY_CAPABILITY"
+            )
+        if capability not in P3_UNIQUE_KEYS_BY_CAPABILITY:
+            raise ValueError(
+                f"capability {capability!r} is missing a unique-key "
+                "definition in P3_UNIQUE_KEYS_BY_CAPABILITY"
+            )
+
+        collection = P3_COLLECTION_BY_CAPABILITY[capability]
+        unique_key = P3_UNIQUE_KEYS_BY_CAPABILITY[capability]
+
+        records = self._fetch_for_refresh(
+            capability=capability,
+            provider=provider,
+            params={
+                "snapshot_date": snapshot_date,
+                "snapshot_time": snapshot_time,
+            },
+        )
+        if not records:
+            return PersistenceResult(
+                status="skipped",
+                capability=capability,
+                collection=collection,
+                persisted=0,
+                failed=0,
+                skipped=True,
+                reason="empty_response",
+                writer_outcome=None,
+            )
+        outcome = self._p3_writer.upsert(
+            collection=collection,
+            records=records,
+            unique_key=unique_key,
+        )
+        # Step 4: CacheManager.put (catch-and-log, mock-only in P1).
+        self._put_cache(capability, records, snapshot_date, snapshot_time)
+        return PersistenceResult(
+            status="ok" if outcome.failed == 0 else "partial_failure",
+            capability=capability,
+            collection=collection,
+            persisted=outcome.persisted,
+            failed=outcome.failed,
+            skipped=False,
+            reason=None,
+            writer_outcome=outcome,
+        )
+
+    def _run_limit_up_pool_refresh(
+        self,
+        *,
+        p3_writer: Any,
+        provider: Any | None,
+    ) -> Any:
+        """Happy-path runner for ``sentiment.limit_up_pool``.
+
+        Mirrors :meth:`_run_refresh` but the unique key is the
+        per-stock ``{market, symbol, trade_date}`` set (P1.2) and
+        the writer is supplied by the caller (the
+        :meth:`refresh_limit_up_pool` kwarg overrides the
+        constructor-wired one).
+        """
+        from .flow_service import PersistenceResult  # local import — same package
+
+        capability = self.limit_up_capability
+        if capability not in P3_COLLECTION_BY_CAPABILITY:
+            raise ValueError(
+                f"capability {capability!r} is not registered in "
+                "P3_COLLECTION_BY_CAPABILITY"
+            )
+        if capability not in P3_UNIQUE_KEYS_BY_CAPABILITY:
+            raise ValueError(
+                f"capability {capability!r} is missing a unique-key "
+                "definition in P3_UNIQUE_KEYS_BY_CAPABILITY"
+            )
+
+        collection = P3_COLLECTION_BY_CAPABILITY[capability]
+        unique_key = P3_UNIQUE_KEYS_BY_CAPABILITY[capability]
+
+        records = self._fetch_for_refresh(
+            capability=capability,
+            provider=provider,
+            params={},
+        )
+        if not records:
+            return PersistenceResult(
+                status="skipped",
+                capability=capability,
+                collection=collection,
+                persisted=0,
+                failed=0,
+                skipped=True,
+                reason="empty_response",
+                writer_outcome=None,
+            )
+        outcome = p3_writer.upsert(
+            collection=collection,
+            records=records,
+            unique_key=unique_key,
+        )
+        # Step 4: CacheManager.put (catch-and-log, mock-only in P1).
+        self._put_cache(capability, records, None, None)
+        return PersistenceResult(
+            status="ok" if outcome.failed == 0 else "partial_failure",
+            capability=capability,
+            collection=collection,
+            persisted=outcome.persisted,
+            failed=outcome.failed,
+            skipped=False,
+            reason=None,
+            writer_outcome=outcome,
+        )
+
+    # ------------------------------------------------------------------
+    # P1 Step 4: Cache write (catch-and-log)
+    # ------------------------------------------------------------------
+
+    def _put_cache(
+        self,
+        capability: str,
+        records: list[dict],
+        snapshot_date: str | None,
+        snapshot_time: str | None,
+    ) -> None:
+        """P1 Step 4: write refresh results into CacheManager (catch-and-log).
+
+        Per SPEC §P1.5.2.bis: failure does NOT block the refresh main path.
+        The cache write is mock-only in P1 — ``cache_manager`` defaults to
+        ``None`` and is injected only in authorised tests.
+
+        Cache key formats:
+        - ``sentiment.market_snapshot`` → ``sentiment:market_snapshot:{snapshot_date}``
+        - ``sentiment.limit_up_pool`` → ``sentiment:limit_up_pool:{snapshot_date}``
+        """
+        if self._cache_manager is None:
+            return
+        sd = snapshot_date or ""
+        if capability == "sentiment.market_snapshot":
+            cache_key = f"sentiment:market_snapshot:{sd}"
+        elif capability == "sentiment.limit_up_pool":
+            cache_key = f"sentiment:limit_up_pool:{sd}"
+        else:
+            logger.warning(
+                "MarketSentimentService._put_cache: unknown capability %r — skipping",
+                capability,
+            )
+            return
+        try:
+            self._cache_manager.put(cache_key, records)
+        except Exception:
+            logger.warning(
+                "MarketSentimentService._put_cache: CacheManager.put failed "
+                "(non-blocking, capability=%r)",
+                capability,
+                exc_info=True,
+            )
 
 
 __all__ = ["MarketSentimentService"]

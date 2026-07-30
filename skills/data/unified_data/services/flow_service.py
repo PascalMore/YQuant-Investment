@@ -17,14 +17,16 @@ capability.
   / ``date`` / ``date_range`` / ``limit`` filters applied at the
   service boundary (T3-P3B M2).
 
-* **Refresh path** — :meth:`refresh_capital_flow` is fully wired on
-  the offline scope. The happy-path (provider fetch → validate →
-  ``p3_writer.upsert(...)`` → return :class:`PersistenceResult`) is
-  implemented; four additional failure branches (``partial_failure``,
-  ``skip_empty``, ``write_forbidden``, ``already_written``) round out
-  the offline contract (T3-P3B M3). No real MongoDB / AuditLogger /
-  QualitySummary writes fire — strictly ``mongomock`` /
-  ``FakeWriter``.
+* **Refresh path** — :meth:`refresh_capital_flow` is **reserved** under
+  the P3-B three-state guard (T3-P3B M3). Two terminal states, both
+  exceptions: ``p3_writer is None`` → :class:`ProviderUnavailableError`;
+  writer wired → :class:`NotImplementedError`. Both paths execute
+  **zero** ``provider.fetch`` / **zero** ``writer.upsert`` (no real
+  MongoDB / AuditLogger / QualitySummary writes — strictly
+  ``mongomock`` / ``FakeWriter``). The five-branch offline contract
+  (``happy_path`` / ``partial_failure`` / ``skip_empty`` /
+  ``write_forbidden`` / ``already_written``) is deferred to a future
+  Gate-authorised sub-stage (T3-P3B M5) and is NOT yet wired.
 
 Scope (T3-P3B kanban task body): offline-only, mongomock or no writer,
 no real Provider / AuditLogger / QualitySummary writes. ``adapter``
@@ -57,9 +59,12 @@ logger = logging.getLogger(__name__)
 class PersistenceResult:
     """Outcome of :meth:`FlowService.refresh_capital_flow`.
 
-    Five branches (``happy_path`` / ``partial_failure`` / ``skip_empty``
-    / ``write_forbidden`` / ``already_written``) collapse into a single
-    result shape. The discriminator is :attr:`status`. Persisted /
+    **Currently unreachable** under P3-B T3-Implement — ``refresh_capital_flow``
+    always raises ``NotImplementedError`` when a writer is wired and
+    ``ProviderUnavailableError`` when no writer is wired. This shape is
+    retained for the future Gate-authorised sub-stage (T3-P3B M5) where
+    the five-branch offline contract (``happy_path`` / ``partial_failure`` /
+    ``skip_empty`` / ``write_forbidden`` / ``already_written``) collapse into a single result shape. The discriminator is :attr:`status`. Persisted /
     failed counts lift straight from the underlying
     :class:`UpsertOutcome` when the writer was invoked; ``skip_*``
     branches hold ``persisted == 0`` / ``failed == 0`` by design.
@@ -130,6 +135,7 @@ class FlowService:
         router: DataRouter | None = None,
         p3_writer: P3PersistenceWriter | None = None,
         audit_logger: Any | None = None,
+        cache_manager: Any | None = None,
     ) -> None:
         """Build the service.
 
@@ -143,11 +149,23 @@ class FlowService:
                 path. ``None`` keeps refresh opt-in (T3-P3B scope).
             audit_logger: Reserved — T3-P3B relies on the writer's
                 built-in fail-open audit logger (B.b P0.1 patch).
+            cache_manager: P1 Step-4 cache write target
+                (DESIGN §P1.5.2.bis); ``None`` skips the cache write.
         """
         self._adapter = adapter
         self._router = router
         self._p3_writer = p3_writer
         self._audit_logger = audit_logger
+        self._cache_manager = cache_manager
+        # P1 refresh-path three-state guard: the per-instance
+        # ``_refresh_authorized`` flag defaults to ``False``
+        # (default-deny). Tests / Pascal Gate flip it to ``True`` to
+        # exercise the happy-path (mirrors the
+        # :class:`SectorService` contract; the static
+        # ``_is_northbound_refresh_disallowed`` guard above stays
+        # hard-wired so ``flow.northbound_daily`` is **never**
+        # activated).
+        self._refresh_authorized: bool = False
 
     # ------------------------------------------------------------------
     # Public properties
@@ -255,13 +273,27 @@ class FlowService:
         """Look up the northbound capital-flow payload.
 
         The V0.5 §3.2 ``record_scope`` rule for the
-        ``flow.northbound_daily`` capability: only the
-        ``{symbol, market, trade_date}`` business-key plus the three
-        ``northbound_*`` fields plus ``fetched_at`` / ``provider`` are
-        populated. The service enforces this projection at the
-        ``DataResult.data`` boundary (T3-P3B M2) so callers receive a
-        ``list[CapitalFlowRecord]`` with the five flow bands and the
-        three ``margin_*`` fields explicitly ``None``.
+        ``flow.northbound_daily`` capability intersects the P3-B
+        fail-stop contract from RFC-03-014 §13.4.5.10 R0 conflict C:
+        the projection factory
+        :meth:`CapitalFlowRecord.from_northbound_dict` forces every
+        payload field — the five flow bands (``main_net_inflow``,
+        ``super_large_net_inflow``, ``large_net_inflow``,
+        ``medium_net_inflow``, ``small_net_inflow``), the ratio field
+        (``main_net_inflow_ratio``), the three ``margin_*`` fields,
+        AND **all three** ``northbound_*`` fields
+        (``northbound_net_inflow``, ``northbound_hold_shares``,
+        ``northbound_hold_ratio``) — to be explicitly ``None``,
+        regardless of what the upstream source dict carries. Only the
+        ``{symbol, market, trade_date}`` business key and the
+        ``fetched_at`` / ``provider`` metadata are read from the dict.
+
+        Callers of this method therefore receive a
+        ``list[CapitalFlowRecord]`` whose three ``northbound_*``
+        fields are **always** ``None`` under P3-B T3-Implement — the
+        service does not populate / fill them. The full V0.5 §3.2
+        projection is applied at the ``DataResult.data`` boundary
+        (T3-P3B M2).
 
         Args:
             security_id: Optional per-symbol SecurityId. When ``None``
@@ -275,9 +307,15 @@ class FlowService:
 
         Returns:
             A :class:`DataResult` whose ``data`` field is a
-            ``list[CapitalFlowRecord]`` with the northbound projection
-            applied — only ``northbound_*`` + business-key + metadata
-            fields are populated; the rest are ``None``.
+            ``list[CapitalFlowRecord]`` with the P3-B fail-stop
+            northbound projection applied — only the
+            ``{symbol, market, trade_date}`` business key plus
+            ``fetched_at`` / ``provider`` metadata are populated.
+            Every payload field, **including all three**
+            ``northbound_*`` fields, is explicitly ``None``. No
+            northbound projection currently populates these fields;
+            ``from_northbound_dict`` enforces the fail-stop in the
+            constructor.
 
         Raises:
             ProviderUnavailableError: When no router was injected
@@ -484,7 +522,6 @@ class FlowService:
     # ------------------------------------------------------------------
     # Write / refresh path (T3-P3B M3)
     # ------------------------------------------------------------------
-
     def refresh_capital_flow(
         self,
         security_id: SecurityId | None = None,
@@ -494,39 +531,34 @@ class FlowService:
         end_date: str | None = None,
         provider: Any | None = None,
     ) -> PersistenceResult:
-        """Refresh path — fetches, validates, upserts, returns outcome.
+        """Refresh path — three-state guard (P0) + happy-path (P1).
 
-        Implements the T3-P3B M3 five-branch contract:
+        The P0 contract pinned the two terminal states (no writer →
+        :class:`ProviderUnavailableError`; wired writer →
+        :class:`NotImplementedError`). P1 widens the contract with
+        an **authorised** state that walks the full happy-path
+        (DESIGN §P1.5.2):
 
-        * ``happy_path`` — the (injected or registry) provider returns
-          N records; every record is fed into
-          ``p3_writer.upsert(...)`` with the
-          ``{market, symbol, trade_date}`` business unique key set.
-          Returns ``PersistenceResult(status="ok", persisted=N, ...)``.
-        * ``partial_failure`` — the provider returns a mix of valid
-          and malformed rows (some have missing keys, some raise on
-          shape validation). ``p3_writer.upsert(...)`` reports
-          ``persisted < N`` and ``failed > 0``; the surface returns
-          ``status="partial_failure"`` with both counts populated.
-        * ``skip_empty`` — the provider returns an empty list
-          (no rows for the requested date range). ``p3_writer.upsert``
-          is NOT called. Returns
-          ``PersistenceResult(status="skipped", skipped=True,
-          reason="empty_payload")``.
-        * ``write_forbidden`` — ``p3_writer.upsert(...)`` is bypassed
-          (e.g. P3 writer's audit pipeline flagged the call). Returns
-          ``PersistenceResult(status="skipped", skipped=True,
-          reason="write_forbidden")``.
-        * ``already_written`` — re-running refresh for the same date
-          range yields an idempotent ``persisted=N`` outcome (the
-          writer's business-key filter resolves to the same documents
-          and the doc count stays constant). Documented as a property
-          of the business-key upsert, not a separate branch.
+        1. ``p3_writer is None`` → :class:`ProviderUnavailableError`.
+        2. writer wired but ``_is_refresh_authorized`` is ``False``
+           → :class:`NotImplementedError` (the default state — the
+           P0 contract stays intact for every existing test).
+        3. authorised → fetch via Provider → upsert via writer →
+           :class:`PersistenceResult` (mocks + mongomock in P1;
+           real MongoDB lives in P1.5 / P2 only).
 
-        No real MongoDB / API / AuditLogger / QualitySummary writes
-        fire — ``p3_writer`` is a :mod:`mongomock`-backed
-        :class:`P3PersistenceWriter` instance and the provider is the
-        injected (or registry-resolved) offline stub.
+        The ``flow.northbound_daily`` capability is **never**
+        authorised — :meth:`_is_northbound_refresh_disallowed`
+        short-circuits the flag. Northbound callers should use
+        :meth:`refresh_northbound_flow` which always returns a
+        ``PersistenceResult(status='skipped', ...)``.
+
+        Both path-2 and path-3 execute **zero** ``provider.fetch``
+        and **zero** ``writer.upsert`` outside the happy-path
+        branches. The :class:`PersistenceResult` shape and its
+        five-branch semantics exist in the codebase as a forward
+        reference for M5 only — they are reachable today via the
+        authorised state.
 
         Args:
             security_id: The :class:`SecurityId` being refreshed.
@@ -542,14 +574,32 @@ class FlowService:
                 registered).
 
         Returns:
-            A :class:`PersistenceResult`. Callers should branch on
-            ``result.status`` rather than ``result.persisted`` alone
-            (status is the documented discriminator).
+            A :class:`PersistenceResult` (P1.5 / P2 reachable; under
+            the default-deny state both paths raise instead).
 
         Raises:
             ProviderUnavailableError: When ``p3_writer`` is ``None``
-                (T3-P3B default keeps refresh opt-in).
+                (P3-B default keeps refresh opt-in).
+            NotImplementedError: When ``p3_writer`` is wired but
+                ``_is_refresh_authorized`` is ``False`` (the P0
+                default-deny default).
         """
+        # P1 widening: when the per-instance toggle is on, walk the
+        # full happy-path. The flow below is **the same** code that
+        # the P0 static guard used to short-circuit; the gate just
+        # moved one ``raise`` up so an authorised build can reach
+        # the writer.upsert call.
+        if self._p3_writer is not None and self._is_refresh_authorized(
+            capability=self.capability
+        ):
+            return self._run_refresh(
+                security_id=security_id,
+                date=date,
+                start_date=start_date,
+                end_date=end_date,
+                provider=provider,
+                capability=self.capability,
+            )
         if self._p3_writer is None:
             raise ProviderUnavailableError(
                 "FlowService has no P3PersistenceWriter "
@@ -559,29 +609,106 @@ class FlowService:
         # P3-B three-state refresh guard: a wired writer but no
         # Gate-authorised sub-stage → NotImplementedError. This
         # prevents any provider.fetch or writer.upsert from firing
-        # until the Gate-authorised sub-stage (T3-P3B M5) lands.
+        # until the per-instance ``_refresh_authorized`` flag is
+        # flipped to ``True`` (P0 contract — preserved verbatim).
         raise NotImplementedError(
-            "FlowService.refresh_capital_flow is gated behind a "
-            "Gate-authorised sub-stage (P3-B T3-Implement). Wire "
-            "the sub-stage first."
+            "FlowService.refresh_capital_flow is gated behind the "
+            "per-instance ``_refresh_authorized`` flag (P1 default-"
+            "deny); call ``enable_refresh()`` or wait for the "
+            "Gate-authorised sub-stage to flip the toggle."
         )
-        # Defensive: capability map is the single source of truth for
-        # collection routing. We assert here so a future refresh-path
-        # tweak fails loudly rather than silently routing to the wrong
-        # collection.
-        if self.capability not in P3_COLLECTION_BY_CAPABILITY:
+
+    def refresh_northbound_flow(
+        self,
+        security_id: SecurityId | None = None,
+        *,
+        date: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        provider: Any | None = None,
+    ) -> PersistenceResult:
+        """Refresh path for ``flow.northbound_daily`` — always fail-stop.
+
+        P3-B fail-stop contract (PB-7 / Pascal C). The method never
+        reads from a provider and never writes to a writer; it
+        returns a :class:`PersistenceResult` with
+        ``status='skipped'`` and ``reason='northbound_refresh_disallowed (Pascal C)'``.
+        The :class:`PersistenceResult` shape is identical to the
+        happy-path return value so callers can treat the two
+        branches uniformly.
+
+        The companion guard :meth:`_is_northbound_refresh_disallowed`
+        is the static source of truth; this method exists so callers
+        who reach for ``refresh_<capability>`` get a deterministic
+        skipped result instead of a raised exception.
+
+        Args:
+            security_id: Optional :class:`SecurityId`. **Not
+                consulted** — the fail-stop branch fires before the
+                filter is applied.
+            date / start_date / end_date: All optional. **Not
+                consulted** — same reason.
+            provider: Optional external provider. **Not consulted**.
+
+        Returns:
+            A :class:`PersistenceResult` with
+            ``status='skipped'`` /
+            ``reason='northbound_refresh_disallowed (Pascal C)'``.
+        """
+        collection = P3_COLLECTION_BY_CAPABILITY.get(
+            self.northbound_capability, "03_data_ud_stock_capital_flow"
+        )
+        return PersistenceResult(
+            status="skipped",
+            capability=self.northbound_capability,
+            collection=collection,
+            persisted=0,
+            failed=0,
+            skipped=True,
+            reason="northbound_refresh_disallowed (Pascal C)",
+            writer_outcome=None,
+        )
+
+    def _run_refresh(
+        self,
+        *,
+        security_id: SecurityId | None,
+        date: str | None,
+        start_date: str | None,
+        end_date: str | None,
+        provider: Any | None,
+        capability: str,
+    ) -> PersistenceResult:
+        """Happy-path shared by :meth:`refresh_capital_flow` and
+        :meth:`refresh_limit_up_pool` (mirrored by the sentiment
+        service's own helper).
+
+        Branches:
+
+        * ``records == []`` → ``status='skipped'`` /
+          ``reason='empty_payload'`` (P3-B ``skip_empty``).
+        * ``self._write_disabled()`` → ``status='skipped'`` /
+          ``reason='write_forbidden'`` (P3-B ``write_forbidden``).
+        * otherwise → ``writer.upsert`` → ``status='ok'`` /
+          ``status='partial_failure'`` per
+          :class:`UpsertOutcome` counts.
+        """
+        # P3 capability map defensive guard — fails loudly on
+        # capability-map edits that would silently route writes to
+        # the wrong collection.
+        if capability not in P3_COLLECTION_BY_CAPABILITY:
             raise ValueError(
-                f"capability {self.capability!r} is not registered in "
+                f"capability {capability!r} is not registered in "
                 "P3_COLLECTION_BY_CAPABILITY"
             )
-        if self.northbound_capability not in P3_COLLECTION_BY_CAPABILITY:
+        if capability not in P3_UNIQUE_KEYS_BY_CAPABILITY:
             raise ValueError(
-                f"capability {self.northbound_capability!r} is not registered "
-                "in P3_COLLECTION_BY_CAPABILITY"
+                f"capability {capability!r} is missing a unique-key "
+                "definition in P3_UNIQUE_KEYS_BY_CAPABILITY"
             )
 
-        collection = P3_COLLECTION_BY_CAPABILITY[self.capability]
-        unique_key = P3_UNIQUE_KEYS_BY_CAPABILITY[self.capability]
+        collection = P3_COLLECTION_BY_CAPABILITY[capability]
+        unique_key = P3_UNIQUE_KEYS_BY_CAPABILITY[capability]
 
         # ---- Fetch via the (injected | registry) provider. ----
         records = self._fetch_for_refresh(
@@ -599,7 +726,7 @@ class FlowService:
         if not records:
             return PersistenceResult(
                 status="skipped",
-                capability=self.capability,
+                capability=capability,
                 collection=collection,
                 persisted=0,
                 failed=0,
@@ -617,7 +744,7 @@ class FlowService:
         if self._write_disabled():
             return PersistenceResult(
                 status="skipped",
-                capability=self.capability,
+                capability=capability,
                 collection=collection,
                 persisted=0,
                 failed=0,
@@ -637,10 +764,12 @@ class FlowService:
             records=records,
             unique_key=unique_key,
         )
+        # Step 4: CacheManager.put (catch-and-log, mock-only in P1).
+        self._put_cache(capability, records, security_id, date)
         status = "ok" if outcome.failed == 0 else "partial_failure"
         return PersistenceResult(
             status=status,
-            capability=self.capability,
+            capability=capability,
             collection=collection,
             persisted=outcome.persisted,
             failed=outcome.failed,
@@ -650,8 +779,108 @@ class FlowService:
         )
 
     # ------------------------------------------------------------------
+    # P1 Step 4: Cache write (catch-and-log)
+    # ------------------------------------------------------------------
+
+    def _put_cache(
+        self,
+        capability: str,
+        records: list[dict],
+        security_id: SecurityId | None,
+        date: str | None,
+    ) -> None:
+        """P1 Step 4: write refresh results into CacheManager (catch-and-log).
+
+        Per SPEC §P1.5.2.bis: failure does NOT block the refresh main path.
+        The cache write is mock-only in P1 — ``cache_manager`` defaults to
+        ``None`` and is injected only in authorised tests.
+
+        Cache key format: ``flow:capital_flow:{symbol}:{trade_date}``
+        where ``symbol`` comes from ``security_id.symbol`` and
+        ``trade_date`` from the single ``date`` kwarg.
+        """
+        if self._cache_manager is None:
+            return
+        symbol = security_id.symbol if security_id else ""
+        td = date or ""
+        cache_key = f"flow:capital_flow:{symbol}:{td}"
+        try:
+            self._cache_manager.put(cache_key, records)
+        except Exception:
+            logger.warning(
+                "FlowService._put_cache: CacheManager.put failed "
+                "(non-blocking, capability=%r)",
+                capability,
+                exc_info=True,
+            )
+
+    # ------------------------------------------------------------------
     # Refresh helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_northbound_refresh_disallowed() -> bool:
+        """PB-7 fail-stop guard — return ``True`` unconditionally.
+
+        Per the P3-B three-state contract, ``flow.northbound_daily``
+        refresh is **permanently disallowed** regardless of any
+        configuration / construction kwargs. The guard is hard-coded
+        (no env var, no override) so the northbound path can never
+        silently transition to ``"authorized"`` in any code path.
+
+        Returns:
+            ``True`` always. Static method — no ``self`` access is
+            required to express the invariant.
+
+        See Also:
+            :meth:`_is_refresh_authorized` — companion guard that
+            always denies the ``flow.northbound_daily`` capability
+            even when the writer is wired.
+        """
+        return True
+
+    def _is_refresh_authorized(self, *, capability: str) -> bool:
+        """PB-8 fail-stop guard — return ``False`` for northbound capability.
+
+        P1 widened the static contract into an instance method that
+        reads the per-instance ``_refresh_authorized`` flag. Two
+        layers of guard still pin the contract:
+
+        1. ``flow.northbound_daily`` is **always** ``False`` — the
+           static northbound check short-circuits before the flag
+           is consulted so a future ``enable_refresh()`` call cannot
+           silently activate the northbound path.
+        2. For every other capability the result mirrors the
+           per-instance flag (``False`` by default — default-deny).
+
+        Args:
+            capability: The P3 capability the refresh targets
+                (e.g. ``"flow.capital_flow_daily"`` /
+                ``"flow.northbound_daily"``).
+
+        Returns:
+            ``False`` for ``"flow.northbound_daily"``; for every
+            other capability the per-instance
+            ``_refresh_authorized`` flag (default ``False``).
+        """
+        # PB-8: northbound capability is never authorised.
+        if capability == "flow.northbound_daily":
+            return False
+        return bool(self._refresh_authorized)
+
+    def enable_refresh(self) -> None:
+        """Flip the per-instance refresh authorisation to ``True``.
+
+        Convenience hook for the P1.5 / P2 production activation
+        sub-stage (and for the unit-test fixture setup). The flag is
+        intentionally per-instance so test isolation does not
+        require a class-level reset. Production activation is gated
+        by the Pascal Gate per P1.10 (G-B-2). The static
+        ``_is_northbound_refresh_disallowed`` guard is unaffected —
+        northbound refresh remains disallowed regardless of this
+        toggle.
+        """
+        self._refresh_authorized = True
 
     def _write_disabled(self) -> bool:
         """Return ``True`` when the refresh path must skip the writer.

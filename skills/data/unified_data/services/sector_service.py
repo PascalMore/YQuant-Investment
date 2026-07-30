@@ -29,9 +29,16 @@ of a :class:`SecurityId` (the data model here is sector, not security).
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from ..adapters import TA_CNMongoAdapter
+from ..adapters.p3_persistence_writer import (
+    P3_COLLECTION_BY_CAPABILITY,
+    P3_UNIQUE_KEYS_BY_CAPABILITY,
+    P3PersistenceWriter,
+    UpsertOutcome,
+)
 from ..exceptions import ProviderUnavailableError
 from ..models import DataResult, Market, SecurityId
 from ..models.domain import IndexDailyBar, SectorClassification, SectorSnapshot
@@ -39,6 +46,14 @@ from . import SERVICE_ERRORS, wrap_empty, wrap_error, wrap_success
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ..router import DataRouter
+
+# SECTOR_P3_COLLECTION — single source of truth for the P3-A collection
+# that backs both ``sector.snapshot`` and ``sector.ranking``. Pinned at
+# P1.13 to avoid diverging from the canonical writer map.
+SECTOR_P3_COLLECTION = "03_data_ud_market_sector_snapshot"
+SECTOR_P3_UNIQUE_KEY: frozenset[str] = frozenset(
+    {"market", "sector_code", "snapshot_date"}
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +121,10 @@ class SectorService:
         self,
         adapter: TA_CNMongoAdapter,
         router: "DataRouter | None" = None,
+        *,
+        p3_writer: P3PersistenceWriter | None = None,
+        audit_logger: Any | None = None,
+        cache_manager: Any | None = None,
     ) -> None:
         self._adapter = adapter
         # P3-A router is wired at construction time. ``None`` is the
@@ -114,6 +133,23 @@ class SectorService:
         # Duck-typed intentionally (matches the test suite's fake
         # routers that don't subclass :class:`DataRouter`).
         self._router = router
+        # P1 refresh-path injection. ``p3_writer`` is the
+        # mongomock-only P3PersistenceWriter; ``None`` keeps the
+        # refresh path opt-in (default — matches the P0 contract).
+        # ``audit_logger`` is forwarded to the writer (no-op default).
+        # ``cache_manager`` is the P1 Step-4 cache write target
+        # (DESIGN §P1.5.2.bis); ``None`` skips the cache write.
+        # ``_refresh_authorized`` is a **per-instance** runtime toggle:
+        # P0 set it to ``False`` (default-deny). Tests / Pascal Gate
+        # flip it to ``True`` to exercise the happy-path. The flag is
+        # an instance attribute (not a class attribute / env var) so
+        # ``_is_refresh_authorized`` can stay a method that reads
+        # ``self`` — mirroring the FlowService / MarketSentimentService
+        # three-state guard pattern.
+        self._p3_writer = p3_writer
+        self._audit_logger = audit_logger
+        self._cache_manager = cache_manager
+        self._refresh_authorized: bool = False
 
     # ------------------------------------------------------------------
     # P3-A router wiring (read-only attribute)
@@ -132,6 +168,11 @@ class SectorService:
         return self._router
 
     @property
+    def p3_writer(self) -> P3PersistenceWriter | None:
+        """The P3PersistenceWriter used on the refresh path (``None`` until injected)."""
+        return self._p3_writer
+
+    @property
     def capability_snapshot(self) -> str:
         """The canonical ``sector.snapshot`` capability string."""
         return f"{self.DOMAIN}.{self.OPERATION_SNAPSHOT}"
@@ -140,6 +181,42 @@ class SectorService:
     def capability_ranking(self) -> str:
         """The canonical ``sector.ranking`` capability string."""
         return f"{self.DOMAIN}.{self.OPERATION_RANKING}"
+
+    # ------------------------------------------------------------------
+    # P1 refresh-path three-state guard
+    # ------------------------------------------------------------------
+
+    def _is_refresh_authorized(self, *, capability: str) -> bool:
+        """Return ``True`` only when the per-instance toggle is on.
+
+        The companion to :meth:`_p3_writer_wired`. The default value
+        is ``False`` — every :class:`SectorService` instance ships
+        default-deny. Pascal's Gate-authorised sub-stage flips the
+        instance flag to ``True`` via a small helper (see
+        :meth:`enable_refresh`); tests use ``monkeypatch.setattr`` to
+        achieve the same effect.
+
+        Args:
+            capability: The P3 capability the refresh targets
+                (``sector.snapshot`` / ``sector.ranking``). The flag
+                is a single global toggle today — both capabilities
+                share the same authorisation state.
+
+        Returns:
+            ``bool`` — the per-instance ``_refresh_authorized`` flag.
+        """
+        return bool(self._refresh_authorized)
+
+    def enable_refresh(self) -> None:
+        """Flip the per-instance refresh authorisation to ``True``.
+
+        Convenience hook for the P1.5 / P2 production activation
+        sub-stage (and for the unit-test fixture setup). The flag is
+        intentionally per-instance so test isolation does not
+        require a class-level reset. Production activation is gated
+        by the Pascal Gate per P1.10 (G-A-2).
+        """
+        self._refresh_authorized = True
 
     # ------------------------------------------------------------------
     # P3-A: get_sector_snapshot
@@ -580,4 +657,329 @@ class SectorService:
         return wrap_success(bars, placeholder, domain, operation)
 
 
-__all__ = ["SectorService"]
+    # ------------------------------------------------------------------
+    # P1 refresh happy-path (DESIGN-03-014 §P1.5.2, §P1.6)
+    # ------------------------------------------------------------------
+
+    def _ensure_p3_collection_registered(self, capability: str) -> None:
+        """Defensive guard: the capability must map to a known P3-A collection.
+
+        The P3-A collection map is the single source of truth for
+        write-path routing. We assert it here so a future capability
+        edit fails loudly rather than silently routing the refresh
+        to a wrong collection.
+        """
+        if capability not in P3_COLLECTION_BY_CAPABILITY:
+            raise ValueError(
+                f"capability {capability!r} is not registered in "
+                "P3_COLLECTION_BY_CAPABILITY"
+            )
+        if P3_COLLECTION_BY_CAPABILITY[capability] != SECTOR_P3_COLLECTION:
+            raise ValueError(
+                f"capability {capability!r} does not map to "
+                f"{SECTOR_P3_COLLECTION!r} (got "
+                f"{P3_COLLECTION_BY_CAPABILITY[capability]!r})"
+            )
+
+    def _fetch_for_refresh(
+        self,
+        *,
+        capability: str,
+        provider: Any | None,
+        params: dict[str, Any],
+    ) -> list[dict]:
+        """Resolve a Provider for the refresh path and fetch its payload.
+
+        Mirrors :meth:`FlowService._fetch_for_refresh` — caller-supplied
+        ``provider`` wins; otherwise the router's registry supplies the
+        first available candidate. Non-list outputs coerce to ``[]`` so
+        the downstream ``skip_empty`` branch fires cleanly.
+        """
+        domain, _, operation = capability.partition(".")
+        if provider is not None:
+            payload = provider.fetch(domain, operation, **params)
+        elif self._router is not None:
+            payload = self._fetch_via_registry(capability, params)
+        else:
+            raise ProviderUnavailableError(
+                f"SectorService.{capability!r} refresh has no provider "
+                "supplied and no router wired; cannot fetch payload."
+            )
+        if not isinstance(payload, list):
+            return []
+        return [dict(row) for row in payload if isinstance(row, dict)]
+
+    def _fetch_via_registry(
+        self, capability: str, params: dict[str, Any]
+    ) -> list[dict]:
+        """Resolve a Provider from the router registry and invoke ``fetch``."""
+        registry = getattr(self._router, "registry", None)
+        if registry is None:
+            return []
+        for candidate in registry.list_providers():
+            if capability in candidate.capabilities and candidate.is_available():
+                domain, _, operation = capability.partition(".")
+                return candidate.fetch(domain, operation, **params)
+        return []
+
+    def _run_refresh(
+        self,
+        *,
+        capability: str,
+        provider: Any | None,
+        params: dict[str, Any],
+    ) -> "PersistenceOutcome":
+        """Shared three-state guard + happy-path runner.
+
+        Returns a :class:`PersistenceOutcome` (local dataclass — not
+        :class:`FlowService.PersistenceResult` to keep the P3-A
+        surface self-contained) that captures every documented
+        branch. The dataclass mirrors the V0.5 §5.4.1 contract:
+        ``status`` / ``capability`` / ``collection`` / ``persisted`` /
+        ``failed`` / ``skipped`` / ``reason`` / ``writer_outcome``.
+
+        Branches:
+
+        * ``p3_writer is None`` → ``ProviderUnavailableError`` (P0 guard).
+        * ``_is_refresh_authorized(capability) is False`` →
+          ``NotImplementedError`` (default-deny; the Gate-authorised
+          sub-stage owns the activation toggle).
+        * provider fetch returns ``[]`` →
+          ``PersistenceOutcome(status='skipped', reason='empty_response')``.
+        * provider fetch returns non-empty → ``writer.upsert`` →
+          ``PersistenceOutcome(status='ok' | 'partial_failure')``.
+        """
+        # Capability map defensive guard. The P0 contract says P3-A
+        # routes only to ``03_data_ud_market_sector_snapshot``; a
+        # future edit that re-routes the capability must surface here.
+        self._ensure_p3_collection_registered(capability)
+
+        # State 1: no writer wired → ProviderUnavailableError.
+        if self._p3_writer is None:
+            raise ProviderUnavailableError(
+                "SectorService has no P3PersistenceWriter wired; "
+                "refresh path is opt-in until the Gate-authorised "
+                "sub-stage activates it."
+            )
+        # State 2: writer wired but not authorised → NotImplementedError
+        # (default-deny — preserved from P0).
+        if not self._is_refresh_authorized(capability=capability):
+            raise NotImplementedError(
+                f"SectorService.{capability!r} refresh is not yet "
+                "authorised; flip the per-instance flag via "
+                "``enable_refresh()`` or Pascal Gate activation."
+            )
+
+        # State 3: authorised — execute the happy-path.
+        records = self._fetch_for_refresh(
+            capability=capability,
+            provider=provider,
+            params=params,
+        )
+        if not records:
+            return PersistenceOutcome(
+                status="skipped",
+                capability=capability,
+                collection=SECTOR_P3_COLLECTION,
+                persisted=0,
+                failed=0,
+                skipped=True,
+                reason="empty_response",
+                writer_outcome=None,
+            )
+        outcome = self._p3_writer.upsert(
+            collection=SECTOR_P3_COLLECTION,
+            records=records,
+            unique_key=SECTOR_P3_UNIQUE_KEY,
+        )
+        # Step 4: CacheManager.put (catch-and-log, mock-only in P1).
+        # Per SPEC §P1.5.2.bis, failure does NOT block the refresh.
+        self._put_cache(capability, records, params)
+        return PersistenceOutcome(
+            status="ok" if outcome.failed == 0 else "partial_failure",
+            capability=capability,
+            collection=SECTOR_P3_COLLECTION,
+            persisted=outcome.persisted,
+            failed=outcome.failed,
+            skipped=False,
+            reason=(
+                None
+                if outcome.failed == 0
+                else f"{outcome.failed} records failed"
+            ),
+            writer_outcome=outcome,
+        )
+
+    # ------------------------------------------------------------------
+    # P1 Step 4: Cache write (catch-and-log)
+    # ------------------------------------------------------------------
+
+    def _put_cache(
+        self,
+        capability: str,
+        records: list[dict],
+        params: dict[str, Any],
+    ) -> None:
+        """P1 Step 4: write refresh results into CacheManager (catch-and-log).
+
+        Per SPEC §P1.5.2.bis: failure does NOT block the refresh main path.
+        The cache write is mock-only in P1 — ``cache_manager`` defaults to
+        ``None`` and is injected only in authorised tests.
+
+        Each capability builds its cache key per the per-service format
+        (SPEC §P1.5.2.bis table). ``params`` carries the caller-supplied
+        filters that populate the key template.
+        """
+        if self._cache_manager is None:
+            return
+        # Build cache key from capability and params.
+        if capability == "sector.snapshot":
+            sc = params.get("sector_code", "")
+            sd = params.get("snapshot_date", "")
+            cache_key = f"sector:snapshot:{sc}:{sd}"
+        elif capability == "sector.ranking":
+            sd = params.get("date", "") or params.get("snapshot_date", "")
+            cache_key = f"sector:ranking:{sd}"
+        else:
+            logger.warning(
+                "SectorService._put_cache: unknown capability %r — skipping",
+                capability,
+            )
+            return
+        try:
+            self._cache_manager.put(cache_key, records)
+        except Exception:
+            logger.warning(
+                "SectorService._put_cache: CacheManager.put failed "
+                "(non-blocking, capability=%r)",
+                capability,
+                exc_info=True,
+            )
+
+    def refresh_sector_snapshot(
+        self,
+        *,
+        provider: Any | None = None,
+        sector_code: str | None = None,
+        snapshot_date: str | None = None,
+    ) -> "PersistenceOutcome":
+        """Refresh ``sector.snapshot`` rows into the P3-A collection.
+
+        P1 three-state guard (DESIGN §P1.5.1):
+
+        1. ``p3_writer is None`` → :class:`ProviderUnavailableError`.
+        2. writer wired but ``_is_refresh_authorized`` is ``False`` →
+           :class:`NotImplementedError`.
+        3. authorised → fetch → upsert →
+           :class:`PersistenceOutcome` (mocks + mongomock in P1;
+           real Mongo in P1.5 / P2 only).
+
+        Args:
+            provider: Optional :class:`DataProvider`. ``None`` falls
+                back to the router's registry (first available
+                candidate for ``sector.snapshot``).
+            sector_code: Optional sector filter forwarded to the
+                provider.
+            snapshot_date: Optional date filter forwarded to the
+                provider.
+
+        Returns:
+            :class:`PersistenceOutcome` summarising the refresh.
+
+        Raises:
+            ProviderUnavailableError: when ``p3_writer`` is ``None``.
+            NotImplementedError: when ``_is_refresh_authorized`` is
+                ``False`` (the P0 default-deny default).
+        """
+        params: dict[str, Any] = {}
+        if sector_code is not None:
+            params["sector_code"] = sector_code
+        if snapshot_date is not None:
+            params["snapshot_date"] = snapshot_date
+        return self._run_refresh(
+            capability=self.capability_snapshot,
+            provider=provider,
+            params=params,
+        )
+
+    def refresh_sector_ranking(
+        self,
+        *,
+        provider: Any | None = None,
+        date: str | None = None,
+        sector_type: str | None = None,
+    ) -> "PersistenceOutcome":
+        """Refresh ``sector.ranking`` rows into the P3-A collection.
+
+        The ranking path shares the P3-A collection with
+        :meth:`refresh_sector_snapshot` (both capabilities route to
+        ``03_data_ud_market_sector_snapshot``). The capability string
+        is the only discriminator; the unique-key set is identical.
+
+        Args:
+            provider: Optional :class:`DataProvider`.
+            date: Optional ranking date.
+            sector_type: Optional sector-type filter.
+
+        Returns:
+            :class:`PersistenceOutcome` summarising the refresh.
+
+        Raises:
+            ProviderUnavailableError: when ``p3_writer`` is ``None``.
+            NotImplementedError: when ``_is_refresh_authorized`` is
+                ``False``.
+        """
+        params: dict[str, Any] = {}
+        if date is not None:
+            params["date"] = date
+        if sector_type is not None:
+            params["sector_type"] = sector_type
+        return self._run_refresh(
+            capability=self.capability_ranking,
+            provider=provider,
+            params=params,
+        )
+
+
+# ------------------------------------------------------------------
+# P3-A refresh-path outcome dataclass
+# ------------------------------------------------------------------
+# Mirrors the V0.5 §5.4.1 contract (DESIGN-03-014) so a future
+# reader can grep for ``PersistenceOutcome`` without first chasing
+# the FlowService one. The shape is intentionally identical so
+# callers can treat the two services uniformly.
+
+
+@dataclass
+class PersistenceOutcome:
+    """Outcome of a :class:`SectorService` refresh call.
+
+    Fields (V0.5 §5.4.1 — frozen at the dataclass level):
+
+    * ``status`` — one of ``"ok"`` / ``"partial_failure"`` /
+      ``"skipped"``.
+    * ``capability`` — the P3 capability the refresh targeted.
+    * ``collection`` — the P3 collection the writer was about to
+      upsert into.
+    * ``persisted`` / ``failed`` — counts from the writer's
+      :class:`UpsertOutcome` (zero on skip branches).
+    * ``skipped`` — ``True`` when the refresh opted out without
+      calling the writer.
+    * ``reason`` — free-form reason for the ``skipped=True`` branch
+      (currently ``"empty_response"``); ``None`` on the success /
+      partial branches.
+    * ``writer_outcome`` — the raw :class:`UpsertOutcome` from
+      ``p3_writer.upsert(...)`` when the writer was called.
+    """
+
+    status: str
+    capability: str
+    collection: str
+    persisted: int = 0
+    failed: int = 0
+    skipped: bool = False
+    reason: str | None = None
+    writer_outcome: UpsertOutcome | None = None
+
+
+__all__ = ["SectorService", "PersistenceOutcome"]

@@ -1,105 +1,181 @@
-"""Market-level sentiment snapshot domain object (Phase 3 P3-B / T3-B).
+"""Market-level sentiment snapshot domain object (Phase 3 P3-C canonical).
 
-:class:`MarketSentimentSnapshot` is the canonical shape for the
-``sentiment.market_snapshot`` capability (DESIGN-03-014 §3.3, abridged
-to the T3-B offline scope). It is intentionally minimal — only the
-fields the offline T3-B implementation needs to round-trip through
-:mod:`mongomock` and the persistence writer's unique-key filter.
+:class:`MarketSentimentSnapshot` is the **Pascal canonical contract** for the
+``sentiment.market_snapshot`` capability (RFC-03-014 V0.16 / SPEC-03-014
+V0.15 / DESIGN-03-014 V0.23 §3.3). It is a 22-field full-market
+multi-dimensional snapshot with the unique key
+``{market, snapshot_date, snapshot_time}``.
 
-Scope (T3-B kanban task body):
+Provenance
+----------
 
-* Required: ``market``, ``sentiment_type``, ``market_date``, ``score``,
-  ``sample_size``, ``source``.
-* Optional (defaulted): all other fields.
-* No ``raw_payload`` (kept off the wire to avoid leaking provider
-  internals).
-* No ``snapshot_time`` granularity — V0.5 §3.3 supports it but the
-  T3-B scope uses a single ``(market, sentiment_type, market_date)``
-  triple.  ``sentiment_type`` keeps the uniqueness key expressive
-  enough to coexist with future sub-aggregates (``market_sentiment``,
-  ``breadth``, ``limit_up_temperature``, ...).
+Pascal 2026-07-30 ratified this 22-field schema as the canonical product
+schema, replacing the earlier T3-B offline 10-field
+``sentiment_type`` aggregation model (which used the unique key
+``{market, sentiment_type, market_date}`` and ``frozen=True, slots=True``).
 
-The dataclass is ``frozen=True, slots=True`` for immutability — matches
-the canonical-object convention used by :class:`SecurityId` /
-:class:`Capability` and avoids accidental mutation when records are
-copied into service-layer return payloads.
+The earlier 10-field shape is **superseded**; the field names
+``sentiment_type``, ``market_date``, ``score``, ``sample_size``,
+``source``, ``notes``, ``metadata`` are no longer part of the canonical
+contract. Any subsequent persistence write, Provider mapping, or new
+test must use the 22-field schema. The 10-field offline implementation
+was kept on disk by the same Pascal ruling (SPEC §12.bis.3) but is
+removed in this migration — every code path through
+:func:`from_dict` now produces the 22-field shape exclusively.
 
-``from_dict`` is deliberately permissive: every field defaults, no
-``KeyError`` is raised on missing keys, and types are not enforced —
-the canonical source of truth remains the persistence writer's
-record schema, not the dataclass itself.
+The dataclass is intentionally **not** ``frozen`` and not ``slots``
+(SPEC §12.bis.1 / DESIGN §3.3) — the canonical shape is a mutable
+dataclass so consumers can update optional fields after construction
+(e.g. attach a ``provider`` / ``fetched_at`` post-init).
+
+Pascal C — northbound fail-stop
+-------------------------------
+
+``northbound_net_flow`` is **permanently** ``None``. The fetch path
+does not point at any real endpoint; the field is preserved for schema
+completeness but never populated with a non-``None`` value. This is a
+hard constraint (DESIGN §4.2.1, SPEC §14.4.5.2 Pascal C).
+
+Pascal OQ-2 — temperature
+------------------------
+
+``market_temperature`` is allowed to be ``None``. The synthesis formula
+is intentionally undefined — no fabricated formula, no derivation
+frome.g. ``advance_count / (advance_count + decline_count)`` is
+performed. The field is reserved for a future synthesis layer.
+
+``limit_up_pool`` / ``limit_down_pool`` self-dedup invariant
+-----------------------------------------------------------
+
+``MarketSentimentSnapshot``'s ``limit_up_pool`` and ``limit_down_pool``
+lists are self-deduped (a single stock does not appear twice in the
+same document). Cross-document uniqueness is guaranteed by the
+``P3PersistenceWriter`` upsert via the canonical
+``{market, snapshot_date, snapshot_time}`` business key.
+
+``from_dict``
+-------------
+
+The constructor is deliberately permissive: every field defaults, no
+``KeyError`` is raised on missing keys, and types are not enforced
+(``None`` and ``""`` are tolerated for the textual unique-key
+components so downstream comparisons do not blow up on missing Mongo
+documents). The canonical source of truth remains the persistence
+writer's record schema, not the dataclass itself.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass
 class MarketSentimentSnapshot:
-    """Market-level sentiment snapshot (Phase 3 P3-B / T3-B offline).
+    """Market-level sentiment snapshot (Phase 3 P3-C canonical, 22 fields).
 
-    Each record represents a single sentiment aggregate for a market on
-    a single calendar date. Consumers reach this object via
-    :meth:`MarketSentimentService.get_market_sentiment_snapshot` (the
-    P3-B implementation under ``services/sentiment_service.py``).
+    Each record represents a single full-market sentiment / temperature
+    snapshot at one observation time point. Consumers reach this object
+    via :meth:`MarketSentimentService.get_market_sentiment_snapshot`
+    (the P3-C implementation under ``services/sentiment_service.py``).
+
+    Unique business key (RFC/SPEC/DESIGN §3.3):
+    ``{market, snapshot_date, snapshot_time}``.
+
+    Attributes:
+        snapshot_date:             Calendar date the snapshot covers
+            (``"YYYY-MM-DD"``).
+        snapshot_time:             Observation time (``"HH:MM:SS"`` or
+            ``"close"``).
+        market:                    Market identifier (e.g. ``"CN"``).
+        limit_up_count:            涨停家数，含 ST。
+        limit_down_count:          跌停家数，含 ST。
+        limit_up_count_ex_st:      涨停家数（不含 ST），Provider 待验证。
+        limit_down_count_ex_st:    跌停家数（不含 ST），Provider 待验证。
+        advance_count:             全市场上涨家数。
+        decline_count:             全市场下跌家数。
+        flat_count:                全市场平盘家数。
+        total_listed_count:        全市场上市公司总数（日级）。
+        market_temperature:        市场温度 0-100。**Pascal OQ-2 允许
+            None**，不强制合成，不编造公式。
+        total_turnover:            全市场成交额（元）。
+        hot_concepts:              当日热门概念列表。
+        continuous_limit_up:       连板股票列表，每条 ``dict`` 含
+            ``symbol`` / ``days`` / ``reason``。
+        max_continuous_days:       当日最大连板天数，基于
+            ``continuous_limit_up`` 派生。
+        northbound_net_flow:       北向资金净流入（元）。**Pascal C 恒
+            None**，fetch 路径不指向真实 endpoint。
+        limit_up_pool:             涨停股票代码列表（与独立
+            ``sentiment.limit_up_pool`` capability 共存边界见
+            DESIGN §3.3）。
+        limit_down_pool:           跌停股票代码列表。
+        fetched_at:                数据获取时间（ISO-8601）。
+        provider:                  数据来源标识，如 ``"akshare"``。
+        raw_payload:               原始 Provider 返回（调试 / 审计用，
+            不用于生产查询路径）。
 
     The data is auxiliary research material — it does not constitute a
     trade instruction or investment recommendation.
-
-    Attributes:
-        market:          Market identifier (e.g. ``"CN"``).
-        sentiment_type:  Which aggregate the record represents (e.g.
-                         ``"market_sentiment"``, ``"breadth"``). The
-                         canonical ``market.sentiment_snapshot``
-                         capability is intentionally broader than a
-                         single metric so future sub-aggregates can
-                         share the same collection.
-        market_date:     Calendar date the snapshot covers
-                         (``"YYYY-MM-DD"``).
-        score:           The aggregate score in the provider's native
-                         units. Allowed range depends on
-                         ``sentiment_type``; this dataclass does not
-                         enforce it.
-        sample_size:     Number of underlying observations the score
-                         was derived from. Zero is allowed (e.g. a
-                         null day); callers can choose to filter it
-                         out.
-        source:          Provider / source identifier (e.g.
-                         ``"akshare"``, ``"stub"``). Empty string is
-                         tolerated and treated as "unknown" by
-                         downstream consumers.
-        provider:        Concrete provider object name (matches the
-                         ``source`` field in :class:`DataResult`). Same
-                         semantics as :attr:`SectorClassification.datasource`.
-        fetched_at:      ISO-8601 timestamp recorded by the provider.
-        notes:           Free-form annotation field — kept tiny so it
-                         fits inside MongoDB documents without
-                         blowing up the index size. Optional.
-        metadata:        Carries context the service / router may add
-                         (``security_id`` placeholder, ``extra`` tags,
-                         etc.). Not part of the unique key.
     """
 
-    market: str
-    sentiment_type: str
-    market_date: str
-    score: float
-    sample_size: int
-    source: str = ""
-    provider: str = ""
+    # Required unique-key fields (positional, no default).
+    snapshot_date: str
+    snapshot_time: str
+
+    # Market (defaulted to CN).
+    market: str = "CN"
+
+    # 涨跌停数据 (含 ST)
+    limit_up_count: int = 0
+    limit_down_count: int = 0
+
+    # 涨跌停数据 (不含 ST，可选)
+    limit_up_count_ex_st: int | None = None
+    limit_down_count_ex_st: int | None = None
+
+    # 全市场涨跌数据
+    advance_count: int = 0
+    decline_count: int = 0
+    flat_count: int = 0
+
+    # 全市场总数 (可选)
+    total_listed_count: int | None = None
+
+    # 指数与温度
+    # market_temperature: Pascal OQ-2 — 允许 None，无已确认公式，禁止编造。
+    market_temperature: float | None = None
+    total_turnover: float | None = None
+
+    # 热门概念与连板
+    hot_concepts: list[str] | None = None
+    continuous_limit_up: list[dict] | None = None
+    max_continuous_days: int | None = None
+
+    # 北向资金（Pascal C — 恒 None）
+    northbound_net_flow: float | None = None
+
+    # 涨停 / 跌停池（可选：若单独提供 limit_up_pool capability，本字段可为空）
+    limit_up_pool: list[str] | None = None
+    limit_down_pool: list[str] | None = None
+
+    # 元数据
     fetched_at: str | None = None
-    notes: str | None = None
-    metadata: dict[str, object] | None = None
+    provider: str = ""
+    raw_payload: dict | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "MarketSentimentSnapshot":
         """Build a snapshot from a MongoDB-shaped ``dict``.
 
-        Missing fields fall back to their declared defaults. ``None``
-        inputs are coerced to empty strings for the required textual
-        fields so downstream comparisons do not blow up on missing
-        MongoDB documents.
+        Missing fields fall back to declared defaults. ``None`` inputs
+        are coerced to empty strings for the required textual fields
+        so downstream comparisons do not blow up on missing Mongo
+        documents.
+
+        **Pascal C — northbound fail-stop**: even if the source dict
+        supplies a numeric ``northbound_net_flow``, the resulting
+        snapshot keeps it ``None``. This is a hard constraint.
 
         Args:
             data: MongoDB document / writer payload.
@@ -113,20 +189,42 @@ class MarketSentimentSnapshot:
                 f"got {type(data).__name__}"
             )
         return cls(
-            market=str(data.get("market") or ""),
-            sentiment_type=str(data.get("sentiment_type") or ""),
-            market_date=str(data.get("market_date") or ""),
-            score=float(data.get("score") or 0.0),
-            sample_size=int(data.get("sample_size") or 0),
-            source=str(data.get("source") or ""),
-            provider=str(data.get("provider") or ""),
+            snapshot_date=str(data.get("snapshot_date", "") or ""),
+            snapshot_time=str(data.get("snapshot_time", "") or ""),
+            market=str(data.get("market", "CN") or "CN"),
+            limit_up_count=int(data.get("limit_up_count", 0) or 0),
+            limit_down_count=int(data.get("limit_down_count", 0) or 0),
+            limit_up_count_ex_st=data.get("limit_up_count_ex_st"),
+            limit_down_count_ex_st=data.get("limit_down_count_ex_st"),
+            advance_count=int(data.get("advance_count", 0) or 0),
+            decline_count=int(data.get("decline_count", 0) or 0),
+            flat_count=int(data.get("flat_count", 0) or 0),
+            total_listed_count=data.get("total_listed_count"),
+            # Pascal OQ-2 — temperature is allowed None; no fabrication.
+            market_temperature=data.get("market_temperature"),
+            total_turnover=data.get("total_turnover"),
+            hot_concepts=data.get("hot_concepts"),
+            continuous_limit_up=data.get("continuous_limit_up"),
+            max_continuous_days=data.get("max_continuous_days"),
+            # Pascal C — northbound_net_flow is permanently None.
+            # Even if upstream supplies a number, do not propagate it.
+            northbound_net_flow=None,
+            limit_up_pool=_stable_dedup(data.get("limit_up_pool")),
+            limit_down_pool=_stable_dedup(data.get("limit_down_pool")),
             fetched_at=data.get("fetched_at"),
-            notes=data.get("notes"),
-            metadata=data.get("metadata"),
+            provider=str(data.get("provider", "") or ""),
+            raw_payload=data.get("raw_payload"),
         )
 
 
-@dataclass(frozen=True, slots=True)
+def _stable_dedup(values: list[str] | None) -> list[str] | None:
+    """Return a first-seen-order copy without duplicates, preserving nullability."""
+    if values is None:
+        return None
+    return list(dict.fromkeys(values))
+
+
+@dataclass
 class LimitUpPoolRecord:
     """涨停/跌停池个股记录 (Phase 3 P3-C / ``sentiment.limit_up_pool``).
 
@@ -145,13 +243,13 @@ class LimitUpPoolRecord:
     trade instruction or investment recommendation.
 
     Attributes:
-        symbol:          Stock symbol (e.g. ``\"600519\"``).
-        market:          Market identifier (e.g. ``\"CN\"``).
-        trade_date:      Trading date (``\"YYYY-MM-DD\"``).
-        status:          Limit-up status — ``\"limit_up\"`` or
-                         ``\"limit_down\"``. Default ``\"limit_up\"``.
+        symbol:          Stock symbol (e.g. ``"600519"``).
+        market:          Market identifier (e.g. ``"CN"``).
+        trade_date:      Trading date (``"YYYY-MM-DD"``).
+        status:          Limit-up status — ``"limit_up"`` or
+                         ``"limit_down"``. Default ``"limit_up"``.
         limit_up_time:   Time the stock hit the limit
-                         (``\"HH:MM:SS\"`` or ``\"close\"``).
+                         (``"HH:MM:SS"`` or ``"close"``).
         last_price:      Current / limit-up price.
         pct_chg:         Price change percentage (e.g. ``10.0``).
         order_amount:    封单金额 — order book size at the

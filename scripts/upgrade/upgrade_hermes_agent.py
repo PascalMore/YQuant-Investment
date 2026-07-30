@@ -42,6 +42,12 @@ DEFAULT_VERSION_REF = "upstream/main"
 MANIFEST_SCHEMA_VERSION = "1"
 GATEWAY_HEALTH_TIMEOUT = 90  # seconds
 
+# V2.1 — Git transport resilience (RFC-10-006 / SPEC-10-006 / DESIGN-10-006)
+# 仅影响 fetch 阶段；非 fetch 阶段（merge/install/restart/push）保持 V1.0/V2.0 行为。
+FETCH_MAX_ATTEMPTS = 3
+FETCH_RETRY_DELAYS = [2, 5]  # attempt 1->2 sleep, attempt 2->3 sleep
+FETCH_TIMEOUT = 300  # 单次 attempt 超时（秒），与 V1.0 一致
+
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -1122,23 +1128,258 @@ def stash_dirty_tree(state: RepoState, manifest: dict, config: UpgradeConfig) ->
 
 
 # ---------------------------------------------------------------------------
+# V2.1 — Git transport resilience (RFC-10-006 / SPEC-10-006 / DESIGN-10-006 §3.4-§3.6)
+# ---------------------------------------------------------------------------
+
+
+# 错误分类模式：(compiled regex, classification) — 顺序敏感，permanent 在前。
+# 使用大小写不敏感 (`re.IGNORECASE`) 单遍预编译。
+_V21_PERMANENT_PATTERNS = [
+    re.compile(r"repository not found", re.IGNORECASE),
+    re.compile(r"repository .*not found", re.IGNORECASE),
+    re.compile(r"authentication failed", re.IGNORECASE),
+    re.compile(r"access denied", re.IGNORECASE),
+    re.compile(r"permission denied", re.IGNORECASE),
+    re.compile(r"host key verification failed", re.IGNORECASE),
+    re.compile(r"certificate verification failed", re.IGNORECASE),
+    re.compile(r"couldn't find remote ref", re.IGNORECASE),
+]
+
+_V21_TRANSIENT_PATTERNS = [
+    re.compile(r"gnutls recv error", re.IGNORECASE),
+    re.compile(r"ssl_error_syscall", re.IGNORECASE),
+    re.compile(r"tls connection was non-properly terminated", re.IGNORECASE),
+    re.compile(r"rpc failed", re.IGNORECASE),
+    re.compile(r"early eof", re.IGNORECASE),
+    re.compile(r"invalid index-pack output", re.IGNORECASE),
+    re.compile(r"the remote end hung up unexpectedly", re.IGNORECASE),
+    re.compile(r"unexpected disconnect", re.IGNORECASE),
+    re.compile(r"connection reset by peer", re.IGNORECASE),
+    re.compile(r"connection refused", re.IGNORECASE),
+    re.compile(r"could not resolve host", re.IGNORECASE),
+    re.compile(r"transfer closed", re.IGNORECASE),
+]
+
+
+def classify_git_transport_failure(stderr: str, stdout: str = "") -> str:
+    """纯函数：分类 git fetch 失败。
+
+    Returns:
+        "permanent"   — 认证/权限/证书/无效 ref 等不可恢复错误
+        "transient"   — TLS/RPC/EOF/index-pack/连接中断等可能通过重试或协议降级恢复
+        "non_transport" — 其他非 fetch 传输错误（如 merge conflict、git config 损坏）
+
+    优先级：permanent > transient > non_transport (空 stderr 也归 non_transport)。
+    """
+    text = (stderr or "") + "\n" + (stdout or "")
+    if not text.strip():
+        return "non_transport"
+    for pat in _V21_PERMANENT_PATTERNS:
+        if pat.search(text):
+            return "permanent"
+    for pat in _V21_TRANSIENT_PATTERNS:
+        if pat.search(text):
+            return "transient"
+    return "non_transport"
+
+
+def _is_tag_target(target: str) -> bool:
+    """启发式判定 target 是否为 tag：v/V 开头 + 至少一个数字字符。"""
+    if not target:
+        return False
+    if not (target.startswith("v") or target.startswith("V")):
+        return False
+    return any(ch.isdigit() for ch in target)
+
+
+def build_fetch_command(remote: str, target: str, *,
+                        fetch_all_tags: bool = False) -> tuple:
+    """构造 target-aware git fetch 命令。
+
+    Returns:
+        (cmd_args, transport_label)
+        - transport_label: "default"（HTTP/1.1 fallback 标志由调用方在 attempt 3 注入）
+        - cmd_args: list[str]，可直接作为 `git(cmd_args, ...)` 的 args
+
+    规则（DESIGN-10-006 §5.2）：
+        - 非 tag（branch / ref，含斜杠）→ `["fetch", "--no-tags", remote, target]`
+        - 含 `refs/tags/` 前缀 → `["fetch", remote, target:target]`
+        - 启发式 tag（v/V + 数字）→ `["fetch", remote, refs/tags/<tag>:refs/tags/<tag>]`
+        - fetch_all_tags=True → `["fetch", "--tags", remote, target]`（static False 保留）
+    """
+    if not remote or not target:
+        raise ValueError("build_fetch_command: remote and target required")
+    if fetch_all_tags:
+        return (["fetch", "--tags", remote, target], "default")
+    if target.startswith("refs/tags/"):
+        return (["fetch", remote, f"{target}:{target}"], "default")
+    if _is_tag_target(target):
+        ref = f"refs/tags/{target}:refs/tags/{target}"
+        return (["fetch", remote, ref], "default")
+    return (["fetch", "--no-tags", remote, target], "default")
+
+
+def _record_fetch_attempt(manifest: dict, *, remote: str, target: str,
+                          attempt: int, transport_label: str, exit_code: int,
+                          failure_class, retry_delay) -> None:
+    """向 manifest.fetch_attempts 追加一条结构化记录。
+
+    绝不写入 proxy URL / 凭证 / 原始 stderr；只记录分类标签。
+
+    Schema (DESIGN-10-006 §10.2 / SPEC-10-006 §3.6):
+        remote, target, attempt, transport, exit_code (all required)
+        failure_class: "transient" | "permanent" | "non_transport" | null
+        retry_delay_seconds: int | null (仅非最后 attempt 且 exit!=0 时；成功 attempt 也可为 null)
+    """
+    attempts = manifest.setdefault("fetch_attempts", [])
+    entry = {
+        "remote": remote,
+        "target": target,
+        "attempt": attempt,
+        "transport": transport_label,
+        "exit_code": exit_code,
+        "failure_class": failure_class if exit_code != 0 else None,
+        "retry_delay_seconds": retry_delay,
+    }
+    attempts.append(entry)
+
+
+def _attempt_command(base_args: list, attempt_num: int) -> list:
+    """attempt 3 注入 `git -c http.version=HTTP/1.1` 命令前缀；其他 attempt 不变。"""
+    if attempt_num >= FETCH_MAX_ATTEMPTS:
+        return ["-c", "http.version=HTTP/1.1"] + list(base_args)
+    return list(base_args)
+
+
+def run_fetch_with_transport_policy(
+    remote: str, target: str, *,
+    repo: Path, manifest: dict,
+    verbose: bool = False,
+    timeout: int = FETCH_TIMEOUT,
+    sleep_fn=None,
+) -> CommandResult:
+    """带 target-aware fetch + 分类重试 + 审计的 fetch 包装器。
+
+    状态机（DESIGN-10-006 §6.2）：
+        Attempt 1 (normal)   — base command
+        Attempt 2 (backoff)  — base command, sleep FETCH_RETRY_DELAYS[0] 前
+        Attempt 3 (H/1.1)    — `-c http.version=HTTP/1.1` 前缀, sleep FETCH_RETRY_DELAYS[1] 前
+
+    任何 attempt exit=0 立即返回。attempt N 分类为 permanent / non_transport
+    立即 fail-stop，不重试。每次 attempt 后写入 manifest.fetch_attempts。
+    """
+    if sleep_fn is None:
+        sleep_fn = time.sleep
+
+    base_args, _ = build_fetch_command(remote, target)
+
+    for attempt in range(1, FETCH_MAX_ATTEMPTS + 1):
+        cmd = _attempt_command(base_args, attempt)
+        is_fallback = attempt >= FETCH_MAX_ATTEMPTS
+        transport_label = "http/1.1-fallback" if is_fallback else "default"
+        r = git(cmd, repo=repo, manifest=manifest.setdefault("commands", []),
+                verbose=verbose, timeout=timeout)
+
+        if r.exit_code == 0:
+            _record_fetch_attempt(
+                manifest, remote=remote, target=target,
+                attempt=attempt, transport_label=transport_label,
+                exit_code=0, failure_class=None, retry_delay=None,
+            )
+            return r
+
+        failure_class = classify_git_transport_failure(r.stderr, r.stdout)
+        # non-transient：立即 fail-stop（不重试）
+        if failure_class in ("permanent", "non_transport"):
+            _record_fetch_attempt(
+                manifest, remote=remote, target=target,
+                attempt=attempt, transport_label=transport_label,
+                exit_code=r.exit_code, failure_class=failure_class,
+                retry_delay=None,
+            )
+            add_manifest_error(
+                manifest, "fetch", f"fetch_{failure_class}",
+                f"fetch {remote} {target} {failure_class} 错误: "
+                f"{redact(r.stderr)[:300]}",
+            )
+            raise UpgradeError(
+                "fetch",
+                f"fetch {remote} {target} {failure_class} 错误 (exit={r.exit_code})",
+                next_steps=[
+                    "检查网络/SSH 认证/代理。",
+                    f"手动: git -C {repo} fetch --no-tags {remote} {target}",
+                ],
+            )
+
+        # transient：先记录本 attempt（带 retry_delay），再 sleep + retry（除非已到最后一次）
+        if attempt < FETCH_MAX_ATTEMPTS:
+            delay = FETCH_RETRY_DELAYS[attempt - 1]
+            _record_fetch_attempt(
+                manifest, remote=remote, target=target,
+                attempt=attempt, transport_label=transport_label,
+                exit_code=r.exit_code, failure_class="transient",
+                retry_delay=delay,
+            )
+            sleep_fn(delay)
+        else:
+            # 最后一次 attempt 仍然 transient 但失败 — 记录（无 retry_delay）
+            _record_fetch_attempt(
+                manifest, remote=remote, target=target,
+                attempt=attempt, transport_label=transport_label,
+                exit_code=r.exit_code, failure_class="transient",
+                retry_delay=None,
+            )
+
+    # 三次 attempt 全 transient 失败：fail-stop
+    add_manifest_error(
+        manifest, "fetch", "fetch_exhausted",
+        f"fetch {remote} {target} 连续 {FETCH_MAX_ATTEMPTS} 次 transient 失败",
+    )
+    raise UpgradeError(
+        "fetch",
+        f"fetch 已达上限 {FETCH_MAX_ATTEMPTS} 次 (remote={remote}, target={target})",
+        next_steps=[
+            f"所有 attempt 已记录到 manifest (fetch_attempts 数组)",
+            f"手动重试: git -C {repo} fetch --no-tags {remote} {target}",
+            f"若确认是代理/TLS 问题: "
+            f"git -C {repo} -c http.version=HTTP/1.1 fetch --no-tags "
+            f"{remote} {target}",
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
 # Fetch & resolve
 # ---------------------------------------------------------------------------
 
 
 def fetch_remotes(config: UpgradeConfig, manifest: dict, target_ref: str) -> None:
-    """S3 fetch: scoped fetch origin main + upstream tags; scoped by target ref remote."""
+    """S3 fetch (V2.1): target-aware fetch + 分类重试。
+
+    V2.1 增量：
+        - 默认 `--no-tags` (移除 V2.0 的隐式 `--tags`)
+        - upstream fetch 走 `run_fetch_with_transport_policy` 包装器
+        - tag target 使用精确 refspec
+        - dry-run 模式直接 return（不调用 git，不 sleep）
+    """
+    if config.dry_run:
+        # dry-run 零网络契约：fetch_remotes 不发起任何 subprocess
+        return
+
     cmd_log = manifest.setdefault("commands", [])
-    # determine if target_ref is remote-scoped (e.g. upstream/main)
+
+    # Step A: 解析 target_ref 中的 remote prefix（V2.0 行为保持）
     remote_for_ref = None
+    bare_target = target_ref
     if "/" in target_ref:
         candidate_remote = target_ref.split("/", 1)[0]
         r = git(["remote"], repo=config.repo, manifest=cmd_log, verbose=config.verbose)
         remotes = [x.strip() for x in r.stdout.splitlines() if x.strip()]
         if candidate_remote in remotes:
             remote_for_ref = candidate_remote
+            bare_target = target_ref.split("/", 1)[1]
 
-    # fetch origin main
+    # Step B: fetch origin main（V2.0/V2.1 一致；origin 是本地 fork，失败立即 fail-stop）
     r = git(["fetch", "origin", "main"], repo=config.repo, manifest=cmd_log,
             verbose=config.verbose, timeout=300)
     if r.exit_code != 0:
@@ -1147,17 +1388,17 @@ def fetch_remotes(config: UpgradeConfig, manifest: dict, target_ref: str) -> Non
         raise UpgradeError("fetch", "fetch origin main 失败",
                            next_steps=["检查网络/SSH 认证。"])
 
-    # fetch upstream --tags (and ref if scoped)
-    fetch_up_cmd = ["fetch", "upstream", "--tags"]
-    if remote_for_ref == "upstream":
-        fetch_up_cmd = ["fetch", "upstream", target_ref.split("/", 1)[1], "--tags"]
-    r = git(fetch_up_cmd, repo=config.repo, manifest=cmd_log,
-            verbose=config.verbose, timeout=300)
-    if r.exit_code != 0:
-        add_manifest_error(manifest, "fetch", "fetch_upstream_failed",
-                           f"fetch upstream 失败: {redact(r.stderr)[:300]}")
-        raise UpgradeError("fetch", "fetch upstream 失败",
-                           next_steps=["检查网络/SSH 认证。"])
+    # Step C: fetch upstream target-aware（走 V2.1 分类重试包装器）
+    upstream_remote = "upstream"
+    upstream_target = bare_target
+    if remote_for_ref is not None and remote_for_ref != "upstream":
+        # target 的 remote prefix 解析为非 upstream（如 origin 自身），仍 fetch upstream
+        upstream_target = target_ref
+    run_fetch_with_transport_policy(
+        upstream_remote, upstream_target,
+        repo=config.repo, manifest=manifest,
+        verbose=config.verbose,
+    )
 
 
 def resolve_target_ref(config: UpgradeConfig, manifest: dict, target_ref: str) -> str:
@@ -1230,30 +1471,53 @@ def classify_git_relation(config: UpgradeConfig, state: RepoState, target_sha: s
 
 def protect_local_commits(config: UpgradeConfig, state: RepoState,
                           plan: GitPlan, manifest: dict) -> None:
-    """S5 protect: 本地领先 commit 已在 origin 可达；否则先 push origin main 保护。"""
+    """S5 protect (V2.1): 根据 state.branch 而非 main 做 reachability 检查和 push。
+
+    V2.0 行为：硬编码 `git push origin main` — feature branch 上不保护 feature HEAD。
+    V2.1 行为：
+        1. 检查 HEAD 是否已在 origin/<state.branch> 可达，可达则 skip push。
+        2. 否则 `git push -u origin <state.branch>`。
+        3. 不 force push；push 失败 fail-stop。
+    """
     if not plan.local_commits_need_protection:
         return
     cmd_log = manifest.setdefault("commands", [])
-    # check if HEAD reachable from origin/main
-    if state.origin_main_sha and _is_ancestor(config.repo, state.pre_head, state.pre_head,
-                                              cmd_log, config.verbose):
-        # Verify HEAD already in origin
-        r = git(["merge-base", "--is-ancestor", state.pre_head, "origin/main"],
-                repo=config.repo, manifest=cmd_log, verbose=config.verbose)
-        if r.exit_code == 0:
-            log_info("本地 commit 已在 origin/main 可达，无需额外保护 push。", config)
-            return
+    head = state.pre_head
+    branch = state.branch
 
-    log_info("本地存在未保护的 commit，执行保护性 push origin main...", config)
-    r = git(["push", "origin", "main"], repo=config.repo, manifest=cmd_log,
-            verbose=config.verbose, timeout=120)
+    # detached HEAD / 空 branch: fail-stop (V2.1 不强行 push 错误 ref)
+    if not branch:
+        add_manifest_error(
+            manifest, "protect", "no_branch",
+            f"保护性 push 失败: state.branch 为空 (detached HEAD?)，无法确定 push 目标",
+        )
+        raise UpgradeError(
+            "protect",
+            "保护性 push 失败：state.branch 为空，无法确定 push 目标",
+            next_steps=[
+                "切换到有效分支后再跑升级：git checkout <branch>",
+                f"或手动 push: git -C {config.repo} push -u origin <branch>",
+            ],
+        )
+
+    # Step 1: 检查 HEAD 是否已在 origin/<branch> 可达
+    r = git(["merge-base", "--is-ancestor", head, f"origin/{branch}"],
+            repo=config.repo, manifest=cmd_log, verbose=config.verbose)
+    if r.exit_code == 0:
+        log_info(f"HEAD 已在 origin/{branch} 可达，无需额外保护 push。", config)
+        return
+
+    # Step 2: push 当前分支
+    log_info(f"本地存在未保护的 commit，执行保护性 push origin {branch}...", config)
+    r = git(["push", "-u", "origin", branch], repo=config.repo,
+            manifest=cmd_log, verbose=config.verbose, timeout=120)
     if r.exit_code != 0:
         add_manifest_error(manifest, "protect", "push_failed",
-                           f"保护性 push origin main 失败: {redact(r.stderr)[:300]}")
-        raise UpgradeError("protect", "保护性 push origin main 失败",
-                           next_steps=[f"手动 push: git -C {config.repo} push origin main",
+                           f"保护性 push origin {branch} 失败: {redact(r.stderr)[:300]}")
+        raise UpgradeError("protect", f"保护性 push origin {branch} 失败",
+                           next_steps=[f"手动 push: git -C {config.repo} push -u origin {branch}",
                                        "检查 SSH/HTTPS 认证与 fork 权限。"])
-    log_ok("本地 commit 已保护至 origin。", )
+    log_ok(f"本地 commit 已保护至 origin/{branch}。")
 
 
 def apply_merge(config: UpgradeConfig, plan: GitPlan, manifest: dict) -> None:
@@ -1604,7 +1868,21 @@ def print_dry_run(config: UpgradeConfig, state: RepoState, *,
         print("  3. git stash push --include-untracked  (dirty tree)")
     else:
         print("  3. (跳过 stash: 工作树干净)")
-    print(f"  4. git fetch origin main + fetch upstream --tags")
+    # V2.1 增量：target-aware fetch + retry plan (DESIGN-10-006 §9)
+    if _is_tag_target(config.version_ref):
+        # tag target: 精确 refspec，无 --no-tags
+        print(f"  4. fetch origin main (无重试)")
+        print(f"     fetch upstream refs/tags/{config.version_ref}:refs/tags/{config.version_ref} (精确 tag refspec)")
+    elif config.version_ref.startswith("refs/tags/"):
+        print(f"  4. fetch origin main (无重试)")
+        print(f"     fetch upstream {config.version_ref}:{config.version_ref} (精确 refspec)")
+    else:
+        # branch target: 默认 --no-tags
+        bare = config.version_ref.split("/", 1)[1] if "/" in config.version_ref else config.version_ref
+        print(f"  4. fetch origin main (无重试)")
+        print(f"     fetch upstream --no-tags {bare}  (target-aware, 默认 --no-tags)")
+    print(f"     -> 瞬态失败时有限重试 (最多{FETCH_MAX_ATTEMPTS}次, 退避{FETCH_RETRY_DELAYS[0]}s+{FETCH_RETRY_DELAYS[1]}s, 第{FETCH_MAX_ATTEMPTS}次 HTTP/1.1 fallback)")
+    print(f"     此 dry-run 不发送网络请求、不 sleep、不修改 git ref")
     if target_sha:
         print(f"  5. resolve target   -> {target_sha}")
         head = state.pre_head
@@ -1633,6 +1911,7 @@ def print_dry_run(config: UpgradeConfig, state: RepoState, *,
 
     print()
     print("  声明: dry-run 未修改 repo、venv、gateway、origin、patch manifest。")
+    print("  声明 (V2.1): dry-run 未发送网络请求、未 sleep、未修改 git ref。")
     print(sep)
     return 0
 

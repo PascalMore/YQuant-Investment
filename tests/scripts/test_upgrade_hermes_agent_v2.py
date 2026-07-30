@@ -603,3 +603,617 @@ def test_parse_simple_yaml_orphan_key_after_list_item(ua):
     assert g["notes"] == "should belong to gamma, not file_globs", (
         f"notes wrongly attributed: {g}"
     )
+
+
+# ===========================================================================
+# V2.1 — Git Transport Resilience (RFC-10-006 / SPEC-10-006 / DESIGN-10-006)
+#
+# Covered:
+#   V2.1-UT-001..004  classify_git_transport_failure — every permanent /
+#                     transient pattern + permanent-priority + edge cases
+#   V2.1-UT-005/006   build_fetch_command — branch / tag target
+#   V2.1-UT-007..014  run_fetch_with_transport_policy — state machine,
+#                     single attempt / transient retry / H/1.1 fallback /
+#                     permanent fail-stop / non_transport fail-stop /
+#                     dry-run no network / sleep_fn injection
+#   V2.1-UT-015       manifest fetch_attempts schema (no proxy/credential)
+#   V2.1-UT-016/017   protect_local_commits — feature branch / main branch
+#                     push target — `["push", "-u", "origin", <branch>]`
+#   V2.1-UT-018       protect_local_commits — HEAD already in origin/<branch>
+#                     => skip push (no duplicate preserve push)
+#   V2.1-UT-019       fetch_remotes — target-aware + dry-run short-circuit
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# V2.1-UT-001..004  classify_git_transport_failure
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("stderr,expected", [
+    # transient patterns (must each classify as transient)
+    ("fatal: gnutls recv error (-110)", "transient"),
+    ("OpenSSL SSL_read: ssl_error_syscall", "transient"),
+    ("fatal: TLS connection was non-properly terminated", "transient"),
+    ("error: RPC failed; HTTP2 stream ... cancelled", "transient"),
+    ("fatal: early EOF", "transient"),
+    ("fatal: invalid index-pack output", "transient"),
+    ("fatal: the remote end hung up unexpectedly", "transient"),
+    ("error: unexpected disconnect while reading sideband packet", "transient"),
+    ("fatal: connection reset by peer", "transient"),
+    ("fatal: unable to connect: connection refused", "transient"),
+    ("fatal: Could not resolve host: github.com", "transient"),
+    ("fatal: transfer closed: expected sha1 ...", "transient"),
+    # permanent patterns (must each classify as permanent)
+    ("fatal: Authentication failed", "permanent"),
+    ("fatal: repository 'https://x/y.git/' not found", "permanent"),
+    ("fatal: unable to access, access denied", "permanent"),
+    ("fatal: Permission denied (publickey)", "permanent"),
+    ("Host key verification failed.", "permanent"),
+    ("fatal: certificate verification failed", "permanent"),
+    ("fatal: couldn't find remote ref 'v999'", "permanent"),
+])
+def test_v21_classify_patterns(ua, stderr, expected):
+    assert hasattr(ua, "classify_git_transport_failure"), (
+        "V2.1: classify_git_transport_failure must exist in upgrade_hermes_agent.py"
+    )
+    out = ua.classify_git_transport_failure(stderr)
+    assert out == expected, f"stderr={stderr!r} -> {out}, expected {expected}"
+
+
+def test_v21_classify_empty_and_garbage(ua):
+    """空 stderr 和不匹配字符串 -> non_transport。"""
+    assert ua.classify_git_transport_failure("") == "non_transport"
+    assert ua.classify_git_transport_failure("some random message") == "non_transport"
+    # merge conflict 不是 fetch 错误
+    assert ua.classify_git_transport_failure(
+        "CONFLICT (content): Merge conflict in file.txt"
+    ) == "non_transport"
+
+
+def test_v21_classify_permanent_priority_over_transient(ua):
+    """当 stderr 同时含 auth 和 TLS 错误时，permanent 必须优先。"""
+    stderr = (
+        "fatal: Authentication failed for 'https://github.com/x/y'\n"
+        "GnuTLS recv error (-110)\n"
+    )
+    assert ua.classify_git_transport_failure(stderr) == "permanent"
+
+
+# ---------------------------------------------------------------------------
+# V2.1-UT-005/006  build_fetch_command
+# ---------------------------------------------------------------------------
+
+
+def test_v21_build_fetch_command_branch(ua):
+    """默认 branch target -> `--no-tags <remote> <branch>`。"""
+    assert hasattr(ua, "build_fetch_command"), (
+        "V2.1: build_fetch_command must exist in upgrade_hermes_agent.py"
+    )
+    cmd, label = ua.build_fetch_command("upstream", "main")
+    assert cmd == ["fetch", "--no-tags", "upstream", "main"]
+    assert label == "default"
+
+
+def test_v21_build_fetch_command_branch_with_slash(ua):
+    """含斜杠的 branch 名 (如 fix/foo) 不应被误判为 tag。"""
+    cmd, label = ua.build_fetch_command("upstream", "fix/feishu-table-card")
+    assert cmd == ["fetch", "--no-tags", "upstream", "fix/feishu-table-card"]
+    assert label == "default"
+
+
+def test_v21_build_fetch_command_tag(ua):
+    """v-prefix + 数字 启发式判定为 tag -> 使用 refs/tags/<tag>:refs/tags/<tag>。"""
+    cmd, label = ua.build_fetch_command("upstream", "v2026.7.1")
+    assert cmd == ["fetch", "upstream", "refs/tags/v2026.7.1:refs/tags/v2026.7.1"]
+    assert label == "default"
+
+
+def test_v21_build_fetch_command_explicit_refspec(ua):
+    """调用方传入 `refs/tags/...` 形式的 target，按精确 refspec 处理。"""
+    cmd, label = ua.build_fetch_command("upstream", "refs/tags/v2026.7.30")
+    # explicit refspec 不应被再加 --no-tags
+    assert cmd == ["fetch", "upstream", "refs/tags/v2026.7.30:refs/tags/v2026.7.30"]
+    assert label == "default"
+
+
+# ---------------------------------------------------------------------------
+# V2.1-UT-007..014  run_fetch_with_transport_policy (mocked git)
+# ---------------------------------------------------------------------------
+
+
+def _make_stub_git(module, scenario):
+    """Build a stub for the module-level `git` callable that returns the
+    sequence of CommandResult specified by `scenario`.
+
+    scenario: list of dicts: {exit_code, stdout, stderr}
+    """
+    calls = []
+
+    def stub_git(cmd, *, repo, **kw):
+        calls.append(list(cmd))
+        idx = len(calls) - 1
+        if idx >= len(scenario):
+            raise AssertionError(
+                f"git() called more times ({idx + 1}) than scenario ({len(scenario)})"
+            )
+        r = scenario[idx]
+        return module.CommandResult(
+            cmd=list(cmd), cwd=str(repo),
+            exit_code=r["exit_code"],
+            stdout=r.get("stdout", ""),
+            stderr=r.get("stderr", ""),
+        )
+
+    return stub_git, calls
+
+
+def test_v21_run_fetch_normal_single_attempt(ua, tmp_path, monkeypatch):
+    """正常单 attempt：exit=0，1 次调用，无 sleep。"""
+    stub, calls = _make_stub_git(ua, [
+        {"exit_code": 0, "stdout": "", "stderr": ""},
+    ])
+    monkeypatch.setattr(ua, "git", stub)
+    sleeps = []
+    monkeypatch.setattr(ua.time, "sleep", lambda s: sleeps.append(s))
+
+    manifest = {}
+    r = ua.run_fetch_with_transport_policy(
+        "upstream", "main",
+        repo=tmp_path, manifest=manifest,
+        sleep_fn=lambda s: None,  # explicit; matches default signature
+    )
+    assert r.exit_code == 0
+    assert len(calls) == 1
+    # command must include --no-tags + upstream + main
+    assert calls[0] == ["fetch", "--no-tags", "upstream", "main"]
+    # no sleep was used (default sleep_fn passed in, but module default uses
+    # sleep_fn=time.sleep — verify by passing our own no-op and seeing
+    # we never re-enter the wrapper)
+    assert manifest["fetch_attempts"][0]["exit_code"] == 0
+    assert manifest["fetch_attempts"][0]["failure_class"] is None
+    assert manifest["fetch_attempts"][0]["transport"] == "default"
+
+
+def test_v21_run_fetch_transient_retry_then_success(ua, tmp_path, monkeypatch):
+    """attempt 1 transient -> sleep 2s -> attempt 2 ok。2 次调用。"""
+    stub, calls = _make_stub_git(ua, [
+        {"exit_code": 128, "stdout": "", "stderr": "fatal: gnutls recv error (-110)"},
+        {"exit_code": 0, "stdout": "", "stderr": ""},
+    ])
+    monkeypatch.setattr(ua, "git", stub)
+    sleeps = []
+
+    manifest = {}
+    r = ua.run_fetch_with_transport_policy(
+        "upstream", "main",
+        repo=tmp_path, manifest=manifest,
+        sleep_fn=lambda s: sleeps.append(s),
+    )
+    assert r.exit_code == 0
+    assert len(calls) == 2
+    assert calls[1] == ["fetch", "--no-tags", "upstream", "main"]
+    assert sleeps == [2], f"expected one 2s sleep between attempts, got {sleeps}"
+    # manifest: 2 entries
+    assert len(manifest["fetch_attempts"]) == 2
+    assert manifest["fetch_attempts"][0]["failure_class"] == "transient"
+    assert manifest["fetch_attempts"][0]["retry_delay_seconds"] == 2
+    assert manifest["fetch_attempts"][1]["failure_class"] is None
+    assert manifest["fetch_attempts"][1]["retry_delay_seconds"] is None
+
+
+def test_v21_run_fetch_transient_retry_then_http11_fallback(ua, tmp_path, monkeypatch):
+    """attempt 1+2 transient -> attempt 3 HTTP/1.1 fallback 成功。3 次调用。"""
+    stub, calls = _make_stub_git(ua, [
+        {"exit_code": 128, "stdout": "", "stderr": "fatal: early EOF"},
+        {"exit_code": 128, "stdout": "", "stderr": "fatal: early EOF"},
+        {"exit_code": 0, "stdout": "", "stderr": ""},
+    ])
+    monkeypatch.setattr(ua, "git", stub)
+    sleeps = []
+    monkeypatch.setattr(ua.time, "sleep", lambda s: sleeps.append(s))
+
+    manifest = {}
+    r = ua.run_fetch_with_transport_policy(
+        "upstream", "main",
+        repo=tmp_path, manifest=manifest,
+        sleep_fn=lambda s: sleeps.append(s),
+    )
+    assert r.exit_code == 0
+    assert len(calls) == 3
+    # attempt 3 must include -c http.version=HTTP/1.1 prefix
+    assert calls[2] == [
+        "-c", "http.version=HTTP/1.1",
+        "fetch", "--no-tags", "upstream", "main",
+    ]
+    # sleeps: 2 then 5
+    assert sleeps == [2, 5], f"unexpected sleep sequence: {sleeps}"
+    assert manifest["fetch_attempts"][2]["transport"] == "http/1.1-fallback"
+    assert manifest["fetch_attempts"][2]["failure_class"] is None
+
+
+def test_v21_run_fetch_three_attempts_exhausted_raises(ua, tmp_path, monkeypatch):
+    """3 次 attempt 全部 transient 失败 -> UpgradeError with next_steps。"""
+    stub, calls = _make_stub_git(ua, [
+        {"exit_code": 128, "stdout": "", "stderr": "fatal: gnutls recv error (-110)"},
+        {"exit_code": 128, "stdout": "", "stderr": "fatal: gnutls recv error (-110)"},
+        {"exit_code": 128, "stdout": "", "stderr": "fatal: early EOF"},
+    ])
+    monkeypatch.setattr(ua, "git", stub)
+
+    manifest = {}
+    with pytest.raises(ua.UpgradeError) as exc_info:
+        ua.run_fetch_with_transport_policy(
+            "upstream", "main",
+            repo=tmp_path, manifest=manifest,
+            sleep_fn=lambda s: None,
+        )
+    err = exc_info.value
+    assert err.stage == "fetch"
+    assert "3" in str(err) or "上限" in str(err) or "exhaust" in str(err).lower()
+    # 3 manifest entries
+    assert len(manifest["fetch_attempts"]) == 3
+    # next_steps 必须给出手动命令（V2.1 实现使用 `git -C {repo} fetch ...`）
+    joined = " ".join(err.next_steps or [])
+    assert "fetch --no-tags" in joined, (
+        f"exhausted next_steps must include manual fetch --no-tags command: {err.next_steps}"
+    )
+
+
+def test_v21_run_fetch_permanent_fail_stop(ua, tmp_path, monkeypatch):
+    """attempt 1 -> permanent -> 立即 fail-stop，无 attempt 2/3，无 sleep。"""
+    stub, calls = _make_stub_git(ua, [
+        {"exit_code": 128, "stdout": "", "stderr": "fatal: Authentication failed"},
+    ])
+    monkeypatch.setattr(ua, "git", stub)
+    sleeps = []
+    monkeypatch.setattr(ua.time, "sleep", lambda s: sleeps.append(s))
+
+    manifest = {}
+    with pytest.raises(ua.UpgradeError) as exc_info:
+        ua.run_fetch_with_transport_policy(
+            "upstream", "main",
+            repo=tmp_path, manifest=manifest,
+            sleep_fn=lambda s: sleeps.append(s),
+        )
+    err = exc_info.value
+    assert err.stage == "fetch"
+    assert len(calls) == 1
+    assert sleeps == []
+    assert len(manifest["fetch_attempts"]) == 1
+    assert manifest["fetch_attempts"][0]["failure_class"] == "permanent"
+
+
+def test_v21_run_fetch_non_transport_fail_stop(ua, tmp_path, monkeypatch):
+    """attempt 1 -> non_transport -> 立即 fail-stop。"""
+    stub, calls = _make_stub_git(ua, [
+        {"exit_code": 128, "stdout": "",
+         "stderr": "fatal: bad config value for 'remote.upstream.url' in ./config"},
+    ])
+    monkeypatch.setattr(ua, "git", stub)
+    sleeps = []
+    monkeypatch.setattr(ua.time, "sleep", lambda s: sleeps.append(s))
+
+    manifest = {}
+    with pytest.raises(ua.UpgradeError):
+        ua.run_fetch_with_transport_policy(
+            "upstream", "main",
+            repo=tmp_path, manifest=manifest,
+            sleep_fn=lambda s: sleeps.append(s),
+        )
+    assert len(calls) == 1
+    assert sleeps == []
+    assert manifest["fetch_attempts"][0]["failure_class"] == "non_transport"
+
+
+def test_v21_run_fetch_dry_run_no_network(ua, tmp_path, monkeypatch):
+    """dry-run 模式：调用方不调用 run_fetch_with_transport_policy。
+    验证入口：fetch_remotes 在 dry_run=True 时直接 return，不调用 git。
+    """
+    upstream_bare = tmp_path / "upstream.git"
+    origin_bare = tmp_path / "origin.git"
+    work = tmp_path / "work"
+    _make_bare(upstream_bare)
+    _make_bare(origin_bare)
+    _make_repo(work, origin=origin_bare, upstream=upstream_bare)
+    _commit(work, "init")
+    _git(work, "push", "origin", "main")
+    _git(work, "push", "upstream", "main")
+    (work / ".install_method").write_text("git")
+
+    cfg = ua.UpgradeConfig(
+        repo=work, version_ref="upstream/main",
+        backup_dir=tmp_path, dry_run=True, restart=False,
+        push=False, rollback_manifest=None, yes=True, verbose=False,
+    )
+    manifest = {"commands": []}
+
+    # Intercept git to count invocations
+    original_git = ua.git
+    git_calls = []
+
+    def counting_git(cmd, **kw):
+        git_calls.append(list(cmd))
+        return original_git(cmd, **kw)
+
+    monkeypatch.setattr(ua, "git", counting_git)
+    ua.fetch_remotes(cfg, manifest, "upstream/main")
+    # fetch_remotes in dry-run should not call git at all
+    assert git_calls == [], (
+        f"fetch_remotes dry-run should not call git; got {git_calls}"
+    )
+
+
+def test_v21_run_fetch_sleep_fn_injection(ua, tmp_path, monkeypatch):
+    """sleep_fn 注入：transient 时 sleep_fn(2) + sleep_fn(5) 都被调用。"""
+    stub, calls = _make_stub_git(ua, [
+        {"exit_code": 128, "stdout": "", "stderr": "fatal: gnutls recv error (-110)"},
+        {"exit_code": 128, "stdout": "", "stderr": "fatal: gnutls recv error (-110)"},
+        {"exit_code": 0, "stdout": "", "stderr": ""},
+    ])
+    monkeypatch.setattr(ua, "git", stub)
+
+    sleeps_recorded = []
+
+    def my_sleep(s):
+        sleeps_recorded.append(s)
+
+    manifest = {}
+    ua.run_fetch_with_transport_policy(
+        "upstream", "main",
+        repo=tmp_path, manifest=manifest,
+        sleep_fn=my_sleep,
+    )
+    assert sleeps_recorded == [2, 5]
+
+
+# ---------------------------------------------------------------------------
+# V2.1-UT-015  manifest fetch_attempts schema
+# ---------------------------------------------------------------------------
+
+
+def test_v21_manifest_fetch_attempts_no_secrets(ua, tmp_path, monkeypatch):
+    """fetch_attempts 元数据必须不含 proxy URL / 凭证 / 原始 stderr。"""
+    # 3 次 transient 后 fail-stop，确保所有 attempt 都被记录
+    stub, calls = _make_stub_git(ua, [
+        {"exit_code": 128, "stdout": "",
+         "stderr": "fatal: gnutls recv error (-110) http://user:secret@proxy.example.com:7897"},
+        {"exit_code": 128, "stdout": "",
+         "stderr": "fatal: gnutls recv error (-110) http://user:secret@proxy.example.com:7897"},
+        {"exit_code": 128, "stdout": "",
+         "stderr": "fatal: gnutls recv error (-110) http://user:secret@proxy.example.com:7897"},
+    ])
+    monkeypatch.setattr(ua, "git", stub)
+
+    manifest = {}
+    with pytest.raises(ua.UpgradeError):
+        ua.run_fetch_with_transport_policy(
+            "upstream", "main",
+            repo=tmp_path, manifest=manifest,
+            sleep_fn=lambda s: None,
+        )
+    # 至少一条 attempt 记录
+    assert manifest["fetch_attempts"], "fetch_attempts should not be empty"
+    fa = manifest["fetch_attempts"][0]
+    # must contain the structured fields, never raw stderr text
+    forbidden_substrings = ["secret", "proxy.example.com", "7897", "http://user"]
+    blob = json.dumps(fa)
+    for sub in forbidden_substrings:
+        assert sub not in blob, f"fetch_attempts leaks {sub!r}: {blob}"
+    # must contain required keys
+    for k in ("remote", "target", "attempt", "transport", "exit_code"):
+        assert k in fa
+    assert fa["remote"] == "upstream"
+    assert fa["target"] == "main"
+    assert fa["attempt"] == 1
+    assert fa["transport"] == "default"
+    assert fa["exit_code"] == 128
+    assert fa["failure_class"] == "transient"
+
+
+# ---------------------------------------------------------------------------
+# V2.1-UT-016/017/018  protect_local_commits — branch-aware push
+# ---------------------------------------------------------------------------
+
+
+def _setup_protect_repo(ua, tmp_path, *, current_branch="main", upstream_branch="main"):
+    """Set up a repo with origin & upstream, push a commit, and create a
+    local-only commit not yet in origin. Return (work_dir, state)."""
+    upstream_bare = tmp_path / "upstream.git"
+    origin_bare = tmp_path / "origin.git"
+    work = tmp_path / "work"
+    _make_bare(upstream_bare)
+    _make_bare(origin_bare)
+    _make_repo(work, origin=origin_bare, upstream=upstream_bare)
+    _commit(work, "init")
+    _git(work, "push", "origin", "main")
+    _git(work, "push", "upstream", "main")
+    (work / ".install_method").write_text("git")
+    base = _git(work, "rev-parse", "HEAD").stdout.strip()
+    if current_branch != "main":
+        _git(work, "checkout", "-b", current_branch)
+    # local-only commit (not pushed)
+    _commit(work, "local fix", filename="local_fix.txt")
+    head = _git(work, "rev-parse", "HEAD").stdout.strip()
+    state = ua.RepoState(
+        repo=work, branch=current_branch, pre_head=head,
+        origin_url="", upstream_url="", install_method="git",
+        dirty_files=[], local_only_commits=["local fix"],
+        origin_main_sha=base,
+    )
+    return work, state
+
+
+def test_v21_protect_feature_branch_pushes_current_branch(ua, tmp_path, monkeypatch):
+    """feature branch 上执行 protect 必须 push 当前 branch，不是 main。"""
+    work, state = _setup_protect_repo(ua, tmp_path, current_branch="fix/feishu-table-card")
+    cfg = ua.UpgradeConfig(
+        repo=work, version_ref="upstream/main",
+        backup_dir=tmp_path, dry_run=False, restart=False,
+        push=False, rollback_manifest=None, yes=True, verbose=False,
+        branch="fix/feishu-table-card",
+    )
+    plan = ua.GitPlan(target_ref="upstream/main", target_sha=state.pre_head,
+                      merge_mode="merge", local_commits_need_protection=True)
+    manifest = {"commands": []}
+
+    push_calls = []
+    original_git = ua.git
+
+    def counting_git(cmd, **kw):
+        if isinstance(cmd, list) and len(cmd) >= 3 and cmd[0] == "push":
+            push_calls.append(list(cmd))
+        return original_git(cmd, **kw)
+
+    monkeypatch.setattr(ua, "git", counting_git)
+    ua.protect_local_commits(cfg, state, plan, manifest)
+
+    # the push that ran must be `["push", "-u", "origin", "fix/feishu-table-card"]`
+    assert any(
+        c == ["push", "-u", "origin", "fix/feishu-table-card"]
+        for c in push_calls
+    ), f"feature-branch push wrong: {push_calls}"
+    # and MUST NOT contain `["push", "-u", "origin", "main"]`
+    assert all(
+        c[-1] != "main" for c in push_calls
+    ), f"protect should not push 'main' on a feature branch: {push_calls}"
+
+
+def test_v21_protect_main_branch_pushes_main(ua, tmp_path, monkeypatch):
+    """main branch 上执行 protect 必须 push main（与 V2.0 行为等价）。"""
+    work, state = _setup_protect_repo(ua, tmp_path, current_branch="main")
+    cfg = ua.UpgradeConfig(
+        repo=work, version_ref="upstream/main",
+        backup_dir=tmp_path, dry_run=False, restart=False,
+        push=False, rollback_manifest=None, yes=True, verbose=False,
+    )
+    plan = ua.GitPlan(target_ref="upstream/main", target_sha=state.pre_head,
+                      merge_mode="merge", local_commits_need_protection=True)
+    manifest = {"commands": []}
+
+    push_calls = []
+    original_git = ua.git
+
+    def counting_git(cmd, **kw):
+        if isinstance(cmd, list) and len(cmd) >= 3 and cmd[0] == "push":
+            push_calls.append(list(cmd))
+        return original_git(cmd, **kw)
+
+    monkeypatch.setattr(ua, "git", counting_git)
+    ua.protect_local_commits(cfg, state, plan, manifest)
+
+    assert any(
+        c == ["push", "-u", "origin", "main"]
+        for c in push_calls
+    ), f"main-branch push wrong: {push_calls}"
+
+
+def test_v21_protect_no_double_push_when_already_reachable(ua, tmp_path, monkeypatch):
+    """HEAD 已在 origin/<branch> 可达时，protect 不得再 push。"""
+    work, state = _setup_protect_repo(ua, tmp_path, current_branch="fix/feishu-table-card")
+    # push the local commit to origin so HEAD is reachable
+    _git(work, "push", "-u", "origin", "fix/feishu-table-card")
+    cfg = ua.UpgradeConfig(
+        repo=work, version_ref="upstream/main",
+        backup_dir=tmp_path, dry_run=False, restart=False,
+        push=False, rollback_manifest=None, yes=True, verbose=False,
+        branch="fix/feishu-table-card",
+    )
+    plan = ua.GitPlan(target_ref="upstream/main", target_sha=state.pre_head,
+                      merge_mode="merge", local_commits_need_protection=True)
+    manifest = {"commands": []}
+
+    push_calls = []
+    original_git = ua.git
+
+    def counting_git(cmd, **kw):
+        if isinstance(cmd, list) and len(cmd) >= 3 and cmd[0] == "push":
+            push_calls.append(list(cmd))
+        return original_git(cmd, **kw)
+
+    monkeypatch.setattr(ua, "git", counting_git)
+    ua.protect_local_commits(cfg, state, plan, manifest)
+    # no push must have been issued
+    assert push_calls == [], f"protect must skip push when HEAD is reachable: {push_calls}"
+
+
+# ---------------------------------------------------------------------------
+# V2.1-UT-019  fetch_remotes — target-aware (uses temp bare repo)
+# ---------------------------------------------------------------------------
+
+
+def test_v21_fetch_remotes_target_aware_branch(ua, tmp_path):
+    """fetch_remotes 默认 branch 模式：命令必须包含 `--no-tags upstream main`，无 `--tags`。"""
+    upstream_bare = tmp_path / "upstream.git"
+    origin_bare = tmp_path / "origin.git"
+    work = tmp_path / "work"
+    _make_bare(upstream_bare)
+    _make_bare(origin_bare)
+    _make_repo(work, origin=origin_bare, upstream=upstream_bare)
+    _commit(work, "init")
+    _git(work, "push", "origin", "main")
+    _git(work, "push", "upstream", "main")
+    (work / ".install_method").write_text("git")
+
+    cfg = ua.UpgradeConfig(
+        repo=work, version_ref="upstream/main",
+        backup_dir=tmp_path, dry_run=False, restart=False,
+        push=False, rollback_manifest=None, yes=True, verbose=False,
+    )
+    manifest = {"commands": []}
+    ua.fetch_remotes(cfg, manifest, "upstream/main")
+    cmds = [c["cmd"] for c in manifest["commands"]]
+    # the upstream fetch must include --no-tags and "main" (not --tags)
+    up_fetch = [c for c in cmds
+                if isinstance(c, list) and "upstream" in c
+                and "fetch" in c]
+    assert up_fetch, f"no upstream fetch in manifest: {cmds}"
+    upstream_cmd = up_fetch[-1]
+    assert "--no-tags" in upstream_cmd, (
+        f"V2.1 default branch fetch must include --no-tags: {upstream_cmd}"
+    )
+    assert "--tags" not in upstream_cmd, (
+        f"V2.1 default branch fetch must NOT include --tags: {upstream_cmd}"
+    )
+    assert "main" in upstream_cmd, (
+        f"V2.1 default branch fetch must include target: {upstream_cmd}"
+    )
+    # fetch_attempts must be recorded with the right transport label
+    assert "fetch_attempts" in manifest
+    fa_targets = {a["target"] for a in manifest["fetch_attempts"]}
+    assert "main" in fa_targets, (
+        f"fetch_attempts must record 'main' target: {manifest['fetch_attempts']}"
+    )
+
+
+def test_v21_fetch_remotes_target_aware_tag(ua, tmp_path):
+    """fetch_remotes 对 tag target (v2026.7.1) 使用精确 refspec。"""
+    upstream_bare = tmp_path / "upstream.git"
+    origin_bare = tmp_path / "origin.git"
+    work = tmp_path / "work"
+    _make_bare(upstream_bare)
+    _make_bare(origin_bare)
+    _make_repo(work, origin=origin_bare, upstream=upstream_bare)
+    _commit(work, "init")
+    _git(work, "push", "origin", "main")
+    _git(work, "push", "upstream", "main")
+    (work / ".install_method").write_text("git")
+    # create a tag on upstream
+    _git(work, "tag", "v2026.7.1")
+    _git(work, "push", "upstream", "v2026.7.1")
+
+    cfg = ua.UpgradeConfig(
+        repo=work, version_ref="v2026.7.1",
+        backup_dir=tmp_path, dry_run=False, restart=False,
+        push=False, rollback_manifest=None, yes=True, verbose=False,
+    )
+    manifest = {"commands": []}
+    ua.fetch_remotes(cfg, manifest, "v2026.7.1")
+    up_fetch = [c for c in manifest["commands"]
+                if isinstance(c["cmd"], list) and "upstream" in c["cmd"]
+                and "fetch" in c["cmd"]]
+    assert up_fetch
+    upstream_cmd = up_fetch[-1]["cmd"]
+    assert "refs/tags/v2026.7.1:refs/tags/v2026.7.1" in upstream_cmd, (
+        f"V2.1 tag fetch must use precise refspec: {upstream_cmd}"
+    )

@@ -1,4 +1,4 @@
-# DESIGN-10-006：Hermes Agent 自动升级脚本 V2
+# DESIGN-10-006：Hermes Agent 自动升级脚本 V2 — Git 传输韧性增强
 
 ## 元数据
 
@@ -7,439 +7,649 @@
 | 状态 | Accepted |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-08 |
-| 最后更新 | 2026-07-08 |
+| 最后更新 | 2026-07-30 |
+| 版本号 | **V2.1** |
 | 来源 RFC | RFC-10-006-hermes-upgrade-script-v2 |
 | 来源 SPEC | SPEC-10-006-hermes-upgrade-script-v2 |
-| 继承 Design | DESIGN-10-005-hermes-auto-upgrade |
+| 继承 Design | DESIGN-10-005-hermes-auto-upgrade, DESIGN-10-006 V2.0 |
 | 目标脚本 | `scripts/upgrade/upgrade_hermes_agent.py` |
-| Quick Flow | T1=t_5b0e9e89, T2=t_5beea5d8, T3=t_fa87e65b, T4=t_3d1b2331 |
+| 流水线 | T1=t_8228a098, T2=t_ec0d709a, T3=t_cf586d51, T4=待创建, T5=待创建, T6=待创建 |
 
-## 1. 设计摘要
+## 1. 版本历史
 
-本 Design 将 RFC/SPEC-10-006 的 V2 增量契约落为可实现的脚本修改方案。V1.0 已有脚本采用单文件标准库实现，并包含 `UpgradeConfig`、`RepoState`、`GitPlan`、`inspect_repo()`、`upgrade()`、`build_parser()`、`print_dry_run()` 等结构。V2 只做局部扩展，不重构主流程。
+| 版本 | 日期 | 更新内容 | 负责人 |
+|---|---|---|---|
+| V2.0 | 2026-07-08 | 基础 V2 设计：feature-branch、patch-manifest、branch override | YQuant-Codex-Principal |
+| V2.1 | 2026-07-30 | 增补 Git 传输韧性增强：target-aware fetch、classified retry、HTTP/1.1 fallback、manifest fetch_attempts audit、branch-aware protect push、dry-run 零网络 | YQuant-Codex-Principal |
 
-核心改动：
+## 2. 设计摘要
 
-1. `UpgradeConfig` 增加 `branch`、`preserve_features`、`patches_manifest`。
-2. `build_parser()` 增加 `--branch`、`--preserve-features`、`--patches-manifest`。
-3. `inspect_repo()` 将硬编码 `branch != "main"` 改为 `branch != config.branch`。
-4. `upgrade()` 在 S0 inspect 后插入 S0.5 `preserve_feature_branch_if_requested()`。
-5. `upgrade()` 在 target resolve/merge 后或 dry-run 中插入 `run_patch_manifest_check_if_requested()`。
-6. 新增 patch manifest dataclass、读取函数、best-effort 核对函数与 V2 测试。
+V2.1 在 V2.0 的安全升级主线之上做增量增强，不重写现有状态机。目标是让 Hermes 自动升级脚本在有代理/WSL 网络不稳定环境下仍能弹性完成 fetch。
 
-设计目标是“最小可审计增量”：避免大范围重构 V1.0，避免引入新依赖，避免在 T2 阶段触碰真实 Hermes repo 或 gateway。
+**核心设计理念**：
+1. **只动 fetch**：所有修改集中在 3 个函数 `fetch_remotes()` / `protect_local_commits()` / `print_dry_run()` 及 2 个新增函数 `classify_git_transport_failure()` / `run_fetch_with_transport_policy()`。
+2. **命令级隔离**：所有 HTTP/1.1 fallback 通过 `git -c http.version=HTTP/1.1` 实现，不写任何 git config。
+3. **有限脆弱**：最多 3 次 attempt，非瞬态错误立即 fail-stop，不掩盖真正问题。
+4. **可审计**：每次 attempt 的结构化元数据写入 manifest，不存原始 stderr 或 secret。
 
-## 2. 现状代码锚点
+### 2.1 精确文件矩阵（T3 Implement 允许的修改范围）
 
-### 2.1 V1.0 关键结构
-
-| 位置 | 当前行为 | V2 处理 |
+| 文件 | 操作 | 说明 |
 |---|---|---|
-| `UpgradeConfig` (`scripts/upgrade/upgrade_hermes_agent.py:51-63`) | repo/version/dry-run/restart/push/rollback 等 | 增加 3 个字段 |
-| `inspect_repo()` (`:403-491`) | 校验 git repo/remotes/branch/install_method/dirty/local-only | branch 检查改为配置驱动 |
-| `print_dry_run()` (`:1080-1144`) | 输出 V1 计划 | 增加 branch/preserve/patch manifest 信息 |
-| `upgrade()` (`:1152-1258`) | S0-S9 主流程 | S0 后插入 S0.5；merge/verify 前后插入 patch check |
-| `build_parser()` (`:1416-1451`) | V1 参数 | 增加 V2 参数 |
-| `config_from_args()` (`:1458-1469`) | args -> UpgradeConfig | 映射 V2 字段 |
-| `tests/scripts/test_upgrade_hermes_agent.py` | V1 单测/集成测试 | 保持不改或仅因签名变化做兼容最小修正 |
+| `scripts/upgrade/upgrade_hermes_agent.py` | 修改 | 3 个现有函数替换 + 2 个新增函数 + 2 个新常量 |
+| `tests/scripts/test_upgrade_hermes_agent.py` | 不改（全量回归） | V1.0 测试必须不因 signature 变化而失败 |
+| `tests/scripts/test_upgrade_hermes_agent_v2.py` | 修改 | 新增 V2.1 测试用例（见 §9） |
+| `docs/rfc/10_infra/RFC-10-006-hermes-upgrade-script-v2.md` | 不改（已由 T1 完成） | — |
+| `docs/spec/10_infra/SPEC-10-006-hermes-upgrade-script-v2.md` | 不改（已由 T1 完成） | — |
+| `docs/design/10_infra/DESIGN-10-006-hermes-upgrade-script-v2.md` | 修改 | 本文件 |
 
-### 2.2 关键限制对应代码
+**不可碰**的 P0 Unified Data dirty files（当前 `git status` 中的 dirty 文件，非本任务范围）。
 
-- main-only 限制：`inspect_repo()` 中 `if branch != "main"`。
-- local-only commit 保护：`inspect_repo()` 与 `protect_local_commits()` 主要围绕 `upstream/main..HEAD`、`origin/main`。
-- 无 patch manifest：当前无 `data/hermes_patches.yaml`，无 `PatchEntry` / `PatchesManifest`。
+### 2.2 V2.1 不修改 V2.0 内容
 
-## 3. 方案设计
+- `UpgradeConfig` 不新增字段（复用现有字段工作，无新 CLI 参数）
+- `build_parser()` 不新增参数
+- `config_from_args()` 不新增映射
+- `upgrade()` 主流程状态机结构不变
+- `data/hermes_patches.yaml` schema 不变
+- `inspect_repo()` 的 branch 检查逻辑不变
 
-### 3.1 精确文件清单（≤ 6 文件）
+## 3. 现状代码锚点与改动概览
 
-T2 Implement 允许新增/修改以下文件，其他文件默认禁止：
+### 3.1 修改函数清单
 
-1. 修改：`scripts/upgrade/upgrade_hermes_agent.py`
-2. 新增：`tests/scripts/test_upgrade_hermes_agent_v2.py`
-3. 新增：`data/hermes_patches.yaml`（T1 已创建；T2 只在 schema 必要时校验，不应随意改内容）
-4. 新增：`docs/rfc/10_infra/RFC-10-006-hermes-upgrade-script-v2.md`（T1）
-5. 新增：`docs/spec/10_infra/SPEC-10-006-hermes-upgrade-script-v2.md`（T1）
-6. 新增：`docs/design/10_infra/DESIGN-10-006-hermes-upgrade-script-v2.md`（本文件）
+| 位置 | 函数 | 当前 V2.0 行为 | V2.1 改为 |
+|---|---|---|---|
+| :1129 | `fetch_remotes()` | 硬编码 `--tags`，失败直接 exit 1 | 改为调用 `run_fetch_with_transport_policy()`，target-aware + retry |
+| :1231 | `protect_local_commits()` | 硬编码 `push origin main` | 改为 `push -u origin <state.branch>`，加 reachability 先检 |
+| :1544 | `print_dry_run()` | 展示 fetch 步骤含 `--tags` | 增加 target-aware fetch plan、retry plan、HTTP/1.1 fallback 说明、\"不发网络\"声明 |
 
-T2 不应修改三层文档；若发现本 Design 与代码现实冲突，使用 `kanban_block` 退回 Principal，而不是自行扩大范围。
+### 3.2 新增常量
 
-注意：项目 `.gitignore` 当前忽略 `/data/`。因此 `data/hermes_patches.yaml` 虽是本任务要求的交付物，但 T4 Closeout 若需要把它纳入 commit，必须显式使用 `git add -f data/hermes_patches.yaml`，或由 orchestrator 另行确认是否迁移到非 ignored 配置路径。本设计不修改 `.gitignore`，避免扩大文件清单。
+| 名称 | 值 | 类型 | 引入位置 |
+|---|---|---|---|
+| `FETCH_MAX_ATTEMPTS` | `3` | `int` | 脚本文件顶层面板常量区（约 :40-70） |
+| `FETCH_RETRY_DELAYS` | `[2, 5]` | `list[int]` | 同上 |
+| `FETCH_TIMEOUT` | `300` | `int` | 继承 V1.0，不新增（已有 `timeout=300` 用法） |
 
-### 3.2 数据结构设计
+### 3.3 新增函数
 
-在 V1.0 dataclass 区域新增：
+| 函数 | 签名 | 设计章节 |
+|---|---|---|
+| `classify_git_transport_failure(stderr, stdout="")` | `-> str` | §4 |
+| `build_fetch_command(remote, target, *, fetch_all_tags=False)` | `-> tuple[list[str], str]` | §5 |
+| `run_fetch_with_transport_policy(remote, target, *, repo, manifest, verbose=False, timeout=300, sleep_fn=time.sleep)` | `-> CommandResult` | §6 |
+
+## 4. classify_git_transport_failure — 纯函数错误分类器
+
+### 4.1 函数签名
 
 ```python
-@dataclass(frozen=True)
-class PatchEntry:
-    id: str
-    title: str
-    commit: str
-    branch: str
-    upstream_pr: Optional[str]
-    upstream_merged: bool
-    file_globs: list[str]
-    notes: str = ""
+def classify_git_transport_failure(stderr: str, stdout: str = "") -> str:
+    """Return 'transient' | 'permanent' | 'non_transport'.
 
-@dataclass
-class PatchesManifest:
-    schema_version: int
-    patches: list[PatchEntry]
-
-@dataclass
-class PatchStatus:
-    id: str
-    upstream_merged_manifest: bool
-    upstream_contains_commit: bool
-    upstream_contains_patch_id: bool
-    status: str  # merged | possibly-merged | pending | unknown
-    reason: str
+    Pure function: no I/O, no side effects. Input is git subprocess stderr.
+    """
 ```
 
-`UpgradeConfig` 新增字段：
+### 4.2 分类表（优先级由上至下，`re.search` + `re.IGNORECASE`）
+
+| 优先级 | 模式 | 分类 |
+|---|---|---|
+| 1 | `repository not found` 或 `could not find` + `repo` | `permanent` |
+| 2 | `authentication failed` | `permanent` |
+| 3 | `access denied` 或 `permission denied` | `permanent` |
+| 4 | `host key verification failed` | `permanent` |
+| 5 | `certificate verification failed` | `permanent` |
+| 6 | `couldn't find remote ref` | `permanent` |
+| 7 | `gnutls recv error` | `transient` |
+| 8 | `ssl_error_syscall` | `transient` |
+| 9 | `tls connection was non-properly terminated` | `transient` |
+| 10 | `rpc failed` | `transient` |
+| 11 | `early eof` | `transient` |
+| 12 | `invalid index-pack output` | `transient` |
+| 13 | `the remote end hung up unexpectedly` | `transient` |
+| 14 | `unexpected disconnect` + `sideband packet` | `transient` |
+| 15 | `connection reset by peer` | `transient` |
+| 16 | `connection refused` | `transient` |
+| 17 | `could not resolve host` | `transient` |
+| 18 | `transfer closed` + `expected` | `transient` |
+| 19 | 其他非空 stderr | `non_transport` |
+| 20 | 空 stderr | `non_transport` |
+
+### 4.3 实现约束
+
+1. **permanent 优先**：模式 1-6 在 transient 模式 7-18 之前匹配，避免 stderr 同时含 auth 和 TLS 错误时误判为 transient。
+2. **单一预编译 Pattern**：用 `re.compile(patterns, re.IGNORECASE)` 以枚举方式循环匹配，不引入外部依赖。
+3. **边界可证伪性**：
+   - 输入 `""` → `"non_transport"`
+   - 输入随机不匹配字符串如 `"merge conflict in file.txt"` → `"non_transport"`
+   - 输入 `"fatal: authentication failed\nGnuTLS recv error (-110)"` → `"permanent"`（永久优先）
+4. **测试覆盖率**：每条模式至少 1 条单元测试（见 §9 UT-001~004）。
+
+## 5. build_fetch_command — Target-aware fetch 命令构造器
+
+### 5.1 函数签名
 
 ```python
-branch: str = "main"
-preserve_features: bool = False
-patches_manifest: Optional[Path] = None
+def build_fetch_command(remote: str, target: str, *,
+                        fetch_all_tags: bool = False) -> tuple[list[str], str]:
+    """Return (cmd_args, transport_label).
+
+    transport_label is 'default' or (with -c overlay) 'http/1.1-fallback'.
+    This function does NOT include the -c http.version=HTTP/1.1 prefix;
+    that is applied at the call site for attempt 3 only.
+    """
 ```
 
-实现注意：若当前 Python 版本/项目风格不使用 `list[str]` 以外的新 typing，不引入 `typing.Literal` 也可接受；status 用 string 常量即可。
+### 5.2 构造规则
 
-### 3.3 CLI 设计
+| target 特征 | 返回命令 | transport_label |
+|---|---|---|
+| 非 tag（纯 branch name / ref，如 `main`, `fix/foo`） | `["fetch", "--no-tags", remote, target]` | `"default"` |
+| 含数字版本号模式如 `v2026.7.1`（启发式：`target.startswith(("v","V")) and any(ch.isdigit() for ch in target)`） | `["fetch", remote, f"refs/tags/{target}:refs/tags/{target}"]` | `"default"` |
+| `fetch_all_tags=True`（仅用作 future escape hatch，当前 static False） | `["fetch", "--tags", remote, target]` | `"default"` |
 
-`build_parser()` 新增：
+### 5.3 设计理由
+
+- `--no-tags` 阻止 Git 隐式跟随 tag 链。纯 branch 升级场景不需要 tag 数据，减少 packfile 体积可降低代理下触发传输错误的概率。
+- Tag target 使用精确 refspec `refs/tags/<tag>:refs/tags/<tag>`，只拉取特定 tag。
+- 启发式判定 tag：`v`/`V` 开头 + 数字字符。该判定允许未来对 tag 目标（如 `v2026.7.1`）使用精确 refspec。注意：无效 tag 会在 attempt 1 后由 `classify_git_transport_failure` 捕获（`couldn't find remote ref` → `permanent`），不会无限重试。
+- 函数返回裸命令参数。attempt 3 的 `-c http.version=HTTP/1.1` 前缀由 `run_fetch_with_transport_policy` 在调用 `git()` 前注入（§6.4）。
+
+## 6. run_fetch_with_transport_policy — 三次attempt 状态机
+
+### 6.1 函数签名
 
 ```python
-p.add_argument("--branch", type=str, default="main",
-               help="允许执行 inspect/upgrade 的当前 git 分支 (默认: main)")
-p.add_argument("--preserve-features", action="store_true",
-               help="升级前 best-effort push 当前 feature branch 到 origin 以保护本地 commit")
-p.add_argument("--patches-manifest", type=Path, default=None,
-               help="Pascal fork 私有 patch 清单路径，例如 data/hermes_patches.yaml")
+def run_fetch_with_transport_policy(
+    remote: str,
+    target: str,
+    *,
+    repo: Path,
+    manifest: dict,
+    verbose: bool = False,
+    timeout: int = 300,
+    sleep_fn: Callable[[float], None] = time.sleep,
+) -> CommandResult:
+    """Execute fetch with target-aware command, classified retry, and audit.
+
+    Returns the first CommandResult with exit_code=0.
+    On final failure, raises UpgradeError with next_steps.
+    """
 ```
 
-`config_from_args()` 映射对应字段。
+### 6.2 三次 attempt 状态机
 
-`validate_args()` 约束：
-
-- rollback 模式不接受 `--preserve-features`、`--patches-manifest`；若 `--branch` 不是默认 `main` 也应视为冲突或明确忽略并提示。推荐保持简单：rollback 只接受默认 branch。
-- `--patches-manifest` 可以是不存在路径；读取阶段 warning，不在参数阶段失败。
-
-### 3.4 S0 branch 检查改造
-
-当前：
-
-```python
-if branch != "main":
-    raise UpgradeError(...)
+```
+                      ┌──────────────────────┐
+                      │   Attempt 1 (normal)  │
+                      │  build_fetch_command  │
+                      │  git(...) with base   │
+                      └──────────┬───────────┘
+                                 │ exit_code
+                        ┌───────┴───────┐
+                    0   │               │  !=0
+                 ┌──────▼───┐           │
+                 │  return   │   classify(stderr)
+                 │  success  │           │
+                 └──────────┘    ┌──────┴──────┐
+                                 │              │
+                        ┌────────▼──┐   ┌──────▼──────┐
+                        │ transient │   │ permanent / │
+                        │           │   │ non_transport│
+                        └─────┬─────┘   └──────┬──────┘
+                              │                 │
+                     sleep(2) │           ┌─────▼────┐
+                     ┌────────▼──────┐    │ UpgradeError
+                     │ Attempt 2     │    │ fail-stop  │
+                     │ (backoff)     │    └────────────┘
+                     │ base command  │
+                     └────────┬──────┘
+                              │ exit_code
+                        ┌─────┴──────┐
+                    0   │            │ !=0
+                 ┌──────▼───┐        │
+                 │  return   │ classify(stderr)
+                 │  success  │        │
+                 └──────────┘   ┌─────┴─────┐
+                                │           │
+                        ┌──────▼──┐   ┌─────▼──────┐
+                        │ transient│   │ permanent /│
+                        └────┬─────┘   │ non_trans  │
+                              │         └─────┬──────┘
+                     sleep(5) │               │
+                     ┌────────▼──────────┐    │
+                     │ Attempt 3 (H/1.1) │    │
+                     │ -c http.version=  │    │
+                     │   HTTP/1.1        │    │
+                     │ + base command    │    │
+                     └────────┬──────────┘    │
+                              │ exit_code     │
+                        ┌─────┴──────┐        │
+                    0   │            │ !=0    │
+                 ┌──────▼───┐   ┌────▼────┐  │
+                 │  return   │   │Upgrade  │  │
+                 │  success  │   │Error    │  │
+                 └──────────┘   │ exhausted│  │
+                                └─────────┘  │
+                              ┌──────────────┘
+                              ▼
+                      fail-stop (previously
+                      classified permanent
+                      or non_transport)
 ```
 
-改为：
+**关键行为**：
+- 任何 attempt exit=0 → 立即返回，不继续后续 attempt
+- Attempt 1 → 2 之间 sleep `FETCH_RETRY_DELAYS[0]` = 2 秒
+- Attempt 2 → 3 之间 sleep `FETCH_RETRY_DELAYS[1]` = 5 秒
+- Attempt 3 注入 `-c http.version=HTTP/1.1` 命令前缀
+- dry-run 模式（`manifest` 内无 `config` 引用；实际上在 `fetch_remotes()` 入口检查 `config.dry_run`，跳过整个函数）
+
+### 6.3 命令构造（attempt 3 的 -c 注入）
 
 ```python
-allowed = config.branch
-if branch != allowed:
+def _build_attempt_command(base_args: list[str], attempt: int, verbose: bool) -> list[str]:
+    """Wrap base_args with -c http.version=HTTP/1.1 for attempt 3."""
+    if attempt >= 3:
+        return ["-c", "http.version=HTTP/1.1"] + base_args
+    return base_args
+```
+
+**实现注意**：`git()` 函数现有签名 `git(args: list[str], ...)`。attempt 3 需传递 `["-c", "http.version=HTTP/1.1", "fetch", "--no-tags", "upstream", "main"]` 作为 `args`。检查 `git()` 实现是否兼容 `-c` 参数在最前面；`git -c key=val <cmd>` 语法支持 `-c` 在任何位置（包括命令前），这是标准 git 语义。
+
+### 6.4 git() 调用时的 -c 前缀处理
+
+`git()` 函数（现有，约 :200-230）通过 `subprocess.run` 调用：
+
+```python
+def git(args: list[str], *, repo, manifest, verbose, timeout=300, check=False) -> CommandResult:
+    cmd = ["git"] + args  # 直接拼接
+```
+
+`git -c http.version=HTTP/1.1 fetch ...` → `cmd = ["git", "-c", "http.version=HTTP/1.1", "fetch", ...]` → 直接 w/ `subprocess.run` 无需修改 `git()` 函数本身。`-c` 参数是 git 标准语义，出现在 `args` 中的第一个位置是完全合法的。
+
+### 6.5 失败后的 UpgradeError 构造
+
+```python
+def _raise_fetch_exhausted(remote, target, manifest_path, backup_zip):
     raise UpgradeError(
-        "inspect",
-        f"当前分支为 '{branch}'，本次允许分支为 '{allowed}'。",
+        "fetch",
+        f"fetch 已达上限 {FETCH_MAX_ATTEMPTS} 次 (remote={remote}, target={target})",
         next_steps=[
-            f"如需在当前分支执行检查: --branch {branch}",
-            f"如需默认升级: git -C {repo} checkout {allowed}",
+            f"所有 attempt 已记录到 manifest {manifest_path}",
+            f"手动重试: git fetch --no-tags {remote} {target}",
+            f"若确认是代理/TLS 问题: git -c http.version=HTTP/1.1 fetch --no-tags {remote} {target}",
+            f"备份路径: {backup_zip}",
         ],
     )
 ```
 
-向后兼容：默认 `allowed == "main"`，因此不带新参数时仍保持 V1.0 安全默认。
+## 7. protect_local_commits — 分支感知保护 push
 
-### 3.5 S0.5 preserve feature branch
-
-新增函数：
+### 7.1 V2.1 重写版
 
 ```python
-def preserve_feature_branch_if_requested(config: UpgradeConfig, state: RepoState, manifest: dict) -> None:
-    if not config.preserve_features:
+def protect_local_commits(config: UpgradeConfig, state: RepoState,
+                          plan: GitPlan, manifest: dict) -> None:
+    """S5 protect: 根据 state.branch 而非 main 做 reachability 检查和 push。"""
+    if not plan.local_commits_need_protection:
         return
-    branch = state.branch
-    if not branch:
-        log_warn("--preserve-features: detached HEAD，跳过 feature branch push。")
-        manifest["preserve_features_status"] = "skipped-detached-head"
-        return
-    if config.dry_run:
-        print(f"  [S0.5] dry-run: would run git push -u origin {branch}")
-        manifest["preserve_features_status"] = "planned-dry-run"
-        return
-    r = git(["push", "-u", "origin", branch], repo=config.repo, manifest=manifest.setdefault("commands", []), verbose=config.verbose)
+
+    cmd_log = manifest.setdefault("commands", [])
+    head = state.pre_head
+    branch = state.branch  # V2.1: 使用 state.branch 而非硬编码 "main"
+
+    # Step 1: 检查 HEAD 是否已在 origin/<branch> 可达
+    # 使用 git merge-base --is-ancestor HEAD origin/<branch>
+    r = git(["merge-base", "--is-ancestor", head, f"origin/{branch}"],
+            repo=config.repo, manifest=cmd_log, verbose=config.verbose)
     if r.exit_code == 0:
-        manifest["preserve_features_status"] = "ok"
-    else:
-        log_warn(f"--preserve-features: git push -u origin {branch} 失败，继续但请人工确认。")
-        manifest["preserve_features_status"] = "warn-push-failed"
-```
-
-插入点：`upgrade()` 中 S0 inspect 成功、dry-run short-circuit 之前。这样 dry-run 的 S0.5 信息可进入 `print_dry_run()`；真实执行则在 backup/merge 前保护 feature branch。
-
-安全边界：
-
-- 禁止 force push。
-- push 失败不直接执行 destructive 操作；但后续 V1 的 `protect_local_commits()` 若判断未保护仍可阻塞。
-- 若当前 branch 是 main，可以允许 push main，也可以输出 “main 由 V1 origin 保护逻辑处理”；二者都可接受，建议减少重复 push。
-
-### 3.6 Patch manifest 解析设计
-
-优先策略：不新增依赖。实现函数必须先尝试可选 PyYAML，失败时使用受控 fallback：
-
-```python
-def _load_yaml_subset(path: Path) -> dict:
-    try:
-        import yaml  # optional, do not add dependency
-    except Exception:
-        return parse_simple_patches_yaml(path.read_text(encoding="utf-8"))
-    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-```
-
-fallback 只需支持本项目 manifest 子集：顶层 `schema_version`、`patches` 列表、字符串/null/bool、`file_globs` 字符串列表。若 fallback 无法解析，返回 warning/unknown，不阻塞升级。不得引入新依赖到项目 dependency 文件。
-
-新增函数：
-
-```python
-def load_patches_manifest(path: Path) -> PatchesManifest:
-    data = _load_yaml_subset(path)
-    schema = int(data.get("schema_version", 1))
-    patches = []
-    for item in data.get("patches", []) or []:
-        patches.append(PatchEntry(...))
-    return PatchesManifest(schema_version=schema, patches=patches)
-```
-
-缺失/错误包装函数：
-
-```python
-def load_patches_manifest_safe(path: Optional[Path]) -> Optional[PatchesManifest]:
-    if path is None: return None
-    if not path.exists(): log_warn(...); return None
-    try: return load_patches_manifest(path)
-    except Exception as exc: log_warn(...); return None
-```
-
-### 3.7 Patch upstream 核对设计
-
-最小可实现版本分两层：
-
-1. commit reachability：
-   - `git merge-base --is-ancestor <patch.commit> <upstream_ref>`；成功则 `merged`。
-   - 若 commit 不存在或不可达，不失败。
-2. patch-id best-effort（可选但推荐）：
-   - `git show <patch.commit> -- <file_globs...> | git patch-id --stable` 得到 patch id；
-   - 对 upstream ref 相关 history 或目标文件 diff 做有限比较；若成本过高，返回 `pending` 并 reason 说明 “patch-id check not implemented”。
-
-建议 T2 先实现稳定的最小版本：commit reachability + manifest flag + file_globs 存在性检查。若 `upstream_merged=false` 且 commit 不可达，则 status=`pending`；如果 file_globs 无法读取则 status=`unknown`。
-
-函数签名：
-
-```python
-def verify_patches_against_upstream(repo: Path, manifest: PatchesManifest, upstream_ref: str, *, cmd_manifest=None, verbose=False) -> list[PatchStatus]:
-    ...
-```
-
-集成函数：
-
-```python
-def run_patch_manifest_check_if_requested(config: UpgradeConfig, manifest: dict, upstream_ref: str) -> None:
-    pm = load_patches_manifest_safe(config.patches_manifest)
-    if not pm:
-        manifest["patch_statuses"] = []
+        log_info(f"HEAD 已在 origin/{branch} 可达，无需额外保护 push。", config)
         return
-    statuses = verify_patches_against_upstream(config.repo, pm, upstream_ref, cmd_manifest=manifest.setdefault("commands", []), verbose=config.verbose)
-    manifest["patch_statuses"] = [asdict(s) for s in statuses]
-    print_patch_statuses(statuses)
+
+    # Step 2: push 当前分支
+    log_info(f"本地存在未保护的 commit，执行保护性 push origin {branch}...", config)
+    r = git(["push", "-u", "origin", branch], repo=config.repo,
+            manifest=cmd_log, verbose=config.verbose, timeout=120)
+    if r.exit_code != 0:
+        add_manifest_error(manifest, "protect", "push_failed",
+                           f"保护性 push origin {branch} 失败: {redact(r.stderr)[:300]}")
+        raise UpgradeError("protect",
+                           f"保护性 push origin {branch} 失败",
+                           next_steps=[
+                               f"手动 push: git -C {config.repo} push -u origin {branch}",
+                               "检查 SSH/HTTPS 认证与 fork 权限。",
+                           ])
+    log_ok(f"本地 commit 已保护至 origin/{branch}。")
 ```
 
-插入点：
+### 7.2 与 V2.0 的关键差异
 
-- dry-run：`print_dry_run()` 末尾可做读取 + best-effort 本地 refs 检查；若需要 fetch 才能判断，输出 `unknown-before-fetch`。
-- real-run：`resolve_target_ref()` 后、`push_origin_if_enabled()` 前均可；推荐 merge/verify 后执行，使用已 fetch 的 upstream refs。
+| 行为 | V2.0 | V2.1 |
+|---|---|---|
+| push target | `"origin"`, `"main"` | `"origin"`, `state.branch` |
+| push 可选 `-u` | 无 | 添加 `-u` 设置 upstream |
+| force push | 无 | 无（保持不变） |
+| 可达性检查 | 先做 `_is_ancestor(pre_head, pre_head)` = 始终 true 的自检，再做 `origin/main` | 直接 `origin/<branch>` |
+| feature branch 保护 | 只 push main，不保护 feature | 保护当前分支 |
+| 消息 | "已保护至 origin" | "已保护至 origin/{branch}" |
+| 空 branch 处理 | 无 | `state.branch` 为空/None → `_is_ancestor` 正常失败 → push 失败 → 合理 fail-stop |
 
-### 3.8 主流程插入
+### 7.3 特殊场景处理
 
-V2 `upgrade()` 控制流：
+- **detached HEAD**：`state.branch` 为 `None` 或 `""`。`merge-base HEAD origin/None` 会失败（exit != 0），然后 `push -u origin` 也会失败。这是合理的 fail-stop 行为。detached HEAD 应通过 `inspect_repo()` 在上游被阻止，不应到达 S5。
+- **`--preserve-features` 交互**：V2.0 的 S0.5 `preserve_feature_branch_if_requested()` 已在 S1 前做了一次 push。S5 的 `protect_local_commits()` 是第二道防线，仅在 `local_commits_need_protection` 为 True 时触发（由 classify 阶段判断）。S0.5 push 成功 → 本函数可达性检查发现 HEAD 已在 `origin/<branch>` → skip push，无重复 push。
+- **main 分支**：`state.branch == "main"` → `push -u origin main`，行为与 V2.0 等价（添加 `-u` 是兼容的增强）。
 
-```text
-S0 inspect_repo
-S0.5 preserve_feature_branch_if_requested  # new
-if dry_run: print_dry_run  # includes V2 info
-S1 backup
-S2 stash
-S3 fetch
-resolve target
-S4 classify
-S5 protect local commits
-S6 merge
-S6.5 patch manifest check if requested  # new; non-blocking
-S7 install + verify
-S8 restart
-S9 push
+## 8. fetch_remotes V2.1 — 重写调用链
+
+### 8.1 重写后代码
+
+```python
+def fetch_remotes(config: UpgradeConfig, manifest: dict, target_ref: str) -> None:
+    """S3 fetch: target-aware fetch with transport resilience policy."""
+    cmd_log = manifest.setdefault("commands", [])
+
+    if config.dry_run:
+        # dry-run: fetch_remotes 不是干活的入口；upgrade() 中 dry-run 走 print_dry_run 快速路径
+        # 但作为安全垫，这里也直接返回。
+        return
+
+    # Step A: 解析 target_ref 中的 remote prefix
+    remote_for_ref = None
+    bare_target = target_ref
+    if "/" in target_ref:
+        candidate_remote = target_ref.split("/", 1)[0]
+        r = git(["remote"], repo=config.repo, manifest=cmd_log, verbose=config.verbose)
+        remotes = [x.strip() for x in r.stdout.splitlines() if x.strip()]
+        if candidate_remote in remotes:
+            remote_for_ref = candidate_remote
+            bare_target = target_ref.split("/", 1)[1]
+
+    # Step B: fetch origin main (沿用 V1.0 行为，但不重试：origin 是本地 fork)
+    r = git(["fetch", "origin", "main"], repo=config.repo, manifest=cmd_log,
+            verbose=config.verbose, timeout=300)
+    if r.exit_code != 0:
+        add_manifest_error(manifest, "fetch", "fetch_origin_failed",
+                           f"fetch origin main 失败: {redact(r.stderr)[:300]}")
+        raise UpgradeError("fetch", "fetch origin main 失败",
+                           next_steps=["检查网络/SSH 认证。"])
+
+    # Step C: fetch upstream target with transport resilience policy
+    run_fetch_with_transport_policy(
+        "upstream", bare_target,
+        repo=config.repo, manifest=manifest,
+        verbose=config.verbose,
+    )
 ```
 
-若实现者认为 patch 核对应在 S9 push 后输出，也可接受；但不得影响“验证失败不 push”的 V1 安全顺序。
+### 8.2 设计决策
 
-### 3.9 Dry-run 输出设计
+1. **origin fetch 不包 retry**：origin 是 Pascal fork，同机或同局域网的 SSH/HTTPS 访问稳定性远高于 GitHub upstream。如果 origin fetch 都失败，升级应立刻 fail-stop。
+2. **dry-run 提前返回**：V2.0 的 `upgrade()` 在 S3 前已通过 `print_dry_run()` 输出并 return。本条只是做双保险。
+3. **upstream fetch 一律走 retry wrapper**：无论 target 是 main 还是 tag，都通过 `run_fetch_with_transport_policy` 执行。
 
-在 V1 dry-run 输出基础上增加：
+## 9. print_dry_run V2.1 — Dry-run 输出增强
 
-```text
-branch allowed: <config.branch>
-branch match: yes/no
-preserve_features: enabled/disabled
-patches_manifest: <path or disabled>
-patches: <N loaded / skipped / warning>
-声明: dry-run 未修改 repo、venv、gateway、origin、patch manifest。
+### 9.1 增量修改
+
+在现有 V2.0 `print_dry_run()` 基础上，修改以下位置：
+
+**Step 4 (fetch) 输出**（原有 :1607）：
+
+```python
+# V2.0:
+print(f"  4. git fetch origin main + fetch upstream --tags")
+
+# V2.1:
+print(f"  4. git fetch origin main (无重试)")
+if _is_tag_target(config.version_ref):
+    print(f"     git fetch upstream {config.version_ref} (精确 tag refspec)")
+else:
+    print(f"     git fetch upstream --no-tags {_bare_target(config.version_ref)}")
+print(f"     -> 瞬态失败时有限重试 (最多3次, 退避2s+5s, 第3次 HTTP/1.1 fallback)")
+print(f"     此 dry-run 不发送网络请求、不 sleep、不修改 git ref")
 ```
 
-若 `--preserve-features` 启用，计划步骤中新增：
+**新增断言末尾**：
 
-```text
-0.5 git push -u origin <branch>  (dry-run only; not executed)
+```python
+print("  声明: dry-run 未发送网络请求、未 sleep、未修改 git ref。")
 ```
 
-若 `--patches-manifest` 启用，计划步骤中新增：
+### 9.2 Dry-run 零网络契约
 
-```text
-6.5 patch manifest check -> best-effort upstream containment report
+dry-run 模式下 `run_fetch_with_transport_policy()` **不可被调用**。验证方式：
+- `fetch_remotes()` 入口检查 `config.dry_run` → return（见 §8.1）
+- `protect_local_commits()` 在 `print_dry_run()` 内不执行（dry-run 在 S3 前已返回）
+- 任何 subprocess（git fetch / git push）不应在 `--dry-run` 中出现
+
+## 10. Manifest fetch_attempts 增量写入
+
+### 10.1 写入位置
+
+`run_fetch_with_transport_policy()` 内，每次 attempt 执行后（success 或 fail）：
+
+```python
+def _record_fetch_attempt(manifest, remote, target, attempt_num, transport_label,
+                           exit_code, failure_class, retry_delay):
+    attempts = manifest.setdefault("fetch_attempts", [])
+    entry = {
+        "remote": remote,
+        "target": target,
+        "attempt": attempt_num,
+        "transport": transport_label,  # "default" | "http/1.1-fallback"
+        "exit_code": exit_code,
+    }
+    if exit_code != 0:
+        entry["failure_class"] = failure_class  # "transient" | "permanent" | "non_transport"
+    else:
+        entry["failure_class"] = None
+    if retry_delay is not None:
+        entry["retry_delay_seconds"] = retry_delay
+    attempts.append(entry)
 ```
 
-### 3.10 测试设计
+### 10.2 Schema（7 字段，2 可选）
 
-新增 `tests/scripts/test_upgrade_hermes_agent_v2.py`。建议直接 import script module，复用 V1 测试 helper 风格。
+| 字段 | 类型 | 必填 | 示例 | 说明 |
+|---|---|---|---|---|
+| `remote` | string | 是 | `"upstream"` | git remote 名 |
+| `target` | string | 是 | `"main"` | fetch 目标（不含 remote 前缀） |
+| `attempt` | int | 是 | `1` | attempt 序号（1-based） |
+| `transport` | string | 是 | `"default"` 或 `"http/1.1-fallback"` | 传输层标识 |
+| `exit_code` | int | 是 | `0` / `128` | git 命令 exit code |
+| `failure_class` | string/null | 否 | `"transient"` | exit != 0 时的分类；exit = 0 时为 `null` |
+| `retry_delay_seconds` | int/null | 否 | `2` | sleep 秒数；仅记录前次 attempt 的退避 |
 
-必须覆盖：
+### 10.3 安全规则
 
-1. `test_help_contains_v2_args`
-2. `test_config_from_args_defaults_branch_main`
-3. `test_config_from_args_branch_override`
-4. `test_load_patches_manifest_v2_schema`
-5. `test_load_patches_manifest_v1_backcompat`
-6. `test_missing_patches_manifest_safe_returns_none_or_empty`
-7. `test_branch_arg_overrides_main_check`：用 temp repo 在 `fix/feishu-table-card` 分支，`UpgradeConfig(branch="fix/feishu-table-card")` 调 `inspect_repo()` 不抛 main-only。
-8. `test_branch_mismatch_fails_with_next_steps`
-9. `test_preserve_features_dry_run_does_not_push`：mock `git()` 或在 dry-run 路径断言 manifest status。
-10. `test_patch_status_pending_when_commit_not_in_upstream`
+- 不记录 `proxy` URL、`http_proxy`/`https_proxy`、git credential、token、access token
+- `failure_class` 仅含分类标签，不含原始错误文本
+- 原始 stderr 摘要继续通过 `commands[].stderr_tail` 记录（现有 `redact()` 已脱敏）
 
-V1 回归必须运行：
+### 10.4 manifest 示例
+
+```json
+{
+  "fetch_attempts": [
+    {
+      "remote": "upstream",
+      "target": "main",
+      "attempt": 1,
+      "transport": "default",
+      "exit_code": 128,
+      "failure_class": "transient",
+      "retry_delay_seconds": null
+    },
+    {
+      "remote": "upstream",
+      "target": "main",
+      "attempt": 2,
+      "transport": "default",
+      "exit_code": 0,
+      "failure_class": null,
+      "retry_delay_seconds": 2
+    }
+  ]
+}
+```
+
+## 11. 副效应矩阵
+
+| 活动 | 写网络 | 写磁盘 | 写 Git | 写 git config | 写 proxy env |
+|---|---|---|---|---|---|
+| fetch attempt 1 (normal) | 是 | 是 | 是(fetch) | 否 | 否 |
+| fetch attempt 2 (retry) | 是 | 是 | 是(fetch) | 否 | 否 |
+| fetch attempt 3 (HTTP/1.1) | 是 | 是 | 是(fetch) | 否(命令级 -c) | 否 |
+| classify_git_transport_failure | 否 | 否 | 否 | 否 | 否 |
+| build_fetch_command | 否 | 否 | 否 | 否 | 否 |
+| manifest fetch_attempts 写入 | 否 | 是 | 否 | 否 | 否 |
+| branch-aware protect push | 是 | 否 | 是(push) | 否 | 否 |
+| dry-run fetch plan | 否 | 否 | 否 | 否 | 否 |
+
+## 12. 实现计划（T3 Implement 执行）
+
+### 12.1 实施顺序
+
+1. **新增常量**（~40-70 行面板区）：`FETCH_MAX_ATTEMPTS = 3`, `FETCH_RETRY_DELAYS = [2, 5]`
+2. **新增 `classify_git_transport_failure()`**：纯函数，枚举 20 条模式，单分支 `re.search` 循环。插入位置：`fetch_remotes()` 之前（约 :1129 前）。
+3. **新增 `build_fetch_command()`**：target-aware 命令构造。插入位置：`classify_git_transport_failure()` 之后。
+4. **新增 `run_fetch_with_transport_policy()`**：三次 attempt 状态机。插入位置：`build_fetch_command()` 之后。
+5. **重写 `fetch_remotes()`**（:1129-1161）：替换为调用 `run_fetch_with_transport_policy()` + origin fetch 保留。
+6. **重写 `protect_local_commits()`**（:1231-1256）：branch-aware push。
+7. **增量修改 `print_dry_run()`**（:1544-1637）：修改 step 4 输出，增加 retry plan 说明。
+
+### 12.2 需要配合的测试修改（T3/T4）
+
+见 SPEC §8 测试表格（V2.1-UT-001~019, V2.1-REG-001~002, V2.1-SMOKE-001~003）。
+
+### 12.3 无需修改的现有代码
+
+- `git()` 函数（:200-230）：不修改。`-c` 参数作为 `args` 列表元素传入即可工作。
+- `CommandResult` dataclass：不修改。
+- `UpgradeConfig`：不新增字段。
+- `RepoState`：不修改。
+- `GitPlan`：不修改。
+- `upgrade()` 主流程（:1650+）：不修改（S3 `fetch_remotes` 的内核被替换但接口不变）。
+
+## 13. 验证策略
+
+### 13.1 离线单元测试（T3/T4 自动化）
+
+| 类型 | 方法 | 覆盖范围 |
+|---|---|---|
+| classify 参数化 | `pytest.mark.parametrize` 逐条测试 | 所有 20 条模式（包括空/不匹配） |
+| build_fetch_command | 对比 return 值与预期 `list[str]` | branch/tag/tag heuristic 路径 |
+| run_fetch_policy | mock `git()` 返回模拟 exit_code/stderr | 成功/transient/permanent/non_transport/dry-run 路径 |
+| manifest fetch_attempts | 检查 `manifest["fetch_attempts"]` | 字段完整/无 secret |
+| protect_local_commits | temp git repo 模拟 origin | main/feature/branch/detached 路径 |
+
+### 13.2 temporary-bare-repo 集成测试
+
+`temporary-bare-repo` 验证（无需网络）：
+1. 创建 temp bare repo 模拟 `upstream`
+2. clone temp repo + commit → push → 测试 fetch 命令参数
+3. 验证 `--no-tags` 期望行为（bare repo 无 tag 时命令仍正确）
+
+### 13.3 真实 E2E（Activation 阶段）
+
+以下验证不属于 T3/T4，属于 **Review PASS 后 Pascal 逐项授权的 Activation**：
+
+| 操作 | 需 Pascal 确认 | 方法 |
+|---|---|---|
+| 真实 fetch upstream | 是 | 首次在 test branch 手动 `--dry-run`，再实际执行一次 |
+| 真实 merge/install/restart | 是 | 选择合适时间窗口 |
+| Feishu 推送验证 | 是 | 检查 manifest 能否被 Feishu 机器人解析 |
+
+### 13.4 验证命令
 
 ```bash
-python3 -m pytest tests/scripts/test_upgrade_hermes_agent.py tests/scripts/test_upgrade_hermes_agent_v2.py -v
-```
-
-### 3.11 回滚与降级
-
-- 若 V2 参数实现破坏 V1 测试，优先回滚 `UpgradeConfig`/parser 的签名兼容问题。
-- 若 YAML fallback 复杂度过高，允许 T2 将 `load_patches_manifest_safe()` 对无 PyYAML 环境降级为 warning + skip，但必须保留 `data/hermes_patches.yaml` 与后续增强 TODO；T3 需记录残余风险。
-- 若 patch-id 判定实现不稳定，允许只实现 commit reachability + pending/unknown，不阻塞 T2；不得输出虚假的 “merged”。
-
-## 4. 实现计划
-
-1. 修改 `UpgradeConfig`、parser、config mapping、rollback 参数冲突校验。
-2. 改造 `inspect_repo()` main-only 为 `config.branch`。
-3. 新增 patch dataclasses 与 YAML safe loader/fallback。
-4. 新增 `preserve_feature_branch_if_requested()` 并接入 `upgrade()` / dry-run 输出。
-5. 新增 patch manifest check 函数并接入 dry-run/real-run。
-6. 新增 `tests/scripts/test_upgrade_hermes_agent_v2.py`。
-7. 跑 V1 + V2 pytest，修正兼容问题。
-8. 跑 4 个 dry-run smoke，确认 no mutation 声明与输出。
-
-## 5. 验证策略
-
-### 5.1 自动化命令
-
-```bash
+# 语法检查
 cd /home/pascal/workspace/yquant-investment
 python3 -m py_compile scripts/upgrade/upgrade_hermes_agent.py
+
+# V1 + V2 + V2.1 全量测试
 python3 -m pytest tests/scripts/test_upgrade_hermes_agent.py tests/scripts/test_upgrade_hermes_agent_v2.py -v
-python3 scripts/upgrade/upgrade_hermes_agent.py --help
+
+# 分类器专项
+python3 -m pytest tests/scripts/test_upgrade_hermes_agent_v2.py -v -k "classify"
+
+# Fetch policy 专项
+python3 -m pytest tests/scripts/test_upgrade_hermes_agent_v2.py -v -k "fetch_policy or build_fetch"
+
+# Protect 专项
+python3 -m pytest tests/scripts/test_upgrade_hermes_agent_v2.py -v -k "protect"
+
+# Dry-run smoke
 python3 scripts/upgrade/upgrade_hermes_agent.py --dry-run --no-restart --no-push
-python3 scripts/upgrade/upgrade_hermes_agent.py --dry-run --no-restart --no-push --preserve-features
-python3 scripts/upgrade/upgrade_hermes_agent.py --dry-run --no-restart --no-push --patches-manifest data/hermes_patches.yaml
+python3 scripts/upgrade/upgrade_hermes_agent.py --dry-run --no-restart --no-push --version v2026.7.1
+
+# Tag dry-run
+python3 scripts/upgrade/upgrade_hermes_agent.py --dry-run --no-restart --no-push --version upstream/main
 ```
 
-`--branch fix/feishu-table-card` 的真实 dry-run 如果当前 Hermes repo 不在该分支，不应强行切换真实 repo；使用 temp repo/mocked repo 测试即可。
+## 14. 风险与应对
 
-### 5.2 数据合理性抽样（P-11）
+| 风险 | 概率 | 影响 | 应对 | 降级 |
+|---|---|---|---|---|
+| `-c http.version=HTTP/1.1` 在某些 WSL/proxy 上不兼容 | 低 | 中 | attempt 3 是最后 fallback，不影响正常路径；HTTP/1.1 也失败 = 用户手动处理 | 人工 `git fetch` 后重跑 |
+| classifier 漏标新瞬态错误模式 | 中 | 中 | 漏标 → `non_transport` → fail-stop。operator 根据 `commands[].stderr_tail` 手动判断 | 后续小版本补充模式 |
+| branch-aware protect push 误触 non-fast-forward | 低 | 高 | 无 `--force` 参数。`git push -u origin <branch>` 默认拒绝 non-ff（除非 `receive.denyNonFastForwards`=false） | 用户手动 resolve |
+| fetch retry 把 ~15 分钟的时间投入全花在 3 次 attempt 上 | 中 | 低 | 正常路径仅 1 次 attempt（~5 分钟）。3 次全部失败也比重新完整升级快 | 用户 `CTRL+C` 后手动 retry |
+| `build_fetch_command` tag heuristic 对非 `v*` tag 无法识别 | 中 | 低 | heuristic 失败 → tag 被当作 branch 名 → `--no-tags upstream <tag>` → Git 可能 resolve 失败 → classifier 返回 `couldn't find remote ref` → permanent → fail-stop | 用户可明确使用 `refs/tags/<tag>` 格式 |
 
-T3 必须读取真实 `data/hermes_patches.yaml`，断言：
+## 15. 交接给 T3 Implement（yquantdeveloper）
 
-- schema_version == 2；
-- patches 数量 ≥ 1；
-- 存在 `id=feishu-markdown-table`；
-- commit == `4d3a9661c`；
-- file_globs 包含 `plugins/platforms/feishu/adapter.py`；
-- patch 核对输出不应把未知状态伪报为 merged。
+### 15.1 T3 允许修改的文件（Allowlist）
 
-### 5.3 手工审查点
-
-- `git diff --name-only` 不应出现禁止文件。
-- dependency 文件无变化。
-- V1.0 默认 help/dry-run 行为仍可读。
-- 所有真实 push/restart 仍默认可通过 `--no-push` / `--no-restart` 跳过；T3 不执行真实副作用。
-
-## 6. 风险、降级与回滚
-
-| 风险 | 应对 | 降级/回滚 |
+| 文件 | 允许操作 | 说明 |
 |---|---|---|
-| parser/config 新字段导致旧测试构造 `UpgradeConfig` 失败 | 给 dataclass 新字段设置默认值；必要时调整测试 fixture | 回滚 dataclass 签名或补默认值 |
-| YAML fallback 不完整 | 只支持本 manifest 子集；解析失败 warning | skip patch check，不阻塞升级 |
-| `--preserve-features` 在真实环境 push 错分支 | 使用当前 branch，禁止 force；dry-run 先展示 | 手动删除远端分支或忽略；不影响本地 |
-| patch status 误判 merged | 只在 commit 可达或 manifest 已标 merged 时输出 merged；其他用 pending/unknown | T4 人工复核 |
-| 触碰真实 Hermes repo/gateway | T2/T3 只跑 dry-run/temp repo/mock；禁止真实 restart/push | 停止并退回 Principal/主控 |
+| `scripts/upgrade/upgrade_hermes_agent.py` | ✅ 修改 | 仅 §3.1 所列 3 个现有函数 + 2 个新增函数 + 2 个新增常量 |
+| `tests/scripts/test_upgrade_hermes_agent_v2.py` | ✅ 修改 | 新增 V2.1 测试用例，不破坏现有 V2.0 测试 |
+| `tests/scripts/test_upgrade_hermes_agent.py` | ❌ 不改 | 全量回归，V1.0 测试不能因为 V2.1 的 signature 变化而失败 |
 
-## 7. 交接给实现者
+### 15.2 T3 禁止操作
 
-### 7.1 必须遵守
+- 禁止修改/删除三层文档（RFC/SPEC/Design）
+- 禁止修改模板文件
+- 禁止修改 `.gitignore`、`pyproject.toml`、`requirements/*`、`Makefile`
+- 禁止修改 `data/hermes_patches.yaml`
+- 禁止修改 Hermes profile / auth / MCP / systemd 配置
+- 禁止修改 `/home/pascal/workspace/hermes-agent/**` 源码
+- 禁止对真实 Hermes repo 执行 `git push` / `git merge` / `pip install` / `restart`
+- 禁止修改 V1.0 / V2.0 测试的断言语义
+- 禁止引入新第三方依赖（包括不写入 `requirements/` 或 `pyproject.toml` 的隐式依赖）
 
-- 严格限制在 §3.1 文件清单内。
-- 不修改三层文档、模板、Hermes profile、真实 Hermes repo。
-- 不新增依赖；PyYAML optional，不可写入 dependency 文件。
-- 不自动改写 `data/hermes_patches.yaml` 的 `upstream_merged`。
-- V1 测试必须全过；V2 测试至少覆盖 SPEC §7 的新增行为。
-- 任何真实 push/restart/merge 到 `/home/pascal/workspace/hermes-agent` 都需要 Pascal 或主控明确确认；T2 不做。
+### 15.3 T3 可自行判断
 
-### 7.2 可自行判断
+- `build_fetch_command` 中的 tag heuristic 是否用 `startswith` + `any(ch.isdigit())` 或更简单的 `target.startswith(("v", "V"))` + 后续 `re.search(r"\d", target)`。两者等价，选更简洁的。
+- `git()` 函数是否需要额外处理 `-c` 参数（应不需要，git 语义支持 `-c` 在任意位置）。
+- `_build_attempt_command` 辅助函数是作为 `run_fetch_with_transport_policy` 的内部函数，还是单独顶层函数。推荐：简单内部 helper 函数 + 单行逻辑。
 
-- patch-id best-effort 是否在本轮实现；若不实现，必须输出 pending/unknown，不得声称 merged。
-- YAML fallback 的实现深度；只要真实 `data/hermes_patches.yaml` 可读且无新依赖即可。
-- 是否把 patch statuses 写入 upgrade manifest；推荐写入，但不影响主升级安全。
+### 15.4 遇到以下情况退回 T2 Principal
 
-### 7.3 遇到以下情况退回 Principal
+- 发现需要修改 `upgrade()` 主流程控制结构（S0-S9 顺序不变假设不成立）
+- 发现需要使用 `http.postBuffer`、`http.lowSpeedLimit`、`http.lowSpeedTime` 配置
+- 发现需要新增第三方 Python 依赖
+- 发现需要修改 Hermes profile / 系统环境变量 / systemd
+- 发现 V1.0 或 V2.0 测试因 V2.1 修改而必须大改（signature 兼容问题优先调整本设计，而非由 Implement 大改测试）
 
-- 需要新增第三方依赖。
-- 需要改变 RFC-10-005 的 push/restart/rollback 主安全顺序。
-- 需要修改文档模板或 AI Coding Pipeline skill。
-- 需要真实操作 `/home/pascal/workspace/hermes-agent` 进行 destructive 验证。
-- 发现 `--branch` 语义需要从“允许当前分支”升级为“自动 checkout/merge 到指定分支”。
+## 16. 自检检查表（Design Gate PASS）
 
-## 8. 验收标准映射
+- [x] RFC、SPEC、Design 三层路径一致（`10_infra/` 前缀，`DESIGN-10-006` 版本 V2.1）
+- [x] Design 仅写入 `docs/design/10_infra/DESIGN-10-006-hermes-upgrade-script-v2.md`，未触碰其他文件
+- [x] 每种错误分类（transient / permanent / non_transport）均有可证伪的示例（边界输入 → 明确输出）
+- [x] 每个 fetch attempt 的 command 构造给出了精确的 `list[str]` 断言
+- [x] Manifest `fetch_attempts` schema 明确 7 字段，红线字段（secret/credential/proxy）已被排除
+- [x] `protect_local_commits` 的 push 行为精确到 `["push", "-u", "origin", branch]`，无 force push
+- [x] dry-run 零网络契约：`fetch_remotes()` 入口检查 `config.dry_run` → return，不调用 `run_fetch_with_transport_policy`
+- [x] 所有 blocking / major / minor 风险已闭合或记录剩余风险
+- [x] T3 allowlist 和 forbidden list 明确列出
+- [x] T3 退回条件明确（4 种情形）
 
-| SPEC 验收 | Design 覆盖 |
-|---|---|
-| A2-001 三层文档 | 本文件 + RFC/SPEC-10-006 |
-| A2-002 patch manifest | §3.6 / §5.2 |
-| A2-003 help 新参数 | §3.3 / §5.1 |
-| A2-004 V1 兼容 | §3.4 / §3.10 / §5.1 |
-| A2-005 branch override | §3.4 / §3.10 |
-| A2-006 preserve dry-run | §3.5 / §3.9 |
-| A2-007 manifest 缺失/错误不阻塞 | §3.6 / §3.11 |
-| A2-008 patch status 不自动改写 | §3.7 |
-| A2-009 不新增依赖 | §3.6 / §7.1 |
-| A2-010 不触碰禁止文件 | §3.1 / §7.1 |
+## 17. 开放问题
 
-## 9. Quick Flow / Q-LINK 自洽性
-
-| Q-LINK | Design 落点 |
-|---|---|
-| Q-LINK-001 | 元数据列出 T1-T4，一次性预创建 |
-| Q-LINK-002 | §3.1 明确三层独立文档 |
-| Q-LINK-003 | T2/T3/T4 task body 通过 parents 串联 |
-| Q-LINK-004 | §7.1 禁止 T2 修改 T1 文档 |
-| Q-LINK-005 | §5.2 数据合理性抽样 |
-| Q-LINK-006 | T4 Closeout body 执行 15 项自审 |
+无。本设计所有实现决策已闭合至代码级精确度。

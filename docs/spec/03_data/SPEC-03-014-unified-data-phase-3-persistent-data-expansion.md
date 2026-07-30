@@ -7,9 +7,9 @@
 | 状态 | Draft |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-07-20 |
-| 最后更新 | 2026-07-29（V0.14 R0 冲突修正契约：新增 §14.4.5.11（4 项冲突的 SPEC 级精确代码坐标、契约修正、验收断言、allowlist/blocklist）。修正 B2 冻结契约与既有实现偏差。不动 §14.4.5.9-§14.4.5.10 B2 裁决内容、不动 §14.6.x DDL 冻结契约、不动既有授权范围） |
-| 版本号 | V0.14 |
-| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.15） |
+|| 最后更新 | 2026-07-31（V0.19 SPEC P1 受控 Mongo 物化与显式 refresh 的零副作用契约冻结：新增 §P1 完整章节——P1 覆盖 capability 与集合文档语义、MongoDB-first 离线实现边界、internal-first read/explicit refresh/cache write 边界与默认禁止规则、完全副作用矩阵、授权关口、零 I/O 边界与验收准则。不动所有已有 P0/P1/P2 边界定义、不动既有授权范围、不动所有 ❌ 状态。与 RFC-03-014 V0.19 一致。） |
+|| 版本号 | V0.19 |
+| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.19） |
 | 关联 RFC | RFC-03-007（Unified Data Layer 总纲）、RFC-03-011（Phase 2 质量与审计治理）、RFC-03-013（Phase 1E 情绪最小切片） |
 | 关联 SPEC | SPEC-03-007（Unified Data Layer 契约基线）、SPEC-03-008（Phase 1B-A 查询平面）、SPEC-03-013（Phase 1E 情绪最小切片） |
 | 关联 Design | DESIGN-03-014（Phase 3 持久化扩展详细设计，V0.21） |
@@ -31,7 +31,9 @@
 | V0.9 | 2026-07-26 | B2 实测映射契约冻结。新增 §14.4.5（B2 单次只读 smoke 实测映射契约冻结）：依据 2026-07-26 B2 一次性只读 smoke 的冻结证据（真实报告只读副本位于 `/tmp/yquant-b2-pr234-20260726/`，不可移动/提交、不可重跑），冻结六项可执行契约——（1）§14.4.5.2 PR-3 `flow.northbound_daily` 经 `stock_hsgt_individual_em(symbol)` 实际返回北向**持股历史**语义（9 个持股字段），**不是**北向净流入；现有 expected 0/11，缺失 date/stock/northbound_net_inflow；禁止伪装，T2 须三选一（A 分流正确 endpoint / B 变更 capability 语义 / C Pascal 确认放弃净流入），未获选择不得自行实现。（2）§14.4.5.3 PR-4 空返回语义区分（无交易日/schema drift/调用异常），本次 row_count=0 且 actual_fields=0 判定 verdict=fail、empty_semantics=undetermined，T2 须在 reporter 定义 empty_semantics 字段，后续独立 live-read 在交易日复验；本阶段不重跑。（3）§14.4.5.4 PR-2 SSL 网络停止诊断边界（endpoint_unreachable，非代码 defect，禁止与 mapping 修复耦合，仅允许后续单变量网络诊断）。（4）§14.4.5.5 单次 live-read 精确调用预算（PR-2=2/PR-3=3/PR-4=2，本次已用尽）与零写入边界（无重试/无 fallback/零 Mongo/Cache/Audit/DDL/cron）。（5）§14.4.5.6 T2 实现最小文件范围与禁止修改清单。（6）§14.4.5.7 T2 验收准则 7 项。本节为权威可执行契约，RFC §13.4.5 引用本节，DESIGN §15.x V0.16 为工具链设计定义。不动 §3 domain object 字段定义（除非 Pascal 确认选项 B）、不动 §14.6.x DDL 冻结契约、不动既有授权范围。 | YQuant-Principal |
 || V0.10 | 2026-07-26 | **Pascal C+X2 决策同步（Recovery/T2.5）**。§14.4.5.2 PR-3 三选一由 Pascal 2026-07-26 明确选 **C**（当前 Phase 3 不提供 northbound net inflow；`northbound_net_inflow` 保持 None；持股历史不得伪装为净流入；不引入新 endpoint/capability；§3 字段定义不变）。§14.4.5.3 PR-4 空返回语义按 **X2** 收敛：移除 `empty_semantics` reporter 字段与三分类（undetermined/no_trading_data/schema_drift/call_anomaly）；空返回维持 verdict=fail（保守）；reporter 账本同步移除 `worktree_changed`（X1 候选 runtime git-worktree 探测被 X2 否决）。§14.4.5.6 T2 最小文件范围与禁止清单同步更新（移除 empty_semantics/worktree_changed）。§14.4.5.7 验收准则第 2 项移除 empty_semantics 要求。删除全部「未选择/阻塞等待 Pascal」失效文本。§14.4.5.4 PR-2 SSL 边界、§14.4.5.5 零写入边界、§3 domain object、§14.6.x DDL 冻结契约均不变。权威可执行契约，RFC §13.4.5 V0.11 引用本节，DESIGN §4.2.1/§15.14 V0.17 为工具链设计定义。 | YQuant-Principal |
 || V0.12 | 2026-07-29 | **D1/D2/D3 文档同步**。§5.5/A-021/§14.5 source_trace 约束从 blanket 子串匹配修正为精确 `(ok)` 后缀匹配——不允许 `"ud_materialized(ok)"` 或 `"cache(ok)"` 条目；允许 `"ud_materialized(skipped: ...)"`、`"cache(miss)"`。与 D1 裁定对齐，不动 §14.4.5 Pascal C+X2 决策内容、不动 §14.6.x DDL 冻结契约、不动既有授权范围。 | YQuant-Principal |
-|| V0.14 | 2026-07-29 | **R0 冲突修正契约**。新增 §14.4.5.11：4 项冲突的 SPEC 级精确坐标（flow_stub northbound 字段恒 None 契约与验收断言 / refresh 三态守卫代码模板 / docstring 修正 / StubFlowProvider northbound 投影过滤），allowlist/blocklist 表，最小验收命令。不动 §14.4.5.9-§14.4.5.10 B2 裁决内容、不动 §14.6.x DDL 冻结契约、不动既有授权范围。 | YQuant-Principal |
+|| V0.15 | 2026-07-30 | **Pascal 22-field MarketSentimentSnapshot canonical 契约裁定同步**。Pascal 裁定 22 字段全市场多维快照（唯一键 `{market, snapshot_date, snapshot_time}`）为 `MarketSentimentSnapshot` 的 canonical 产品 schema，替代此前离线 T3-B 实现的 10 字段 `sentiment_type` 聚合模型（`{market, sentiment_type, market_date}`）。§3.3 追加 provenance 声明确认 canonical 状态；§1 需求摘要措辞从「候选」升级为「canonical」；§12 追加 developer allowlist（sentiment.py 10→22 字段迁移、fixture 更新、测试断言对齐）。Superseded 离线 10 字段实现保留在磁盘，不作删除，但任何实盘路径必须以 22 字段 canonical 契约为准。不动 §14.4.5.9-§14.4.5.11 B2/R0 裁决内容、不动 §14.6.x DDL 冻结契约、不动既有授权范围。 | YQuant-Principal |
+||| V0.17 | 2026-07-30 | **P0 真实 Provider 离线可实现契约冻结**。新增 §P0 完整章节：定义六 capability 精确状态矩阵、真实 Provider 统一接口边界（extract→canonical mapping→validation/provenance→DataResult.source_trace）、P3-A/P3-B/P3-C 逐项 mapping 验收项（PA-/PB-/PC- 系列）、P0 vs P1 vs P2 边界依赖、完全副作用矩阵、旧 checkbox 状态纠正；§7 追加 A-026~A-031 P0 验收项；§2.1/§2.2 更新 P0 In/Out scope。全部真实调用声明为未来授权 smoke/production activation。不动 §14.4.5 B2/R0/Pascal C+X2 裁决、不动 §14.6.x DDL 冻结契约、不动既有授权范围。 | YQuant-Principal |
+|  | V0.19 | 2026-07-31 | **P1 受控 Mongo 物化与显式 refresh 的零副作用契约冻结**。新增 §P1 完整章节：P1 覆盖 capability 与集合文档语义、MongoDB-first 离线实现边界、internal-first read/explicit refresh/cache write 边界与默认禁止规则、完全副作用矩阵、授权关口、零 I/O 边界与验收准则。与 RFC-03-014 V0.19 一致。不动 P0/P1/P2 边界定义、不动已有授权范围、不动所有 ❌ 状态。 | YQuant-Principal |
 
 ---
 
@@ -76,7 +78,7 @@
 
 1. **SectorSnapshot domain object**：`models/domain/sector.py` 中新增——19 个字段（类型、必填性、语义严格定义）。
 2. **CapitalFlowRecord domain object**：`models/domain/flow.py` 中新增——17 个字段（类型、必填性、语义严格定义）。
-3. **MarketSentimentSnapshot domain object**：`models/domain/sentiment.py` 中新增——22 个字段（类型、必填性、语义严格定义）。
+3. **MarketSentimentSnapshot domain object**（**Pascal canonical 契约**）：`models/domain/sentiment.py` 中——22 字段全市场多维快照（类型、必填性、语义严格定义）。唯一键 `{market, snapshot_date, snapshot_time}`。**此 22 字段 canonical 契约取代**此前离线 T3-B 实现的 10 字段 `sentiment_type` 聚合模型（`{market, sentiment_type, market_date}` 唯一键）。离线实现保留在磁盘，不对齐 canonical 契约的部分标记为 superseded。
 4. **Provider 注册**：AKShareProvider 新增 6 个 capability；external_fallback_chains 注册；FreshnessPolicy 注册；TA_CN_NOT_COVERED 确认。
 5. **读写路径定义**：internal-first 读取路径 + 外部 Provider 物化写入路径 + canary 手动触发模式。
 6. **测试策略**：colocated 单元测试 + fixture + 离线约束。
@@ -309,6 +311,11 @@ class CapitalFlowRecord:
 
 ```python
 # skills/data/unified_data/models/domain/sentiment.py（Phase 3 追加；Phase 1E 的 StockSentimentScore 同文件）
+#
+# > **Pascal canonical 契约（2026-07-30）**：本 22 字段全市场多维快照（唯一键 {market, snapshot_date, snapshot_time}）
+# > 为 MarketSentimentSnapshot 的产品 canonical schema。此前离线 T3-B 实现的 10 字段 sentiment_type 聚合模型
+# > （{market, sentiment_type, market_date} 唯一键、frozen=True、slots=True）已被取代。当前磁盘上的 sentiment.py
+# > 仍为 10 字段离线实现（保持不删），但任何后续实盘开发、持久化写入、Provider 映射必须本规范为准。
 
 @dataclass
 class MarketSentimentSnapshot:
@@ -389,12 +396,20 @@ class MarketSentimentSnapshot:
 
 | 字段 | 约束 | 说明 |
 |---|---|---|
-| `snapshot_time` | 格式 "HH:MM:SS" 或 "close" | `close` 表示收盘后快照 |
-| `market_temperature` | 0-100 区间 | 合成指标：[假设] 基于涨跌比、涨停强度、成交额等多指标合成；合成公式由 Domain Service 内部实现 |
-| `limit_up_pool` / `limit_down_pool` | 每个列表最大 500 个代码 | 若独立提供 `sentiment.limit_up_pool` capability，此集合中的对应字段可为空 |
 | `continuous_limit_up` | list of dict，每条含 `symbol`, `days`, `reason` | reason 为自由字符串 |
+| `market_temperature` | 0-100 区间，可 None | 合成指标，Pascal 确认允许 None（不强制合成，禁止编造） |
+| `limit_up_pool` / `limit_down_pool` | 每个列表最大 500 个代码 | 若独立提供 `sentiment.limit_up_pool` capability，此集合中的对应字段可为空 |
 
-**温度合成公式待定**：`market_temperature` 为派生字段，由 `sentiment_service` 在 Provider 原始数据上合成。T2 Design 阶段需定义合成公式或确认保留为 `None` 由消费方自行计算。
+| `snapshot_date` | 格式 `YYYY-MM-DD` | 唯一键 `{market, snapshot_date, snapshot_time}` 的组成部分 |
+| `snapshot_time` | 格式 `HH:MM:SS` 或 `close` | 唯一键组成部分。`close` 表示收盘后快照 |
+| `market` | 如 `"CN"` | 唯一键组成部分 |
+
+**MongoDB 唯一键**：`{market, snapshot_date, snapshot_time}`
+**MongoDB 索引建议**：
+- `{snapshot_date: -1}` — 按日查询
+- `{snapshot_time: -1}` — 按时点查询
+
+**温度合成公式待定**：`market_temperature` 为派生字段，由 `sentiment_service` 在 Provider 原始数据上合成。Pascal 确认该字段可保持为 `None`（不强制合成，禁止编造）。T2 Design 阶段需定义合成公式或确认保留为 `None` 由消费方自行计算。
 
 ---
 
@@ -738,7 +753,13 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 | **A-022** | **连通性/认证/权限/数据合理性四条独立记录**：每条 smoke 报告的 connectivity/auth/permissions 节必须独立、不可互相推导 | 检查 YAML 报告结构 | T4 P3-A/B/C |
 | **A-023** | **Secret source 非泄露三布尔检查**：审计输出仅包含存在/不存在/可加载/不可加载/键声明/缺失的布尔结论，不含值/长度/URI/用户名 | 终端输出审计 | T4 P3-A/B/C |
 | **A-024** | **失败后不自动重试、不切换写入**：smoke 失败仅记录报告，不写入物化/Cache，不自动重试，不自动回退 | 检查 smoke 报告输出 + 无 MongoDB 变更 | T4 P3-A/B/C |
-| **A-025** | **DDL/DML/真实 refresh 仍阻塞**：T4 阶段不执行 `createCollection`、`createIndex`、`upsert()`、`refresh_xxx()` | 终端检查 MongoDB 集合清单 + 无新写入 | T4 P3-A/B/C |
+|| **A-025** | **DDL/DML/真实 refresh 仍阻塞**：T4 阶段不执行 `createCollection`、`createIndex`、`upsert()`、`refresh_xxx()` | 终端检查 MongoDB 集合清单 + 无新写入 | T4 P3-A/B/C |
+|| **A-026** | **§P0 精确状态矩阵**：六 capability 状态矩阵（离线已验证/AKShareProvider 注册/Real fetch 实现/Real persistence/Refresh 实现/Live smoke 执行）在三层文档中一致 | 静态核对 RFC §P0.2 → SPEC §P0.2 → DESIGN（待 T2 确认） | P0 全部 |
+|| **A-027** | **§P0 统一接口边界**：extract→canonical mapping→validation/provenance→DataResult.source_trace 四阶段管线在 SPEC 中定义；禁止实现范围（真实 API/Mongo/Cache 调用）有显式 forbid list | 静态 grep 确认 §P0.3 含所有 5 项禁止实现项 | P0 全部 |
+|| **A-028** | **P3-A 映射验收**：§P0.4 的 PA-1~PA-9 全部通过 | 逐项验证 | P0 P3-A |
+|| **A-029** | **P3-B 映射验收**：§P0.5 的 PB-1~PB-10 全部通过；PB-5（northbound 恒 None）/PB-7（refresh 三态守卫）/PB-8（northbound fail path）包含精确 Python 验收断言 | 逐项验证 | P0 P3-B |
+|| **A-030** | **P3-C 映射验收**：§P0.6 的 PC-1~PC-11 全部通过；PC-3（market_temperature 恒 None）/PC-4（northbound_net_flow 恒 None）确保不虚构值 | 逐项验证 | P0 P3-C |
+|| **A-031** | **P0 vs P1 vs P2 边界**：§P0.7 的三阶段边界表与副作用矩阵（§P0.8）在所有三层文档中一致；实现阶段不越界执行 P1/P2 操作 | 静态核对 + 端到端离线 smoke 确认无真实网络调用 | P0 全部 |
 
 ---
 
@@ -897,6 +918,46 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 | `skills/research/argus/**` | Argus 信号系统不修改 |
 | 任何 Template / README / SKILL | 全局规约源不变 |
 | 任何 cron / systemd 配置 | 不在 Phase 3 范围 |
+
+### 12.bis Sentiment domain object 10→22 字段迁移变更清单
+
+Pascal 裁定（2026-07-30）确认 22 字段全市场多维快照为 MarketSentimentSnapshot 的 canonical 产品 schema。以下为 T3 Implement 或后续对齐阶段必须执行的文件变更清单。**当前（100%）不对齐 canonical 的离线实现保留不删**，但任何持久化/Provider 调用必须基于 canonical 契约。
+
+#### 12.bis.1 必需变更（Allowlist）
+
+| 路径 | 允许操作 | 约束 |
+|------|---------|------|
+| `models/domain/sentiment.py` | `MarketSentimentSnapshot` dataclass 从 10 字段（`market`, `sentiment_type`, `market_date`, `score`, `sample_size`, `source`, `provider`, `fetched_at`, `notes`, `metadata`）重构为 22 字段 canonical 契约（`snapshot_date`, `snapshot_time`, `market`, `limit_up_count`, `limit_down_count`, `limit_up_count_ex_st`, `limit_down_count_ex_st`, `advance_count`, `decline_count`, `flat_count`, `total_listed_count`, `market_temperature`, `total_turnover`, `hot_concepts`, `continuous_limit_up`, `max_continuous_days`, `northbound_net_flow`, `limit_up_pool`, `limit_down_pool`, `fetched_at`, `provider`, `raw_payload`），唯一键由 `{market, sentiment_type, market_date}` 改为 `{market, snapshot_date, snapshot_time}`；`from_dict()` 同步更新；关闭 `frozen=True, slots=True`（按 SPEC §3.3 可修改的 dataclass 模式） | 不得保留旧 10 字段的任何引用在新 dataclass 中；不得在`from_dict()` 中引用 `sentiment_type`、`market_date`、`score`、`sample_size`、`notes`、`metadata` 等淘汰字段 |
+| `services/sentiment_service.py` | 更新引用类型：所有 `get_market_sentiment_snapshot()` 返回类型改为新 `MarketSentimentSnapshot`；`refresh_market_sentiment_snapshot()` 写入路径基于新 schema | 不改动 read path 的 capability 注册逻辑；不改动 `PersistenceResult`；不改动三态守卫 |
+| `tests/fixtures/sentiment_fixtures.py` | fixture 数据从 10 字段重建为 22 字段 canonical 映射；覆盖正常交易日 + 极端行情两种场景 | 至少 2 条记录；所有非 None 字段填充合法值 |
+| `tests/test_market_sentiment.py` | 断言更新：字段计数从 10→22；唯一键断言从 `sentiment_type`→`snapshot_date+snapshot_time`；温度范围验证；列表长度约束 | 不得缩减已有测试覆盖的边界条件 |
+| `tests/test_sentiment_service.py` | service 层 fixture 引用更新；Spy 断言更新 | 同上 |
+| `providers/_stub_columns.py` | `sentiment.market_snapshot` STUB_COLUMNS 更新为 22 字段 canonical 列 | 与 `providers/__init__.py` 保持孪生等价 |
+| `providers/__init__.py` | 同上同步更新 | 保持与 `_stub_columns.py` 孪生等价 |
+| `models/domain/__init__.py` | 确认 `MarketSentimentSnapshot` 仍在导出列表（保持不变） | 不改变导出符号名 |
+
+#### 12.bis.2 禁止修改（Blocklist）
+
+| 路径 | 理由 |
+|------|------|
+| `skills/data/unified_data/router.py` | Router 内部编排逻辑不受 domain object 字段变更影响 |
+| `skills/data/unified_data/client.py` | client 层仅传递 capability 字符串和 `SecurityId`，不关心 domain object 字段 |
+| `skills/data/unified_data/providers/__init__.py` 中的 `STUB_COLUMNS` 孪生必须按 §12.bis.1 同步更新，除此以外的 `providers/__init__.py` 结构保持不变 | 避免 import 冲突 |
+| `skills/data/unified_data/models/domain/flow.py` | CapitalFlowRecord 不受 MarketSentimentSnapshot 变更影响 |
+| `skills/data/unified_data/services/flow_service.py` | FlowService 不受影响 |
+| `skills/data/unified_data/providers/akshare.py` | AKShareProvider 的 sentiment capability 映射更新属独立范围（不在此迁移 task 中） |
+| 任何 Template / README / SKILL | 全局规约源不变 |
+| 任何 cron / systemd 配置 | 不在 Phase 3 范围 |
+
+#### 12.bis.3 Superseded 声明
+
+离线 T3-B 实现的 10 字段 `MarketSentimentSnapshot`（`frozen=True, slots=True`, 唯一键 `{market, sentiment_type, market_date}`）已被本节 22 字段 canonical 契约**取代**。离线代码保留在磁盘（`models/domain/sentiment.py`），不作删除，但：
+- 任何持久化写入必须基于 22 字段 canonical 契约。
+- 任何 Provider 映射必须基于 22 字段 canonical 契约。
+- 任何新测试必须基于 22 字段 canonical 契约。
+- 现有 10 字段测试保留作为 regression baseline。
+
+此 superseded 状态由 Pascal 2026-07-30 裁定锁死，不得未经 Pascal 确认恢复 10 字段为 canonical。
 
 ---
 
@@ -1553,3 +1614,429 @@ T4 阶段**不要求**所有三个子阶段同时通过 smoke——单子阶段�
 - **不允许输出 secret 值、长度、URI、用户名或全路径+键值组合**
 - 不允许自动重试失败的 smoke——仅记录结论
 - 不允许绕过停止条件：任何停止条件触发必须停止，不得在失败后降级为写入操作
+
+---
+
+## P0 真实 Provider 离线可实现契约冻结
+
+### P0.1 背景与目标
+
+Phase 3 离线实现（T3 Implement）已在工作树中存在并通过 `792 passed`。但离线实现与真实 Provider 之间仍存在文档/代码漂移、Provider 映射缺失、持久化路径未实现、测试覆盖不足四类缺口。本 §P0 定义可在**不发起任何真实 API/Mongo 调用**前提下实施的真实 Provider 接入契约。
+
+本节的精确状态矩阵、统一接口边界、逐 capability 验收项、P0/P1/P2 边界依赖和副作用矩阵与 RFC §P0 一致。所有真实调用声明为未来授权 smoke（P2）或 production activation（P1），禁止在 P0 离线 Implement/Verify 中触发。
+
+### P0.2 六 Capability 精确状态矩阵
+
+| Capability | 离线已验证 | AKShareProvider 注册 | Real fetch 实现 | Real persistence 实现 | Refresh 实现 | Live smoke 执行 |
+|---|---|---|---|---|---|---|
+| `sector.snapshot` | ✅ stub + 测试 PASS | ✅ P3-A stub | ❌ 未实现 | ❌ 未执行 | ❌ 未实现（三态 unauthorized） | ❌ B2 失败（SSLError） |
+| `sector.ranking` | ✅ stub + 测试 PASS | ✅ P3-A stub | ❌ 未实现 | ❌ 未执行 | ❌ 未实现 | ❌ B2 失败（同 endpoint） |
+| `flow.capital_flow_daily` | ✅ stub + 测试 PASS | ❌ 未注册 | ❌ 未实现（B2 成功但 `_EXPECTED_FLOW_FIELDS` 未对齐） | ❌ 未执行 | ❌ 未实现（injected-not-implemented） | ✅ B2 成功 |
+| `flow.northbound_daily` | ✅ stub + 测试 PASS | ❌ 未注册 | ❌ 未实现（Pascal C: 恒 None） | ❌ 未执行 | ❌ fail-stop（永不写入） | ✅ B2 success 但语义不匹配 |
+| `sentiment.market_snapshot` | ✅ 22-field canonical（from_dict/fixture/stub/test 已验证基线） | ❌ 未注册 | ❌ 未实现 | ❌ 未执行 | ❌ 未实现（injected-not-implemented） | ❌ B2 空返回 |
+| `sentiment.limit_up_pool` | ✅ 同 market_snapshot（22-field canonical 已验证基线） | ❌ 未注册 | ❌ 未实现 | ❌ 未执行 | ❌ 未实现 | ❌ B2 空返回 |
+
+状态语义同 RFC §P0.2。
+
+### P0.3 真实 Provider 统一接口边界
+
+任何真实 Provider 接入必须遵循以下四阶段管线：
+
+```
+Step 1: extract                 → AKShare/其他 Provider → pd.DataFrame/dict
+Step 2: canonical mapping       → AKShare 字段 → domain object 字段
+Step 3: validation/provenance   → canonical object 字段校验 + provenance 记录
+Step 4: DataResult.source_trace → 四阶段结果封装为 source_trace 条目
+```
+
+**离线实现范围**（P0 允许，不会触发真实调用）：
+- stub fetch → canonical mapping 的纯函数映射测试
+- `from_dict()` 松弛映射覆盖所有字段
+- `_EXPECTED_*_FIELDS`（STUB_COLUMNS）定义与 `providers/__init__.py` 孪生等价性测试
+- Provider endpoint 选择逻辑的文档定义（不激活 endpoint）
+
+**禁止实现范围**（P0 不允许）：
+- ❌ 真实 `akshare.stock_xxx()` 调用
+- ❌ `P3PersistenceWriter.upsert()` 真实 MongoDB 写入
+- ❌ `CacheManager.put()` 真实写入
+- ❌ `refresh_xxx()` 中的真实 fetch→upsert 路径
+- ❌ 任何形式的外网 / API / MongoDB 网络连接
+
+### P0.4 P3-A 映射验收项（PA-1 ~ PA-9）
+
+| # | 验收项 | 验证方式 |
+|---|---|---|
+| PA-1 | `_EXPECTED_SECTOR_SNAPSHOT_FIELDS` 基于 AKShare `stock_board_industry_cons_em` 公开文档定义；含板块代码/名称/类型/日期/涨幅/涨跌家数/领涨股/换手率 | 静态检查 |
+| PA-2 | `_EXPECTED_SECTOR_RANKING_FIELDS` 基于 `stock_board_industry_rank_em` 公开文档定义 | 静态检查 |
+| PA-3 | sector.snapshot 空返回 → `DataResult.success(data=None/is_empty, provider="akshare")`；source_trace 不含 "ud_materialized(ok)" | stub 测试 |
+| PA-4 | sector.ranking 空返回 → `DataResult.success(data=[], provider="akshare")` | stub 测试 |
+| PA-5 | 字段漂移错误处理：unmapped 额外字段静默忽略；缺失字段填 None/默认值，不抛 KeyError | `from_dict` 测试 |
+| PA-6 | 按 `snapshot_date` 降序排序 | stub fixture 断言 |
+| PA-7 | `_EXPECTED_SECTOR_*_FIELDS` 与 STUB_COLUMNS 孪生等价 | 孪生等价性测试 |
+| PA-8 | STUB_COLUMNS 覆盖 industry + concept 两种板块类型 | fixture 覆盖 ≥2 条 |
+| PA-9 | AKShare Provider 字段映射仅在 STUB_COLUMNS 中定义；不创建真实 endpoint skeleton | 静态 grep |
+
+约束同 RFC §P0.4：不得臆定未在公开文档中出现过的字段名；空 ≠ 失败。
+
+### P0.5 P3-B 映射验收项（PB-1 ~ PB-10）
+
+| # | 验收项 | 验证方式 |
+|---|---|---|
+| PB-1 | `_EXPECTED_FLOW_FIELDS` 基于 B2 冻结证据 + `stock_individual_fund_flow` 公开文档定义；≥10 字段含 symbol/market/trade_date/main_net_inflow/super_large_net_inflow/large_net_inflow/medium_net_inflow/small_net_inflow/main_net_inflow_ratio/margin_balance | 静态检查 |
+| PB-2 | `_EXPECTED_NORTHBOUND_FIELDS` 三字段恒 None：northbound_net_inflow / northbound_hold_shares / northbound_hold_ratio | 静态检查（Pascal C） |
+| PB-3 | 资金流符号约定：所有 `*_net_inflow` 正=净流入、负=净流出 | fixture + 单元测试 |
+| PB-4 | 非沪深港通标的 northbound 字段为 None | stub fixture 断言 |
+| PB-5 | `flow_stub._build_default_payload()` Record A/C northbound 字段均为 None | Python 断言：4 条记录全部通过 |
+| PB-6 | `StubFlowProvider.fetch("flow", "northbound_daily")` 过滤 northbound 字段为 None | stub 测试 |
+| PB-7 | `FlowService(p3_writer=Mock())` → `refresh_capital_flow()` 抛 `NotImplementedError`；不 upsert | pytest.raises + assert_not_called |
+| PB-8 | `FlowService` 有显式 northbound fail path（`_is_northbound_refresh_disallowed()` 返回 True） | 静态检查 |
+| PB-9 | 空返回语义：空 DataFrame → `DataResult.success(data=[], provider="akshare")` | stub 测试 |
+| PB-10 | `_EXPECTED_*_FIELDS` 与 STUB_COLUMNS 孪生等价 | 孪生等价性测试 |
+
+**绝对禁止**：
+- ❌ 将北向持股历史（`持股数量`/`持股市值`/`今日增持资金`）别名映射为 `northbound_net_inflow`。
+- ❌ 在 `CapitalFlowRecord.northbound_net_inflow` 中填入持股语义的值。
+- ❌ 在映射文档中把「北向持股历史」表述为「北向净流入」。
+- ❌ 引入 A/B 选项的 endpoint skeleton。
+
+### P0.6 P3-C 映射验收项（PC-1 ~ PC-11）
+
+| # | 验收项 | 验证方式 |
+|---|---|---|
+| PC-1 | `_EXPECTED_SENTIMENT_FIELDS` 基于 AKShare `stock_market_fund_flow` + `stock_zt_pool_em` 公开文档定义；22-field canonical 契约为唯一基准 | 静态检查 |
+| PC-2 | `_EXPECTED_LIMIT_UP_FIELDS` 基于 `stock_zt_pool_em` 公开文档定义 | 静态检查 |
+| PC-3 | `market_temperature` 在 fixture + stub 中均为 None | fixture 断言 |
+| PC-4 | `northbound_net_flow` 在 fixture + stub 中均为 None | fixture 断言 |
+| PC-5 | 22-field `from_dict()` 覆盖全部 22 字段，无 KeyError | 单元测试 |
+| PC-6 | 空返回 → `DataResult.success(data=None, provider="akshare")`；verdict=fail（X2 保守） | stub 测试 |
+| PC-7 | `get_market_sentiment()` 返回 `MarketSentimentSnapshot`（22-field canonical） | Python 断言 |
+| PC-8 | `get_limit_up_pool()` 返回 `list[dict]`（symbol/reason/days） | Python 断言 |
+| PC-9 | `refresh_market_sentiment_snapshot()` 三态守卫：p3_writer=None→ProviderUnavailableError；injected→NotImplementedError | pytest.raises |
+| PC-10 | `_EXPECTED_*_FIELDS` 与 STUB_COLUMNS 孪生等价 | 孪生等价性测试 |
+| PC-11 | freshness `sentiment` vs `market_sentiment` 命名冲突不擅自裁定 | 仅披露 |
+
+**绝对禁止**：
+- ❌ 虚构 `market_temperature` 值。
+- ❌ 虚构 `northbound_net_flow` 值。
+- ❌ 基于 superseded 10 字段模型定义 fixture/expected 字段集。
+- ❌ 擅自裁定 `sentiment` vs `market_sentiment` freshness 命名冲突。
+
+### P0.7 P0 vs P1 vs P2 边界
+
+| 阶段 | 名称 | 包含操作 | 授权模式 | 依赖 |
+|---|---|---|---|---|
+| **P0** | 离线可实现契约 | 静态代码/fixture/mock、孪生等价性测试、refresh 三态守卫 stub、`_EXPECTED_*_FIELDS` 定义、from_dict 松弛映射、离线端到端 smoke | 当前 Kanban 链 | 无 |
+| **P1** | 持久化与刷新 | 真实 Mongo DDL/DML、refresh happy-path、CacheManager.put() 激活 | 逐 sub-phase Pascal Gate（G-A/B/C-*） | P0 通过 |
+| **P2** | 真实 Smoke & Canary | PR-0~4、PR-DDL-*、PR-CANARY-* | 逐 Gate Pascal 授权 | P1 完成 |
+
+### P0.8 完全副作用矩阵
+
+| 操作 | P0 权限 | P1 权限 | P2 权限 | 风险 |
+|---|---|---|---|---|
+| 静态代码/fixture/mock | ✅ | ✅ | ✅ | 无 |
+| `_EXPECTED_*_FIELDS` / STUB_COLUMNS | ✅ | ✅ | ✅ | 低 |
+| Stub Provider 返回 fixture | ✅ | ✅ | ✅ | 无 |
+| 真实 AKShare API 调用 | ❌ 禁止 | ❌ 禁止 | ✅ PR-smoke | 低 |
+| 真实 Mongo ping/listCollections | ❌ 禁止 | ❌ 禁止 | ✅ PR-1 | 低 |
+| 真实 Mongo DDL | ❌ 禁止 | ❌ 禁止 | ✅ PR-DDL-* | 中 |
+| 真实 Mongo DML/upsert | ❌ 禁止 | ✅ G-*-2 后 | ✅ PR-CANARY | 中 |
+| CacheManager.put() 真实写入 | ❌ 禁止 | ✅ refresh 激活后 | ✅ | 低 |
+| refresh_xxx() happy-path | ❌ 禁止 | ✅ G-*-2 后 | ✅ | 中 |
+| 任意 cron/systemd/调度 | ❌ 禁止 | ❌ 禁止 | ❌ 禁止（Phase 5） | 高 |
+
+### P0.9 旧 Checkbox 状态纠正
+
+同 RFC §P0.9 的纠正表。核心原则：
+
+1. 旧 checkbox 的「未勾选」不自动等于「未实现」——部分项在离线实现中已落实。
+2. 所有「已勾选」必须能追溯到可执行的代码/测试/文档证据。
+3. 「真实 Provider 接入完成」「真实 MongoDB 写入完成」「真实 smoke 完成」在任何离线阶段 checkbox 中均不得声称已完成。
+4. 后续 Implementation 验收引用本节的「可审计现状」，不再引用旧 checkbox 原始状态。
+
+### P0.10 Developer Allowlist（本 §P0 约束）
+
+与 RFC §13.4.5.10 Developer allowlist 表一致，增加以下 P0 特定约束：
+
+| 路径 | 允许操作 | 约束 |
+|---|---|---|
+| `providers/_stub_columns.py` | 追加 P3-B/P3-C 的 `_EXPECTED_*_FIELDS` / STUB_COLUMNS 定义 | 与 `providers/__init__.py` 孪生等价 |
+| `models/domain/sentiment.py` | 22 字段 canonical `from_dict()` 实现（frozen=False） | 不动 10 字段 superseded 实现；不删旧字段 |
+| `services/sentiment_service.py` | 22 字段 canonical 类型引用更新 | 不动 read path 注册逻辑 |
+| `services/flow_service.py` | `_is_refresh_authorized()` + `_is_northbound_refresh_disallowed()` 守卫 | refresh happy-path 仍禁止 |
+| `providers/flow_stub.py` | `_build_default_payload()` northbound → None 修复；`fetch()` northbound 投影过滤 | 不动其他字段 |
+| `tests/fixtures/` | P3-B/P3-C fixture 更新 | 覆盖正常 + 极端行情场景 |
+
+| **禁止修改**：`router.py`、`client.py`、`akshare.py`（P0 不注册真实 endpoint）、`adapters/p3_persistence_writer.py`（P0 不修改写入路径）、任何 `.env`/配置/依赖。
+
+---
+
+## P1 受控 Mongo 物化与显式 refresh 的零副作用契约
+
+### P1.1 背景与作用域
+
+P0 已冻结离线可实现契约（stub Provider、`_EXPECTED_*_FIELDS`、from_dict 松弛映射、孪生等价性测试、refresh 三态守卫 stub）。P1 在 P0 基础上新增受控持久化与显式刷新的代码实现——全部在 mongomock/fake 环境中验证，不触发真实 I/O。
+
+**P1 In Scope**：
+- `P3PersistenceWriter.get()` 代码实现（mongomock 验证）
+- `P3PersistenceWriter.upsert()` 业务唯一键 upsert 实现（mongomock 验证）
+- `CacheManager.put()` 调用代码路径（mock 验证）
+- `refresh_xxx()` happy-path 完整编排（mock Provider + mongomock 验证）
+- `DataRouter._try_materialized()` capability 参数 + `P3PersistenceWriter` 注入引用
+- `_is_refresh_authorized()` toggle 逻辑实现（通过 fixture 配置测试两种状态）
+- `northbound_daily` refresh fail-path 守卫（静态验证）
+- 对应的单元测试 & fixture 更新
+
+**P1 Out of Scope**：
+- ❌ 任何真实 MongoDB 连接、DDL、DML
+- ❌ 任何真实 AKShare API 调用
+- ❌ G-A/B/C-2 Refresh Gate 的真实激活（属独立后续卡）
+- ❌ PR-DDL-* 的 DDL 执行（属 P2）
+- ❌ PR-0~PR-4 真实 smoke（属 P2）
+- ❌ cron/systemd/调度（属 Phase 5）
+
+### P1.2 P1 vs P0 vs P2 边界依赖更新
+
+| 阶段 | 包含操作 | 授权模式 | 依赖 |
+|---|---|---|---|
+| **P0**（已完成） | 离线可实现契约（stub/`_EXPECTED_*_FIELDS`/from_dict/孪生等价性/refresh 三态守卫 stub） | 已纳入当前 Kanban 链 | 无 |
+| **P1**（本阶段） | 受控物化与显式 refresh 代码路径；P3PersistenceWriter/refresh happy-path/Cache 写入/零 I/O 验证 | 纳入当前 Kanban 链（P1 T1→T2→T3） | P0 全部验收通过 |
+| **P1.5**（生产激活后续卡） | G-A/B/C-2 Gate 激活：`_is_refresh_authorized()`→True + refresh happy-path 生产启用 | 逐子阶段 Pascal Gate（G-A/B/C-2） | P1 通过 + Pascal 显式确认 |
+| **P2** | 真实 Smoke 与 Canary（PR-0~PR-4、PR-DDL-*、PR-CANARY-*） | 逐 Gate Pascal 授权 | P1.5 完成 |
+
+### P1.3 Capability 级别 P1 状态矩阵
+
+| Capability | 实现状态 | Mongomock 测试 | 生产激活 |
+|---|---|---|---|
+| `sector.snapshot` refresh happy-path | ✅ P1 实现 | ✅ mock Provider + mongomock | ❌ 需 G-A-2 Gate |
+| `sector.ranking` refresh happy-path | ✅ P1 实现 | ✅ mock Provider + mongomock | ❌ 需 G-A-2 Gate |
+| `flow.capital_flow_daily` refresh happy-path | ✅ P1 实现 | ✅ mock Provider + mongomock | ❌ 需 G-B-2 Gate |
+| `flow.northbound_daily` refresh fail-path | ✅ P1 fail-stop（永不激活） | ✅ 静态检查 + pytest | ❌ 永远不激活（Pascal C） |
+| `sentiment.market_snapshot` refresh happy-path | ✅ P1 实现 | ✅ mock Provider + mongomock | ❌ 需 G-C-2 Gate |
+| `sentiment.limit_up_pool` refresh happy-path | ✅ P1 实现 | ✅ mock Provider + mongomock | ❌ 需 G-C-2 Gate |
+
+### P1.4 集合/文档语义与 upsert 规则
+
+三个物化集合在生产中位于 MongoDB `tradingagents` 库，通过前缀 `03_data_ud_` 隔离 ownership。P1 实现针对 mongomock 环境验证。
+
+| 集合 | 唯一键 upsert 规则 | 约束 |
+|---|---|---|
+| `03_data_ud_market_sector_snapshot` | `{market, sector_code, snapshot_date}` → `update_one(filter, {"$set": doc}, upsert=True)` | 同一键的重复写入覆盖，不保留历史版本 |
+| `03_data_ud_stock_capital_flow` | `{market, symbol, trade_date}` → 同上 | `northbound_daily` 永不进入 upsert 路径 |
+| `03_data_ud_market_sentiment_snapshot` | `{market, snapshot_date, snapshot_time}` → 同上 | 22 字段 canonical 契约为唯一 schema；禁止写入旧 10 字段模型 |
+
+**关键约束**：P3PersistenceWriter 使用自定义业务唯一键（不是 LocalMongoAdapter 的 `materialized_key`）。已在 DESIGN-03-014 §0.4 中冻结。
+
+### P1.5 Refresh 契约
+
+#### P1.5.1 三态守卫
+
+P0 已实现的三态守卫保持。P1 新增完整 refresh happy-path：
+
+| 守卫状态 | 条件 | 行为 | P1 测试验证 |
+|---|---|---|---|
+| `p3_writer=None` | P3PersistenceWriter 未注入 | `ProviderUnavailableError` | pytest.raises（同 P0） |
+| `injected-not-implemented` | p3_writer 存在但 `_is_refresh_authorized()=False` | `NotImplementedError` | pytest.raises（同 P0） |
+| **authorized**（P1 新增） | `_is_refresh_authorized()=True` | `fetch()` → canonical mapping → `P3PersistenceWriter.upsert()` → `CacheManager.put()` → 返回 `PersistenceResult` | mock Provider + mongomock 全流程验证 |
+
+#### P1.5.2 Refresh happy-path 伪代码契约
+
+```python
+def refresh_xxx(self) -> PersistenceResult:
+    # 三态守卫
+    if self.p3_writer is None:
+        raise ProviderUnavailableError("P3 writer not injected")
+    if not self._is_refresh_authorized():
+        raise NotImplementedError("Refresh not yet authorized")
+
+    # Step 1: fetch from Provider (mock only in P1)
+    raw_data = self.provider.fetch(domain, capability, params)
+    # raw_data is pd.DataFrame (mock/fixture in P1)
+
+    if raw_data.empty:
+        return PersistenceResult(skipped=0, reason="empty_response")
+
+    # Step 2: canonical mapping
+    records = [self._to_canonical(row) for _, row in raw_data.iterrows()]
+
+    # Step 3: upsert to P3PersistenceWriter (mongomock in P1)
+    outcome = self.p3_writer.upsert(
+        collection=COLLECTION,
+        records=[asdict(r) for r in records],
+        unique_key=UNIQUE_KEY
+    )
+
+    # Step 4: write to CacheManager (mock in P1)
+    if outcome.persisted > 0:
+        try:
+            self.cache_manager.put(cache_key, records)
+        except Exception:
+            pass  # catch-and-log, don't block refresh
+
+    return PersistenceResult(
+        status="ok" if outcome.failed == 0 else "partial",
+        capability=capability,
+        collection=COLLECTION,
+        persisted=outcome.persisted,
+        failed=outcome.failed,
+        skipped=0,
+        reason=None if outcome.failed == 0 else f"{outcome.failed} records failed",
+        writer_outcome=outcome
+    )
+```
+
+#### P1.5.2.bis Cache Key 规范与失败行为
+
+P1 离线 refresh happy-path 中 Step 4 **必须**调用 `CacheManager.put()`（通过 unittest.mock 验证）。
+每 service 的 cache key 规范如下：
+
+| Service | Capability | cache_key 格式 | 示例 |
+|---------|-----------|----------------|------|
+| SectorService | `sector.snapshot` | `"sector:snapshot:{sector_code}:{snapshot_date}"` | `"sector:snapshot:BK0489:2026-07-30"` |
+| SectorService | `sector.ranking` | `"sector:ranking:{snapshot_date}"` | `"sector:ranking:2026-07-30"` |
+| FlowService | `flow.capital_flow_daily` | `"flow:capital_flow:{symbol}:{trade_date}"` | `"flow:capital_flow:600519:2026-07-30"` |
+| SentimentService | `sentiment.market_snapshot` | `"sentiment:market_snapshot:{snapshot_date}"` | `"sentiment:market_snapshot:2026-07-30"` |
+| SentimentService | `sentiment.limit_up_pool` | `"sentiment:limit_up_pool:{snapshot_date}"` | `"sentiment:limit_up_pool:2026-07-30"` |
+
+**失败行为**（与 §P1.5.2 Step 4 catch-and-log 一致）：
+- `CacheManager.put()` 抛异常时不阻断 refresh 主流程。
+- refresh 仍然返回 `PersistenceResult(status="ok", ...)`（不因 cache 写入失败降级）。
+- `CacheManager.put()` 接收 `(cache_key, records)`，`records` 为 step 3 upsert 的 `list[dict]`。
+
+**读路径无隐式写约束**（与 §P1.6 一致）：
+- 标准 `DataRouter.query()` 或 `UnifiedDataClient.get_*()` 方法绝不调用 `CacheManager.put()`。
+- Cache 写入**仅**发生在显式 `refresh_xxx()` 方法的 Step 4。
+
+**Developer allowlist 追加约束**（与 §P1.11 互补）：
+- 允许文件：`services/sector_service.py`、`services/flow_service.py`、`services/sentiment_service.py`。
+- 这三个文件的 refresh happy-path **必须**包含 Step 4 `CacheManager.put()` 调用。
+- 禁止在 `cache_manager.py`、`router.py`、`client.py`、`providers/`、`adapters/` 中添加 Cache 写入。
+
+#### P1.5.3 Northbound fail-path 契约
+
+```python
+def refresh_northbound_flow(self, ...) -> PersistenceResult:
+    """北向资金 refresh 路径。
+
+    始终 fail-stop。
+    不读取真实 AKShare endpoint、不 upsert。
+    """
+    return PersistenceResult(
+        status="skipped",
+        capability="flow.northbound_daily",
+        collection="03_data_ud_stock_capital_flow",
+        persisted=0,
+        failed=0,
+        skipped=0,
+        reason="northbound_refresh_disallowed (Pascal C)",
+        writer_outcome=None
+    )
+```
+
+**测试验证**：
+- `refresh_capital_flow()` 在 authorized 态时写入正确的集合和键。
+- `refresh_northbound_flow()` 始终返回 skipped。
+- `_is_northbound_refresh_disallowed()` 返回 True。
+
+### P1.6 Internal-first Read 契约
+
+`DataRouter.query()` 的 internal-first 读取路径保持不变。P1 实现以下代码路径：
+
+```python
+# Router._try_materialized() 在 P3 capability 上
+def _try_materialized(self, security_id, domain, operation, params):
+    # 仅 P3 capability 走 P3PersistenceWriter
+    if self._is_p3_capability(domain, operation):
+        if self.p3_writer is None:
+            return None  # 降级到下一层
+        collection = self._p3_collection_for(domain, operation)
+        filter = self._p3_filter_for(security_id, domain, operation, params)
+        doc = self.p3_writer.get(collection, filter)
+        return doc
+    # 非 P3 capability 走 LocalMongoAdapter
+    return super()._try_materialized(...)
+```
+
+> **实现约束**：三个 helper 方法 `_is_p3_capability()`、`_p3_collection_for()`、`_p3_filter_for()`
+> 是 canonical 接口（不可消除）。其内部实现可使用
+> `P3_COLLECTION_BY_CAPABILITY`-style dict 作为底层数据存储（O(1) lookup），
+> 但 **必须**通过 helper 方法间接调用，不允许在 `_try_materialized()` 中直接引用 dict。
+> Helper 提供明确的测试 seam 和未来 P2/P3 扩展点。
+
+**测试验证**：
+- P3 capability 在 mongomock 中命中时返回正确的文档。
+- P3 capability 在 mongomock 中未命中时返回 None 并降级到下一层。
+- P3 capability 在 source_trace 中添加 `"ud_materialized(ok)"`（仅当 `_is_refresh_authorized()=True` 且已写入）。
+- 非 P3 capability 不受影响。
+
+### P1.7 零 I/O 验证约束（P1 Implement/Verify）
+
+| 验证项目 | 方法 | 禁止 |
+|---|---|---|
+| P3PersistenceWriter.get() | mongomock | 真实 MongoDB |
+| P3PersistenceWriter.upsert() | mongomock | 真实 MongoDB |
+| CacheManager.put() | unittest.mock | 真实 Cache 后端 |
+| refresh happy-path 编排 | mock Provider + mongomock | 真实 AKShare / MongoDB |
+| `_try_materialized()` | mongomock | 真实 MongoDB |
+| DDL createCollection/index | mock（仅验证脚本存在性） | 真实 MongoDB DDL |
+| 凭据读取 | 不验证 | 读取 `.env` / 凭据文件 |
+| 端到端 smoke | 全 mock 环境 | 任何外网连接 |
+
+任何真实 I/O 的测试必须标注 `@pytest.mark.skip(reason="仅 P2 可执行")` 或等效守卫。
+
+### P1.8 副作用矩阵（仅 P1 离线阶段）
+
+| 操作 | P1 代码路径 | P1 验证允许 | 生产激活授权 |
+|---|---|---|---|
+| P3PersistenceWriter.get() | 实现 | ✅ mongomock | 无需授权（仅 mock） |
+| P3PersistenceWriter.upsert() | 实现 | ✅ mongomock | G-A/B/C-2 Gate |
+| CacheManager.put() 调用 | 实现 | ✅ unittest.mock | refresh 激活后 |
+| refresh_xxx() happy-path | 实现 | ✅ mock Provider + mongomock | G-A/B/C-2 Gate |
+| `_is_refresh_authorized()` toggle | 实现 | ✅ fixture 两种状态测试 | G-A/B/C-2 Gate |
+| `DataRouter._try_materialized()` 扩展 | 实现 | ✅ mongomock | 无需授权（仅 mock） |
+| DDL 代码（createCollection/index） | 可写 | ❌ 不执行 | PR-DDL-*（P2） |
+| 真实 AKShare API | ❌ 不实现 | N/A | PR-2/3/4（P2） |
+| 真实 MongoDB DML | ❌ 不实现 | N/A | PR-CANARY（P2） |
+| cron/systemd/调度 | ❌ 不实现 | N/A | Phase 5 |
+
+### P1.9 授权关口
+
+本表与 RFC §P1.7 一致。
+
+| Gate | 含义 | P1 阶段状态 |
+|---|---|---|
+| G-A/B/C-1 DDL Gate | `createCollection`/`createIndex` 授权 | ✅ B1-P3A/B/C 已全部冻结 |
+| G-A/B/C-2 Refresh Gate | `_is_refresh_authorized()`→True + refresh 生产激活 | ❌ P1 中不激活 |
+| G-A/B/C-3 Canary Gate | 手动 canary 调度授权 | ❌ 不属 P1 范围 |
+
+### P1.10 P1 验收准则
+
+1. `P3PersistenceWriter.upsert()` 在 mongomock 中使用业务唯一键 upsert 正确集合，写入后 `get()` 可正确读取。
+2. `refresh_xxx()` 全流程（mock Provider → mongomock upsert → Cache mock）在 authorized 态 PASS；在 unauthorized 态抛出 `NotImplementedError`。
+3. `northbound_daily` refresh 路径始终返回 skipped（`_is_northbound_refresh_disallowed()=True`）。
+4. `DataRouter._try_materialized()` 在 P3 capability 上通过 mongomock 返回正确的物化数据，source_trace 格式与 RFC §P1.5.2 一致。
+5. 全部 P0 验收标准（PA-1~PA-9、PB-1~PB-10、PC-1~PC-11）在 P1 代码变更后继续 PASS。
+6. 零真实 I/O：pytest 收集的所有测试不产生外部网络调用或真实文件写入（通过 socket/syscall mock 在 CI 中验证）。
+7. 每个 service 的 refresh happy-path 在 authorized 态时 Step 4 的 `CacheManager.put()` 调用通过 unittest.mock 验证（调用计数 ≥1、参数 cache_key 格式符合 §P1.5.2.bis）。
+8. `git diff --check` 无冲突标记；`git diff --name-status` 仅显示 RFC 与 SPEC 两份文档的改动。
+
+### P1.11 Developer Allowlist
+
+以下文件允许在 P1 Implement 阶段修改。任何不在列表中的文件改动视为越界。
+
+| 路径 | 允许操作 | 约束 |
+|---|---|---|
+| `adapters/p3_persistence_writer.py` | 补充 upsert/get 实现；补充 mongomock 兼容性 | 保持 `_assert_fake_db` 守卫；不引入真实 pymongo 连接路径 |
+| `services/sector_service.py` | `refresh_sector_snapshot()` / `refresh_sector_ranking()` happy-path 实现（**必须**包含 Step 4 CacheManager.put()） | 三态守卫不变；northbound_ranking 不写入 |
+| `services/flow_service.py` | `refresh_capital_flow()` happy-path 实现（**必须**包含 Step 4 CacheManager.put()）；`_is_refresh_authorized()` toggle 实现；`_is_northbound_refresh_disallowed()` 实现 | northbound refresh 始终 fail-stop |
+| `services/sentiment_service.py` | `refresh_market_sentiment_snapshot()` / `refresh_limit_up_pool()` happy-path 实现（**必须**包含 Step 4 CacheManager.put()） | 22 字段 canonical 契约为唯一写入 schema |
+| `router.py` | `_try_materialized()` 追加 capability 参数 + P3PersistenceWriter 注入引用 | 不影响非 P3 capability 路径；不改变 Step 4 自动 `_materialize()` 行为 |
+| `client.py` | 无新增修改（在 P0 范围外） | 保持现有 5 个 lazy service 属性不变 |
+| `cache_manager.py` | 无新增修改 | 保持现有 catch-and-log 设计 |
+| `tests/` | P1 新增测试：refresh happy-path / mongomock 物化 / toggle 状态 / northbound fail-path | 零真实 I/O；不得调用真实 AKShare/MongoDB |
+
+**禁止修改**：
+- ❌ `models/domain/*`（P0 已冻结；P1 不修改 schema）
+- ❌ `providers/akshare.py`（真实 endpoint 注册属 P2）
+- ❌ `providers/_stub_columns.py` / `providers/__init__.py`（P0 已冻结 expected 字段集）
+- ❌ `freshness.py`（PC-11 命名冲突冻结）
+- ❌ 任何 `.env`、config、requirements、SKILL.md、README

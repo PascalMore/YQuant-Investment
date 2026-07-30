@@ -15,7 +15,7 @@ from .market_data import DailyBar, IndexDailyBar, RealtimeQuote
 from .metadata import IndexInfo, StockInfo
 from .news import NewsItem
 from .sector import SectorClassification, SectorSnapshot
-from .sentiment import LimitUpPoolRecord
+from .sentiment import LimitUpPoolRecord, MarketSentimentSnapshot
 
 __all__ = [
     "DailyBar",
@@ -31,6 +31,10 @@ __all__ = [
     "SectorSnapshot",
     # Phase 3 P3-B (T3-P3B): capital-flow canonical record.
     "CapitalFlowRecord",
+    # Phase 3 P3-C (T3-P3C): canonical 22-field market sentiment snapshot
+    # (Pascal 2026-07-30 ratification, RFC-03-014 V0.16 / SPEC-03-014
+    # V0.15 / DESIGN-03-014 V0.23 §3.3).
+    "MarketSentimentSnapshot",
     # Phase 3 P3-C (T3-P3C): limit-up pool canonical record.
     "LimitUpPoolRecord",
 ]

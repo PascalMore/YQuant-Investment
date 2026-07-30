@@ -30,6 +30,8 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
+import pytest
+
 from skills.data.unified_data import (
     CacheManager,
     DataProvider,
@@ -39,6 +41,7 @@ from skills.data.unified_data import (
     SecurityId,
 )
 from skills.data.unified_data.router import DataRouter
+from skills.data.unified_data.tests.conftest import FakeProvider
 
 
 # The six P3 capabilities covered by the read-only invariant.
@@ -428,3 +431,152 @@ class TestRouterQueryContract:
         assert writer_param.kind is inspect.Parameter.KEYWORD_ONLY, (
             "_try_materialized: p3_writer kwarg must stay kw-only (M1 fix is additive)"
         )
+
+
+class TestRouterHelpers:
+    """Canonical P3 helper methods — ``_is_p3_capability``,
+    ``_p3_collection_for``, ``_p3_filter_for``.
+
+    The helpers are the single canonical interface for all P3 dispatch
+    in the router (SPEC §P1.6). The underlying dict
+    ``P3_COLLECTION_BY_CAPABILITY`` is kept as the O(1) storage but
+    all main-flow code paths go through these helpers.
+    """
+
+    # ------------------------------------------------------------------
+    # _is_p3_capability
+    # ------------------------------------------------------------------
+
+    def test_is_p3_capability_true_for_all_six(self):
+        """All six P3 capabilities return ``True``."""
+        for cap in P3_CAPABILITIES:
+            domain, _, operation = cap.partition(".")
+            assert DataRouter._is_p3_capability(domain, operation) is True, (
+                f"expected {cap!r} to be recognised as a P3 capability"
+            )
+
+    def test_is_p3_capability_false_for_non_p3(self):
+        """Non-P3 capabilities return ``False``."""
+        assert DataRouter._is_p3_capability("market_data", "kline_daily") is False
+        assert DataRouter._is_p3_capability("financial", "income_statement") is False
+        assert DataRouter._is_p3_capability("unknown", "unknown") is False
+
+    def test_is_p3_capability_false_for_empty_string(self):
+        """Empty domain/operation returns ``False``."""
+        assert DataRouter._is_p3_capability("", "") is False
+        assert DataRouter._is_p3_capability("sector", "") is False
+        assert DataRouter._is_p3_capability("", "snapshot") is False
+
+    # ------------------------------------------------------------------
+    # _p3_collection_for
+    # ------------------------------------------------------------------
+
+    def test_p3_collection_for_known_capability(self):
+        """Known capability returns the correct collection name."""
+        assert DataRouter._p3_collection_for("sector", "snapshot") == (
+            "03_data_ud_market_sector_snapshot"
+        )
+        assert DataRouter._p3_collection_for("sector", "ranking") == (
+            "03_data_ud_market_sector_snapshot"
+        )
+        assert DataRouter._p3_collection_for("flow", "capital_flow_daily") == (
+            "03_data_ud_stock_capital_flow"
+        )
+        assert DataRouter._p3_collection_for("flow", "northbound_daily") == (
+            "03_data_ud_stock_capital_flow"
+        )
+        assert DataRouter._p3_collection_for("sentiment", "market_snapshot") == (
+            "03_data_ud_market_sentiment_snapshot"
+        )
+        assert DataRouter._p3_collection_for("sentiment", "limit_up_pool") == (
+            "03_data_ud_market_sentiment_snapshot"
+        )
+
+    def test_p3_collection_for_unknown_raises_key_error(self):
+        """Unknown capability raises ``KeyError``."""
+        with pytest.raises(KeyError):
+            DataRouter._p3_collection_for("unknown", "unknown")
+
+    # ------------------------------------------------------------------
+    # _p3_filter_for
+    # ------------------------------------------------------------------
+
+    def test_p3_filter_for_returns_params_passthrough(self):
+        """``_p3_filter_for`` returns a copy of ``params``."""
+        sid = SecurityId(market=Market.CN, symbol="600519")
+        result = DataRouter._p3_filter_for(
+            security_id=sid,
+            domain="flow",
+            operation="capital_flow_daily",
+            params={"trade_date": "2026-07-21"},
+        )
+        assert result == {"trade_date": "2026-07-21"}
+        # The returned dict is a copy, not the same object.
+        sentinel: dict = {}
+        result2 = DataRouter._p3_filter_for(sid, "flow", "capital_flow_daily", sentinel)
+        assert result2 is not sentinel
+
+    def test_p3_filter_for_empty_params_returns_empty_dict(self):
+        """Empty/none params yields an empty dict."""
+        sid = SecurityId(market=Market.CN, symbol="600519")
+        result = DataRouter._p3_filter_for(sid, "sector", "snapshot", None)
+        assert result == {}
+
+    # ------------------------------------------------------------------
+    # Indirection — main flow goes through helpers, not raw dict
+    # ------------------------------------------------------------------
+
+    def test_main_flow_uses_helpers_indirection(self):
+        """``_query_external_chain_with_cache`` uses ``_is_p3_capability``.
+
+        The read-only invariant (M1) is enforced through the helper
+        — not through a direct ``P3_COLLECTION_BY_CAPABILITY`` lookup.
+        This test patches the helper to prove the indirection path is
+        active: when the helper returns True, the write fan-out is
+        suppressed (zero ``_materialize`` calls); when False, the
+        fan-out fires.
+        """
+        from unittest.mock import patch
+
+        sid = SecurityId(market=Market.CN, symbol="600519")
+        provider = FakeProvider(
+            name="indirection_test",
+            payload={"close": [1.0]},
+            capabilities={NON_P3_CAPABILITY},
+            markets={Market.CN},
+        )
+        registry = ProviderRegistry()
+        registry.register(provider)
+        local_spy = _SpyLocalAdapter()
+        cache_spy = _SpyCacheManager()
+        router = DataRouter(
+            registry=registry,
+            local_mongo_adapter=local_spy,
+            cache_manager=cache_spy,
+        )
+
+        # Patch _is_p3_capability to return True for a non-P3 capability.
+        # This should suppress the write fan-out (same as real P3).
+        with patch.object(DataRouter, "_is_p3_capability", return_value=True):
+            result = router.query(
+                domain="market_data",
+                operation="kline_daily",
+                security_id=sid,
+            )
+            assert result.succeeded
+            # Write fan-out suppressed because helper returned True.
+            assert len(local_spy.puts) == 0
+            assert len(cache_spy.puts) == 0
+
+        # Without the patch, the same capability still triggers writes.
+        local_spy.puts.clear()
+        cache_spy.puts.clear()
+        result2 = router.query(
+            domain="market_data",
+            operation="kline_daily",
+            security_id=sid,
+        )
+        assert result2.succeeded
+        # Write fan-out fires for real non-P3 capability.
+        assert len(local_spy.puts) >= 1
+        assert len(cache_spy.puts) >= 1

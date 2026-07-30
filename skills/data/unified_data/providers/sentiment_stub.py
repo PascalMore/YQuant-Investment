@@ -1,4 +1,4 @@
-"""Offline stub provider for ``sentiment.market_snapshot`` (Phase 3 P3-B / T3-B).
+"""Offline stub provider for ``sentiment.market_snapshot`` (Phase 3 P3-C / T3R).
 
 :class:`StubSentimentProvider` is the offline-only stand-in for the
 real (yet-to-be-built) AKShare-backed sentiment source. It mirrors
@@ -11,7 +11,7 @@ exposes but performs **no I/O** of any kind:
 * Returns deterministic canned payloads so the service-layer tests can
   reason about the query/refresh wiring without flakiness.
 
-Scope guardrails (T3-B kanban task body):
+Scope guardrails (T3R kanban task body):
 
 * Capabilities advertised: `{"sentiment.market_snapshot"}`. The
   sister capability `sentiment.limit_up_pool` (V0.5 section 2.2) is
@@ -20,20 +20,17 @@ Scope guardrails (T3-B kanban task body):
   `adapters/p3_persistence_writer.py`.
 * Market coverage defaults to ``{Market.CN}``; tests can override via
   the ``markets`` kwarg.
-* ``fetch`` returns a list of plain ``dict`` objects that look exactly
-  like what ``P3PersistenceWriter.upsert`` would persist — including
-  the ``(market, sentiment_type, market_date)`` business unique key
-  the writer enforces (T3-B augments the V0.5 §0.4
-  ``{market, snapshot_date, snapshot_time}`` key with
-  ``sentiment_type`` so multiple aggregates can coexist in the same
-  collection).
+* The default ``market_snapshot`` fetch returns one deterministic,
+  fully populated canonical 22-field record keyed by
+  ``{market, snapshot_date, snapshot_time}``. It is an offline fixture,
+  not a fabricated market reading: ``market_temperature`` and
+  ``northbound_net_flow`` stay ``None``.
 
 The class is intentionally tiny: it is **not** meant to model the real
-AKShare sentiment API. Once the real provider ships (post-T3-B), the
-service layer / router will continue to work unchanged because the
-contract is dictated by :attr:`DataProvider.capabilities` and the
-:func:`MarketSentimentSnapshot.from_dict` mapping — not by this
-stub's internals.
+AKShare sentiment API. Once the real provider ships, the service layer /
+router will continue to work unchanged because the contract is dictated
+by :attr:`DataProvider.capabilities` and
+:func:`MarketSentimentSnapshot.from_dict` — not by this stub's internals.
 """
 
 from __future__ import annotations
@@ -45,31 +42,42 @@ from ..models import Market
 from ..provider import DataProvider
 
 
-# Canonical offline payload — one record per sentiment_type so the
-# service layer can prove the ``(market, sentiment_type, market_date)``
-# uniqueness key flows through unchanged. The numbers are
-# deterministic and intentionally boring (so test failures are not
-# confused with data changes).
+# Canonical 22-field offline fixture. Values are deterministic markers for
+# tests, not live market observations. In particular, no temperature formula
+# is implied and no northbound endpoint is consulted.
 _DEFAULT_SENTIMENT_PAYLOAD: tuple[dict, ...] = (
     {
+        "snapshot_date": "2026-07-21",
+        "snapshot_time": "close",
         "market": "CN",
-        "sentiment_type": "market_sentiment",
-        "market_date": "2026-07-21",
-        "score": 52.3,
-        "sample_size": 4250,
-        "source": "stub",
-        "provider": "stub",
-        "notes": "neutral-to-slightly-bullish offline fixture",
-    },
-    {
-        "market": "CN",
-        "sentiment_type": "breadth",
-        "market_date": "2026-07-21",
-        "score": 0.42,
-        "sample_size": 4250,
-        "source": "stub",
-        "provider": "stub",
-        "notes": "advance/decline ratio neutral",
+        "limit_up_count": 42,
+        "limit_down_count": 8,
+        "limit_up_count_ex_st": 38,
+        "limit_down_count_ex_st": 7,
+        "advance_count": 3250,
+        "decline_count": 1500,
+        "flat_count": 250,
+        "total_listed_count": 5000,
+        "market_temperature": None,
+        "total_turnover": 850_000_000_000.0,
+        "hot_concepts": ["offline_fixture"],
+        "continuous_limit_up": [
+            {
+                "symbol": "OFFLINE-001",
+                "days": 1,
+                "reason": "deterministic offline fixture",
+            }
+        ],
+        "max_continuous_days": 1,
+        "northbound_net_flow": None,
+        "limit_up_pool": ["OFFLINE-001"],
+        "limit_down_pool": ["OFFLINE-002"],
+        "fetched_at": "2026-07-21T15:30:00+08:00",
+        "provider": "sentiment_stub",
+        "raw_payload": {
+            "source": "deterministic_offline_fixture",
+            "live_data": False,
+        },
     },
 )
 

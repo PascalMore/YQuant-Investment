@@ -122,6 +122,8 @@ from .fundamental_service import FundamentalService  # noqa: E402
 from .market_data_service import MarketDataService  # noqa: E402
 from .metadata_service import MetadataService  # noqa: E402
 from .sector_service import SectorService  # noqa: E402
+# Phase 3 P3-C (T3-P3C): market-sentiment service class.
+from .sentiment_service import MarketSentimentService  # noqa: E402
 # Phase 3 P3-C (T3-P3C): limit-up pool canonical record.
 from ..models.domain.sentiment import LimitUpPoolRecord  # noqa: E402
 
@@ -142,6 +144,8 @@ __all__ = [
     "MarketDataService",
     "MetadataService",
     "SectorService",
+    # Phase 3 P3-C (T3-P3C): market-sentiment service class.
+    "MarketSentimentService",
     # Phase 3 P3-B (T3-P3B): refresh-path outcome dataclass.
     "PersistenceResult",
     # Phase 3 P3-C (T3-P3C): limit-up pool canonical record.
