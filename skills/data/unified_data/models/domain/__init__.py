@@ -15,6 +15,7 @@ from .market_data import DailyBar, IndexDailyBar, RealtimeQuote
 from .metadata import IndexInfo, StockInfo
 from .news import NewsItem
 from .sector import SectorClassification, SectorSnapshot
+from .sector_ranking import SectorRankingDaily
 from .sentiment import LimitUpPoolRecord, MarketSentimentSnapshot
 
 __all__ = [
@@ -37,4 +38,6 @@ __all__ = [
     "MarketSentimentSnapshot",
     # Phase 3 P3-C (T3-P3C): limit-up pool canonical record.
     "LimitUpPoolRecord",
+    # Phase 3 (RFC-03-015 T3): historical sector ranking daily row.
+    "SectorRankingDaily",
 ]

@@ -47,6 +47,13 @@ from .services import (
 # stays local (mirrors the T3-B precedent) so the package-level
 # ``__all__`` does not need to widen in the T3-B allowlist.
 from .services.sentiment_service import MarketSentimentService
+# Phase 3 (RFC-03-015 T3): historical sector ranking service + writer.
+# Imported directly from their modules (not via ``.services`` /
+# ``.adapters`` package ``__all__``) so the existing package surfaces
+# stay untouched (DESIGN-03-015 §3.1.3 — services/__init__.py and
+# adapters/__init__.py are not in the T3 allowlist).
+from .adapters.historical_ranking_writer import HistoricalRankingWriter
+from .services.historical_sector_service import HistoricalSectorService
 
 
 class UnifiedDataClient:
@@ -63,6 +70,8 @@ class UnifiedDataClient:
         freshness: FreshnessPolicy | None = None,
         external_fallback_chains: dict[str, list[str]] | None = None,
         p3_writer: Any | None = None,
+        historical_ranking_db: Any | None = None,
+        historical_ranking_expected_universe: Mapping[str, frozenset[str]] | None = None,
     ) -> None:
         self._registry = registry if registry is not None else ProviderRegistry()
         self._config = config or UnifiedDataConfig.minimal()
@@ -107,6 +116,17 @@ class UnifiedDataClient:
         # forward it without forcing callers to plumb both the
         # client and the writer separately.
         self._p3_writer = p3_writer
+        # Phase 3 (RFC-03-015 T3): historical sector ranking facade is
+        # conditional — only active when a mongomock/fake db is injected.
+        # ``historical_ranking_expected_universe`` maps dataset → expected
+        # sector-code universe (Gate-1 authoritative universe, injected
+        # by the caller; never hardcoded — H-049u).
+        self._historical_ranking_db = historical_ranking_db
+        self._historical_ranking_expected_universe: dict[str, frozenset[str]] = {
+            dataset: frozenset(codes)
+            for dataset, codes in (historical_ranking_expected_universe or {}).items()
+        }
+        self._historical_sector_service: HistoricalSectorService | None = None
 
     # ------------------------------------------------------------------
     # Convenience
@@ -527,6 +547,61 @@ class UnifiedDataClient:
         """
         return self._get_sentiment_service().get_limit_up_pool(
             trade_date=trade_date,
+        )
+
+    # ------------------------------------------------------------------
+    # Phase 3 (RFC-03-015) — sector.ranking_history facade (conditional)
+    # ------------------------------------------------------------------
+
+    # Lazy ``HistoricalSectorService`` loader. The facade is only
+    # active when a mongomock/fake db is injected at construction
+    # (``historical_ranking_db=...``); without it the method raises so
+    # callers cannot silently hit a real Mongo / TA-CN path. The
+    # expected universe is forwarded from the optional client kwarg
+    # (Gate-1 authoritative universe — never hardcoded).
+    def _historical_sector(self) -> HistoricalSectorService:
+        if self._historical_sector_service is None:
+            if self._historical_ranking_db is None:
+                raise RuntimeError(
+                    "UnifiedDataClient was constructed without a mongomock/fake "
+                    "historical-ranking db; pass `historical_ranking_db=...` "
+                    "to enable get_sector_ranking_history()."
+                )
+            self._historical_sector_service = HistoricalSectorService(
+                writer=HistoricalRankingWriter(self._historical_ranking_db),
+                expected_universe_by_dataset=self._historical_ranking_expected_universe,
+            )
+        return self._historical_sector_service
+
+    def get_sector_ranking_history(
+        self,
+        trade_date: str,
+        dataset: str,
+        limit: int = 0,
+    ) -> DataResult:
+        """查询历史行业日涨跌幅排名（``sector.ranking_history``）。
+
+        RFC-03-015 T3 离线 facade：直读物化集合
+        ``03_data_ud_sector_ranking_daily``，不经 router/provider，
+        零真实 I/O。
+
+        Args:
+            trade_date: 已收盘历史交易日（``YYYY-MM-DD``，必填）。
+            dataset: dataset 标识（必填，第一版仅 ``sw2021_ta_cn``）。
+            limit: 返回前 N 个板块；``0`` / 负数 / ``None`` → 全部。
+
+        Returns:
+            ``DataResult``，``data`` 为 ``list[SectorRankingDaily]``
+            （按 pct_chg 降序）或 ``[]``（empty）。
+
+        Raises:
+            ValueError: 参数非法（Category 1）。
+            RuntimeError: 未注入 ``historical_ranking_db``。
+        """
+        return self._historical_sector().get_sector_ranking_history(
+            trade_date=trade_date,
+            dataset=dataset,
+            limit=limit,
         )
 
     # ------------------------------------------------------------------
