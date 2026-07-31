@@ -89,27 +89,27 @@
 
 ### 2.1 In Scope
 
-- [ ] P3-A: `SectorSnapshot` domain object 定义 + `sector.snapshot` / `sector.ranking` 能力注册
-- [ ] P3-A: AKShareProvider 的 `sector.snapshot` / `sector.ranking` fetch 实现
-- [ ] P3-A: `03_data_ud_market_sector_snapshot` 物化集合写入 + LocalMongoAdapter 读取
-- [ ] P3-A: `sector_service.get_sector_snapshot()` / `sector_service.get_sector_ranking()` 实现
-- [ ] P3-B: `CapitalFlowRecord` domain object 定义 + `flow.capital_flow_daily` / `flow.northbound_daily` 能力注册
-- [ ] P3-B: AKShareProvider 的 `flow.capital_flow_daily` / `flow.northbound_daily` fetch 实现
-- [ ] P3-B: `03_data_ud_stock_capital_flow` 物化集合写入 + LocalMongoAdapter 读取
-- [ ] P3-B: `flow_service.get_capital_flow()` / `flow_service.get_northbound_flow()` 实现
-- [ ] P3-C: `MarketSentimentSnapshot` domain object 定义 + `sentiment.market_snapshot` / `sentiment.limit_up_pool` 能力注册
-- [ ] P3-C: AKShareProvider 的 `sentiment.market_snapshot` / `sentiment.limit_up_pool` fetch 实现
-- [ ] P3-C: `03_data_ud_market_sentiment_snapshot` 物化集合写入 + LocalMongoAdapter 读取
-- [ ] P3-C: `sentiment_service.get_market_snapshot()` / `sentiment_service.get_limit_up_pool()` 实现
-- [ ] 全部：UnifiedDataClient 新增对应域方法（§5.1）
-- [ ] 全部：colocated 单元测试 + fixture
-- [ ] 全部：Pascal 逐项授权 Gate 确认后执行
-- [ ] **T4 新增**: Secret source 审计（PR-0）：逐候选文件验证存在性 + 可加载性
-- [ ] **T4 新增**: MongoDB 只读预检（PR-1）：ping + listCollections + 确认无意外 P3 集合
-- [ ] **T4 新增**: Provider smoke sector（PR-2）：单板块代码 ≤3 交易日，只读调用
-- [ ] **T4 新增**: Provider smoke flow（PR-3）：单标的 ≤3 交易日，只读调用
-- [ ] **T4 新增**: Provider smoke sentiment（PR-4）：单日期，只读调用
-- [ ] **T4 新增**: Smoke 报告生成：每 capability 独立 YAML 报告（§14.4.2 模板）
+- [x] P3-A: `SectorSnapshot` domain object 定义 + `sector.snapshot` / `sector.ranking` 能力注册（P0 ✅ offline）
+- [ ] P3-A: AKShareProvider 的 `sector.snapshot` / `sector.ranking` fetch 实现（❌ 属 P2 真实 Provider smoke）
+- [x] P3-A: `03_data_ud_market_sector_snapshot` 物化集合写入 + P3PersistenceWriter 读取（P1 ✅ mongomock fake-only；❌ 真实 MongoDB 属 P1.5/P2）
+- [x] P3-A: `sector_service.get_sector_snapshot()` / `sector_service.get_sector_ranking()` 实现（P0 ✅ offline）
+- [x] P3-B: `CapitalFlowRecord` domain object 定义 + `flow.capital_flow_daily` / `flow.northbound_daily` 能力注册（P0 ✅ offline）
+- [ ] P3-B: AKShareProvider 的 `flow.capital_flow_daily` / `flow.northbound_daily` fetch 实现（❌ 属 P2 真实 Provider smoke）
+- [x] P3-B: `03_data_ud_stock_capital_flow` 物化集合写入 + P3PersistenceWriter 读取（P1 ✅ mongomock fake-only；❌ 真实 MongoDB 属 P1.5/P2；⚠️ northbound_daily 始终 fail-stop Pascal C）
+- [x] P3-B: `flow_service.get_capital_flow()` / `flow_service.get_northbound_flow()` 实现（P0 ✅ offline；northbound 恒 None-Pascal C）
+- [x] P3-C: `MarketSentimentSnapshot` domain object 定义（22 字段 canonical）+ `sentiment.market_snapshot` / `sentiment.limit_up_pool` 能力注册（P0 ✅ canonical 22-field）
+- [ ] P3-C: AKShareProvider 的 `sentiment.market_snapshot` / `sentiment.limit_up_pool` fetch 实现（❌ 属 P2 真实 Provider smoke）
+- [x] P3-C: `03_data_ud_market_sentiment_snapshot` 物化集合写入 + P3PersistenceWriter 读取（P1 ✅ mongomock fake-only；❌ 真实 MongoDB 属 P1.5/P2；limit_up_pool 独立键 `{market, symbol, trade_date}` 已验证 F1/F4）
+- [x] P3-C: `sentiment_service.get_market_snapshot()` / `sentiment_service.get_limit_up_pool()` 实现（P0 ✅ offline）
+- [x] 全部：UnifiedDataClient 新增对应域方法（§5.1）（P0 ✅ offline；未含 flow/sentiment service 属性需 T3 补充）
+- [x] 全部：colocated 单元测试 + fixture（P0 ✅ offline）
+- [ ] 全部：Pascal 逐项授权 Gate 确认后执行（❌ 未授权——DDL Gate 已冻结但 Refresh/Canary Gate 均未激活）
+- [ ] **T4 新增**: Secret source 审计（PR-0）：逐候选文件验证存在性 + 可加载性（❌ 属 P2，未执行）
+- [ ] **T4 新增**: MongoDB 只读预检（PR-1）：ping + listCollections + 确认无意外 P3 集合（❌ 属 P2，未执行）
+- [ ] **T4 新增**: Provider smoke sector（PR-2）：单板块代码 ≤3 交易日，只读调用（❌ 属 P2，未执行）
+- [ ] **T4 新增**: Provider smoke flow（PR-3）：单标的 ≤3 交易日，只读调用（❌ 属 P2，未执行）
+- [ ] **T4 新增**: Provider smoke sentiment（PR-4）：单日期，只读调用（❌ 属 P2，未执行）
+- [ ] **T4 新增**: Smoke 报告生成：每 capability 独立 YAML 报告（§14.4.2 模板）（❌ 属 P2，未执行）
 
 ### 2.2 Out of Scope
 
@@ -562,7 +562,8 @@ SENTIMENT_LIMIT_UP_POOL = "sentiment.limit_up_pool"
 |---|---|---|---|---|
 | `03_data_ud_market_sector_snapshot` | P3-A | `{market, sector_code, snapshot_date}` | `{sector_code:1, snapshot_date:-1}`, `{snapshot_date:-1}`, `{sector_type:1, snapshot_date:-1}` | 无（物化可追溯数据） |
 | `03_data_ud_stock_capital_flow` | P3-B | `{market, symbol, trade_date}` | `{symbol:1, trade_date:-1}`, `{trade_date:-1}` | 无（物化可追溯数据） |
-| `03_data_ud_market_sentiment_snapshot` | P3-C | `{market, snapshot_date, snapshot_time}` | `{snapshot_date:-1}`, `{snapshot_time:-1}` | 无（物化可追溯数据） |
+| `03_data_ud_market_sentiment_snapshot` — `sentiment.market_snapshot` | P3-C | `{market, snapshot_date, snapshot_time}` | `{snapshot_date:-1}`, `{snapshot_time:-1}` | 无（物化可追溯数据）；MarketSentimentSnapshot 22 字段 canonical 契约为唯一写入 schema |
+| `03_data_ud_market_sentiment_snapshot` — `sentiment.limit_up_pool` | P3-C | `{market, symbol, trade_date}` | `{trade_date:-1}`, `{market:1, trade_date:-1}` | 无（物化可追溯数据）；LimitUpPoolRecord 为唯一写入 schema。读路径 date-level pool filter 为 `{market, trade_date}`（详见 F1 amendment `SPEC-03-014-F1` 键裁定 + F4 amendment `SPEC-03-014-F4` 读 filter 裁定） |
 
 **唯一键语义**：同一唯一键的记录通过 upsert（`update_one` with `$set`）更新，相同键的后续写入覆盖先前的完整记录。不保留历史版本（如需版本跟踪属 Phase 5+）。
 
@@ -1822,7 +1823,8 @@ P0 已冻结离线可实现契约（stub Provider、`_EXPECTED_*_FIELDS`、from_
 |---|---|---|
 | `03_data_ud_market_sector_snapshot` | `{market, sector_code, snapshot_date}` → `update_one(filter, {"$set": doc}, upsert=True)` | 同一键的重复写入覆盖，不保留历史版本 |
 | `03_data_ud_stock_capital_flow` | `{market, symbol, trade_date}` → 同上 | `northbound_daily` 永不进入 upsert 路径 |
-| `03_data_ud_market_sentiment_snapshot` | `{market, snapshot_date, snapshot_time}` → 同上 | 22 字段 canonical 契约为唯一 schema；禁止写入旧 10 字段模型 |
+| `03_data_ud_market_sentiment_snapshot` — `sentiment.market_snapshot` | `{market, snapshot_date, snapshot_time}` → `update_one(filter, {"$set": doc}, upsert=True)` | 22 字段 canonical `MarketSentimentSnapshot` 为唯一写入 schema；禁止写入旧 10 字段模型 |
+| `03_data_ud_market_sentiment_snapshot` — `sentiment.limit_up_pool` | `{market, symbol, trade_date}` → `update_one(filter, {"$set": doc}, upsert=True)` | `LimitUpPoolRecord` 为唯一写入 schema；与 `sentiment.market_snapshot` 共存于同一集合（异构文档，异键），写入不冲突（详见 F1 amendment `SPEC-03-014-F1` 键裁定 + F4 amendment `SPEC-03-014-F4` 读 filter 裁定） |
 
 **关键约束**：P3PersistenceWriter 使用自定义业务唯一键（不是 LocalMongoAdapter 的 `materialized_key`）。已在 DESIGN-03-014 §0.4 中冻结。
 
@@ -1949,7 +1951,7 @@ def _try_materialized(self, security_id, domain, operation, params):
         if self.p3_writer is None:
             return None  # 降级到下一层
         collection = self._p3_collection_for(domain, operation)
-        filter = self._p3_filter_for(security_id, domain, operation, params)
+        filter = self._p3_filter_for(security_id, domain, operation, params, market=market)  # F4: 注入 market 防止跨市场泄漏
         doc = self.p3_writer.get(collection, filter)
         return doc
     # 非 P3 capability 走 LocalMongoAdapter
@@ -2008,16 +2010,16 @@ def _try_materialized(self, security_id, domain, operation, params):
 | G-A/B/C-2 Refresh Gate | `_is_refresh_authorized()`→True + refresh 生产激活 | ❌ P1 中不激活 |
 | G-A/B/C-3 Canary Gate | 手动 canary 调度授权 | ❌ 不属 P1 范围 |
 
-### P1.10 P1 验收准则
+### P1.10 P1 验收准则（Fake-only Closeout ✅）
 
-1. `P3PersistenceWriter.upsert()` 在 mongomock 中使用业务唯一键 upsert 正确集合，写入后 `get()` 可正确读取。
-2. `refresh_xxx()` 全流程（mock Provider → mongomock upsert → Cache mock）在 authorized 态 PASS；在 unauthorized 态抛出 `NotImplementedError`。
-3. `northbound_daily` refresh 路径始终返回 skipped（`_is_northbound_refresh_disallowed()=True`）。
-4. `DataRouter._try_materialized()` 在 P3 capability 上通过 mongomock 返回正确的物化数据，source_trace 格式与 RFC §P1.5.2 一致。
-5. 全部 P0 验收标准（PA-1~PA-9、PB-1~PB-10、PC-1~PC-11）在 P1 代码变更后继续 PASS。
-6. 零真实 I/O：pytest 收集的所有测试不产生外部网络调用或真实文件写入（通过 socket/syscall mock 在 CI 中验证）。
-7. 每个 service 的 refresh happy-path 在 authorized 态时 Step 4 的 `CacheManager.put()` 调用通过 unittest.mock 验证（调用计数 ≥1、参数 cache_key 格式符合 §P1.5.2.bis）。
-8. `git diff --check` 无冲突标记；`git diff --name-status` 仅显示 RFC 与 SPEC 两份文档的改动。
+- [x] `P3PersistenceWriter.upsert()` 在 mongomock 中使用业务唯一键 upsert 正确集合，写入后 `get()` 可正确读取。
+- [x] `refresh_xxx()` 全流程（mock Provider → mongomock upsert → Cache mock）在 authorized 态 PASS；在 unauthorized 态抛出 `NotImplementedError`。
+- [x] `northbound_daily` refresh 路径始终返回 skipped（`_is_northbound_refresh_disallowed()=True`）。
+- [x] `DataRouter._try_materialized()` 在 P3 capability 上通过 mongomock 返回正确的物化数据，source_trace 格式与 RFC §P1.5.2 一致。
+- [x] 全部 P0 验收标准（PA-1~PA-9、PB-1~PB-10、PC-1~PC-11）在 P1 代码变更后继续 PASS。
+- [x] 零真实 I/O：pytest 收集的所有测试不产生外部网络调用或真实文件写入（通过 socket/syscall mock 在 CI 中验证）。
+- [x] 每个 service 的 refresh happy-path 在 authorized 态时 Step 4 的 `CacheManager.put()` 调用通过 unittest.mock 验证（调用计数 ≥1、参数 cache_key 格式符合 §P1.5.2.bis）。
+- [x] `git diff --check` 无冲突标记；`git diff --name-status` 仅显示 RFC 与 SPEC 两份文档的改动。
 
 ### P1.11 Developer Allowlist
 

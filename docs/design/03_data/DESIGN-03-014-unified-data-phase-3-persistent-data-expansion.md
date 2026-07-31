@@ -141,7 +141,8 @@ class P3PersistenceWriter:
 |---|---|---|
 | `sector.snapshot`, `sector.ranking` | `03_data_ud_market_sector_snapshot` | `{market, sector_code, snapshot_date}` |
 | `flow.capital_flow_daily`, `flow.northbound_daily` | `03_data_ud_stock_capital_flow` | `{market, symbol, trade_date}` |
-| `sentiment.market_snapshot`, `sentiment.limit_up_pool` | `03_data_ud_market_sentiment_snapshot` | `{market, snapshot_date, snapshot_time}` |
+| `sentiment.market_snapshot` | `03_data_ud_market_sentiment_snapshot` | `{market, snapshot_date, snapshot_time}` |
+| `sentiment.limit_up_pool` | `03_data_ud_market_sentiment_snapshot` | `{market, symbol, trade_date}` |
 
 **P3PersistenceWriter 与 Router / refresh 的单一路径关系（已冻结，含方案 A 扩展声明）**：
 - **读路径（§2.1 Step 2）**：`DataRouter._try_materialized()` 在 Phase 3 capability 上调用 `P3PersistenceWriter.get()`，**不走** `LocalMongoAdapter.get()`。非 Phase 3 capability 的物化读仍走 `LocalMongoAdapter`。实现方式：`_try_materialized()` 须追加 `capability` 参数 + 可选 `P3PersistenceWriter` 注入引用（见 §2.1「读取路径不变形约束」第三条）。这是 `DataRouter.query()` 主编排逻辑的唯一最小允许扩展。
@@ -571,10 +572,10 @@ class MarketSentimentSnapshot:
 |------|----------------------------------------|--------------------------------------------------------|
 | 返回形状 | `list[str]`（仅股票代码） | `list[LimitUpPoolRecord]`（富结构：价格、封单金额、连板数、原因等） |
 | 消费方 | Dashboard 概览、快速涨停数统计 | 策略级连板分析、封成比计算 |
-| 去重责任 | 快照自身去重（同集合单文档内） | 调用方在 `03_data_ud_market_sentiment_snapshot` 集合中用 `{market, snapshot_date, snapshot_time}` 唯一键区分不同快照记录 |
+| 去重责任 | 快照自身去重（同集合单文档内） | 调用方在 `03_data_ud_market_sentiment_snapshot` 集合中用 `{market, symbol, trade_date}` 唯一键区分不同 LimitUpPoolRecord 记录。Date-level pool 读 filter 使用 `{market, trade_date}`（前缀查询），single-stock 扩展使用 `{market, symbol, trade_date}`（全键匹配，详见 F1 amendment `DESIGN-03-014-F1` 键裁定 + F4 amendment `DESIGN-03-014-F4` 读 filter 裁定） |
 | 可空语义 | 若 `sentiment.limit_up_pool` capability 独立提供，本字段可为 `None`（不作为主数据源） | 独立 capability 为本字段的富化版本；两者共存时消费方优先使用 capability 数据 |
 
-**去重设计原则**：同一 `MarketSentimentSnapshot` 文档中的 `limit_up_pool`/`limit_down_pool` 列表自身去重（同一只股票不会在同一个文档中重复出现）。跨文档去重由 P3PersistenceWriter 的 upsert 唯一键 `{market, snapshot_date, snapshot_time}` 保证——同一时点的快照覆盖先前版本。`sentiment.limit_up_pool` capability 与 `MarketSentimentSnapshot.limit_pools` 之间**不在写入路径去重**，而是由消费方根据使用场景选择读取源。
+**去重设计原则**：同一 `MarketSentimentSnapshot` 文档中的 `limit_up_pool`/`limit_down_pool` 列表自身去重（同一只股票不会在同一个文档中重复出现）。跨文档去重由 P3PersistenceWriter 的 upsert 唯一键 `{market, snapshot_date, snapshot_time}` 保证——同一时点的 MarketSentimentSnapshot 覆盖先前版本。`sentiment.limit_up_pool` capability 的 LimitUpPoolRecord 写入使用独立唯一键 `{market, symbol, trade_date}`——与 MarketSentimentSnapshot 不共享 upsert 键，两者在同一个 MongoDB 集合中通过异构文档共存。`sentiment.limit_up_pool` capability 与 `MarketSentimentSnapshot.limit_pools` 之间**不在写入路径去重**，而是由消费方根据使用场景选择读取源。
 
 **字段语义与约定**：
 
@@ -1463,7 +1464,8 @@ def refresh_sector_snapshot(
 |---|---|---|---|---|
 | `03_data_ud_market_sector_snapshot` | P3-A | `{market, sector_code, snapshot_date}` | `{sector_code:1, snapshot_date:-1}`, `{snapshot_date:-1}`, `{sector_type:1, snapshot_date:-1}` | 无（物化可追溯数据） |
 | `03_data_ud_stock_capital_flow` | P3-B | `{market, symbol, trade_date}` | `{symbol:1, trade_date:-1}`, `{trade_date:-1}` | 无（物化可追溯数据） |
-| `03_data_ud_market_sentiment_snapshot` | P3-C | `{market, snapshot_date, snapshot_time}` | `{snapshot_date:-1}`, `{snapshot_time:-1}` | 无（物化可追溯数据） |
+| `03_data_ud_market_sentiment_snapshot` — `sentiment.market_snapshot` | P3-C | `{market, snapshot_date, snapshot_time}` | `{snapshot_date:-1}`, `{snapshot_time:-1}` | 无（物化可追溯数据）；MarketSentimentSnapshot 22 字段 canonical 契约为唯一写入 schema |
+| `03_data_ud_market_sentiment_snapshot` — `sentiment.limit_up_pool` | P3-C | `{market, symbol, trade_date}` | `{trade_date:-1}`, `{market:1, trade_date:-1}` | 无（物化可追溯数据）；LimitUpPoolRecord 为唯一写入 schema。读路径 date-level pool filter 为 `{market, trade_date}`（详见 F1 amendment `DESIGN-03-014-F1` 键裁定 + F4 amendment `DESIGN-03-014-F4` 读 filter 裁定） |
 
 **唯一键语义**：同一唯一键的记录通过 upsert（`update_one` with `$set`）更新，相同键的后续写入覆盖先前的完整记录。不保留历史版本（如需版本跟踪属 Phase 5+）。
 
@@ -2482,7 +2484,8 @@ P1 覆盖 P3-A/P3-B/P3-C 全部六个 capability，对应三个 `03_data_ud_*` �
 |---|---|---|---|---|
 | **P3-A** | `03_data_ud_market_sector_snapshot` | `sector.snapshot`、`sector.ranking` | `{market, sector_code, snapshot_date}` | upsert 覆盖；两 capability 写入同一集合 |
 | **P3-B** | `03_data_ud_stock_capital_flow` | `flow.capital_flow_daily`、`flow.northbound_daily` | `{market, symbol, trade_date}` | `capital_flow_daily` 实现 happy-path；`northbound_daily` **始终 fail-stop**（`_is_northbound_refresh_disallowed()`=True，永不进入 upsert 路径） |
-| **P3-C** | `03_data_ud_market_sentiment_snapshot` | `sentiment.market_snapshot`、`sentiment.limit_up_pool` | `{market, snapshot_date, snapshot_time}` | 22 字段 canonical 契约为唯一写入 schema；禁止写入旧 10 字段 `sentiment_type` 聚合模型 |
+| **P3-C** | `03_data_ud_market_sentiment_snapshot` | `sentiment.market_snapshot` | `{market, snapshot_date, snapshot_time}` | MarketSentimentSnapshot 22 字段 canonical 契约为唯一写入 schema；禁止写入旧 10 字段 `sentiment_type` 聚合模型 |
+| | | `sentiment.limit_up_pool` | `{market, symbol, trade_date}` | LimitUpPoolRecord 为唯一写入 schema；与 `sentiment.market_snapshot` 共存于同一集合（异构文档，异键），写入不冲突。读路径 date-level pool filter 为 `{market, trade_date}`（详见 F1 amendment `DESIGN-03-014-F1` 键裁定 + F4 amendment `DESIGN-03-014-F4` 读 filter 裁定） |
 
 **幂等性保证**：Refresh_xxx() 在相同唯一键上的重复调用是幂等的——`$set` 覆盖字段值，不产生额外文档或副作用。
 
@@ -2552,7 +2555,7 @@ def _try_materialized(self, domain: str, operation: str, params: dict,
     # P3 capability 走 P3PersistenceWriter
     if capability and p3_writer:
         collection = self._p3_collection_for(capability)
-        filter = self._p3_filter_for(capability, params)
+        filter = self._p3_filter_for(capability, params, market=market)  # F4: market 字段注入
         doc = p3_writer.get(collection, filter)
         if doc:
             result = DataResult(provider="ud_p3_persisted", freshness="cached")
@@ -2920,17 +2923,17 @@ PC-11（freshness `sentiment` vs `market_sentiment` 命名冲突）在 P1 中保
 
 **任何 MongoDB DDL/DML/upsert/cache/refresh/canary/真实 API 仍然需要 Pascal 按具体动作明确授权**。P1 离线实现中的任何代码路径不得在未经 Pascal Gate 授权的情况下试图连接真实环境。
 
-### P1.15 P1 验收标准（Design 级）
+### P1.15 P1 验收标准（Design 级，Fake-only Closeout ✅）
 
-1. P3PersistenceWriter.get()/upsert() 在 mongomock 环境中使用业务唯一键读取/写入正确的 `03_data_ud_*` 集合，写入后 `get()` 可正确读回。
-2. `refresh_xxx()` 全流程（mock Provider → mongomock upsert → Cache mock）在 authorized 态 PASS；在 unauthorized 态抛 `NotImplementedError`。
-3. `northbound_daily` refresh 路径始终返回 skipped（`_is_northbound_refresh_disallowed()`=True）。
-4. `DataRouter._try_materialized()` 在 P3 capability 上通过 mongomock 返回正确的物化数据，source_trace 格式与 RFC §P1.5.2 一致。
-5. 所有 P0 验收标准在 P1 代码变更后继续 PASS。
-6. 零真实 I/O：全部测试使用 mongomock/unittest.mock/fake Provider；无真实 AKShare/MongoDB 调用产生。
-7. `DataRouter.query()` 在 P3 capability 上不触发 `_materialize()` 写入——Step 4 后的 source_trace 不含 `"ud_materialized(ok)"`（不含写入证据的 `(ok)` 后缀条目）。
-8. 每个 service 的 refresh happy-path 在 authorized 态时 Step 4 的 `CacheManager.put()` 调用通过 unittest.mock 验证（调用计数 ≥1、参数 cache_key 格式符合 §P1.5.2.bis）。
-9. `git diff --check` 无残留冲突标记；`git diff --name-status` 仅显示本 Design 文件的改动。
+- [x] P3PersistenceWriter.get()/upsert() 在 mongomock 环境中使用业务唯一键读取/写入正确的 `03_data_ud_*` 集合，写入后 `get()` 可正确读回。
+- [x] `refresh_xxx()` 全流程（mock Provider → mongomock upsert → Cache mock）在 authorized 态 PASS；在 unauthorized 态抛 `NotImplementedError`。
+- [x] `northbound_daily` refresh 路径始终返回 skipped（`_is_northbound_refresh_disallowed()`=True）。
+- [x] `DataRouter._try_materialized()` 在 P3 capability 上通过 mongomock 返回正确的物化数据，source_trace 格式与 RFC §P1.5.2 一致。
+- [x] 所有 P0 验收标准在 P1 代码变更后继续 PASS。
+- [x] 零真实 I/O：全部测试使用 mongomock/unittest.mock/fake Provider；无真实 AKShare/MongoDB 调用产生。
+- [x] `DataRouter.query()` 在 P3 capability 上不触发 `_materialize()` 写入——Step 4 后的 source_trace 不含 `"ud_materialized(ok)"`（不含写入证据的 `(ok)` 后缀条目）。
+- [x] 每个 service 的 refresh happy-path 在 authorized 态时 Step 4 的 `CacheManager.put()` 调用通过 unittest.mock 验证（调用计数 ≥1、参数 cache_key 格式符合 §P1.5.2.bis）。
+- [x] `git diff --check` 无残留冲突标记；`git diff --name-status` 仅显示本 Design 文件的改动。
 
 ---
 

@@ -502,7 +502,13 @@ class TestRouterHelpers:
     # ------------------------------------------------------------------
 
     def test_p3_filter_for_returns_params_passthrough(self):
-        """``_p3_filter_for`` returns a copy of ``params``."""
+        """``_p3_filter_for`` returns a copy of ``params``.
+
+        F4 amendment (SPEC-03-014-F4 §3.2): when ``market`` is not
+        provided, the filter must NOT include ``"market"`` and must
+        remain a pure copy of ``params``. Backward compatibility is
+        preserved so callers that omit ``market`` continue to work.
+        """
         sid = SecurityId(market=Market.CN, symbol="600519")
         result = DataRouter._p3_filter_for(
             security_id=sid,
@@ -521,6 +527,90 @@ class TestRouterHelpers:
         sid = SecurityId(market=Market.CN, symbol="600519")
         result = DataRouter._p3_filter_for(sid, "sector", "snapshot", None)
         assert result == {}
+
+    def test_p3_filter_for_injects_market(self):
+        """``_p3_filter_for(market="CN")`` injects ``market`` into filter.
+
+        F4 amendment (SPEC-03-014-F4 §3.1): the materialized-read
+        filter MUST include ``market`` to prevent cross-market record
+        leakage. When ``market="CN"`` is passed, the returned filter
+        must be ``{"market": "CN", **params}``.
+        """
+        sid = SecurityId(market=Market.INDEX, symbol="limit_up_pool:2026-07-21")
+        result = DataRouter._p3_filter_for(
+            security_id=sid,
+            domain="sentiment",
+            operation="limit_up_pool",
+            params={"trade_date": "2026-07-21"},
+            market="CN",
+        )
+        assert result == {"market": "CN", "trade_date": "2026-07-21"}
+        # ``market`` MUST be sourced from the ``market`` kwarg, NOT
+        # from ``security_id.market`` (which is the INDEX placeholder).
+        assert result["market"] == "CN"
+
+    def test_p3_filter_for_none_market_excludes_market_key(self):
+        """``_p3_filter_for(market=None)`` returns filter without ``"market"``.
+
+        F4 amendment (SPEC-03-014-F4 §3.1 F-3): when ``market`` is
+        ``None`` the function MUST fall back to the passthrough
+        behaviour — filter MUST NOT include ``"market"``.
+        """
+        sid = SecurityId(market=Market.CN, symbol="600519")
+        result = DataRouter._p3_filter_for(
+            security_id=sid,
+            domain="sentiment",
+            operation="limit_up_pool",
+            params={"trade_date": "2026-07-21"},
+            market=None,
+        )
+        assert result == {"trade_date": "2026-07-21"}
+        assert "market" not in result
+
+    def test_p3_filter_for_market_does_not_mutate_params(self):
+        """``_p3_filter_for`` MUST NOT mutate the ``params`` argument.
+
+        F4 amendment (SPEC-03-014-F4 §3.2 F-5): the helper copies
+        ``params`` before injecting ``market``; the original object
+        must remain unchanged.
+        """
+        sid = SecurityId(market=Market.CN, symbol="600519")
+        params = {"trade_date": "2026-07-21"}
+        snapshot = dict(params)
+        DataRouter._p3_filter_for(
+            security_id=sid,
+            domain="sentiment",
+            operation="limit_up_pool",
+            params=params,
+            market="CN",
+        )
+        assert params == snapshot
+
+    def test_p3_filter_for_returns_new_dict_object(self):
+        """``_p3_filter_for`` MUST return a new dict object (F-4).
+
+        Repeated calls with the same ``params`` must return distinct
+        dict instances so callers can mutate the result without
+        affecting subsequent calls.
+        """
+        sid = SecurityId(market=Market.CN, symbol="600519")
+        params = {"trade_date": "2026-07-21"}
+        first = DataRouter._p3_filter_for(
+            security_id=sid,
+            domain="sentiment",
+            operation="limit_up_pool",
+            params=params,
+            market="CN",
+        )
+        second = DataRouter._p3_filter_for(
+            security_id=sid,
+            domain="sentiment",
+            operation="limit_up_pool",
+            params=params,
+            market="CN",
+        )
+        assert first is not second
+        assert first is not params
 
     # ------------------------------------------------------------------
     # Indirection — main flow goes through helpers, not raw dict

@@ -467,8 +467,12 @@ Smoke 测试的详细规程见 §13.4。核心交付物为每 capability 的 smo
 |---|---|---|
 | T1 RFC+SPEC | ✅ 已完成（V0.2） | 经独立 Review T1.4 APPROVE |
 | T2 Design | ✅ 已完成（V0.6） | 经多轮 Design Correction（V0.1→V0.6） |
-| T3 Implement | 🔄 Superseded（V0.15 离线实现，含 10 字段 MarketSentimentSnapshot `sentiment_type` 模型） | 离线 T3-B 实现的 10 字段 `sentiment_type` 聚合模型已被 Pascal 2026-07-30 22-field canonical 裁定取代。离线代码保留在磁盘，但任何持久化/Provider/实盘路径必须以 22 字段 canonical 契约为准。T3 Implement 尚未对齐 canonical 契约（属后续阶段） |
-| **T4 生产就绪** | **▶ 当前阶段** | **本 T1 RFC 更新定义** |
+| T3 Implement | ⬜ 子阶段交付（分层状态，见下方） | 分层说明： |
+| | ├─ P0：✅ Canonical 契约冻结 | 22 字段 canonical schema、fixture、stub Provider、孪生等价性、refresh 三态守卫 stub — 已冻结 |
+| | └─ P1：✅ Fake-only Closeout（F1/F4/F5） | materialized read 代码路径（P3PersistenceWriter / refresh happy-path / Cache 写入）全部通过 mongomock 验证 Closeout。`limit_up_pool` 业务键 `{market, symbol, trade_date}` 与 `sentiment.market_snapshot` 键 `{market, snapshot_date, snapshot_time}` 分离验证通过。读路径 market 隔离（`_p3_filter_for()` 注入 market 参数）已验证 |
+| | ⛔ P3-A/B/C real AKShare、real Mongo DDL/DML、real smoke、canary/cron：**尚未完成，需 Pascal 分项授权** |
+| | ⛔ `flow.northbound_daily` refresh 维持 Pascal C fail-stop（永不进入 authorized 态） |
+| **T4 生产就绪** | **⏸ 待 P1.5/P2 授权后恢复** | 真实 Provider smoke、MongoDB 预检、DDL/DML、canary — 所有 real I/O 步骤均未开始 |
 | T5 生产部署 | ⏳ 待规划 | 需 T4 通过后 |
 | T6 全量上线 | ⏳ 待规划 | 需 T5 通过后 |
 
@@ -1131,9 +1135,10 @@ Step 4: DataResult.source_trace
 
 | 阶段 | 名称 | 包含操作 | 授权模式 | 依赖 |
 |---|---|---|---|---|
-| **P0**（本阶段） | **离线可实现契约** | 静态代码、fixture、mock Provider、孪生等价性测试、refresh 三态守卫 stub（`NotImplementedError`）、`_EXPECTED_*_FIELDS` 定义、from_dict 松弛映射、端到端离线 smoke（mongomock/fake） | 纳入当前流水线 Kanban 链（P0 T1→T2→T3→T4→T5→T6） | 无外部依赖 |
-| **P1** | **持久化与刷新** | 真实 Mongo DDL/DML（upsert）、internal-first read 路径激活、refresh happy-path 实现、`_is_refresh_authorized()` toggle→True、CacheManager.put() 激活 | 逐 sub-phase Pascal Gate（G-A-1/G-B-1/G-C-1 DDL + G-A-2/G-B-2/G-C-2 refresh） | P0 全部验收通过 |
-| **P2** | **真实 Smoke & Canary** | PR-0 Secret 审计、PR-1 MongoDB 只读预检、PR-2/3/4 真实 Provider smoke、PR-DDL-* 集合创建、PR-CANARY-* 手动 canary | 逐 Gate Pascal 授权（PR-0~PR-4、PR-DDL-*、PR-CANARY-*） | P1 完成 |
+|| **P0**（已完成） | **离线可实现契约** | 静态代码、fixture、mock Provider、孪生等价性测试、refresh 三态守卫 stub（`NotImplementedError`）、`_EXPECTED_*_FIELDS` 定义、from_dict 松弛映射、端到端离线 smoke（mongomock/fake） | 已通过 Kanban 链完成 | 无外部依赖 |
+| **P1**（已完成） | **Fake-only Closeout** | P3PersistenceWriter get/upsert 代码实现（mongomock 验证）、refresh happy-path 编排（mock Provider + mongomock）、CacheManager.put() 调用代码、_is_refresh_authorized() toggle、DataRouter._try_materialized() capability 扩展、northbound_daily fail-stop。**全部仅 mongomock/fake 验证，零真实 I/O** | 已通过 Kanban 链完成（P1 T1→T2→T3→T4→T5→T6） | P0 全部验收通过 |
+| **P1.5** | **生产激活** | G-A/B/C-2 Refresh Gate 激活：`_is_refresh_authorized()`→True + refresh happy-path 生产启用 | 逐子阶段 Pascal Gate（G-A/B/C-2）；P1.5 前不得真实激活 | P1 完成 + Pascal 显式确认 |
+| **P2** | **真实 Smoke & Canary** | PR-0 Secret 审计、PR-1 MongoDB 只读预检、PR-2/3/4 真实 Provider smoke、PR-DDL-* 集合创建、PR-CANARY-* 手动 canary | 逐 Gate Pascal 授权（PR-0~PR-4、PR-DDL-*、PR-CANARY-*） | P1.5 完成 |
 
 | 操作 | P0 允许 | P1 允许 | P2 允许 |
 |---|---|---|---|
@@ -1213,9 +1218,10 @@ P1 覆盖 P3-A/P3-B/P3-C 全部六个 capability，对应三个 `03_data_ud_*` �
 |---|---|---|---|---|
 | **P3-A** | `03_data_ud_market_sector_snapshot` | `sector.snapshot`、`sector.ranking` | `{market, sector_code, snapshot_date}` | upsert（`update_one` with `$set`）；同一唯一键的重复写入覆盖，不保留历史版本 |
 | **P3-B** | `03_data_ud_stock_capital_flow` | `flow.capital_flow_daily`、`flow.northbound_daily` | `{market, symbol, trade_date}` | upsert（同上）。`northbound_daily` 的 refresh 路径**始终 fail-stop**（`_is_northbound_refresh_disallowed()` 返回 True），永不进入 authorized 态 |
-| **P3-C** | `03_data_ud_market_sentiment_snapshot` | `sentiment.market_snapshot`、`sentiment.limit_up_pool` | `{market, snapshot_date, snapshot_time}` | upsert（同上） |
-
-**禁止**：
+| **P3-C** | `03_data_ud_market_sentiment_snapshot` | `sentiment.market_snapshot` | `{market, snapshot_date, snapshot_time}` | upsert（同上）；MarketSentimentSnapshot 22 字段 canonical 契约为唯一写入 schema |
+| | | `sentiment.limit_up_pool` | `{market, symbol, trade_date}` | upsert（同上）；LimitUpPoolRecord 为唯一写入 schema；两个 capability 共存于同一集合（异构文档，异键），写入不冲突。读路径 date-level pool filter 为 `{market, trade_date}`，single-stock 扩展为 `{market, symbol, trade_date}`（详见 F1 amendment `RFC-03-014-F1` 键裁定 + F4 amendment `RFC-03-014-F4` 读 filter 裁定） |
+|
+|**禁止**：
 - 任何旧 10-field `sentiment_type` 聚合模型（`{market, sentiment_type, market_date}` 唯一键）的写入路径——22 字段 canonical 契约是唯一产品 schema。
 - 在 P1 离线实现中写入真实 MongoDB 集合（见 §P1.6 副作用矩阵）。
 
@@ -1342,13 +1348,13 @@ PC-11（freshness `sentiment` vs `market_sentiment` 命名冲突）在 P1 中保
 - P1 不得为消除命名冲突修改 `freshness.py` 或 `DEFAULT_TTLS` 定义中的键名。
 - PC-11 的裁定时机标记为「P3 三层文档 finalize 前，由 Pascal 单独决断」。
 
-### P1.10 P1 验收标准
+### P1.10 P1 验收标准（Fake-only Closeout ✅）
 
-1. P3PersistenceWriter.get()/upsert() 在 mongomock 环境中读取/写入正确的业务集合，使用 §P1.2 定义的唯一键。
-2. `refresh_xxx()` happy-path：mock Provider + mongomock 全流程 PASS；`_is_refresh_authorized()=True` 时写入 upsert 和 cache；`=False` 时不执行任何写入。
-3. `northbound_daily` refresh 路径 `_is_northbound_refresh_disallowed()` 返回 True，永不进入 authorized 态。
-4. `DataRouter._try_materialized()` 在 P3 capability 上返回正确的物化数据（mongomock 环境）。
-5. 读取方法（`get_sector_snapshot` 等）不触发任何写入——source_trace 不含 `"ud_materialized(ok)"` 或 `"cache(ok)"`。
-6. 零真实 I/O 声明：全部测试仅使用 mongomock/unittest.mock/fake Provider；无真实 AKShare/MongoDB 调用产生。
-7. 所有 P0 验收标准（PA-1~PA-9、PB-1~PB-10、PC-1~PC-11）在 P1 代码变更后**继续通过**。
-8. `git diff --check` 无残留冲突标记；`git diff --name-status` 仅显示两份文档（RFC 与 SPEC）的改动。
+- [x] P3PersistenceWriter.get()/upsert() 在 mongomock 环境中读取/写入正确的业务集合，使用 §P1.2 定义的唯一键。
+- [x] `refresh_xxx()` happy-path：mock Provider + mongomock 全流程 PASS；`_is_refresh_authorized()=True` 时写入 upsert 和 cache；`=False` 时不执行任何写入。
+- [x] `northbound_daily` refresh 路径 `_is_northbound_refresh_disallowed()` 返回 True，永不进入 authorized 态。
+- [x] `DataRouter._try_materialized()` 在 P3 capability 上返回正确的物化数据（mongomock 环境）。
+- [x] 读取方法（`get_sector_snapshot` 等）不触发任何写入——source_trace 不含 `"ud_materialized(ok)"` 或 `"cache(ok)"`。
+- [x] 零真实 I/O 声明：全部测试仅使用 mongomock/unittest.mock/fake Provider；无真实 AKShare/MongoDB 调用产生。
+- [x] 所有 P0 验收标准（PA-1~PA-9、PB-1~PB-10、PC-1~PC-11）在 P1 代码变更后**继续通过**。
+- [x] `git diff --check` 无残留冲突标记；`git diff --name-status` 仅显示两份文档（RFC 与 SPEC）的改动。

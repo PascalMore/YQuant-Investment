@@ -334,7 +334,13 @@ class DataRouter:
         """
         capability = _validate_capability(domain, operation)
         # Surface malformed ``market`` eagerly — Phase 0 behaviour.
-        self._resolve_market(market, security_id)
+        # F4 amendment (SPEC-03-014-F4 §2.3): the resolved market is
+        # also forwarded through the call chain so
+        # ``_p3_filter_for()`` can inject it into the materialized-read
+        # filter. Without this passthrough the P3 read path loses
+        # market isolation and may return cross-market records
+        # (DESIGN-03-014-F4 §2.1.4).
+        resolved_market = self._resolve_market(market, security_id)
         params_dict = dict(params or {})
         ts = fetched_at or datetime.now(timezone.utc).replace(tzinfo=None)
 
@@ -406,6 +412,7 @@ class DataRouter:
             ts,
             inherited_trace=trace,
             force_refresh=force_refresh,
+            market=resolved_market.value,
         )
         if result.provider == "error" and empty_ta_cn is not None:
             # Everything failed, return the empty TA-CN result instead
@@ -589,24 +596,39 @@ class DataRouter:
         domain: str,
         operation: str,
         params: Mapping[str, Any] | None,
+        market: str | None = None,
     ) -> dict[str, Any]:
         """Build a business-key filter dict for ``P3PersistenceWriter.get()``.
 
-        For P1 offline mode, the filter is a simple passthrough of
-        ``params`` (the same dict the caller passes into the router).
-        Future sub-stages may enrich it with additional business-key
-        fields derived from ``security_id``.
+        The filter MUST include ``market`` to prevent cross-market
+        record leakage. The ``market`` value comes from the ``query()``
+        call chain (resolved via :meth:`_resolve_market`), not from
+        ``security_id.market`` (which may be a placeholder for
+        level-pool queries such as ``sentiment.limit_up_pool``).
+
+        When ``market`` is provided, the returned filter is
+        ``{"market": market, **(params or {})}``. When ``market`` is
+        ``None`` (caller did not pass it), the behaviour falls back to
+        the Phase 1B-B passthrough for backward compatibility — the
+        returned dict does NOT include ``"market"``.
 
         Args:
             security_id: The :class:`SecurityId` being queried.
             domain: The P3 domain.
             operation: The P3 operation.
             params: Caller-supplied query parameters.
+            market: Resolved market string (e.g. ``"CN"``). Passed
+                through the entire call chain from ``query()``.
 
         Returns:
-            A ``dict`` suitable as a filter for ``P3PersistenceWriter.get()``.
+            A ``dict`` suitable as a filter for
+            ``P3PersistenceWriter.get()``. Always a fresh dict object
+            (mutating the result does not affect ``params``).
         """
-        return dict(params or {})
+        filter_ = dict(params or {})
+        if market is not None:
+            filter_["market"] = market
+        return filter_
 
     def _try_materialized(
         self,
@@ -620,6 +642,7 @@ class DataRouter:
         *,
         capability: str | None = None,
         p3_writer: Any = None,
+        market: str | None = None,
     ) -> DataResult | None:
         """Step 2: consult :class:`LocalMongoAdapter` or ``P3PersistenceWriter``.
 
@@ -683,7 +706,9 @@ class DataRouter:
                 # the *dispatch* to be observable in the trace.
                 rows = p3_writer.get(
                     collection,
-                    self._p3_filter_for(security_id, domain, operation, params),
+                    self._p3_filter_for(
+                        security_id, domain, operation, params, market=market
+                    ),
                 )
             except Exception as exc:
                 logger.warning(
@@ -864,6 +889,8 @@ class DataRouter:
         ts: datetime,
         inherited_trace: list[str] | None,
         force_refresh: bool = False,
+        *,
+        market: str | None = None,
     ) -> DataResult:
         """Run Step 2 → Step 3 → Step 4 with the cache layer wired in.
 
@@ -910,6 +937,7 @@ class DataRouter:
             force_refresh=force_refresh,
             capability=capability,
             p3_writer=self._p3_writer,
+            market=market,
         )
         if materialized is not None:
             return materialized

@@ -15,6 +15,18 @@ the task body remain intact.
 Tests live in this single file because the writer's ``upsert`` /
 ``UpsertOutcome`` surface is small enough that the writer can be
 exercised end-to-end without splitting the file.
+
+Three-class coverage (T3-B / T3-D verifier scope, kanban
+``t_88a121fc``): the V0.5 §0.4 design enumerates three Phase-3
+business collections — sector snapshot, capital flow, market
+sentiment. Each test class below covers the write → get → delete
+round-trip on **its** collection using the documented business unique
+key. The four classic acceptance tests
+(``test_all_records_persist`` /
+``test_upsert_is_idempotent_on_business_key`` /
+``test_delete_returns_record_count`` /
+``test_constructor_rejects_real_pymongo``) are repeated per
+collection so the verification matrix is uniform across all three.
 """
 
 from __future__ import annotations
@@ -35,6 +47,12 @@ from skills.data.unified_data.adapters.p3_persistence_writer import (
 
 SECTOR_COLLECTION = "03_data_ud_market_sector_snapshot"
 SECTOR_UNIQUE_KEY = frozenset({"market", "sector_code", "snapshot_date"})
+
+FLOW_COLLECTION = "03_data_ud_stock_capital_flow"
+FLOW_UNIQUE_KEY = frozenset({"market", "symbol", "trade_date"})
+
+SENTIMENT_COLLECTION = "03_data_ud_market_sentiment_snapshot"
+SENTIMENT_UNIQUE_KEY = frozenset({"market", "snapshot_date", "snapshot_time"})
 
 
 def _make_writer() -> P3PersistenceWriter:
@@ -302,3 +320,344 @@ class TestRefreshWritesViaP3Writer:
         assert n == 1
         remaining = writer.get(SECTOR_COLLECTION, {})
         assert len(remaining) == 2
+
+
+# ---------------------------------------------------------------------------
+# Three-class coverage — P3-B capital flow (T3-B / T3-D verifier scope)
+# ---------------------------------------------------------------------------
+
+
+def _sample_flow_records() -> list[dict]:
+    """Three capital-flow records across two symbols × two dates.
+
+    Business unique key: ``{market, symbol, trade_date}`` per V0.5 §0.4.
+    """
+    return [
+        {
+            "market": "CN",
+            "symbol": "600519",
+            "trade_date": "2026-07-21",
+            "main_net_inflow": 12_345_678.0,
+            "main_net_inflow_pct": 1.23,
+            "retail_net_inflow": -2_000_000.0,
+            "super_large_net_inflow": 5_000_000.0,
+            "large_net_inflow": 3_000_000.0,
+            "medium_net_inflow": 2_000_000.0,
+            "small_net_inflow": 2_345_678.0,
+            "northbound_net_flow": None,
+            "provider": "flow_stub",
+        },
+        {
+            "market": "CN",
+            "symbol": "600519",
+            "trade_date": "2026-07-20",
+            "main_net_inflow": 8_000_000.0,
+            "main_net_inflow_pct": 0.50,
+            "retail_net_inflow": -1_500_000.0,
+            "provider": "flow_stub",
+        },
+        {
+            "market": "CN",
+            "symbol": "000001",
+            "trade_date": "2026-07-21",
+            "main_net_inflow": -3_500_000.0,
+            "main_net_inflow_pct": -0.45,
+            "retail_net_inflow": 1_000_000.0,
+            "northbound_net_flow": None,
+            "provider": "flow_stub",
+        },
+    ]
+
+
+class TestCapitalFlowP3Writer:
+    """V0.5 §0.4 / RFC V0.9 P3-B — capital flow collection round-trip.
+
+    The :class:`P3PersistenceWriter` must serve the P3-B collection
+    the same way it serves the sector snapshot collection. The
+    business unique key is the documented
+    ``{market, symbol, trade_date}``; routing by the wrong key (e.g.
+    ``materialized_key``) would break both ``get`` and ``delete``
+    below.
+    """
+
+    def test_all_records_persist(self):
+        writer = _make_writer()
+        records = _sample_flow_records()
+        outcome = writer.upsert(
+            collection=FLOW_COLLECTION,
+            records=records,
+            unique_key=FLOW_UNIQUE_KEY,
+        )
+        assert outcome.persisted == 3
+        assert outcome.failed == 0
+        assert outcome.failed_keys == []
+        assert outcome.errors == []
+
+        docs = writer.get(
+            FLOW_COLLECTION,
+            {"market": "CN", "symbol": "600519"},
+        )
+        dates = sorted(d["trade_date"] for d in docs)
+        assert dates == ["2026-07-20", "2026-07-21"]
+
+    def test_upsert_is_idempotent_on_business_key(self):
+        """Re-running the same business key overwrites in place (V0.5 §5.4.3)."""
+        writer = _make_writer()
+        writer.upsert(
+            collection=FLOW_COLLECTION,
+            records=_sample_flow_records(),
+            unique_key=FLOW_UNIQUE_KEY,
+        )
+        outcome = writer.upsert(
+            collection=FLOW_COLLECTION,
+            records=[
+                {
+                    "market": "CN",
+                    "symbol": "600519",
+                    "trade_date": "2026-07-21",
+                    "main_net_inflow": 99_999_999.0,
+                    "main_net_inflow_pct": 9.99,
+                    "provider": "flow_stub",
+                }
+            ],
+            unique_key=FLOW_UNIQUE_KEY,
+        )
+        assert outcome.persisted == 1
+        assert outcome.failed == 0
+
+        docs = writer.get(
+            FLOW_COLLECTION,
+            {"market": "CN", "symbol": "600519", "trade_date": "2026-07-21"},
+        )
+        assert len(docs) == 1
+        assert docs[0]["main_net_inflow"] == 99_999_999.0
+
+        all_docs = writer.get(FLOW_COLLECTION, {})
+        assert len(all_docs) == 3
+
+    def test_delete_returns_record_count(self):
+        writer = _make_writer()
+        writer.upsert(
+            collection=FLOW_COLLECTION,
+            records=_sample_flow_records(),
+            unique_key=FLOW_UNIQUE_KEY,
+        )
+        n = writer.delete(
+            FLOW_COLLECTION,
+            {"market": "CN", "symbol": "000001"},
+        )
+        assert n == 1
+        remaining = writer.get(FLOW_COLLECTION, {})
+        assert len(remaining) == 2
+
+    def test_constructor_rejects_real_pymongo(self):
+        """Same offline guard tested for the sector path applies here too."""
+
+        class FakePymongoDatabase:
+            pass
+
+        FakePymongoDatabase.__module__ = "pymongo.database"
+        with pytest.raises(TypeError) as excinfo:
+            P3PersistenceWriter(FakePymongoDatabase())
+        assert "pymongo" in str(excinfo.value).lower()
+
+
+# ---------------------------------------------------------------------------
+# Three-class coverage — P3-C market sentiment (T3-B / T3-D verifier scope)
+# ---------------------------------------------------------------------------
+
+
+def _sample_sentiment_records() -> list[dict]:
+    """Three sentiment records across two dates × close/mid sessions.
+
+    Business unique key: ``{market, snapshot_date, snapshot_time}``
+    per V0.23 §3.3 (the canonical 22-field contract). The earlier
+    ``{market, sentiment_type, market_date}`` key is superseded —
+    callers must use the new one.
+    """
+    return [
+        {
+            "market": "CN",
+            "snapshot_date": "2026-07-21",
+            "snapshot_time": "close",
+            "limit_up_count": 42,
+            "limit_down_count": 8,
+            "advance_count": 3250,
+            "decline_count": 1500,
+            "flat_count": 250,
+            "market_temperature": None,
+            "northbound_net_flow": None,
+            "provider": "sentiment_stub",
+        },
+        {
+            "market": "CN",
+            "snapshot_date": "2026-07-20",
+            "snapshot_time": "close",
+            "limit_up_count": 18,
+            "limit_down_count": 12,
+            "advance_count": 2100,
+            "decline_count": 1800,
+            "flat_count": 600,
+            "market_temperature": None,
+            "northbound_net_flow": None,
+            "provider": "sentiment_stub",
+        },
+        {
+            "market": "CN",
+            "snapshot_date": "2026-07-21",
+            "snapshot_time": "mid",
+            "limit_up_count": 30,
+            "limit_down_count": 6,
+            "advance_count": 2800,
+            "decline_count": 1700,
+            "flat_count": 500,
+            "market_temperature": None,
+            "northbound_net_flow": None,
+            "provider": "sentiment_stub",
+        },
+    ]
+
+
+class TestMarketSentimentP3Writer:
+    """V0.23 §3.3 / RFC V0.16 P3-C — market-sentiment collection round-trip.
+
+    The sentiment collection shares the same writer but uses a
+    different business unique key (``{market, snapshot_date,
+    snapshot_time}``). A swap to the old ``sentiment_type /
+    market_date`` form would still upsert but break
+    ``get`` / ``delete`` because the filter wouldn't match.
+    """
+
+    def test_all_records_persist(self):
+        writer = _make_writer()
+        records = _sample_sentiment_records()
+        outcome = writer.upsert(
+            collection=SENTIMENT_COLLECTION,
+            records=records,
+            unique_key=SENTIMENT_UNIQUE_KEY,
+        )
+        assert outcome.persisted == 3
+        assert outcome.failed == 0
+        assert outcome.failed_keys == []
+        assert outcome.errors == []
+
+        docs = writer.get(
+            SENTIMENT_COLLECTION,
+            {"market": "CN", "snapshot_date": "2026-07-21"},
+        )
+        times = sorted(d["snapshot_time"] for d in docs)
+        assert times == ["close", "mid"]
+
+    def test_upsert_is_idempotent_on_business_key(self):
+        """Re-running the same business key overwrites in place (V0.5 §5.4.3)."""
+        writer = _make_writer()
+        writer.upsert(
+            collection=SENTIMENT_COLLECTION,
+            records=_sample_sentiment_records(),
+            unique_key=SENTIMENT_UNIQUE_KEY,
+        )
+        outcome = writer.upsert(
+            collection=SENTIMENT_COLLECTION,
+            records=[
+                {
+                    "market": "CN",
+                    "snapshot_date": "2026-07-21",
+                    "snapshot_time": "close",
+                    "limit_up_count": 99,
+                    "limit_down_count": 0,
+                    "advance_count": 5000,
+                    "decline_count": 0,
+                    "flat_count": 0,
+                    "market_temperature": None,
+                    "northbound_net_flow": None,
+                    "provider": "sentiment_stub",
+                }
+            ],
+            unique_key=SENTIMENT_UNIQUE_KEY,
+        )
+        assert outcome.persisted == 1
+        assert outcome.failed == 0
+
+        docs = writer.get(
+            SENTIMENT_COLLECTION,
+            {"market": "CN", "snapshot_date": "2026-07-21", "snapshot_time": "close"},
+        )
+        assert len(docs) == 1
+        assert docs[0]["limit_up_count"] == 99
+
+        all_docs = writer.get(SENTIMENT_COLLECTION, {})
+        assert len(all_docs) == 3
+
+    def test_delete_returns_record_count(self):
+        writer = _make_writer()
+        writer.upsert(
+            collection=SENTIMENT_COLLECTION,
+            records=_sample_sentiment_records(),
+            unique_key=SENTIMENT_UNIQUE_KEY,
+        )
+        n = writer.delete(
+            SENTIMENT_COLLECTION,
+            {"market": "CN", "snapshot_date": "2026-07-20"},
+        )
+        assert n == 1
+        remaining = writer.get(SENTIMENT_COLLECTION, {})
+        assert len(remaining) == 2
+
+    def test_constructor_rejects_real_pymongo(self):
+        """Same offline guard tested for the sector path applies here too."""
+
+        class FakePymongoDatabase:
+            pass
+
+        FakePymongoDatabase.__module__ = "pymongo.database"
+        with pytest.raises(TypeError) as excinfo:
+            P3PersistenceWriter(FakePymongoDatabase())
+        assert "pymongo" in str(excinfo.value).lower()
+
+
+# ---------------------------------------------------------------------------
+# Cross-collection — capability map and unique-key map completeness
+# ---------------------------------------------------------------------------
+
+
+class TestAllP3CollectionsCovered:
+    """Sanity-check that the writer's dispatch tables list all 3 collections.
+
+    Acts as a tripwire: if a new business collection is added to
+    :data:`P3_COLLECTION_BY_CAPABILITY`, this class forces the test
+    suite to grow alongside it.
+    """
+
+    def test_collection_map_has_exactly_three_collections(self):
+        # 6 capability entries map onto 3 unique collection names —
+        # sector has 2 capabilities (snapshot, ranking), flow has 2
+        # (capital_flow_daily, northbound_daily), sentiment has 2
+        # (market_snapshot, limit_up_pool). The tripwire counts the
+        # unique collection values, not the capability entries.
+        assert len(set(P3_COLLECTION_BY_CAPABILITY.values())) == 3
+
+    def test_unique_key_map_has_exactly_three_keys(self):
+        # Each of the 6 capabilities has a documented business unique
+        # key; sector, flow, sentiment each contribute 2 frozensets.
+        # The tripwire counts distinct unique keys by their frozenset
+        # identity so capability aliases (e.g. sector.snapshot ==
+        # sector.ranking) don't inflate the count.
+        keys = {tuple(sorted(k)) for k in P3_UNIQUE_KEYS_BY_CAPABILITY.values()}
+        assert len(keys) == 3
+
+    def test_all_three_collections_have_distinct_unique_keys(self):
+        # sector vs flow share the prefix {market, ...} but diverge.
+        assert P3_UNIQUE_KEYS_BY_CAPABILITY["sector.snapshot"] != (
+            P3_UNIQUE_KEYS_BY_CAPABILITY["flow.capital_flow_daily"]
+        )
+        assert P3_UNIQUE_KEYS_BY_CAPABILITY["sentiment.market_snapshot"] != (
+            P3_UNIQUE_KEYS_BY_CAPABILITY["sector.snapshot"]
+        )
+
+    def test_collection_map_contains_sector_flow_sentiment(self):
+        expected = {
+            SECTOR_COLLECTION,
+            FLOW_COLLECTION,
+            SENTIMENT_COLLECTION,
+        }
+        assert set(P3_COLLECTION_BY_CAPABILITY.values()) == expected
