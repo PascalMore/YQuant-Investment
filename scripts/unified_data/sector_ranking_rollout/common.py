@@ -10,8 +10,11 @@
   fingerprint 只含结构字段，不含任何连接值。
 * :class:`BudgetReader` — Gate-1/3 查询强制层（G1-B-001 ~ G1-B-007）：
   查询类型白名单（count/distinct/find/aggregate）、过滤强制（白名单字段
-  ``sector_code`` / ``trade_date`` / ``market`` 至少一个）、单次 find
-  limit 上限、maxTimeMS/serverSelectionTimeoutMS 超时、预算统计。
+  ``full_symbol``（SW L1 行业指数，值集由 ``stock_sector_info`` L1 universe
+  派生）/ ``trade_date`` / ``classify_system``（``stock_sector_info`` 查询用）
+  至少一个）、单次 find limit 上限、maxTimeMS/serverSelectionTimeoutMS 超时、
+  预算统计。**不再使用** ``sector_code``（801* 前缀）或 ``index_basic_info``
+  ``market=\"CN\"`` 作为 L1 主路径过滤（L1 契约校正，SPEC G1-B-002）。
 * :func:`redact` / :func:`scan_secrets` — secrets 脱敏与泄露扫描
   （G0-C-005；泄露类别 ``uri_with_credentials`` / ``password_value`` /
   ``token_value`` / ``secret_value``）。
@@ -168,9 +171,10 @@ class MissingConnectionKeyError(Exception):
 # BudgetReader（G1-B-001 ~ G1-B-007）
 # ---------------------------------------------------------------------------
 
-# 过滤白名单（G1-B-002，F3 闭合：find 与 aggregate 首 stage 同一规则）
+# 过滤白名单（G1-B-002，F3 闭合 + L1 契约校正：find 与 aggregate 首 stage
+# 同一规则；不再使用 sector_code / market 作为 L1 主路径过滤）
 ALLOWED_FILTER_FIELDS: frozenset[str] = frozenset(
-    {"sector_code", "trade_date", "market"}
+    {"full_symbol", "trade_date", "classify_system"}
 )
 
 # realtime/intraday 标记（G1-C-005 / G3-B-009 / RT-4）
@@ -204,7 +208,23 @@ def _validate_pipeline(pipeline: list[Mapping[str, Any]]) -> list[dict[str, Any]
 
 
 class BudgetReader:
-    """Gate-1/3 查询强制层：白名单方法 + 过滤校验 + 条数/超时上限 + 统计。"""
+    """Gate-1/3 查询强制层：白名单方法 + 过滤校验 + 条数/超时上限 + 统计。
+
+    Args:
+        db: pymongo / mongomock Database。
+        max_find: 单次 find limit 上限（G1-B-003，默认 1000）。
+        max_time_ms: 每次查询 maxTimeMS（G1-B-004，默认 30000）。
+        server_selection_timeout_ms: serverSelectionTimeoutMS（默认 10000）。
+        cumulative_rows_limit: 累计命中行数上限（G1-B-006，**Gate-1 scope**；
+            默认 100000）。``None`` 禁用全局累计阻断（G3-B-019，Gate-3
+            专用——job 层无全局阈值）。
+        day_rows_limit: 日级命中行数上限（G3-B-018，**Gate-3 专用**；默认
+            ``None`` 不启用）。Gate-3 ``main`` 显式传 ``4 * len(expected)``
+            （31 → 124）；每次查询后检查 ``cumulative_rows > day_rows_limit``
+            → :class:`BudgetViolation` → G3-S-013。
+        max_rows: 兼容别名（等价于 ``cumulative_rows_limit``；保留供既有
+            调用方/测试使用，任一给定即覆盖默认）。
+    """
 
     def __init__(
         self,
@@ -213,25 +233,57 @@ class BudgetReader:
         max_find: int = 1000,
         max_time_ms: int = 30_000,
         server_selection_timeout_ms: int = 10_000,
-        max_rows: int = 100_000,
+        cumulative_rows_limit: int | None = 100_000,
+        day_rows_limit: int | None = None,
+        max_rows: int | None = None,
     ) -> None:
         self._db = db
         self._max_find = max_find
         self._max_time_ms = max_time_ms
         self._server_selection_timeout_ms = server_selection_timeout_ms
-        self._max_rows = max_rows
+        if max_rows is not None:
+            cumulative_rows_limit = max_rows
+        self._cumulative_rows_limit = cumulative_rows_limit
+        self._day_rows_limit = day_rows_limit
         self._total_rows = 0
         self._stats: list[dict[str, Any]] = []
 
+    @property
+    def cumulative_rows(self) -> int:
+        """当前累计命中行数（Gate-1 判 G1-B-006；Gate-3 单日 informational）。"""
+        return self._total_rows
+
+    def reset_stats(self) -> None:
+        """清零累计计数器（``cumulative_rows``）**与** stats 列表（G3-B-017）。
+
+        二者必须同时清零，否则 ``days[].query_budget`` 跨日累加（违
+        G3-A-003）。Gate-3 每 ``process_day`` 开头调用；job 级聚合
+        （``summary.total_query_rows`` / 顶层 ``query_budget``）必须在 reset
+        外基于保留的逐日记录计算（reset-safe，DESIGN §3.6.6）。
+        """
+        self._total_rows = 0
+        self._stats = []
+
     def _record(self, kind: str, rows: int, ms: float) -> None:
-        # G1-B-006：累计命中 > 上限 → BudgetViolation（提示缩小范围）
+        # 先记录本次查询（审计证据），再判上限——违规查询也进入 stats，
+        # 使 failed_days[].query_budget 反映停止前实际执行的查询。
         self._total_rows += rows
-        if self._total_rows > self._max_rows:
+        self._stats.append({"kind": kind, "count": 1, "rows": rows, "ms": round(ms, 3)})
+        # G1-B-006（Gate-1 scope）：累计命中 > 上限 → BudgetViolation
+        if (
+            self._cumulative_rows_limit is not None
+            and self._total_rows > self._cumulative_rows_limit
+        ):
             raise BudgetViolation(
                 f"cumulative rows {self._total_rows} exceed budget "
-                f"{self._max_rows} (G1-B-006); narrow the query range"
+                f"{self._cumulative_rows_limit} (G1-B-006); narrow the query range"
             )
-        self._stats.append({"kind": kind, "count": 1, "rows": rows, "ms": round(ms, 3)})
+        # G3-B-018（Gate-3 专用）：单日累计命中 > 日级上限 → BudgetViolation
+        if self._day_rows_limit is not None and self._total_rows > self._day_rows_limit:
+            raise BudgetViolation(
+                f"per-day rows {self._total_rows} exceed day limit "
+                f"{self._day_rows_limit} (G3-B-018)"
+            )
 
     def count(self, collection: str, filter: Mapping[str, Any]) -> int:
         f = _validate_filter(filter)

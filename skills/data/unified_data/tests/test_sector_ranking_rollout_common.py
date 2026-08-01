@@ -148,9 +148,15 @@ class TestBudgetReaderFilterEnforcement:
         with pytest.raises(BudgetViolation):
             reader.find("index_daily_quotes", {"foo": 1})
 
-    def test_whitelist_sector_code_filter_allowed(self):
+    def test_whitelist_full_symbol_filter_allowed(self):
         reader = BudgetReader(_budget_db())
-        assert reader.find("index_daily_quotes", {"sector_code": "801010"}) == []
+        assert reader.find("index_daily_quotes", {"full_symbol": "801780.SI"}) == []
+
+    def test_whitelist_classify_system_filter_allowed(self):
+        reader = BudgetReader(_budget_db())
+        assert (
+            reader.find("stock_sector_info", {"classify_system": "SW"}) == []
+        )
 
     def test_whitelist_trade_date_range_filter_allowed(self):
         reader = BudgetReader(_budget_db())
@@ -162,9 +168,17 @@ class TestBudgetReaderFilterEnforcement:
             == []
         )
 
-    def test_whitelist_market_filter_allowed(self):
+    def test_legacy_sector_code_filter_rejected(self):
+        # L1 契约校正：sector_code（801* 前缀猜测）不再是 Gate-1 主路径过滤。
         reader = BudgetReader(_budget_db())
-        assert reader.find("index_basic_info", {"market": "CN"}) == []
+        with pytest.raises(BudgetViolation):
+            reader.find("index_daily_quotes", {"sector_code": "801010"})
+
+    def test_legacy_market_filter_rejected(self):
+        # L1 契约校正：index_basic_info market=CN 不再是 L1 主路径过滤。
+        reader = BudgetReader(_budget_db())
+        with pytest.raises(BudgetViolation):
+            reader.find("index_basic_info", {"market": "CN"})
 
     def test_count_requires_filter(self):
         reader = BudgetReader(_budget_db())
@@ -203,7 +217,7 @@ class TestBudgetReaderFilterEnforcement:
             reader.aggregate(
                 "index_daily_quotes",
                 [
-                    {"$match": {"sector_code": {"$in": ["801010"]}}},
+                    {"$match": {"full_symbol": {"$in": ["801780.SI"]}}},
                     {"$group": {"_id": "$trade_date"}},
                 ],
             )
@@ -213,23 +227,23 @@ class TestBudgetReaderFilterEnforcement:
     def test_find_limit_above_budget_raises(self):
         reader = BudgetReader(_budget_db())
         with pytest.raises(BudgetViolation):
-            reader.find("index_daily_quotes", {"sector_code": "801010"}, limit=1001)
+            reader.find("index_daily_quotes", {"full_symbol": "801780.SI"}, limit=1001)
 
     def test_find_limit_at_budget_allowed(self):
         reader = BudgetReader(_budget_db())
         assert (
-            reader.find("index_daily_quotes", {"sector_code": "801010"}, limit=1000)
+            reader.find("index_daily_quotes", {"full_symbol": "801780.SI"}, limit=1000)
             == []
         )
 
     def test_stats_records_query_kinds(self):
         db = _budget_db()
         db["index_daily_quotes"].insert_one(
-            {"sector_code": "801010", "trade_date": "20260713"}
+            {"full_symbol": "801780.SI", "trade_date": "20260713"}
         )
         reader = BudgetReader(db)
-        reader.find("index_daily_quotes", {"sector_code": "801010"})
-        reader.count("index_daily_quotes", {"sector_code": "801010"})
+        reader.find("index_daily_quotes", {"full_symbol": "801780.SI"})
+        reader.count("index_daily_quotes", {"full_symbol": "801780.SI"})
         stats = reader.stats()
         assert len(stats) >= 2
         by_kind = {s["kind"]: s for s in stats}
@@ -244,20 +258,20 @@ class TestBudgetReaderFilterEnforcement:
         db = _budget_db()
         for i in range(12):
             db["index_daily_quotes"].insert_one(
-                {"sector_code": "801010", "trade_date": f"2026{i:02d}01"}
+                {"full_symbol": "801780.SI", "trade_date": f"2026{i:02d}01"}
             )
         reader = BudgetReader(db, max_rows=10)
         with pytest.raises(BudgetViolation):
-            reader.find("index_daily_quotes", {"sector_code": "801010"})
+            reader.find("index_daily_quotes", {"full_symbol": "801780.SI"})
 
     def test_cumulative_rows_within_budget_allowed(self):
         db = _budget_db()
         for i in range(3):
             db["index_daily_quotes"].insert_one(
-                {"sector_code": "801010", "trade_date": f"2026{i:02d}01"}
+                {"full_symbol": "801780.SI", "trade_date": f"2026{i:02d}01"}
             )
         reader = BudgetReader(db, max_rows=10)
-        rows = reader.find("index_daily_quotes", {"sector_code": "801010"})
+        rows = reader.find("index_daily_quotes", {"full_symbol": "801780.SI"})
         assert len(rows) == 3
         stats = reader.stats()
         assert sum(s["rows"] for s in stats) == 3

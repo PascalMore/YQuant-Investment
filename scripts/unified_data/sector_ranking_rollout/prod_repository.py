@@ -49,10 +49,17 @@ class ProdRankingWriter:
     与 :class:`HistoricalRankingWriter` 平行但允许真实 db；每个操作先过
     :meth:`_assert_namespace`（拒绝目标集合外的一切读写）。写入只应在
     ``BuildOutcome.status == \"complete\"`` 时发生（G3-B-012 由调用方保证）。
+
+    ``get()`` 强制 canonical sort ``{pct_chg: -1, sector_code: 1}``（DESIGN
+    §3.6.5 G3-V-003）：Mongo natural order 与 canonical order 不一致，生产
+    backfill 写后读回校验必须以受控排序检索，否则 G3-V-003 误报。
     """
 
     COLLECTION = "03_data_ud_sector_ranking_daily"
     UNIQUE_KEY: frozenset[str] = frozenset({"dataset", "trade_date", "sector_code"})
+    # canonical order：pct_chg DESC -> sector_code ASC（DESIGN §3.6.5 G3-V-003；
+    # tie-break sector_code ASC，保证同 pct_chg 时排序确定）。
+    CANONICAL_SORT: list[tuple[str, int]] = [("pct_chg", -1), ("sector_code", 1)]
 
     def __init__(self, db: Any) -> None:
         if db is None:
@@ -71,10 +78,15 @@ class ProdRankingWriter:
         collection: str | None = None,
         filter: Mapping[str, Any] | None = None,
     ) -> list[dict]:
-        """读取 ranking 行，返回 ``list[dict]``（与冻结 writer 同形态）。"""
+        """读取 ranking 行，返回 ``list[dict]``（与冻结 writer 同形态）。
+
+        强制 canonical sort ``{pct_chg: -1, sector_code: 1}``（G3-V-003）：
+        不接受调用方传入 sort；排序被本方法锁定，以保证写后读回比对的是
+        canonical order 而非 Mongo natural order。
+        """
         self._assert_namespace(collection)
         coll = self._db[collection or self.COLLECTION]
-        cursor = coll.find(dict(filter or {}))
+        cursor = coll.find(dict(filter or {})).sort(self.CANONICAL_SORT)
         return [dict(doc) for doc in cursor]
 
     def upsert(

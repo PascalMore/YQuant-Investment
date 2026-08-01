@@ -1,12 +1,17 @@
 """Gate-3 工具：真实 TA-CN 历史 backfill CLI（dry-run / canary / 全量，日级原子）。
 
-DESIGN-03-016 V0.4 §3.6 / SPEC-03-016 §3.4。读取 Gate-1 report
-（``--expected-file``，唯一 expected universe 来源，H-049u），从
-``index_daily_quotes`` 按日构建（复用冻结 ``build_ranking_rows``，100%
-exact-match、固定 pct_chg 公式），经 :class:`ProdRankingWriter` upsert 到
-``03_data_ud_sector_ranking_daily``，写后读回（G3-V-001~004）。范围来源
-二选一（``--range-file`` / 成对 ``--start-date``/``--end-date``）或 canary
-单日（``--canary-date``），互斥规则按 F1 冻结（§3.6.3）。
+DESIGN-03-016 V0.6 §3.6 / SPEC-03-016 §3.4（L1 契约校正）。读取 Gate-1 report
+（``--expected-file``，唯一 expected universe 来源，H-049u），必含三字段
+``expected_sector_codes`` / ``expected_sector_names`` / ``expected_full_symbols``
+（后者 = ``.SI`` 后缀 L1 join 值集，即 ``index_daily_quotes.full_symbol``
+值集；缺失/非法 → G3-S-002 参数层 fail-fast exit 1，不等 process_day）。
+从 ``index_daily_quotes`` 按 ``full_symbol`` join 逐日构建（复用冻结
+``build_ranking_rows``，100% exact-match、固定 pct_chg 公式），经
+:class:`ProdRankingWriter` upsert 到 ``03_data_ud_sector_ranking_daily``，
+写后读回（G3-V-001~004）。候选输出 ``sector_code`` 为 ``.SI`` 后缀 L1 code
+（来自 code→name 映射；G3-B-011 / 契约 6）。范围来源二选一（``--range-file`` /
+成对 ``--start-date``/``--end-date``）或 canary 单日（``--canary-date``），
+互斥规则按 F1 冻结（§3.6.3）。
 
 退出码（SPEC G0-C-004）：0 成功 / 1 参数前置失败 / 2 停止条件 / 3 连接凭据失败。
 
@@ -18,10 +23,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time as time_mod
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from skills.data.unified_data.models.domain.sector_ranking import (
     SectorRankingDaily,
@@ -33,6 +39,7 @@ from skills.data.unified_data.services.historical_sector_service import (
 
 from .common import (
     BudgetReader,
+    BudgetViolation,
     CompletedSessionPolicy,
     ConnLoader,
     EXIT_CONN,
@@ -51,6 +58,13 @@ from .prod_repository import NamespaceViolation, ProdRankingWriter
 TOOL = "gate3_backfill"
 VERSION = "0.1.0"
 DATASET = "sw2021_ta_cn"
+
+# Gate-1 report 必填三字段（G3-S-002：任一缺失/非法 → 参数层 fail-fast exit 1）。
+REQUIRED_EXPECTED_FIELDS: tuple[str, ...] = (
+    "expected_sector_codes",
+    "expected_sector_names",
+    "expected_full_symbols",
+)
 
 # realtime/intraday 标记（G3-B-009 / G3-S-010，RT-4）。
 REALTIME_MARKERS: frozenset[str] = frozenset({"realtime", "intraday", "rt"})
@@ -98,7 +112,14 @@ def _now_iso() -> str:
 
 
 def _load_expected_report(path: str) -> dict[str, Any]:
-    """读取并校验 Gate-1 report（G3-S-002 → EXIT_PARAM(1)）。"""
+    """读取并校验 Gate-1 report（G3-S-002 → EXIT_PARAM(1)，参数层 fail-fast）。
+
+    必填三字段：``expected_sector_codes``（31 个 ``.SI`` 后缀 L1 code）、
+    ``expected_sector_names``（code→name 映射）、``expected_full_symbols``
+    （31 个 ``index_daily_quotes.full_symbol`` 值集，即 ``.SI`` 后缀 L1 join
+    值集，Gate-3 行情 join 键）；任一缺失/类型非法 → G3-S-002，**不等
+    process_day**（SPEC §3.4.1 / G3-S-002）。
+    """
     p = Path(path)
     if not p.exists():
         raise Gate3Stop(
@@ -116,10 +137,48 @@ def _load_expected_report(path: str) -> dict[str, Any]:
         ) from exc
     if not isinstance(report, dict):
         raise Gate3Stop("G3-S-002", "--expected-file JSON must be an object", exit_code=EXIT_PARAM)
-    if "expected_sector_codes" not in report or "expected_sector_names" not in report:
+
+    missing = [field_name for field_name in REQUIRED_EXPECTED_FIELDS if field_name not in report]
+    if missing:
         raise Gate3Stop(
             "G3-S-002",
-            "--expected-file JSON missing expected_sector_codes/expected_sector_names",
+            "--expected-file JSON missing required field(s): "
+            + ", ".join(missing),
+            exit_code=EXIT_PARAM,
+        )
+
+    codes = report["expected_sector_codes"]
+    names = report["expected_sector_names"]
+    symbols = report["expected_full_symbols"]
+    if not isinstance(codes, list) or not codes:
+        raise Gate3Stop(
+            "G3-S-002",
+            "expected_sector_codes must be a non-empty list",
+            exit_code=EXIT_PARAM,
+        )
+    if not all(isinstance(c, str) and c.endswith(".SI") for c in codes):
+        raise Gate3Stop(
+            "G3-S-002",
+            "expected_sector_codes must be .SI-suffixed L1 codes",
+            exit_code=EXIT_PARAM,
+        )
+    if not isinstance(names, dict) or not names:
+        raise Gate3Stop(
+            "G3-S-002",
+            "expected_sector_names must be a non-empty mapping",
+            exit_code=EXIT_PARAM,
+        )
+    if not isinstance(symbols, list) or not symbols:
+        raise Gate3Stop(
+            "G3-S-002",
+            "expected_full_symbols must be a non-empty list",
+            exit_code=EXIT_PARAM,
+        )
+    if not all(isinstance(s, str) and s.endswith(".SI") for s in symbols):
+        raise Gate3Stop(
+            "G3-S-002",
+            "expected_full_symbols must be .SI-suffixed L1 join values "
+            "(index_daily_quotes.full_symbol)",
             exit_code=EXIT_PARAM,
         )
     return report
@@ -284,6 +343,19 @@ class DayOutcome:
     failed: int = 0
     ms: float = 0.0
     reason: str = ""
+    query_budget: list[dict[str, Any]] = field(default_factory=list)
+
+
+def _failed_status(sc_id: str) -> str:
+    """失败类别映射（G3-S-xxx → 人读 status，DESIGN §3.6.6 failed_days[].status）。"""
+    return {
+        "G3-S-004": "incomplete",
+        "G3-S-005": "empty",
+        "G3-S-006": "upsert-failed",
+        "G3-S-007": "read-back-mismatch",
+        "G3-S-010": "realtime-marker",
+        "G3-S-013": "budget-violation",
+    }.get(sc_id, "stop")
 
 
 def _to_internal(trade_date: str, date_format: str) -> str:
@@ -307,15 +379,29 @@ def process_day(
     budget: BudgetReader | None = None,
     date_format: str = "YYYYMMDD",
     updated_at: str | None = None,
+    expected_full_symbols: list[str] | None = None,
 ) -> DayOutcome:
     """处理单个交易日（读取 → 构建 → upsert → 写后读回，日级原子）。
 
-    * ``prev_date=None``（无前一日）→ ``DayOutcome(status=\"empty\",
-      reason=\"no-prev-close\")``（G3-B-004 / G3-B-016）。
+    * ``expected_full_symbols``：Gate-1 ``expected_full_symbols``（``.SI``
+      后缀 L1 join 值集 = ``index_daily_quotes.full_symbol`` 值集）；行情
+      join field = ``full_symbol``（L1 契约校正，非 ``sector_code``）。
+      ``None``（兼容 gate4 冻结测试调用）时 fallback 到 ``expected_codes``
+      （生产 Gate-3 CLI 始终显式传入 Gate-1 report 的该字段）。
+    * 候选输出 ``sector_code`` 来自 ``expected_codes``（``.SI`` 后缀 L1
+      code），``sector_name`` 来自 ``expected_names``（G3-B-011）。
+    * ``prev_date=None``（无前一日）→ ``DayOutcome(status="empty",
+      reason="no-prev-close")``（G3-B-004 / G3-B-016）。
     * 任一完整性 / rt / upsert / 读回失败 → ``Gate3Stop``（G3-S-004~007/010），
       不物化部分榜单（G3-B-012）。
+    * 预算模型（G3-B-017~020）：开头调用 ``reader.reset_stats()`` 使累计计数
+      **按日 scoped**；单日命中 > ``day_rows_limit`` → :class:`BudgetViolation`
+      → ``Gate3Stop``（G3-S-013，退出码 2，停止后续日）。
     """
     reader = budget if budget is not None else BudgetReader(db)
+    # G3-B-017：每 process_day 开头清零累计计数与 stats 列表（per-day scoped）。
+    reader.reset_stats()
+    day_start = time_mod.monotonic()
     if prev_date is None:
         return DayOutcome(
             trade_date=trade_date,
@@ -324,16 +410,30 @@ def process_day(
             reason="no-prev-close",
         )
 
+    symbols = list(expected_full_symbols) if expected_full_symbols is not None else list(expected_codes)
+    # code→full_symbol 映射（契约：带 .SI 的 l1_code 与 full_symbol 值集一一对应）。
+    code_to_symbol = dict(zip(expected_codes, symbols))
+    if len(code_to_symbol) != len(expected_codes):
+        # 防御：长度不一致时退化为恒等映射（code 即 full_symbol 值）。
+        code_to_symbol = {code: code for code in expected_codes}
+
     internal_day = _to_internal(trade_date, date_format)
     internal_prev = _to_internal(prev_date, date_format)
 
-    docs = reader.find(
-        "index_daily_quotes",
-        {
-            "sector_code": {"$in": expected_codes},
-            "trade_date": {"$in": [internal_day, internal_prev]},
-        },
-    )
+    try:
+        docs = reader.find(
+            "index_daily_quotes",
+            {
+                "full_symbol": {"$in": symbols},
+                "trade_date": {"$in": [internal_day, internal_prev]},
+            },
+        )
+    except BudgetViolation as exc:
+        # G3-B-018 / G3-S-013：单日查询命中 > day_rows_limit → 停止后续日。
+        raise Gate3Stop(
+            "G3-S-013",
+            f"{trade_date}: per-day query budget exceeded: {exc}",
+        ) from exc
     if any(_is_rt_marker(doc.get("source")) for doc in docs):
         raise Gate3Stop(
             "G3-S-010",
@@ -341,13 +441,14 @@ def process_day(
             "refusing to materialize (RT-4)",
         )
 
-    day_docs = {str(d["sector_code"]): d for d in docs if d["trade_date"] == internal_day}
-    prev_docs = {str(d["sector_code"]): d for d in docs if d["trade_date"] == internal_prev}
+    day_docs = {str(d["full_symbol"]): d for d in docs if d["trade_date"] == internal_day}
+    prev_docs = {str(d["full_symbol"]): d for d in docs if d["trade_date"] == internal_prev}
 
     candidates: list[dict[str, Any]] = []
     for code in expected_codes:
-        day_row = day_docs.get(code)
-        prev_row = prev_docs.get(code)
+        symbol = code_to_symbol.get(code, code)
+        day_row = day_docs.get(symbol)
+        prev_row = prev_docs.get(symbol)
         if day_row is None:
             continue  # 缺 day 行 → 该 code 缺失（G3-B-010）
         close = coerce_float(day_row.get("close"))
@@ -407,7 +508,9 @@ def process_day(
         observed=len(outcome.rows),
         upserted=upsert_outcome.persisted,
         failed=upsert_outcome.failed,
-        ms=0.0,
+        ms=round(time_mod.monotonic() - day_start, 3),
+        # G3-A-003：per-day query_budget（reset 后仅含单日计数，G3-B-017）。
+        query_budget=reader.stats(),
     )
 
 
@@ -450,12 +553,46 @@ def read_back_verify(
 # ---------------------------------------------------------------------------
 
 
+def _sum_query_rows(records: Iterable[Mapping[str, Any]]) -> int:
+    """对保留的逐日记录（days[] ∪ failed_days[]）的 query_budget 条数求和。
+
+    reset-safe（M2 / DESIGN §3.6.6）：只读保留记录，不读 reader 实时累计状态。
+    """
+    total = 0
+    for rec in records:
+        for item in rec.get("query_budget") or []:
+            total += int(item.get("rows", 0))
+    return total
+
+
+def _aggregate_query_budget(
+    records: Iterable[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """跨日聚合保留记录的 query_budget（各查询类别次数/条数/耗时求和）。
+
+    reset-safe（M4 / DESIGN §3.6.6）：由 days[] ∪ failed_days[] 派生，
+    不读取 reader 实时累计状态。
+    """
+    merged: dict[str, dict[str, Any]] = {}
+    for rec in records:
+        for item in rec.get("query_budget") or []:
+            kind = str(item.get("kind"))
+            entry = merged.setdefault(
+                kind, {"kind": kind, "count": 0, "rows": 0, "ms": 0.0}
+            )
+            entry["count"] += int(item.get("count", 0))
+            entry["rows"] += int(item.get("rows", 0))
+            entry["ms"] = round(entry["ms"] + float(item.get("ms", 0.0)), 3)
+    return list(merged.values())
+
+
 def _build_report_payload(
     *,
     conn_fingerprint: Mapping[str, Any],
     plan: RangePlan,
     canary: Mapping[str, Any] | None,
     days: list[dict[str, Any]],
+    failed_days: list[dict[str, Any]],
     summary: dict[str, Any],
     expected_sector_codes: list[str],
     expected_sector_names: Mapping[str, str],
@@ -476,6 +613,7 @@ def _build_report_payload(
         },
         "canary": dict(canary) if canary else None,
         "days": list(days),
+        "failed_days": list(failed_days),
         "summary": dict(summary),
         "expected_sector_codes": list(expected_sector_codes),
         "expected_sector_names": dict(expected_sector_names),
@@ -538,21 +676,34 @@ def main(
 
     secret_entries = conn.secret_entries()
     writer = ProdRankingWriter(db)
-    budget = BudgetReader(db)
     expected_codes = [str(c) for c in report.get("expected_sector_codes", [])]
     expected_names = {
         str(k): str(v) for k, v in (report.get("expected_sector_names") or {}).items()
     }
+    # L1 契约校正：行情 join 键 = Gate-1 expected_full_symbols（.SI 后缀）。
+    expected_full_symbols = [str(s) for s in report.get("expected_full_symbols", [])]
     full_dates = sorted({str(d) for d in (report.get("coverage_by_date") or {})})
     date_format = str(report.get("trade_date_format") or "YYYYMMDD")
 
+    # G3-B-018 / G3-B-019：Gate-3 reader 禁用全局累计阻断
+    # （cumulative_rows_limit=None），启用日级上限 4 × len(expected)（31 → 124）。
+    day_rows_limit = 4 * len(expected_codes)
+    budget = BudgetReader(
+        db,
+        cumulative_rows_limit=None,
+        day_rows_limit=day_rows_limit,
+    )
+
     days: list[dict[str, Any]] = []
+    failed_days: list[dict[str, Any]] = []
     stop_conditions: list[str] = []
     canary_payload: dict[str, Any] | None = None
     day_outcomes: list[DayOutcome] = []
+    last_success: str | None = None
 
     try:
         for trade_date in plan.dates:
+            day_start = time_mod.monotonic()
             try:
                 if trade_date in full_dates:
                     day_index = full_dates.index(trade_date)
@@ -564,12 +715,14 @@ def main(
                     prev_date=prev_date,
                     expected_codes=expected_codes,
                     expected_names=expected_names,
+                    expected_full_symbols=expected_full_symbols,
                     db=db,
                     writer=writer,
                     budget=budget,
                     date_format=date_format,
                     updated_at=updated_at,
                 )
+                outcome.ms = round(time_mod.monotonic() - day_start, 3)
                 day_outcomes.append(outcome)
                 days.append(
                     {
@@ -580,10 +733,29 @@ def main(
                         "upserted": outcome.upserted,
                         "failed": outcome.failed,
                         "ms": round(outcome.ms, 3),
+                        # G3-A-003：per-day query_budget（单日计数，G3-B-017）。
+                        "query_budget": list(outcome.query_budget),
                     }
                 )
+                if outcome.status == "complete":
+                    last_success = outcome.trade_date
             except Gate3Stop as exc:
                 stop_conditions.append(exc.sc_id)
+                # M5：失败日保留于 failed_days[]（即使不进成功 days[]）。
+                failed_days.append(
+                    {
+                        "trade_date": trade_date,
+                        "status": _failed_status(exc.sc_id),
+                        # G3-S-013：observed = 该日实际命中行数（> day_limit）。
+                        "observed": budget.cumulative_rows,
+                        # G3-S-013 必填 day_limit；其他 SC 为 null（DESIGN §3.6.6）。
+                        "day_limit": day_rows_limit if exc.sc_id == "G3-S-013" else None,
+                        "stop_id": exc.sc_id,
+                        "ms": round(time_mod.monotonic() - day_start, 3),
+                        # 停止前已执行的单日查询统计（G3-B-017 per-day scoped）。
+                        "query_budget": budget.stats(),
+                    }
+                )
                 log_jsonl(
                     report_dir,
                     "gate3",
@@ -619,11 +791,23 @@ def main(
         }
 
     success_days = sum(1 for d in day_outcomes if d.status == "complete")
-    failed_days = len(day_outcomes) - success_days
+    # 失败日 = failed_days[]（停止条件命中的日）+ days[] 中非 complete 的日。
+    failed_days_count = len(failed_days) + sum(
+        1 for d in days if d["status"] != "complete"
+    )
+    # M4：job 级聚合由保留的逐日记录（days[] ∪ failed_days[]）派生，reset-safe。
+    retained_records = days + failed_days
+    total_query_rows = _sum_query_rows(retained_records)
     summary = {
         "success_days": success_days,
-        "failed_days": failed_days,
+        "failed_days": failed_days_count,
         "stop_conditions_hit": stop_conditions,
+        # G3-A-004：全量累计查询命中行数（informational，G3-B-019）。
+        "total_query_rows": total_query_rows,
+        # G3-A-004：停止时记录最后成功日，供修复后显式重跑（G3-B-001）。
+        "resumption_boundary": last_success,
+        # G3-B-018：日级上限实际值（4 × len(expected)，31 → 124）。
+        "day_rows_limit": day_rows_limit,
     }
 
     payload = _build_report_payload(
@@ -631,10 +815,11 @@ def main(
         plan=plan,
         canary=canary_payload,
         days=days,
+        failed_days=failed_days,
         summary=summary,
         expected_sector_codes=expected_codes,
         expected_sector_names=expected_names,
-        query_budget=budget.stats(),
+        query_budget=_aggregate_query_budget(retained_records),
         checks={"G3-B-001": "PASS", "G3-B-013": "PASS", "G3-B-016": "PASS"}
         if not stop_conditions
         else {},
@@ -658,7 +843,7 @@ def main(
         report_dir,
         "gate3",
         {"action": "apply_done", "success_days": success_days,
-         "failed_days": failed_days, "stop_conditions_hit": stop_conditions},
+         "failed_days": failed_days_count, "stop_conditions_hit": stop_conditions},
         secret_entries=secret_entries,
     )
     if stop_conditions:

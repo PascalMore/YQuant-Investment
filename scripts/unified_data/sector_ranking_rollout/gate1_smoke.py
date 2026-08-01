@@ -1,10 +1,15 @@
 """Gate-1 工具：只读 smoke + 权威 expected universe 校验（03-016 rollout）。
 
-DESIGN-03-016 V0.4 §3.4 / SPEC-03-016 §3.2。只读 ``index_basic_info`` /
-``index_daily_quotes``，产出 ``gate1-report.json`` / ``.md``（G1-R-001~010），
-含权威 SW L1 expected universe、逐日 coverage、close 完整性、source 分布、
-canary 候选清单。默认 dry-run（零副作用）；``--apply --yes`` 才执行真实
-只读查询并写 report。
+DESIGN-03-016 V0.6 §3.4 / SPEC-03-016 §3.2（L1 契约校正）。只读
+``stock_sector_info``（L1 universe 唯一主来源，``classify_system=\"SW\"``
+distinct ``(l1_code,l1_name)`` 恰好 31）+ ``index_daily_quotes``（行情
+join field = ``full_symbol``，值集 = 31 个 ``.SI`` 后缀 L1 code），产出
+``gate1-report.json`` / ``.md``（G1-R-001~010），含权威 SW L1 expected
+universe、``expected_full_symbols``、``universe_source``、逐日 coverage、
+close 完整性、source 分布、canary 候选清单。``index_basic_info`` 仅可作
+可选元数据交叉核对（按真实 ``market=\"申万指数\"`` 语义），**不得**用作
+L1 universe 主来源；不再 query ``market=\"CN\"``。默认 dry-run（零副作用）；
+``--apply --yes`` 才执行真实只读查询并写 report。
 
 退出码（SPEC G0-C-004）：0 成功 / 2 停止条件 / 3 连接凭据失败。
 
@@ -42,11 +47,9 @@ from .common import (
 
 TOOL = "gate1_smoke"
 VERSION = "0.1.0"
-SW_PREFIX = "801"
-# 候选 code 提取顺序（G1-C-001）：sector_code → code → symbol。
-_CODE_FIELDS = ("sector_code", "code", "symbol")
-# 数据集隔离：type/classify 字段出现这些标记 → 混入 concept/region/style（G1-C-006）。
-_NON_SW_CLASSIFY_MARKERS = ("concept", "region", "style")
+UNIVERSE_SOURCE = "stock_sector_info"
+# 生产契约：SW L1 universe 恰好 31 个（SPEC G1-C-001 / G1-S-002）。
+EXPECTED_L1_COUNT = 31
 
 
 class Gate1Stop(Exception):
@@ -80,56 +83,62 @@ def _today_cst(now_fn: Callable[[], datetime] | None) -> str:
 
 
 # ---------------------------------------------------------------------------
-# G1-C-001 权威枚举 + G1-C-006 数据集隔离
+# G1-C-001 权威枚举（L1 契约校正：主来源 stock_sector_info）+ G1-C-006
 # ---------------------------------------------------------------------------
 
 
-def enumerate_sw_l1(db: Any, *, budget: BudgetReader | None = None) -> dict[str, str]:
-    """从 ``index_basic_info``（market=CN）枚举 SW L1 code/name。
+def enumerate_sw_l1(
+    db: Any,
+    *,
+    budget: BudgetReader | None = None,
+    expected_count: int = EXPECTED_L1_COUNT,
+) -> dict[str, str]:
+    """从 ``stock_sector_info`` 枚举 SW L1 code/name。
 
-    候选 code 提取顺序：``sector_code`` → ``code`` → ``symbol``；过滤前缀
-    ``^801``；重复 / 非法 → G1-S-003；空 → G1-S-002；type/classify 含
-    concept/region/style → G1-C-006（混入 → 停止）。
+    聚合：``$match {classify_system: \"SW\"}`` + ``$group (l1_code,l1_name)``
+    distinct；恰好 ``expected_count``（生产 31）条。``l1_code`` canonical
+    形态 = 带 ``.SI`` 后缀（例如 ``801780.SI``），同时即为
+    ``index_daily_quotes.full_symbol`` 的值。空/≠31 → G1-S-002；重复 /
+    非 ``.SI`` 后缀 canonical 形态 → G1-S-003。**不得**使用
+    ``index_basic_info`` 作为 L1 universe 枚举主来源（SPEC G1-C-001）。
     """
     reader = budget if budget is not None else BudgetReader(db)
-    docs = reader.find("index_basic_info", {"market": "CN"})
+    rows = reader.aggregate(
+        "stock_sector_info",
+        [
+            {"$match": {"classify_system": "SW"}},
+            {"$group": {"_id": {"l1_code": "$l1_code", "l1_name": "$l1_name"}}},
+        ],
+    )
 
     universe: dict[str, str] = {}
-    for doc in docs:
-        code = next(
-            (str(doc[f]) for f in _CODE_FIELDS if doc.get(f) is not None),
-            None,
-        )
-        if code is None:
-            continue
-        if not code.startswith(SW_PREFIX):
+    for row in rows:
+        _id = row.get("_id") or {}
+        code = str(_id.get("l1_code") or "").strip()
+        name = str(_id.get("l1_name") or "").strip()
+        if not code.endswith(".SI"):
             raise Gate1Stop(
                 "G1-S-003",
-                f"non-SW-L1 code {code!r} found in index_basic_info (market=CN)",
+                f"non-.SI canonical l1_code {code!r} found in stock_sector_info "
+                "(classify_system=SW)",
             )
-        classify = str(doc.get("type") or doc.get("classify") or "").lower()
-        if any(marker in classify for marker in _NON_SW_CLASSIFY_MARKERS):
-            raise Gate1Stop(
-                "G1-C-006",
-                f"dataset isolation violated: {code!r} classify={classify!r}",
-            )
-        name = str(doc.get("name") or "").strip()
         if not name:
-            raise Gate1Stop("G1-S-003", f"missing name for sector_code {code!r}")
+            raise Gate1Stop("G1-S-003", f"missing l1_name for l1_code {code!r}")
         if code in universe:
-            raise Gate1Stop("G1-S-003", f"duplicate sector_code {code!r}")
+            raise Gate1Stop("G1-S-003", f"duplicate l1_code {code!r}")
         universe[code] = name
 
-    if not universe:
+    if len(universe) != expected_count:
         raise Gate1Stop(
             "G1-S-002",
-            "no SW L1 universe found in index_basic_info (market=CN); refusing to guess",
+            f"SW L1 universe size {len(universe)} != expected {expected_count}; "
+            "refusing to guess (stock_sector_info classify_system=SW)",
         )
     return universe
 
 
 # ---------------------------------------------------------------------------
-# G1-C-001 双源交叉核对（OQ-016-2）
+# G1-C-001 可选交叉核对（OQ-016-2 已闭合：reference 缺失不阻断主 universe）
 # ---------------------------------------------------------------------------
 
 
@@ -158,7 +167,8 @@ def cross_check_reference(
     Returns:
         (discrepancies, reference_missing)。差异种类：``db_only`` /
         ``ref_only`` / ``name_mismatch``；差异仅记入 report，不参与
-        expected universe 构造。
+        expected universe 构造；reference 缺失只记 ``reference_missing``，
+        不阻断主 universe（主来源 stock_sector_info 可用）。
     """
     reference = _load_reference(reference_path)
     if reference is None:
@@ -189,7 +199,7 @@ def cross_check_reference(
 
 
 # ---------------------------------------------------------------------------
-# G1-C-003 可用 trade_date 范围 + 逐日 coverage
+# G1-C-003 可用 trade_date 范围 + 逐日 coverage（join field = full_symbol）
 # ---------------------------------------------------------------------------
 
 
@@ -225,19 +235,23 @@ def compute_coverage(
     max_trade_date: str | None = None,
     budget: BudgetReader | None = None,
 ) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
-    """逐日 coverage（G1-C-003）：aggregate $match + $group by trade_date。"""
+    """逐日 coverage（G1-C-003）：aggregate $match（full_symbol 值集）+ $group。
+
+    join field = ``index_daily_quotes.full_symbol``（L1 契约校正，非
+    sector_code）；``expected_full_symbols`` = 31 个 ``.SI`` 后缀 L1 code。
+    """
     reader = budget if budget is not None else BudgetReader(db)
-    codes = list(universe)
+    full_symbols = list(universe)  # universe key 即 .SI L1 code = full_symbol 值集
 
     # 先探测源日期形态（抽样首条）。
     sample = reader.find(
         "index_daily_quotes",
-        {"sector_code": {"$in": codes}},
+        {"full_symbol": {"$in": full_symbols}},
         limit=1,
     )
     fmt = _detect_date_format(sample)
 
-    match: dict[str, Any] = {"sector_code": {"$in": codes}}
+    match: dict[str, Any] = {"full_symbol": {"$in": full_symbols}}
     if min_trade_date or max_trade_date:
         date_q: dict[str, Any] = {}
         if min_trade_date:
@@ -250,18 +264,18 @@ def compute_coverage(
         "index_daily_quotes",
         [
             {"$match": match},
-            {"$group": {"_id": "$trade_date", "codes": {"$addToSet": "$sector_code"}}},
+            {"$group": {"_id": "$trade_date", "symbols": {"$addToSet": "$full_symbol"}}},
         ],
     )
 
     coverage_by_date: dict[str, dict[str, Any]] = {}
     for row in rows:
         external = _to_external(str(row["_id"]), fmt)
-        observed = len({str(c) for c in row.get("codes", [])})
+        observed = len({str(s) for s in row.get("symbols", [])})
         coverage_by_date[external] = {
-            "expected": len(codes),
+            "expected": len(full_symbols),
             "observed": observed,
-            "ratio": round(observed / len(codes), 6) if codes else 0.0,
+            "ratio": round(observed / len(full_symbols), 6) if full_symbols else 0.0,
         }
 
     external_dates = sorted(coverage_by_date)
@@ -274,7 +288,7 @@ def compute_coverage(
 
 
 # ---------------------------------------------------------------------------
-# G1-C-004 close/pre_close 完整性
+# G1-C-004 close/pre_close 完整性（join field = full_symbol）
 # ---------------------------------------------------------------------------
 
 
@@ -285,36 +299,52 @@ def check_close_completeness(
     budget: BudgetReader | None = None,
     trade_date_format: str = "YYYYMMDD",
 ) -> dict[str, list[str]]:
-    """逐日检查 close 有限数值缺失清单（G1-C-004）。"""
-    reader = budget if budget is not None else BudgetReader(db)
-    codes = list(universe)
+    """逐日检查 close 有限数值缺失清单（G1-C-004，full_symbol join）。
 
-    dates = sorted(
-        {
-            _to_external(str(value), trade_date_format)
-            for value in reader.distinct(
-                "index_daily_quotes", "trade_date", {"sector_code": {"$in": codes}}
-            )
-        }
+    单次 aggregate（DESIGN-03-016 V0.6 §3.4.2 伪代码约定 + G1-B-006 预算
+    契约）：``$match {full_symbol: {$in: expected_full_symbols}}`` →
+    ``$group by trade_date`` 收集 ``{full_symbol, close}`` 对；close 有效性
+    在 Python 侧用与旧实现相同的 :func:`coerce_float` 判定（覆盖 bool /
+    None / NaN / inf / 数值字符串），产出
+    ``dict[external_date, list[full_symbol]]``（有完整 close 的日期为空列表）。
+
+    相比旧实现（distinct dates + 逐日 ``find({full_symbol:$in, trade_date})``）
+    消除 N-date 查询模式：真实 Gate-1 高历史深度（4,592 个 trade_date）下
+    旧实现曾产生 4,592 轮 find / 87,099 行 + distinct 6,422 → 触发
+    100,000 累计行上限（G1-S-007）；聚合实现只按日期数（4,592）计行，
+    远低于上限。
+    """
+    reader = budget if budget is not None else BudgetReader(db)
+    full_symbols = list(universe)
+
+    rows = reader.aggregate(
+        "index_daily_quotes",
+        [
+            {"$match": {"full_symbol": {"$in": full_symbols}}},
+            {
+                "$group": {
+                    "_id": "$trade_date",
+                    "symbols": {
+                        "$addToSet": {"symbol": "$full_symbol", "close": "$close"}
+                    },
+                }
+            },
+        ],
     )
 
     missing_by_date: dict[str, list[str]] = {}
-    for external in dates:
-        internal = _to_internal(external, trade_date_format)
-        docs = reader.find(
-            "index_daily_quotes",
-            {"sector_code": {"$in": codes}, "trade_date": internal},
-        )
+    for row in rows:
+        external = _to_external(str(row["_id"]), trade_date_format)
         missing: list[str] = []
-        for doc in docs:
-            if coerce_float(doc.get("close")) is None:
-                missing.append(str(doc["sector_code"]))
+        for entry in row.get("symbols", []):
+            if coerce_float(entry.get("close")) is None:
+                missing.append(str(entry.get("symbol")))
         missing_by_date[external] = sorted(set(missing))
     return missing_by_date
 
 
 # ---------------------------------------------------------------------------
-# G1-C-005 data_source/source 线索
+# G1-C-005 data_source/source 线索（join field = full_symbol）
 # ---------------------------------------------------------------------------
 
 
@@ -324,12 +354,12 @@ def check_source_distribution(
     *,
     budget: BudgetReader | None = None,
 ) -> tuple[dict[str, int], list[str]]:
-    """source 值分布 + realtime/intraday 标记检测（G1-C-005）。"""
+    """source 值分布 + realtime/intraday 标记检测（G1-C-005，full_symbol join）。"""
     reader = budget if budget is not None else BudgetReader(db)
     rows = reader.aggregate(
         "index_daily_quotes",
         [
-            {"$match": {"sector_code": {"$in": list(universe)}}},
+            {"$match": {"full_symbol": {"$in": list(universe)}}},
             {"$group": {"_id": "$source", "n": {"$sum": 1}}},
         ],
     )
@@ -365,7 +395,7 @@ def select_candidates(
 
 
 # ---------------------------------------------------------------------------
-# report 构造（G1-R-001 ~ G1-R-010）
+# report 构造（G1-R-001 ~ G1-R-010，L1 契约校正）
 # ---------------------------------------------------------------------------
 
 
@@ -377,6 +407,8 @@ def build_report(
     query_budget: list[dict[str, Any]],
     expected_sector_codes: list[str],
     expected_sector_names: Mapping[str, str],
+    expected_full_symbols: list[str],
+    universe_source: str,
     trade_date_range: Mapping[str, Any],
     trade_date_format: str,
     coverage_by_date: Mapping[str, dict[str, Any]],
@@ -399,6 +431,8 @@ def build_report(
         "trade_date_format": trade_date_format,
         "expected_sector_codes": list(expected_sector_codes),
         "expected_sector_names": dict(expected_sector_names),
+        "expected_full_symbols": list(expected_full_symbols),
+        "universe_source": universe_source,
         "trade_date_range": dict(trade_date_range),
         "coverage_by_date": dict(coverage_by_date),
         "close_missing_by_date": dict(close_missing_by_date),
@@ -419,7 +453,7 @@ def _default_reference_path(report_dir: str) -> str:
 def _baseline_counts(db: Any) -> dict[str, int]:
     return {
         "index_daily_quotes": int(db["index_daily_quotes"].estimated_document_count()),
-        "index_basic_info": int(db["index_basic_info"].estimated_document_count()),
+        "stock_sector_info": int(db["stock_sector_info"].estimated_document_count()),
     }
 
 
@@ -427,10 +461,29 @@ def _print_dry_run_plan(args: argparse.Namespace, report_dir: str) -> None:
     print(f"[{TOOL}] dry-run plan (zero side effects)")
     print(f"  report-dir: {report_dir}")
     print("  queries (via BudgetReader, budget-enforced):")
-    print("    - find index_basic_info {market: CN}            (G1-C-001)")
-    print("    - find/aggregate index_daily_quotes sector_code (G1-C-003/004/005)")
+    print("    - aggregate stock_sector_info {classify_system: SW}  (G1-C-001)")
+    print("    - find/aggregate index_daily_quotes full_symbol (G1-C-003/004/005)")
     print(f"  budget: find limit<=1000, maxTimeMS<=30000, serverSelectionTimeoutMS<=10000")
     print("  no writes; --apply --yes required to execute real read + write report")
+
+
+def _detect_source_format(
+    db: Any, budget: BudgetReader, full_symbols: Iterable[str]
+) -> str:
+    """探测源 trade_date 形态（YYYYMMDD / YYYY-MM-DD，full_symbol 过滤）。"""
+    try:
+        sample = budget.find(
+            "index_daily_quotes",
+            {"full_symbol": {"$in": list(full_symbols)}},
+            limit=1,
+        )
+    except BudgetViolation:
+        sample = []
+    if sample and isinstance(sample[0].get("trade_date"), str):
+        value = sample[0]["trade_date"]
+        if len(value) == 8 and value.isdigit():
+            return "YYYYMMDD"
+    return "YYYY-MM-DD"
 
 
 # ---------------------------------------------------------------------------
@@ -482,6 +535,9 @@ def main(
     discrepancies: list[dict[str, Any]] = []
     candidates: list[str] = []
     recommended: str | None = None
+    # 源 trade_date 形态：正常路径由 _detect_source_format 探测；stop 路径
+    # 复用已探测值（探测基于真实 universe 值集，不硬编码 universe）。
+    trade_date_format: str = "YYYY-MM-DD"
 
     try:
         baseline = _baseline_counts(db)
@@ -493,13 +549,13 @@ def main(
         )
 
         universe = enumerate_sw_l1(db, budget=budget)
+        expected_full_symbols = sorted(universe)  # .SI L1 code = full_symbol 值集
+        trade_date_format = _detect_source_format(db, budget, expected_full_symbols)
+
         discrepancies, ref_missing = cross_check_reference(universe, ref_path)
         if ref_missing:
-            raise Gate1Stop(
-                "G1-S-002",
-                f"reference file missing: {ref_path}; Pascal must provide "
-                "sw_l1_reference.csv or confirm against SW official site",
-            )
+            # L1 契约校正：reference 缺失只记录，不阻断主 universe。
+            discrepancies.append({"kind": "reference_missing", "path": str(ref_path)})
 
         date_range, coverage_by_date = compute_coverage(
             db,
@@ -511,7 +567,9 @@ def main(
         if not coverage_by_date:
             raise Gate1Stop("G1-S-005", "no usable trade_date coverage found")
 
-        close_missing = check_close_completeness(db, universe, budget=budget)
+        close_missing = check_close_completeness(
+            db, universe, budget=budget, trade_date_format=trade_date_format
+        )
         source_dist, rt_markers = check_source_distribution(db, universe, budget=budget)
         if rt_markers:
             raise Gate1Stop(
@@ -537,8 +595,10 @@ def main(
             query_budget=budget.stats(),
             expected_sector_codes=sorted(universe),
             expected_sector_names=universe,
+            expected_full_symbols=expected_full_symbols,
+            universe_source=UNIVERSE_SOURCE,
             trade_date_range=date_range,
-            trade_date_format=_detect_source_format(db, budget),
+            trade_date_format=trade_date_format,
             coverage_by_date=coverage_by_date,
             close_missing_by_date=close_missing,
             source_distribution=source_dist,
@@ -587,8 +647,10 @@ def main(
             query_budget=budget.stats(),
             expected_sector_codes=sorted(universe),
             expected_sector_names=universe,
+            expected_full_symbols=sorted(universe),
+            universe_source=UNIVERSE_SOURCE,
             trade_date_range=date_range,
-            trade_date_format=_detect_source_format(db, budget),
+            trade_date_format=trade_date_format,
             coverage_by_date=coverage_by_date,
             close_missing_by_date=close_missing,
             source_distribution=source_dist,
@@ -624,23 +686,6 @@ def main(
         write_report(report_dir, "gate1", payload)
         print(f"[{TOOL}] STOP G1-S-007: {exc}", file=sys.stderr)
         return EXIT_STOP
-
-
-def _detect_source_format(db: Any, budget: BudgetReader) -> str:
-    """探测源 trade_date 形态（YYYYMMDD / YYYY-MM-DD）。"""
-    try:
-        sample = budget.find(
-            "index_daily_quotes",
-            {"sector_code": {"$regex": "^801"}},
-            limit=1,
-        )
-    except BudgetViolation:
-        sample = []
-    if sample and isinstance(sample[0].get("trade_date"), str):
-        value = sample[0]["trade_date"]
-        if len(value) == 8 and value.isdigit():
-            return "YYYYMMDD"
-    return "YYYY-MM-DD"
 
 
 if __name__ == "__main__":

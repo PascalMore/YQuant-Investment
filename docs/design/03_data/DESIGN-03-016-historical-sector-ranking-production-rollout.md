@@ -7,9 +7,9 @@
 | 状态 | Draft |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-31 |
-| 最后更新 | 2026-07-31（V0.4 修订：T2.3 交叉文档闭合——Gate-3 canary 与全量范围来源互斥冻结；历史修订见 Changelog） |
-| 来源 RFC | RFC-03-016-historical-sector-ranking-production-rollout（V0.1） |
-| 来源 SPEC | SPEC-03-016-historical-sector-ranking-production-rollout（V0.2） |
+| 最后更新 | 2026-08-01（V0.8 Design Gate `t_1f6c001b` REVISE 七项 minor 闭合：BudgetReader 构造签名补 `day_rows_limit`（§3.3.3）、`reset_stats()` 定义固化（§3.3.3/§3.6.4）、report schema 补 `failed_days[]` 与 `summary.total_query_rows`/顶层 `query_budget` 派生（§3.6.6）、fixture allowlist 对齐 `sector_ranking_rollout_fixtures.py`（§3.1.1/§4/§5/§7）、共享目录基线措辞（§2.1）；对齐 SPEC V0.5 / RFC V0.4；V0.7 Gate-3 查询预算范围校正：BudgetReader per-day scoped 模型 §3.3.3 + process_day §3.6.4 + G3-S-013 §3.6.7 + report §3.6.6，对齐 SPEC V0.4 G3-B-017~020；V0.6 REVISE closure `t_cfdad408`；V0.5 L1 契约校正；历史修订见 Changelog） |
+| 来源 RFC | RFC-03-016-historical-sector-ranking-production-rollout（V0.4） |
+| 来源 SPEC | SPEC-03-016-historical-sector-ranking-production-rollout（V0.5） |
 | 目标模块 | 03_data（数据层）— 生产 rollout 工具与 Gate 执行 |
 | 适配 Agent | YQuant-Developer-Engineer（T3 Implement）、YQuant-Test-Engineer（T4 Verify / 逐 Gate 只读 Verify）、YQuant-Reviewer-Principal（T5 Review） |
 
@@ -63,14 +63,14 @@ RFC-03-016 / SPEC-03-016 定义了生产 rollout 的**契约**（副作用矩阵
 | `skills/data/unified_data/services/historical_sector_service.py` | `HistoricalSectorService`（只读查询）+ `build_ranking_rows` 纯函数 + `BuildOutcome` + `WARNING_EMPTY`/`WARNING_INCOMPLETE`（03-015 冻结） | **import 复用**（Gate-3 用 build_ranking_rows；Gate-4 注入 ProdRankingReader）；禁止修改 |
 | `skills/data/unified_data/adapters/historical_ranking_writer.py` | `HistoricalRankingWriter`（mongomock-only，拒绝真实 pymongo；get/upsert/delete；`COLLECTION="03_data_ud_sector_ranking_daily"`；`UNIQUE_KEY`）（03-015 冻结） | **接口参考**（ProdRankingWriter/Reader 对齐其 `get()` 接口）；禁止修改 |
 | `skills/data/unified_data/adapters/p3_persistence_writer.py` | `UpsertOutcome`（persisted/failed/failed_keys/errors） | **import 复用**（ProdRankingWriter 返回该类型）；禁止修改 |
-| `skills/data/unified_data/adapters/ta_cn_mongo_adapter.py` | TA-CN 只读 adapter（`get_index_list(market)` / `get_index_daily_bars(...)` 读 `index_basic_info` / `index_daily_quotes`） | **只读参考**（Gate-1/3 的查询模式参考）；禁止修改、不在 T3 引用（Gate 工具自带 BudgetReader） |
+| `skills/data/unified_data/adapters/ta_cn_mongo_adapter.py` | TA-CN 只读 adapter（`get_index_list(market)` / `get_index_daily_bars(...)` 读 `index_basic_info` / `index_daily_quotes`；`get_stock_sector_info` / `get_stocks_by_sector` 读 `stock_sector_info`） | **只读参考**（Gate-1/3 的查询模式参考）；禁止修改、不在 T3 引用（Gate 工具自带 BudgetReader）。**注意（L1 契约校正）**：`get_index_daily_bars` 当前只匹配 `sector_code/symbol/code`，**未支持 `full_symbol`**；Gate 工具的 BudgetReader 必须直接按 `full_symbol` 过滤 `index_daily_quotes`，不得复用此 adapter 方法（developer 后续修复路径见 §7.4） |
 | `skills/data/unified_data/client.py` | `UnifiedDataClient.get_sector_ranking_history()` 条件性 facade（仅注入 mongomock db 时可测；`historical_ranking_db=None` 时 RuntimeError） | 禁止修改；Gate-4 激活的是**独立的生产读路径**（ProdRankingReader + binding），consumer 集成留待独立变更 |
 | `skills/data/unified_data/tests/test_sector_ranking_history.py` | 03-015 离线单测（51 项定向） | 回归范围；禁止修改 |
 | `skills/data/unified_data/tests/fixtures/historical_ranking_fixtures.py` | `make_mongomock_db` / `make_valid_ranking_rows` / `EXPECTED_SECTOR_CODES` 等 | 禁止修改；Gate 工具测试用**新增** fixture |
 | `skills/.env` | `MONGODB_*` 主连接（`MONGODB_HOST/PORT/USERNAME/PASSWORD/DATABASE`，库 `tradingagents`）+ `YQUANT_UD_AUDIT_*` 三组身份 | Gate 工具仅使用该唯一受控连接源（五键组件式构造，无 URI/prefix/alias/fallback）；不读取/打印值 |
 | `data/rollout/` | 不存在（需创建） | Gate report / logs / reference 的固定产物目录 |
 
-> 注意：`git status` 当前显示 `client.py`、`models/domain/__init__.py`、`providers/akshare.py` 为 03-015 阶段的**未提交修改**。本设计（及后续 T3）**不得**改动这些文件；未提交状态与 03-016 无关，由 orchestrator 在 03-015 closeout 时处理。
+> 注意（共享目录基线，M7 固化）：本仓库为共享工作目录，`git status` 的 dirty 集合只是**某一时刻的快照，不构成归属证明**。截至本修订（2026-08-01），当前快照为 11 个修改文件（3 份 03-016 文档 + 8 个 03-016 T3 rollout 产物：4 脚本 + 1 fixture + 3 测试）；该快照**随时可能变化**（既有 03-015/P3-A 冻结文件也可能被其他工作线修改）。Verify/Review 判定 03-016 边界时必须使用**路径过滤的基线归属**——仅 §3.1.1 T3 allowlist 与本三份文档计入 03-016，§2.2 冻结清单任何文件出现 diff 即视为越界；**不得**依赖易变声明（文件 mtime、dirty 总数、「仅某文件 dirty」等）。本设计（及后续 T3）**不得**改动任何冻结文件。若后续再次出现与 03-016 无关的未提交状态，由 orchestrator 处理。
 
 ### 2.2 精确禁止修改路径（T3 allowlist 外延）
 
@@ -120,7 +120,7 @@ RFC-03-016 / SPEC-03-016 定义了生产 rollout 的**契约**（副作用矩阵
 | `scripts/unified_data/sector_ranking_rollout/gate3_backfill.py` | Gate-3 真实 backfill CLI（dry-run / canary / 全量，日级原子，写后读回） | SPEC §3.4；见 §3.6 |
 | `scripts/unified_data/sector_ranking_rollout/gate4_activate.py` | Gate-4 读路径激活 CLI（binding 开关 + 只读 smoke） | SPEC §3.5；见 §3.7 |
 | `data/rollout/sector-ranking/reference/sw_l1_reference.csv` | SW 2021 L1 一级行业 code/name 参考表（**reference-only**，供 Gate-1 双源交叉核对，不入运行时） | OQ-016-2；见 §3.4 |
-| `skills/data/unified_data/tests/fixtures/rollout_fixtures.py` | Gate 工具测试 fixture：`make_sw_index_docs()`、`make_index_basic_docs()`、`make_expected_universe()`、`make_reference_csv(tmp_path)`、`make_binding(tmp_path)`、`make_gate1_report(tmp_path)` | 新增 fixture，不与 03-015 fixture 混用 |
+| `skills/data/unified_data/tests/fixtures/sector_ranking_rollout_fixtures.py` | Gate 工具测试 fixture：`make_sw_index_docs()`、`make_index_basic_docs()`、`make_expected_universe()`、`make_reference_csv(tmp_path)`、`make_binding(tmp_path)`、`make_gate1_report(tmp_path)` 等 | 新增 fixture，不与 03-015 fixture 混用；实际文件名（M6 对齐） |
 | `skills/data/unified_data/tests/test_sector_ranking_rollout_common.py` | common.py 单测（ConnLoader 形态/脱敏/预算/退出码） | SPEC §6 |
 | `skills/data/unified_data/tests/test_sector_ranking_rollout_gate1.py` | Gate-1 单测（G1-B / G1-C / G1-S 全矩阵） | SPEC §6 |
 | `skills/data/unified_data/tests/test_sector_ranking_rollout_gate2.py` | Gate-2 单测（G2-D / G2-S） | SPEC §6 |
@@ -229,28 +229,50 @@ class ConnLoader:
 ```python
 class BudgetReader:
     def __init__(self, db: Any, *, max_find=1000, max_time_ms=30000,
-                 server_selection_timeout_ms=10000) -> None: ...
+                 server_selection_timeout_ms=10000,
+                 cumulative_rows_limit: int | None = 100000,
+                 day_rows_limit: int | None = None) -> None: ...
+        # cumulative_rows_limit: 累计命中行数上限。
+        #   Gate-1（report 生成）：默认 100000（G1-B-006），整个 report 共享一个 reader。
+        #   Gate-3（backfill）：传入 None（禁用全局累计阻断，G3-B-019）。
+        # day_rows_limit: 日级命中行数上限（G3-B-018，Gate-3 专用）。
+        #   Gate-1：None（不启用）。
+        #   Gate-3（backfill）：main 显式传 4*len(expected_sector_codes)（31 → 124）；
+        #     每次 find 后检查 cumulative_rows > day_rows_limit → BudgetViolation → G3-S-013；
+        #     每 process_day 开头调用 reset_stats() 清零。
     def count(self, collection: str, filter: dict) -> int
     def distinct(self, collection: str, key: str, filter: dict) -> list
     def find(self, collection: str, filter: dict, *, limit: int = 1000,
              projection: dict | None = None) -> list[dict]
     def aggregate(self, collection: str, pipeline: list[dict]) -> list[dict]
     def stats(self) -> list[dict]      # 每类查询：次数/条数/耗时（G1-B-007）
+    def reset_stats(self) -> None      # 清零累计计数器（cumulative_rows）**与 stats 列表**（每类查询计数/条数/耗时）
+        # ——二者必须同时清零，否则 days[].query_budget 跨日累加（违 G3-A-003）。
+        # Gate-3 每 process_day 开头调用（G3-B-017）；job 级聚合
+        # （summary.total_query_rows / 顶层 query_budget）必须在 reset 外基于保留的逐日记录计算（reset-safe，§3.6.6）
+    @property
+    def cumulative_rows(self) -> int   # 当前累计命中行数（Gate-1 判 G1-B-006；Gate-3 informational）
 ```
 
-强制规则（SPEC G1-B-001~007 逐条落到代码）：
+强制规则（SPEC G1-B-001~007 + G3-B-017~020 逐条落到代码）：
 
 | SPEC | 实现 |
 |---|---|
 | G1-B-001 查询类型白名单 | 只暴露 `count` / `distinct` / `find` / `aggregate`；其余 pymongo 方法不封装 |
-| G1-B-002 过滤强制 | `find` 的 filter 与 `aggregate` pipeline 第一个 stage（必须为 `$match`）必须含白名单字段 {`sector_code`, `trade_date` 范围, `market`} 至少一个；空 filter / 空 pipeline / 首 stage 非 `$match` / 白名单外字段（如 `{"foo": 1}`）→ 抛 `BudgetViolation`（G1-S-007 → 退出码 2）。`find` 与 `aggregate` 首 stage 使用**同一校验规则**（F3 闭合，SPEC G1-B-002 逐字一致） |
+| G1-B-002 过滤强制 | `find` 的 filter 与 `aggregate` pipeline 第一个 stage（必须为 `$match`）必须含白名单字段 {`full_symbol`（SW L1 值集，由 `stock_sector_info` 派生）, `trade_date` 范围, `classify_system`（`stock_sector_info` 查询用）} 至少一个；空 filter / 空 pipeline / 首 stage 非 `$match` / 白名单外字段（如旧的 `sector_code`/`market` 前缀猜测）→ 抛 `BudgetViolation`（G1-S-007 → 退出码 2）。`find` 与 `aggregate` 首 stage 使用**同一校验规则**（F3 闭合 + L1 契约校正，SPEC G1-B-002 逐字一致） |
 | G1-B-003 结果条数上限 | `find` 默认 `limit<=1000`；调用方显式传入 `limit>1000` 抛 `BudgetViolation` |
 | G1-B-004 超时上限 | 每次查询带 `max_time_ms`（默认 30000）与 `server_selection_timeout_ms`（默认 10000） |
 | G1-B-005 扫描保护 | 空 filter / 空 pipeline 静态拒绝（G1-S-007 → 退出码 2） |
-| G1-B-006 记录范围上限 | Gate-1 累计命中 > 100000 → `BudgetViolation`（提示缩小范围） |
+| G1-B-006 记录范围上限（Gate-1 scope） | **仅 Gate-1**：reader 构造时 `cumulative_rows_limit=100000`（默认），累计命中 > 100000 → `BudgetViolation`（提示缩小范围）。Gate-3 **不使用**此上限（见 G3-B-019） |
 | G1-B-007 预算审计 | `stats()` 计入 report 的 `query_budget` 字段 |
+| G3-B-017 per-day scoped（Gate-3） | **Gate-3**：reader 构造时 `cumulative_rows_limit=None`（禁用全局累计阻断）；`process_day` 在开头调用 `reader.reset_stats()` 清零累计计数**与 stats 列表**，使预算**按日 scoped**不跨日累加（reset_stats 定义见 §3.3.3 签名注释，M2） |
+| G3-B-018 日级上限（Gate-3） | **Gate-3**：reader 额外接受 `day_rows_limit`（类级默认 `None`=不启用；Gate-3 `main` 显式传 `4 × len(expected_sector_codes)` = 124，见实现要点）；每次 `find` 后检查 `cumulative_rows > day_rows_limit` → 抛 `BudgetViolation` → G3-S-013（退出码 2）。此上限与 G1-B-003（单次 ≤1000）并存，是更紧的日级约束 |
+| G3-B-019 全局 100k 不适用 Gate-3 | Gate-3 reader `cumulative_rows_limit=None`；job 层无全局阻断阈值；`gate3-report.summary.total_query_rows` 仅 informational（数据正常 = 6,421 × 62 = 398,102） |
+| G3-B-020 扫描保护保留 | G1-B-001~005 在 Gate-3 reader 中**全部强制**（白名单、过滤、≤1000、超时、空 filter 拒绝）；per-day 模型只重新定义累加范围，不放宽单次查询保护 |
 
-`BudgetViolation` 在 Gate-1/3 的 main 中捕获并映射为退出码 2。
+`BudgetViolation` 在 Gate-1 的 main 中映射为 G1-S-007（退出码 2）；在 Gate-3 的 `process_day` 中映射为 G3-S-013（退出码 2，日级越界，停止后续日）。
+
+> **实现要点（T3）**：Gate-1 `main` 构造 `BudgetReader(db)` 用默认 `cumulative_rows_limit=100000`；Gate-3 `main` 构造 `BudgetReader(db, cumulative_rows_limit=None, day_rows_limit=4*len(expected))`，并在 `process_day` 开头调用 `reader.reset_stats()`。两种 Gate 复用同一 `BudgetReader` 类，仅构造参数不同——不新增第二个类。
 
 #### 3.3.4 `ReportWriter` + 日志 + 脱敏
 
@@ -344,24 +366,32 @@ main()
   └─ apply：
       ├─ conn = ConnLoader(); db = conn.load_db()                   # 失败 → 3
       ├─ baseline_counts(db)                                          # G1-C-007 / G1-V-005 只读基线
-      │     index_daily_quotes.estimatedDocumentCount + index_basic_info.estimatedDocumentCount
+      │     index_daily_quotes.estimatedDocumentCount + stock_sector_info.estimatedDocumentCount
+      │     (+ index_basic_info.estimatedDocumentCount 若作可选交叉核对)
       ├─ sw_universe = enumerate_sw_l1(db)                            # G1-C-001 / G1-C-006
-      │     BudgetReader.find("index_basic_info", {"market": "CN"})
-      │       候选 code 提取顺序：doc.sector_code → doc.code → doc.symbol
-      │       过滤前缀 "^801"；重复/非法 → G1-S-003 停止；空 → G1-S-002 停止
-      │       type/classify 字段含 concept/region/style → G1-C-006 FAIL（混入 → 停止）
-      ├─ cross_check_reference(sw_universe)                           # G1-C-001 双源（OQ-016-2）
-      │     reference 文件缺失 → G1-C-001 FAIL（reference_missing）→ 停止并上报
+      │     BudgetReader.aggregate("stock_sector_info",
+      │       [{$match: {classify_system: "SW"}},
+      │        {$group: {_id: {l1_code, l1_name}}},
+      │        {$sort: {_id.l1_code: 1}}])
+      │     结果必须恰好 31 个 distinct (l1_code, l1_name)
+      │     l1_code canonical 形态 = 带 .SI 后缀（例如 801780.SI）；重复/非法 → G1-S-003 停止；空/≠31 → G1-S-002 停止
+      │     派生 expected_full_symbols = 31 个 l1_code（.SI 后缀，即 index_daily_quotes.full_symbol 值集）
+      │     【不得】使用 index_basic_info 作为 L1 universe 主来源
+      ├─ cross_check_reference(sw_universe)                           # G1-C-001 可选交叉核对（OQ-016-2 已闭合）
+      │     reference 文件缺失 → 记入 report.discrepancies（reference_missing），不阻断（主来源 stock_sector_info 可用）
       │     差异（DB 有 reference 无 / reference 有 DB 无 / name 不一致）→ 记入 report.discrepancies
       │     差异影响 canary 候选 → G1-S-005 停止
+      │     【可选】index_basic_info 交叉核对：须按生产真实 market="申万指数" 字段语义，不得用 market="CN"
       ├─ date_range, coverage = compute_coverage(db, sw_universe)    # G1-C-003
-      │     distinct("trade_date", {"sector_code": {"$in": codes}}) → min/max + 逐日
-      │     coverage_by_date[trade_date] = {expected, observed, ratio}
+      │     distinct("index_daily_quotes", "trade_date", {full_symbol: {$in: expected_full_symbols}}) → min/max + 逐日
+      │     coverage_by_date[trade_date] = {expected: 31, observed, ratio}
       │     trade_date_format = 抽样首个 trade_date 的形态（"YYYYMMDD" / "YYYY-MM-DD"）→ 记入 report
+      │     join field = full_symbol（非 sector_code）；31/31 全覆盖的共同完整交易日为可用范围
       ├─ close_completeness = check_close_completeness(db, universe) # G1-C-004
-      │     aggregate: $match {sector_code in codes} + $group by trade_date 统计 close 缺失/非法行
+      │     aggregate: $match {full_symbol in expected_full_symbols} + $group by trade_date 统计 close 缺失/非法行
+      │     close 缺失 → fail-stop；pre_close 从前一交易日同 full_symbol 的 close 推导
       ├─ source_dist = check_source_distribution(db, universe)       # G1-C-005
-      │     aggregate: $match {sector_code in codes} + $group by source
+      │     aggregate: $match {full_symbol in expected_full_symbols} + $group by source
       │     rt 标记（source in {"realtime","intraday","rt"}）→ G1-S-006 停止
       ├─ canary_candidates = select_candidates(coverage, close_completeness, source_dist)
       │     规则（OQ-016-3）：coverage==100% 且 close 完整 且 无 rt 标记 且 非今日（今日判定经 CompletedSessionPolicy 的 now 时钟，§3.3.5）；
@@ -374,10 +404,11 @@ main()
 
 #### 3.4.3 权威 expected universe 语义（OQ-016-2 解决）
 
-- **主来源**：`tradingagents.index_basic_info`（`market="CN"` + SW L1 code 前缀 `801`）——Gate-1 report 的 `expected_sector_codes` / `expected_sector_names` **只来自主来源**。
-- **双源交叉核对**：`data/rollout/sector-ranking/reference/sw_l1_reference.csv`（T3 创建，表头 `sector_code,sector_name,note`，note 记录公开来源 URL 与核对日期，文件头注释标注 `REFERENCE-ONLY`）。差异仅记入 `report.discrepancies`，**不参与** expected universe 构造。
-- **reference 缺失**：`enumerate_sw_l1` 正常（主来源可用），但 `cross_check_reference` 报 `reference_missing` → G1-C-001 判定为 FAIL → 停止；Pascal 补 reference 或人工对照申万官网后放行。
-- 该文件**不是**运行时 universe 来源，不违反「不得硬编码 universe」（03-015 H-049u 约束的是 expected 注入路径，Gate-3 的 `--expected-file` 仍强制来自 Gate-1 report）。
+- **主来源（L1 契约校正后）**：`tradingagents.stock_sector_info`（filter `{classify_system:"SW"}`，按 `(l1_code,l1_name)` distinct 得到恰好 31 个申万一级行业）——Gate-1 report 的 `expected_sector_codes` / `expected_sector_names` / `expected_full_symbols` **只来自主来源**。`l1_code` canonical 形态 = 带 `.SI` 后缀（例如 `801780.SI`），同时即为 `index_daily_quotes.full_symbol` 的值。
+- **`index_basic_info` 角色降级**：`index_basic_info` **不得**用作 L1 universe 枚举主来源（其生产真实 `market="申万指数"`，不含可直接识别申万层级的字段）。仅可作**可选元数据交叉核对**，且须按真实字段语义使用（不得用 `market="CN"`）。交叉核对差异仅记入 `report.discrepancies`，不参与 expected universe 构造。
+- **双源交叉核对（可选）**：`data/rollout/sector-ranking/reference/sw_l1_reference.csv`（T3 创建，表头 `sector_code,sector_name,note`，note 记录公开来源 URL 与核对日期，文件头注释标注 `REFERENCE-ONLY`）。reference 缺失不再阻断（主来源 `stock_sector_info` 可用），仅记 `reference_missing`。
+- **行情 join**：`expected_full_symbols`（31 个 `.SI` 后缀 code）= `index_daily_quotes.full_symbol` 值集；Gate-1/3 的行情查询以此值集过滤，join field = `full_symbol`（非 `sector_code`）。
+- **L2/L3 排除**：本期明确仅 L1 排行；`classify_system="SW"` 的 L1 distinct 已天然排除 L2/L3；`index_daily_quotes` 当前仅有 L1 行情，文档不得宣称 L2/L3 行情可用。
 
 #### 3.4.4 Report 结构（G1-R-001~010 具体化）
 
@@ -397,8 +428,10 @@ main()
                         "auth_configured": true},
   "query_budget": [{"kind": "find", "count": 3, "rows": 512, "ms": 1240}],
   "trade_date_format": "YYYYMMDD",
-  "expected_sector_codes": ["801010", "801020", "..."],
-  "expected_sector_names": {"801010": "农林牧渔", "..."},
+  "expected_sector_codes": ["801010.SI", "801020.SI", "..."],
+  "expected_sector_names": {"801010.SI": "农林牧渔", "..."},
+  "expected_full_symbols": ["801010.SI", "801020.SI", "..."],
+  "universe_source": "stock_sector_info",
   "trade_date_range": {"min": "2010-01-04", "max": "2026-07-30"},
   "coverage_by_date": {"2010-01-04": {"expected": 31, "observed": 31, "ratio": 1.0}},
   "close_missing_by_date": {"2010-01-04": []},
@@ -417,8 +450,8 @@ main()
 | SC | 触发点 | 退出码 |
 |---|---|---|
 | G1-S-001 | `ConnLoader.load_db()` 抛连接/认证异常 | 3 |
-| G1-S-002 | `enumerate_sw_l1` 返回空 | 2 |
-| G1-S-003 | 候选 code 重复 / 非 `^801` 前缀 / 非法格式 | 2 |
+| G1-S-002 | `enumerate_sw_l1` 返回空 或 distinct 数 ≠ 31 | 2 |
+| G1-S-003 | 候选 `l1_code` 重复 / 非 `.SI` 后缀 canonical 形态 / 非法格式 | 2 |
 | G1-S-004 | report 无法固化 expected（内部错误） | 2 |
 | G1-S-005 | canary 候选为空 或 候选日 coverage<100% / close 缺失 / reference 差异影响候选 | 2 |
 | G1-S-006 | `source_dist` 出现 rt 标记 | 2 |
@@ -524,6 +557,8 @@ python3 -m scripts.unified_data.sector_ranking_rollout.gate3_backfill \
   [--report-dir data/rollout/sector-ranking]
 ```
 
+- `--expected-file`：必须传入 Gate-1 report，其 JSON 必须包含三项必填字段：`expected_sector_codes`（31 个 `.SI` 后缀 L1 code）、`expected_sector_names`（code→name 映射）、`expected_full_symbols`（31 个 `index_daily_quotes.full_symbol` 值集，即 `.SI` 后缀 L1 join 值集，Gate-3 行情 join 键）；任一缺失或非法 → G3-S-002 参数层 fail-fast（退出码 1），**不等 process_day**（与 SPEC §3.4.1 逐字一致）。
+
 #### 3.6.3 范围解析（OQ-016-4 解决；F1 冻结）
 
 | 模式 | 规则 |
@@ -539,12 +574,15 @@ python3 -m scripts.unified_data.sector_ranking_rollout.gate3_backfill \
 
 ```text
 process_day(trade_date: str) -> DayOutcome
+  ├─ reader.reset_stats()                                    # G3-B-017：清零累计计数与 stats 列表，per-day scoped（M2）
   ├─ prev_date = ordered_available_dates[day_index - 1]      # 来自 Gate-1 coverage_by_date keys（升序）
   │     day_index == 0 → DayOutcome(status="empty", reason="no-prev-close")
-  ├─ docs = BudgetReader.find("index_daily_quotes",
-  │        {"sector_code": {"$in": expected_codes},
+  ├─ docs = reader.find("index_daily_quotes",
+  │        {"full_symbol": {"$in": expected_full_symbols},      # join field = full_symbol（非 sector_code）
   │         "trade_date": {"$in": [to_internal(day), to_internal(prev_date)]}})
-  ├─ 按 sector_code 组织：day 行（close 必须有限数值） + prev 行（close 作为 pre_close）
+  │     reader 内部检查 cumulative_rows > day_rows_limit(124) → BudgetViolation → G3-S-013（退出码 2，停止后续日）
+  │     单次 find 仍受 G1-B-003（≤1000）/ G1-B-005（空 filter 拒绝）约束（G3-B-020 扫描保护保留）
+  ├─ 按 full_symbol 组织：day 行（close 必须有限数值） + prev 行（close 作为 pre_close）
   │     缺 day 行 / close 非法 → 该 code 缺失（G3-B-010）
   │     缺 prev 行 → 该 code 不入库（G3-B-004 / H-047~H-048）→ 影响完整性
   │     rt 标记（source ∈ {"realtime","intraday","rt"}）→ 该 code 不入库（G3-B-009 / RT-4；G3-S-010）
@@ -558,8 +596,13 @@ process_day(trade_date: str) -> DayOutcome
   │     行数 == len(expected)；逐行 SectorRankingDaily.from_dict 校验 9 字段；
   │     排序 pct_chg DESC → sector_code ASC；唯一键无重复
   │     任一不符 → G3-S-007（退出码 2，停止后续日）
-  └─ DayOutcome(status="complete", upserted=len(rows), ms=...)
+  └─ DayOutcome(status="complete", upserted=len(rows), ms=...,
+                query_budget=reader.stats())                 # per-day query_budget 记入 DayOutcome（G3-A-003）
+  # 任一 G3-S-004~013 命中 → 该日保留失败记录（status/observed/stop_id/query_budget），
+  #   写入 report failed_days[]，即使该日不进成功 days[]（M5，§3.6.6）
 ```
+
+> **reader 生命周期（G3-B-017/G3-B-019）**：Gate-3 `main` 在日循环前构造**一个** `BudgetReader(db, cumulative_rows_limit=None, day_rows_limit=4*len(expected))`，传入所有 `process_day` 调用。**关键**：每个 `process_day` 开头调用 `reader.reset_stats()` 清零累计计数**与 stats 列表**——这使得预算计数**按日 scoped**，不跨日累加。因此全量回填 6,421 日 × 62 行/日 = 398,102 累计行（informational，记入 `summary.total_query_rows`，派生见 §3.6.6）**不会**命中任何预算停止条件；只有单日异常（>124 行）才触发 G3-S-013。`cumulative_rows_limit=None` 确保旧的全局 100k 上限（G1-B-006，Gate-1 scope）在 Gate-3 中不生效。
 
 字段来源（对齐 SPEC §4.bis）：
 
@@ -567,10 +610,10 @@ process_day(trade_date: str) -> DayOutcome
 |---|---|
 | `dataset` | 常量 `"sw2021_ta_cn"`（G3-B-006，不从 TA-CN 推断） |
 | `trade_date` | `to_internal()` 反转换：TA-CN `YYYYMMDD` → 输出 `YYYY-MM-DD`（G3-B-007 / H-053）；格式由 Gate-1 `trade_date_format` 决定 |
-| `sector_code` / `sector_name` | Gate-1 `expected_sector_codes` / `expected_sector_names`（G3-B-011；缺失 → 行不入库） |
+| `sector_code` / `sector_name` | Gate-1 `expected_sector_codes`（`.SI` 后缀）/ `expected_sector_names`（G3-B-011；缺失 → 行不入库）；来源 `stock_sector_info` `classify_system="SW"` distinct |
 | `pct_chg` | `build_ranking_rows` 固定公式 `(close - pre_close) / pre_close * 100`（G3-B-008 / H-032；禁止使用上游自带 pct_chg） |
 | `rank` | `build_ranking_rows` 连续 1-based，tiebreaker sector_code ASC |
-| `close` / `pre_close` | TA-CN 文档；`pre_close` 为前一交易日 close（G3-B-004） |
+| `close` / `pre_close` | TA-CN `index_daily_quotes` 文档（按 `full_symbol` 关联）；`pre_close` 为前一交易日同 `full_symbol` 的 close（G3-B-004） |
 | `updated_at` | `_now_iso()`（UTC ISO-8601），upsert 覆盖时刷新（H-020） |
 
 #### 3.6.5 写后读回（G3-V-001~004 实现）
@@ -588,14 +631,23 @@ def read_back_verify(writer, trade_date: str, expected: list[str]) -> None:
 
 #### 3.6.6 Report 结构
 
-`gate3-report.json`：`{tool, version, timestamp, conn_source, conn_fingerprint, range: {start, end, excluded_first}, canary: {date, outcome, read_back}, days: [{trade_date, status, expected, observed, upserted, failed, ms}], summary: {success_days, failed_days, stop_conditions_hit}, expected_sector_codes, expected_sector_names, checks, query_budget}`（G3-A-001~005）。
+`gate3-report.json`：`{tool, version, timestamp, conn_source, conn_fingerprint, range: {start, end, excluded_first}, canary: {date, outcome, read_back}, days: [{trade_date, status, expected, observed, upserted, failed, ms, query_budget}], failed_days: [{trade_date, status, observed, day_limit, stop_id, ms, query_budget}], summary: {success_days, failed_days, stop_conditions_hit, total_query_rows, resumption_boundary, day_rows_limit}, expected_sector_codes, expected_sector_names, checks, query_budget}`（G3-A-001~005）。
 
-#### 3.6.7 停止条件映射（G3-S-001~012）
+> **新增字段说明（G3-B-017~020 + M4/M5 固化）**：
+> - `days[].query_budget` = 每日 per-day 预算统计（G3-A-003，来自 `reader.stats()` 经 `reset_stats()` 清零后的**单日**计数；该日总命中行数 = 其各查询类别条数之和）。
+> - `failed_days[]`（M5） = 任一 G3-S-004~013 命中的失败日记录，**必须保留于 report**（即使该日不进成功 `days[]` 列表）。字段：`trade_date`（失败日）、`status`（失败类别，如 `budget-violation`）、`observed`（该日实际命中行数；G3-S-013 时 > `day_limit`）、`day_limit`（该日上限实际值；G3-S-013 必填 = `summary.day_rows_limit`，其他 SC 可为 `null`）、`stop_id`（如 `G3-S-013`）、`ms`、`query_budget`（停止前已执行的单日查询统计）。G3-S-013 触发时 report 必须能据此回溯「哪一日、命中多少行、上限多少、由哪个停止条件终止」。
+> - `summary.total_query_rows`（M4） = 对**保留的** per-day 记录（成功 `days[]` ∪ 失败 `failed_days[]`）的 `query_budget` 条数之和（即全量累计查询命中行数），informational，不作为停止条件（G3-B-019；数据正常 = planned_days × ~62）。
+> - 顶层 `query_budget`（M4） = 对**保留的** per-day 记录（`days[]` ∪ `failed_days[]`）的 `query_budget` 做跨日聚合（各查询类别次数/条数/耗时求和），informational。
+> - 以上两个 job 级数字**均由保留的逐日记录派生**，**不得**读取 `BudgetReader` 的实时累计状态——`reset_stats()` 后 reader 仅持有当日计数，job 级聚合必须 reset-safe（M2）。
+> - `summary.resumption_boundary` = 若因 G3-S-xxx 停止，记录最后成功日 trade_date（供修复后显式重跑，G3-A-004）。
+> - `summary.day_rows_limit` = 日级上限实际值（默认 124，G3-B-018，供审计回溯）。
+
+#### 3.6.7 停止条件映射（G3-S-001~013）
 
 | SC | 触发点 | 退出码 |
 |---|---|---|
 | G3-S-001 | 连接/认证失败 | 3 |
-| G3-S-002 | `--expected-file` 缺失 / JSON schema 不完整（缺 `expected_sector_codes` / `expected_sector_names`） | 1 |
+| G3-S-002 | `--expected-file` 缺失 / JSON schema 不完整（缺 `expected_sector_codes` / `expected_sector_names` / `expected_full_symbols` 任一必填字段或类型非法——`expected_full_symbols` 须为 `.SI` 后缀 L1 join 值集；参数层 fail-fast，不等 process_day） | 1 |
 | G3-S-003 | 范围非法（无任何范围来源；`--range-file` 与 `--start-date`/`--end-date` 互斥冲突；start 缺 end（或反之）；`--canary-date` 与任何全量范围来源同时传入〔`--range-file`，或成对 `--start-date`/`--end-date`；与不成对 start/end 仍按缺配对〕；start>end；超 Gate-1 范围；未来日 / 今日未收盘〔CompletedSessionPolicy，§3.3.5〕；canary 不在候选清单） | 1 |
 | G3-S-004 | 目标日 `observed != expected`（incomplete） | 2 |
 | G3-S-005 | 目标日零有效行（empty） | 2 |
@@ -606,8 +658,9 @@ def read_back_verify(writer, trade_date: str, expected: list[str]) -> None:
 | G3-S-010 | 检测 rt 标记混入 | 2 |
 | G3-S-011 | `scan_secrets` 命中 | 2 |
 | G3-S-012 | 任意未知异常（report 记录脱敏异常栈） | 2 |
+| G3-S-013 | `BudgetViolation`（单日查询命中行数 > `day_rows_limit`，默认 124 = 4 × `len(expected_sector_codes)`；表明上游 schema 漂移或数据异常）；该日记录保留于 report `failed_days[]`（`observed`/`day_limit`/`stop_id`，§3.6.6，M5） | 2 |
 
-失败后**不自动** retry / 扩范围 / rollback / drop（RFC §5.4 / G3 禁止自动动作段）；修复后由 Pascal 显式重跑对应日（幂等 upsert 覆盖）。
+失败后**不自动** retry / 扩范围 / rollback / drop（RFC §5.4 / G3 禁止自动动作段）；修复后由 Pascal 显式重跑对应日（幂等 upsert 覆盖）。G3-S-013 同样遵循——日级预算越界是数据异常信号，不自动放宽 `day_rows_limit`。
 
 ### 3.7 Gate-4 详细设计（gate4_activate.py + prod_repository.ProdRankingReader + BindingState）
 
@@ -712,8 +765,7 @@ main()
       │     基线清单 = §3.1.1 T3 allowlist（14 文件）+ data/rollout/sector-ranking/**
       │     仅对基线清单内路径执行 `git status --porcelain -- <allowlist 路径>` 比对；
       │     基线清单内出现修改/删除/新增外状态 → G4-S-003 / G4-S-004 → 退出码 2
-      │     共享树既有 03-015 dirty（client.py / models/domain/__init__.py / providers/akshare.py
-      │       / 其他未提交）在基线清单外 → 记入 report.scope_diff，不触发停止
+      │     共享树既有未提交修改（基线清单外、与本 rollout 无关，如历史 03-015/P3-A 阶段文件）→ 记入 report.scope_diff，不触发停止
       │     不 reset / 不 stash / 不 clean / 不修改共享树
       ├─ 只读证明：目标集合 estimated_document_count 前后一致（G4-A-004）
       ├─ report + logs + scan_secrets
@@ -740,7 +792,7 @@ main()
 ### 3.8 数据流/控制流图（汇总）
 
 ```text
-Gate-1（只读）:  index_basic_info/index_daily_quotes(RO)
+Gate-1（只读）:  stock_sector_info(RO, universe) + index_daily_quotes(RO, 行情, join=full_symbol)
    → BudgetReader → report(gate1-report.json) → [Verify G1-V]
 Gate-2（DDL）:    tradingagents.03_data_ud_sector_ranking_daily
    → createCollection + createIndex(uniq) → verify 快照 → [Verify G2-V]
@@ -776,7 +828,7 @@ Gate-4（读）:     03_data_ud_sector_ranking_daily(RO)
 | `data/rollout/sector-ranking/gate{N}-report.json/.md` | `common.py:write_report()`（每 Gate apply 结束） | G1-R-001~010 / G3-A / G4-A 字段集 | report 全文过 `scan_secrets`，命中 → SC-016-G0-1 | 写入失败 → 工具报错退出（不进入下一 Gate）；历史 report 以时间戳副本保留，不覆盖 |
 | `data/rollout/sector-ranking/logs/gate{N}-*.log` | `common.py:log_jsonl()`（每步动作） | 结构化 JSONL（动作/耗时/计数/脱敏异常） | `redact()` 每个 record | 日志失败不阻断主流程（WARN 记录） |
 | `data/rollout/sector-ranking/binding_state.json` | `gate4_activate.py:apply()`（`--enable`/`--disable` + `--apply`） | `{capability, enabled, gate, updated_at, previous}` | 仅由 gate4 工具写入 | `--disable` 为回滚路径；数据永不删除 |
-| `data/rollout/sector-ranking/reference/sw_l1_reference.csv` | T3 创建（人工核对后固化） | `sector_code,sector_name,note` | 表头 + code 前缀 `801` | reference-only；不参与运行时；Gate-1 缺失即 STOP |
+| `data/rollout/sector-ranking/reference/sw_l1_reference.csv` | T3 创建（人工核对后固化） | `sector_code,sector_name,note` | 表头 + code `.SI` 后缀 canonical 形态 | reference-only；不参与运行时 universe 构造（主来源 = `stock_sector_info`）；Gate-1 缺失仅记 `reference_missing`，不阻断 |
 
 测试替身：所有写路径在测试中用 mongomock + `tmp_path` report/binding 文件；`ProdRankingWriter`/`ProdRankingReader` 接受 mongomock db，测试断言 upsert 行、namespace 拒绝、binding fail-closed。
 
@@ -789,7 +841,7 @@ Gate-4（读）:     03_data_ud_sector_ranking_daily(RO)
 | OQ | 问题 | Design 决策 | 章节 |
 |---|---|---|---|
 | OQ-016-1 | 现有连接源是否满足最小权限（只读/只写/DDL 分离） | **复用 `MONGODB_*` 唯一受控连接源**（RFC CR-016-1），不新建账号/角色（超授权）。静态无法证明其角色权限 → Gate-1 G1-C-007 证明只读、Gate-2 apply 证明 DDL（fail-fast G2-S-001/002）；DDL 权限不足 → STOP 并上报 Pascal（不自动建账号）。残余风险见 §6 | §3.3.2 / §3.4 / §3.5 |
-| OQ-016-2 | `index_basic_info` 是否含 SW L1 权威 code/name | 主来源 = `index_basic_info`（`market="CN"` + `^801` 过滤）；双源交叉核对 = `sw_l1_reference.csv`（reference-only）；reference 缺失 → G1-C-001 FAIL → STOP，Pascal 补/人工对照申万官网 | §3.4.3 |
+| OQ-016-2 | ~~`index_basic_info` 是否含 SW L1 权威 code/name~~ **已校正（L1 契约校正）**：主来源 = `stock_sector_info`（`{classify_system:"SW"}` distinct `(l1_code,l1_name)` = 31）；行情 join field = `index_daily_quotes.full_symbol`；`index_basic_info`（真实 `market="申万指数"`）降级为可选元数据交叉核对，**不得**用作 L1 universe 主来源；reference 缺失不再阻断（仅记 `reference_missing`） | §3.4.3 |
 | OQ-016-3 | canary 候选日选定规则 | 候选 = coverage 100% + close 完整 + 无 rt 标记 + 非今日；`recommended = max(trade_date)`（最近日最接近当前 schema/source 状态）；`--canary-date` 必须 ∈ 候选清单 | §3.4.2 |
 | OQ-016-4 | 全量 backfill 日期范围解析 | 范围来源二选一：成对 `--start-date`/`--end-date`（Pascal 子范围）或 `--range-file`（Gate-1 全范围，**默认排除最早可用日**）；互斥；无范围来源 → EXIT_PARAM(1)；校验 start≤end ⊆ Gate-1 范围、经 CompletedSessionPolicy 判定已收盘 | §3.6.3 |
 | OQ-016-5 | Gate-4 后是否需查询辅助索引 `idx_dataset_date` | 不创建（Gate-2 范围外）；Gate-4 smoke 查询均按 `{dataset, trade_date}` 过滤，由唯一索引前缀支持；留待未来 RFC 评估 | §3.5 / §3.7 |
@@ -808,7 +860,7 @@ Gate-4（读）:     03_data_ud_sector_ranking_daily(RO)
 
 - [ ] `scripts/unified_data/sector_ranking_rollout/gate1_smoke.py`
 - [ ] `data/rollout/sector-ranking/reference/sw_l1_reference.csv`（31 个 SW 2021 L1 code/name，表头 + note 标注公开来源与核对日期；`REFERENCE-ONLY`）
-- [ ] `skills/data/unified_data/tests/fixtures/rollout_fixtures.py`（含 Gate-1 fixture）
+- [ ] `skills/data/unified_data/tests/fixtures/sector_ranking_rollout_fixtures.py`（含 Gate-1 fixture）
 - [ ] `skills/data/unified_data/tests/test_sector_ranking_rollout_gate1.py`
 
 ### 4.3 Step 3 — Gate-2
@@ -833,7 +885,7 @@ Gate-4（读）:     03_data_ud_sector_ranking_daily(RO)
 - [ ] 运行全部新单测（5 个 test 文件）
 - [ ] 回归 03-015 定向（`test_sector_ranking_history.py`，51 项）与模块全量（1047/1047）保持 PASS
 - [ ] `python3 -m scripts.unified_data.sector_ranking_rollout.gate1_smoke --help` 等 4 个工具 help/smoke 可运行（dry-run 路径，零真实 I/O）
-- [ ] `git diff --check HEAD` 通过；`git status` 仅新增 allowlist 文件
+- [ ] `git diff --check HEAD` 通过；03-016 相关改动仅限 §3.1.1 allowlist 文件（路径过滤归属，M7；共享树其他 dirty 不计）
 
 ---
 
@@ -846,13 +898,13 @@ Gate-4（读）:     03_data_ud_sector_ranking_daily(RO)
 | `test_sector_ranking_rollout_common.py` | CL-1~6（五键组件形态、缺失任一必需键 fail-fast、无 URI/prefix 分支、fingerprint 无连接值/无 username 信息）；G1-B-001~007（BudgetReader 白名单/过滤强制/limit/超时/扫描保护/记录上限/预算统计）；G1-B-002 负向（空 filter → BudgetViolation；aggregate 首 stage 非 `$match` → BudgetViolation；`$match` 无白名单字段 → BudgetViolation；白名单外字段 → BudgetViolation）；G0-C-005（redact/scan_secrets）；退出码常量；G4-P-001~010（CompletedSessionPolicy：FakeTradeCalendar + fake clock 注入逐项断言，fail-closed：policy=None → 拒绝读） |
 | `test_sector_ranking_rollout_gate1.py` | G1-C-001~007（权威枚举/参考文件交叉核对/coverage/close 完整性/source 分布/隔离/连接指纹）；G1-S-001~008 每条触发路径 → 退出码；G1-R-001~010 report 字段齐备；G1-V-005 只读证明（计数前后一致） |
 | `test_sector_ranking_rollout_gate2.py` | G2-D-001/002 幂等（重复执行跳过）；G2-S-003 规格不一致停止；G2-S-004 namespace 白名单；G2-S-002 前置 verify 失败 → 4；G2-A-001~004 审计证据 |
-| `test_sector_ranking_rollout_gate3.py` | G3-B-002 日级原子（一日失败停止后续）；G3-B-003 升序处理；G3-B-004 前一日推导（首日 empty）；G3-B-007 日期转换；G3-B-008 重算 pct_chg（禁止上游值）；G3-B-009/010 rt 剔除、close/pre_close 校验；G3-B-012 incomplete/empty 不物化；G3-B-013~016 范围解析（`--range-file` 取 coverage_by_date 升序去重；默认排除最早日；`--range-file` 与 start/end 互斥 → 1；start 缺 end → 1；无范围来源 → 1；canary/范围来源互斥三负例：`--canary-date` + `--range-file` → 1、`--canary-date` + 成对 `--start-date`/`--end-date` → 1、`--canary-date` + 不成对 start/end → 1〔按缺配对〕；canary 单日模式无范围来源时合法 → 0/dry-run 计划）；G3-S-002~012 触发路径；G3-V-001~004 写后读回；canary 不进入全量（G3-S-008） |
+| `test_sector_ranking_rollout_gate3.py` | G3-S-002（expected-file schema：缺 `expected_full_symbols` → 1；参数层 fail-fast，不等 process_day）；G3-B-002 日级原子（一日失败停止后续）；G3-B-003 升序处理；G3-B-004 前一日推导（首日 empty）；G3-B-007 日期转换；G3-B-008 重算 pct_chg（禁止上游值）；G3-B-009/010 rt 剔除、close/pre_close 校验；G3-B-012 incomplete/empty 不物化；G3-B-013~016 范围解析（`--range-file` 取 coverage_by_date 升序去重；默认排除最早日；`--range-file` 与 start/end 互斥 → 1；start 缺 end → 1；无范围来源 → 1；canary/范围来源互斥三负例：`--canary-date` + `--range-file` → 1、`--canary-date` + 成对 `--start-date`/`--end-date` → 1、`--canary-date` + 不成对 start/end → 1〔按缺配对〕；canary 单日模式无范围来源时合法 → 0/dry-run 计划）；G3-S-002~013 触发路径；G3-V-001~004 写后读回；canary 不进入全量（G3-S-008）；**per-day 查询预算模型（G3-B-017~020：跨 10 日 mock 每日 62 行，验证 reader.reset_stats() 使累计不跨日累加 → 全量退出码 0 不命中 BudgetViolation；单日注入 125 行 mock → G3-S-013 退出码 2；BudgetReader cumulative_rows_limit=None 时全局 100k 不触发；扫描保护仍强制：空 filter → BudgetViolation、单次 find >1000 → BudgetViolation；report 含 days[].query_budget + summary.total_query_rows（= 保留的逐日记录求和）+ summary.day_rows_limit；G3-S-013 失败日记录保留于 failed_days[]（observed=125 / day_limit=124 / stop_id）且 resumption_boundary=前一日）** |
 | `test_sector_ranking_rollout_gate4.py` | G4-V-001~008 全部 smoke 用例（complete/empty/非法日期/当日未收盘/跨 dataset 混读/排序/limit/无越权写）；G4-V-004 正/反例（FakeTradeCalendar + fake clock：交易日未收盘 → ValueError；已收盘 → 不抛错；非交易日 → empty token）；G4-S-002~008 触发路径；binding fail-closed（disable 后读取拒绝）；policy fail-closed（无日历证据 → 拒绝读）；`--enable` 顺序（pre-smoke → binding → post-smoke）；回滚预案（G4-V-104） |
 
 ### 5.2 集成测试
 
-- 每个 Gate 用 mongomock + fixture（`make_mongomock_db` 的**新增** `rollout_fixtures.py` 版本）端到端跑 `main(argv)`：dry-run 零副作用 → apply 产生 report → 断言 report 与退出码。
-- Gate-3 集成：fixture 中构造 31 个 SW L1 code 的连续 3 个交易日文档 → canary + 全量 → 写后读回全部 PASS。
+- 每个 Gate 用 mongomock + fixture（`make_mongomock_db` 的**新增** `sector_ranking_rollout_fixtures.py` 版本）端到端跑 `main(argv)`：dry-run 零副作用 → apply 产生 report → 断言 report 与退出码。
+- Gate-3 集成：fixture 中构造 31 个 SW L1 code 的连续 3 个交易日文档 → canary + 全量 → 写后读回全部 PASS；**额外多日预算集成（G3-B-017~020）：构造连续 10 个交易日（每日 62 行）→ 全量 apply 退出码 0，验证 reader.reset_stats() 使累计不跨日累加（summary.total_query_rows ≈ 620 = 保留的 days[].query_budget 求和，无 BudgetViolation）；构造 1 个异常日（125 行）→ 退出码 2（G3-S-013），failed_days[] 保留该日（observed=125 / day_limit=124 / stop_id），resumption_boundary 记录前一日**。
 - Gate-4 集成：fixture 物化 canary 日数据 → `--enable` 全套 smoke → `--disable` 回滚证明。
 
 ### 5.3 手工验证（不可自动化项）
@@ -873,7 +925,7 @@ Gate-4（读）:     03_data_ud_sector_ranking_daily(RO)
 | 风险 | 应对 | 降级/回滚 |
 |---|---|---|
 | Gate-1 发现真实数据不足 100%（缺行业/缺 close/日期断裂） | 严格按 G1-S-005 停止；report 记录缺口；canary 候选必须 100% | 不进入 Gate-2；Pascal 决策缩小日期范围或修上游 |
-| `index_basic_info` 无 SW L1 枚举或与 reference 冲突 | 双源交叉核对 + discrepancies 记录 | G1-C-001 FAIL → 停止；Pascal 人工对照申万官网 |
+| `stock_sector_info`（`{classify_system:"SW"}` distinct）与 reference 冲突，或 `index_basic_info` 可选交叉核对发现 name 不一致 | 主来源 `stock_sector_info` 异常 → G1-C-001 FAIL 停止；`index_basic_info`（可选元数据交叉核对，真实 `market="申万指数"`）差异仅记 `report.discrepancies` 不阻断 universe 构造 | G1-C-001 FAIL → 停止并上报 Pascal 人工对照申万官网 |
 | `MONGODB_*` 身份 DDL 权限不足（OQ-016-1 残余） | Gate-2 pre_verify + fail-fast | G2-S-001/002 停止，上报 Pascal（不自动建账号） |
 | backfill 中途失败（连接/完整性/upsert/读回） | 日级原子 + G3-S-004~007 停止 + 不自动 retry/rollback/drop | 修复后从失败日幂等重跑（upsert 覆盖） |
 | 误写目标集合外 / 误建多余集合 | ProdRankingWriter `_assert_namespace` + Gate-2 白名单 + post_verify 前后比对 | 停止；不自动删除；Pascal 显式授权后才处理 |
@@ -905,7 +957,7 @@ Gate-4（读）:     03_data_ud_sector_ranking_daily(RO)
 
 - `common.py` 内部 helper 命名、`BudgetReader` 的 `projection` 参数默认值、聚合 pipeline 具体形态（在不违反 G1-B 前提下）。
 - report `.md` 摘要格式（内容须覆盖结论/关键统计/canary/失败项）。
-- `rollout_fixtures.py` 中 fixture 函数命名与拆分方式。
+- `sector_ranking_rollout_fixtures.py` 中 fixture 函数命名与拆分方式。
 - 单测文件内部组织（可用 pytest 参数化减少重复）。
 - `ProdRankingReader.binding` 的默认读取实现细节（读取 `binding_state.json` 的方式与缓存策略）。
 
@@ -914,8 +966,20 @@ Gate-4（读）:     03_data_ud_sector_ranking_daily(RO)
 - 发现必须修改任何冻结文件（§2.2）才能完成工具（如 `conftest.py` fixture 注册、`client.py` 改造）。
 - 发现需要新增第三方依赖。
 - 发现 SPEC 契约在真实 pymongo 下不可实现（如 `create_index(background=False)` 在目标 MongoDB 版本不可用）。
-- 发现 Gate-1 无法从 `index_basic_info` 提取 SW L1 universe 且 reference 亦不可用（需重新定义权威来源）。
+- 发现 Gate-1 无法从 `stock_sector_info`（`{classify_system:"SW"}`）得到恰好 31 个 distinct L1，或 L1→`index_daily_quotes.full_symbol` 行情 join 不成立（需重新定义权威来源）。
 - 发现 `MONGODB_*` 身份权限不足且需创建账号/角色（OQ-016-1 需单独授权）。
+
+### 7.4 L1 契约校正后的 Developer 后续修复路径（仅 Design Gate 通过后实施）
+
+> 以下路径是 L1 契约校正（universe 来源 `index_basic_info`→`stock_sector_info`，join field `sector_code`→`full_symbol`）在**既有代码**中遗留的修复点。T3 Implement **不得**在本期修改这些文件（§2.2 / §7.1 冻结）；它们作为 Gate 工具 Review PASS 后的独立变更记录在此，由后续 Developer 卡按各自授权执行。
+
+| 路径 | 文件 | 当前问题 | 期望修复方向 | 触发时机 |
+|---|---|---|---|---|
+| DP-016-1 | `scripts/unified_data/sector_ranking_rollout/gate1_smoke.py`（T3 新建） | 本期 T3 新建的工具必须直接用 `BudgetReader` 按 `full_symbol` 过滤 `index_daily_quotes`、用 `stock_sector_info` `{classify_system:\"SW\"}` distinct 枚举 L1 universe——**不得**复用 `ta_cn_mongo_adapter.get_index_daily_bars`（其不支持 `full_symbol`） | T3 实现即按 L1 契约编写（§3.4.2 / §3.4.3）；本路径仅记录约束来源 | T3 Implement |
+| DP-016-2 | `skills/data/unified_data/adapters/ta_cn_mongo_adapter.py`（既有，§2.2 冻结） | `get_index_daily_bars` 只匹配 `sector_code/symbol/code`，**未支持 `full_symbol`** | 后续独立卡：为该方法增加 `full_symbol` 过滤支持（或新增 `get_index_daily_bars_by_full_symbol`），供非 rollout 场景复用；本 rollout 不依赖此修复 | Design Gate 通过后的独立 adapter 维护卡 |
+| DP-016-3 | rollout fixtures / tests（T3 新建于 `skills/data/unified_data/tests/fixtures/sector_ranking_rollout_fixtures.py`） | 既有 03-015 fixture（`historical_ranking_fixtures.py`）使用 `sector_code` / `EXPECTED_SECTOR_CODES` 旧形态 | T3 新建的 `sector_ranking_rollout_fixtures.py` 必须用 L1 契约形态（`.SI` 后缀 `full_symbol`、`stock_sector_info` SW distinct 31）；**不得**修改 03-015 既有 fixture（§2.2 冻结） | T3 Implement |
+
+约束：上述路径均**不在本期 T3 allowlist（§3.1.1 14 文件）内**的既有文件修改；DP-016-1 / DP-016-3 在 T3 新建文件中按 L1 契约实现即可，DP-016-2 是后续独立变更。
 
 ---
 
@@ -941,9 +1005,9 @@ python3 -m scripts.unified_data.sector_ranking_rollout.gate1_smoke \
 |---|---|
 | G1-V-001 | `data/rollout/sector-ranking/gate1-report.json` + `.md` 存在；JSON schema 校验通过（G1-R-001~010 + trade_date_format + discrepancies） |
 | G1-V-002 | `stop_conditions_hit` 为空；`checks` 全 PASS |
-| G1-V-003 | `expected_sector_codes` 非空，与 `index_basic_info` 抽查 5 个 code/name 一致 |
+| G1-V-003 | `expected_sector_codes` 非空（恰好 31 个 `.SI` 后缀 code），与 `stock_sector_info`（`{classify_system:"SW"}`）抽查 5 个 code/name 一致；`expected_full_symbols` 31 个均可在 `index_daily_quotes` 按 `full_symbol` 命中 |
 | G1-V-004 | report/log 静态扫描无 secrets |
-| G1-V-005 | `index_daily_quotes` / `index_basic_info` `estimatedDocumentCount` 与 Gate-1 前后基线一致（只读证明） |
+| G1-V-005 | `index_daily_quotes` / `stock_sector_info` `estimatedDocumentCount` 与 Gate-1 前后基线一致（只读证明）；`index_basic_info` 若作可选交叉核对其计数亦不变 |
 
 ### 8.2 Gate-2 卡
 
@@ -1019,6 +1083,10 @@ Verify（G4-V-101~105）：smoke 全部 PASS（G4-V-001~008）；warning token �
 
 | 版本 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
+| V0.8（Design Gate `t_1f6c001b` REVISE 七项 minor 闭合） | 2026-08-01 | P0 Principal amendment（任务 `t_f7922150`），Design Gate `t_1f6c001b` REVISE（0 blocker / 0 major / 7 minor）全部闭合：M1 §3.3.3 `BudgetReader.__init__` 签名补 `day_rows_limit`（类级默认 `None`=不启用，Gate-3 `main` 显式传 `4*len(expected)`）；M2 `reset_stats()` 定义固化——**同时**清零累计计数器（`cumulative_rows`）与 stats 列表，job 级聚合在 reset 外基于保留记录（reset-safe）；M3 SPEC G3-B-018 公式校正为 `4 × len(expected_sector_codes)` = 124（SPEC V0.5）；M4 §3.6.6 `summary.total_query_rows` 与顶层 `query_budget` 定义为**保留的逐日记录**（days[] ∪ failed_days[]）求和（informational，不读 reader 实时累计状态）；M5 report schema 新增 `failed_days[]`（trade_date/status/observed/day_limit/stop_id/ms/query_budget），G3-S-013 失败日必须保留即使不进成功 `days[]`；M6 fixture allowlist 全篇对齐实际文件名 `sector_ranking_rollout_fixtures.py`（§3.1.1/§4.2/§5.1/§5.2/§7.2/§7.4）；M7 §2.1 工作树声明替换为共享目录基线措辞（11 文件快照非归属证明，Verify/Review 用路径过滤归属，不做 mtime/dirty 总数等易变声明），§4.6 验收同步。**未改变** Gate 业务语义、退出码总体集合（仍 0/1/2/3/4）、L1 契约、Gate-2 namespace/唯一索引、canonical 排序/读回、既有 G3-V 检查、连接源、T3 allowlist 总数（14）、生产授权边界。RFC 更新至 V0.4、SPEC 更新至 V0.5 | YQuant-Principal |
+| V0.7（Gate-3 查询预算范围校正） | 2026-08-01 | P0 设计校正（任务 `t_888c30fb`），对齐 SPEC V0.4 G3-B-017~020：发现全量回填可行性阻断——Gate-3 `main` 复用一个共享 `BudgetReader`（默认 `cumulative_rows_limit=100000`，G1-B-006 Gate-1 scope）跨 6,421 日累加 → 必然在约第 1,613 日命中 BudgetViolation（G1-S-007）。修正：① §3.3.3 `BudgetReader` 新增 `cumulative_rows_limit`（默认 100k，Gate-1）/ `day_rows_limit`（Gate-3）/ `reset_stats()` / `cumulative_rows` 属性；Gate-3 构造时 `cumulative_rows_limit=None` 禁用全局阻断；② §3.6.4 `process_day` 开头调用 `reader.reset_stats()` 实现 per-day scoped 计数（G3-B-017），`find` 后检查 `cumulative_rows > day_rows_limit(124)` → G3-S-013；③ §3.6.7 新增 G3-S-013（退出码 2，日级越界，不自动放宽）；④ §3.6.6 report 新增 `days[].query_budget` / `summary.total_query_rows`(informational) / `summary.resumption_boundary` / `summary.day_rows_limit`；⑤ §5.1 测试矩阵 + §5.2 集成测试补 per-day 预算正/负例（10 日每日 62 行 → 退出码 0；单日 125 行 → G3-S-013）。数值边界固化：全量 6,421 日、单日 62 行、累计 398,102（informational）、日级上限 124。**未改变** Gate-1/2/4 业务语义、Gate-3 写入/dataset/构建规则、L1 契约、连接源、T3 allowlist 总数（14）、退出码总体集合（仍 0/1/2/3/4，仅新增 G3-S-013 触发路径）。RFC 更新至 V0.3、SPEC 更新至 V0.4 | YQuant-Principal |
+| V0.6（REVISE closure `t_cfdad408`） | 2026-08-01 | 独立 Design Gate `t_cfdad408` REVISE 闭合（MINOR-1/OBS-1）：固化 Gate-3 `--expected-file` 必填字段——必含 `expected_sector_codes` / `expected_sector_names` / `expected_full_symbols`（后者 = `.SI` 后缀 L1 join 值集即 `index_daily_quotes.full_symbol` 值集）；G3-S-002 / schema-invalid 将缺失或非法 `expected_full_symbols` 作为参数层 fail-fast（退出码 1），不等 process_day（§3.6.2 CLI 输入要求 / §3.6.7 G3-S-002 / §5.1 测试矩阵同步，与 SPEC §3.4.1 逐字一致）。OBS-1：§2.1 背景基线描述修正（`client.py` 等 03-015/P3-A 变更已被既有提交吸收）。**未改变** Gate-3 范围、写入、退出码总体集合（仍 0/1/2/3/4）与生产授权边界；RFC 保持 V0.2、SPEC 保持 V0.3（新增 REVISE closure 行） | YQuant-Codex-Principal |
+| V0.5（L1 契约校正） | 2026-08-01 | 根据 Pascal 最新裁定与 2026-08-01 只读生产核验，校正 L1 universe 来源与 join 契约：universe 主来源 `index_basic_info`(market=CN) → `stock_sector_info`(classify_system=SW distinct `(l1_code,l1_name)` = 31)；join field `sector_code` → `index_daily_quotes.full_symbol`；code canonical 形态 `.SI` 后缀；`index_basic_info`（真实 `market="申万指数"`）降级为可选元数据交叉核对（须按真实字段语义，不得用 market=CN）；明确 L2/L3 不在本期范围（`index_daily_quotes` 仅 L1 行情）；明确最小数据质量（pct_chg 必须、close 缺失 fail-stop、最早日 pre_close 缺失不得以全历史 OHLC 阻断同日有效横截面）。涉及章节：metadata、§2.1 adapter note、§3.3 G1-B-002、§3.4.2 Gate-1 apply flow、§3.4.3 universe 语义、§3.4.4 report 示例、§3.4.5 停止条件、§3.6.4 process_day、§3.6 字段来源、§3.8 数据流图、§3.10 reference 持久化、§3.12 OQ-016-2、§6 风险表、§7.3 退回 Principal、§8.1 G1-V-003/005。**未改变** Gate 业务语义、退出码、连接源与 allowlist 总数（仍 14）、Gate-2/3/4 冻结 | YQuant-Codex-Principal |
 | V0.4 | 2026-07-31 | 评审 `t_99d11552` REVISE 闭合（F-1）：Gate-3 `--canary-date` 与全量范围来源互斥冻结——与 `--range-file` 同时传入 → 退出码 1、与成对 `--start-date`/`--end-date` 同时传入 → 退出码 1、与不成对 start/end 仍按缺配对 → 退出码 1（§3.6.3 范围解析表新增互斥行 / G3-S-003 触发点扩展）；canary 单日模式仅在无任何范围来源时合法；§5.1 gate3 测试矩阵补三负例。**未改变** canary 候选选择、date range 计算、Gate-3 回填范围、任何生产动作与退出码总体集合（仍 0/1/2/3/4） | YQuant-Codex-Principal |
 | V0.3 | 2026-07-31 | T2.2 交叉文档闭合（Gate `t_e1611476` REVISE）：F1 Gate-3 范围来源唯一化（`--range-file` 进 CLI synopsis，与成对 `--start-date`/`--end-date` 互斥，无范围来源 → EXIT_PARAM(1)，§3.6.3/§8.3）；F2 新建可注入 TradeCalendar / CompletedSessionPolicy（§3.3.5，ProdRankingReader 读入口执行，冻结 service 零修改；G4-R-003/G4-V-004 fake calendar + fake clock 逐项证伪）；F3 G1-B-002 过滤白名单统一（含 `market`，find 与 aggregate 首 stage 同规则）；F4 provenance 修正（来源 SPEC V0.1→V0.2）；OBS-1 conn_prefix 旧概念措辞修正（§3.4.4）；OBS-2 Gate-4 git-status 收敛为 activation 卡路径 allowlist / baseline manifest（§3.7.4）。**未改变** V0.1/V0.2 已冻结的 Gate 业务语义、退出码、连接源与 allowlist 总数（仍 14） | YQuant-Codex-Principal |
 | V0.2 | 2026-07-31 | 评审 #864 闭合：连接源收敛为唯一受控 `MONGODB_*` 组件来源（五键组件式构造，无 URI/prefix/alias/fallback，CLI 去掉 `--conn`，fingerprint 去 username 派生信息）；T3 allowlist 统一为 14 个新文件并全篇一致。**未改变 Gate 业务语义** | YQuant-Codex-Principal |
