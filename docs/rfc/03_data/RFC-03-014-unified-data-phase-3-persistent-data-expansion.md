@@ -7,8 +7,8 @@
 | 状态 | 草稿（Draft） |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-07-20 |
-|| 最后更新 | 2026-07-31（V0.19 RFC/SPEC P1 受控 Mongo 物化与显式 refresh 的零副作用契约冻结：新增 §P1 完整章节——P1 覆盖 capability 与集合文档语义、MongoDB-first 离线实现边界、internal-first read/explicit refresh/cache write 边界与默认禁止规则、完整副作用矩阵、授权关口与零 I/O 边界、PC-11 freshness 跨层冻结声明。不动所有已有 P0/P1/P2 边界定义、不动既有授权范围、不动所有 ❌ 状态。） |
-|| 版本号 | V0.19 |
+|| 最后更新 | 2026-08-02（V0.20 RFC F6 freshness canonical key 裁定同步：PC-11 冻结解除——Pascal 裁定 `market_sentiment` 为 `sentiment.market_snapshot` 的唯一 canonical freshness key、`sentiment_limit_up_pool` 为 `sentiment.limit_up_pool` 的唯一 canonical key；§P0.6、§P1.9 冻结项同步解除并指向 RFC-03-014-F6 / SPEC-03-014-F6。不动所有已有 P0/P1/P2 边界定义、不动既有授权范围、不动所有 ❌ 状态。） |
+|| 版本号 | V0.20 |
 | 所属模块 | 03_data（数据层） |
 | 依赖 RFC | RFC-03-007（Unified Data Layer 总纲）、RFC-03-011（Phase 2 质量与审计治理） |
 | 依赖 SPEC | SPEC-03-007（Unified Data Layer 契约）、SPEC-03-014（Phase 3 持久化扩展契约，本文件对应之 SPEC） |
@@ -36,6 +36,7 @@
 || V0.16 | 2026-07-30 | **Pascal 22-field MarketSentimentSnapshot canonical 契约裁定同步**。Pascal 裁定 22 字段全市场多维快照（`{market, snapshot_date, snapshot_time}` 唯一键）为 `MarketSentimentSnapshot` 的 canonical 产品 schema，淘汰此前离线 T3-B 实现的 10 字段 `sentiment_type` 聚合模型（`{market, sentiment_type, market_date}` 唯一键）。§5.3 P3-C schema 引用从候选升级为 canonical；§9 A-003 追加 canonical 声明验证；§10 T3 阶段状态标注 10 字段模型已被 superseded；§11 OQ-6 明确 market_temperature 为未决待定（允许 None）。离线存在的 10 字段实现作为 superseded 事实保留，不删除，但任何进一步扩展必须基于 22 字段 canonical 契约。不动 §13.4.5.8-§13.4.5.10 B2/R0 裁决内容、不动 §13.6 DDL 冻结状态、不动既有授权范围。 | YQuant-Principal |
 || V0.17 | 2026-07-30 | **P0 真实 Provider 离线可实现契约冻结**。新增 §P0 完整章节：定义六 capability 精确状态矩阵、真实 Provider 统一接口边界（extract→canonical mapping→validation/provenance→DataResult.source_trace）、P3-A/P3-B/P3-C 逐项映射验收项、P0 vs P1 vs P2 边界依赖、完全副作用矩阵、旧 checkbox 状态纠正到可审计现状。全部真实调用声明为未来授权 smoke/production activation，禁止在离线 Implement/Verify 中触发。不动 §13.4.5 B2/R0/Pascal C+X2 裁决、不动 §13.6 DDL 冻结状态、不动既有授权范围。 | YQuant-Principal |
 |  | V0.19 | 2026-07-31 | **P1 受控 Mongo 物化与显式 refresh 的零副作用契约冻结**。新增 §P1 完整章节：P1 覆盖 capability 与集合文档语义、MongoDB-first 离线实现边界（仅 fake/mock/静态审计）、internal-first read/explicit refresh/cache write 边界与默认禁止规则、完全副作用矩阵、授权关口与零 I/O 边界、PC-11 freshness 跨层冻结声明。不动 P0/P1/P2 边界定义、不动已有授权范围、不动所有 ❌ 状态。 | YQuant-Principal |
+|  | V0.20 | 2026-08-02 | **F6 freshness canonical key 裁定同步**。Pascal 裁定冻结 `market_sentiment` 为 capability `sentiment.market_snapshot` 的唯一 canonical freshness domain key（TTL=3600），`sentiment_limit_up_pool` 为 capability `sentiment.limit_up_pool` 的唯一 canonical key（TTL=3600）；`sentiment` 不再是 freshness TTL key（仅 capability domain 前缀）；禁止双 key/alias/fallback 造成 freshness 漂移。§P0.6（冻结事实、PC-11、绝对禁止）与 §P1.9（Freshness 跨层冻结项）同步解除并指向 F6 裁定。权威裁定见 `RFC-03-014-F6`，可执行契约见 `SPEC-03-014-F6`。不动 P0/P1/P2 边界定义、不动既有授权范围、不动所有 ❌ 状态。 | YQuant-Principal |
 |
 ---
 
@@ -1109,7 +1110,7 @@ Step 4: DataResult.source_trace
 **冻结事实**：
 - `market_snapshot`：B2 空返回，row_count=0。22 字段 canonical schema 已裁定。`market_temperature` 允许 None（OQ-6）。`northbound_net_flow` 无合规来源前为 None。
 - `limit_up_pool`：B2 空返回同 market_snapshot。Expected 字段集基于 AKShare 公开文档推断。
-- freshness 跨层命名冲突（`sentiment` vs `market_sentiment`）仍未解决，P0 不擅自裁定。
+- freshness 跨层命名冲突已由 Pascal 裁定冻结 `market_sentiment` canonical key（RFC-03-014-F6 / SPEC-03-014-F6），P0/P1 冻结解除。
 
 | # | 验收项 | 验证方式 | 约束 |
 |---|---|---|---|
@@ -1123,13 +1124,13 @@ Step 4: DataResult.source_trace
 | PC-8 | `sentiment_service.get_limit_up_pool()` 返回 `list[dict]`（含 symbol/reason/days） | Python 断言 | 与 SPEC §5.1 一致 |
 | PC-9 | `refresh_market_sentiment_snapshot()` 三态守卫：`p3_writer=None`→`ProviderUnavailableError`；injected→`NotImplementedError`；authorized→happy-path（当前不在 P0 范围） | pytest.raises | 不执行 fetch/upsert |
 | PC-10 | `_EXPECTED_*_FIELDS` 与 STUB_COLUMNS 孪生等价性通过 | 孪生等价性测试 | 同 §P0.4 PA-7 |
-| PC-11 | freshness 跨层命名冲突（`sentiment` vs `market_sentiment`）在 P0 中不改、不擅自裁定 | 仅披露 | 不动 RFC/SPEC/DESIGN 中所有出现处 |
+| PC-11 | freshness canonical key 已裁定冻结：`market_sentiment` 为 `sentiment.market_snapshot` 唯一 key、`sentiment_limit_up_pool` 为 `sentiment.limit_up_pool` 唯一 key（RFC-03-014-F6） | 断言见 SPEC-03-014-F6 §3.2 C-1~C-6 | 禁止双 key/alias/fallback |
 
 **绝对禁止**：
 - ❌ 虚构 `market_temperature` 合成公式或填充非 None 值。
 - ❌ 虚构 `northbound_net_flow` 值。
 - ❌ 基于 superseded 10 字段模型定义 fixture/expected 字段集。
-- ❌ 擅自裁定 `sentiment` vs `market_sentiment` freshness 命名冲突。
+- ❌ 在 `FreshnessPolicy.DEFAULT_TTLS` 注册 `sentiment` 或引入双 key/alias/fallback（F6 裁定后，见 SPEC-03-014-F6 §3.2）。
 
 ### P0.7 P0 vs P1 vs P2 边界与依赖
 
@@ -1347,6 +1348,8 @@ PC-11（freshness `sentiment` vs `market_sentiment` 命名冲突）在 P1 中保
 - 文档中所有 `DEFAULT_TTLS` 键名保持当前代码基线的 `market_sentiment`（磁盘）与 `sentiment`（SPEC §0 术语）分别记录。
 - P1 不得为消除命名冲突修改 `freshness.py` 或 `DEFAULT_TTLS` 定义中的键名。
 - PC-11 的裁定时机标记为「P3 三层文档 finalize 前，由 Pascal 单独决断」。
+
+> **F6 裁定（2026-08-02，V0.20）**：Pascal 已决断——冻结 `market_sentiment` 为 canonical freshness key（`sentiment_limit_up_pool` 独立并列；`sentiment` 不再作为 TTL key）。本冻结项正式解除。权威裁定见 `RFC-03-014-F6`，可执行契约见 `SPEC-03-014-F6`；运行时 freshness 查表对齐（capability → canonical key，消除 `_DEFAULT_TTL=3600` fallback 巧合）归 F6 Implement 阶段，Design 阶段同步 DESIGN-03-014。
 
 ### P1.10 P1 验收标准（Fake-only Closeout ✅）
 

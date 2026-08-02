@@ -65,6 +65,13 @@ class FreshnessPolicy:
         # hour, so the TTL is intentionally tight. Matches V0.5 §4.4
         # l.650 alignment with the sector pattern (single-line
         # addition, same shape as P3-A sector).
+        # F6 ruling (RFC-03-014-F6): ``market_sentiment`` is the
+        # canonical freshness domain key for capability
+        # ``sentiment.market_snapshot``. ``sentiment`` itself is only a
+        # capability-domain prefix and is deliberately NOT registered as
+        # a TTL key (double key / alias would split freshness
+        # semantics). Runtime lookups must pass the canonical key —
+        # see ``DataRouter._freshness_domain_for``.
         "market_sentiment": 3600,
         # Phase 3 P3-B (T3-P3B): capital-flow TTL = 43200s (12h).
         # Per V0.5 §4.4 l.650 reconciliation, capital-flow data is

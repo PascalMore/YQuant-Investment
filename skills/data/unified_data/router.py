@@ -91,6 +91,16 @@ try:
 except Exception:  # pragma: no cover - never expected in this codebase
     P3_COLLECTION_BY_CAPABILITY = {}
 
+# F6 ruling (RFC-03-014-F6 / SPEC-03-014-F6 §2.2): capability →
+# canonical freshness domain key. Only the two sentiment capabilities
+# deviate from identity (their capability-domain prefix ``sentiment``);
+# everything else maps to the domain prefix (identity), so non-P3
+# freshness/cache TTL lookups are byte-for-byte unchanged.
+_CAPABILITY_FRESHNESS_DOMAINS: dict[str, str] = {
+    "sentiment.market_snapshot": "market_sentiment",
+    "sentiment.limit_up_pool": "sentiment_limit_up_pool",
+}
+
 logger = logging.getLogger(__name__)
 
 
@@ -574,6 +584,27 @@ class DataRouter:
         return capability in P3_COLLECTION_BY_CAPABILITY
 
     @staticmethod
+    def _freshness_domain_for(capability: str) -> str:
+        """Return the canonical freshness domain key for ``capability``.
+
+        F6 ruling (RFC-03-014-F6 / SPEC-03-014-F6 §2.2):
+
+        * ``sentiment.market_snapshot`` → ``market_sentiment``
+        * ``sentiment.limit_up_pool`` → ``sentiment_limit_up_pool``
+        * every other capability → its domain prefix (identity):
+          ``sector.snapshot`` → ``sector``, ``flow.capital_flow_daily`` →
+          ``flow``, ``market_data.kline_daily`` → ``market_data``, ...
+
+        The capability-domain prefix (``sentiment``) is deliberately NOT
+        a freshness TTL key — it must never be passed to
+        :meth:`FreshnessPolicy.label` / :meth:`get_ttl` or to the TTL
+        consult inside ``CacheManager.put`` / ``LocalMongoAdapter.put``
+        (fallback coincidences with ``_DEFAULT_TTL=3600`` are forbidden).
+        """
+        domain, _, _ = capability.partition(".")
+        return _CAPABILITY_FRESHNESS_DOMAINS.get(capability, domain)
+
+    @staticmethod
     def _p3_collection_for(domain: str, operation: str) -> str:
         """Return the P3 collection name for the given capability.
 
@@ -864,17 +895,29 @@ class DataRouter:
             # P3 read is read-only by SPEC §537-546 — no Step-2 put,
             # no Step-3 cache put.
             return
+        # F6 (RFC-03-014-F6 / SPEC-03-014-F6): the TTL consult inside
+        # the adapters (``get_ttl``) must hit the canonical freshness
+        # key, not the raw capability-domain prefix. The P3 read-only
+        # guard above keeps this branch unreachable for P3 capabilities
+        # (a future-proofing + correctness fix); for non-P3
+        # capabilities ``_freshness_domain_for`` is identity, so the
+        # adapter cache/materialized keys are unchanged. The P3 guard
+        # itself deliberately keeps using ``domain`` (not ``put_domain``)
+        # so the read-only invariant cannot be bypassed.
+        put_domain = domain
+        if capability is not None:
+            put_domain = self._freshness_domain_for(capability)
         if self._local_mongo_adapter is not None:
             try:
                 self._local_mongo_adapter.put(
-                    security_id, domain, operation, params, result
+                    security_id, put_domain, operation, params, result
                 )
             except Exception as exc:
                 logger.warning("LocalMongoAdapter.put failed in router: %s", exc)
         if self._cache_manager is not None:
             try:
                 self._cache_manager.put(
-                    security_id, domain, operation, params, result
+                    security_id, put_domain, operation, params, result
                 )
             except Exception as exc:
                 logger.warning("CacheManager.put failed in router: %s", exc)
@@ -1214,16 +1257,25 @@ class DataRouter:
         label — mirrors the existing defensive pattern used by Step 1
         P3-B / P3-C branches.
         """
+        # F6 (RFC-03-014-F6 / SPEC-03-014-F6): the freshness consult
+        # must use the canonical freshness domain derived from the
+        # capability, NOT the raw capability-domain prefix.
+        # ``_freshness_domain_for`` is identity for every non-sentiment
+        # capability, so only sentiment lookups change (sentiment →
+        # market_sentiment / sentiment_limit_up_pool). Passing the raw
+        # ``sentiment`` prefix here would silently hit ``_DEFAULT_TTL``
+        # (fallback coincidence) — forbidden by the F6 ruling.
+        freshness_domain = self._freshness_domain_for(capability)
         if data_signal is None:
             # Empty payload → ``"empty"``, same as the legacy branch.
             # We do not override this: freshness carries the
             # empty/non-empty signal regardless of capability scope.
-            return self._freshness.label(ts, data_signal, domain, False)
+            return self._freshness.label(ts, data_signal, freshness_domain, False)
         if capability in P3_COLLECTION_BY_CAPABILITY:
             # D2 contract — external Step-4 success for P3 capability
             # is always reported as ``"delayed"``.
             return "delayed"
-        return self._freshness.label(ts, data_signal, domain, False)
+        return self._freshness.label(ts, data_signal, freshness_domain, False)
 
     @staticmethod
     def _attempt_provider_fetch(

@@ -7,12 +7,12 @@
 | 状态 | 草稿（Draft） |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-07-31 |
-| 最后更新 | 2026-08-01（V0.4 Design Gate `t_1f6c001b` REVISE 七项 minor 闭合的 provenance 指针同步：依赖 SPEC 更新至 V0.5、对应 DESIGN 更新至 V0.8；无语义变更；V0.3 Gate-3 查询预算范围校正：§5.1.3 引用 per-day scoped budget 模型 G3-B-017~020 + G3-S-013，对齐 SPEC V0.4 / DESIGN V0.7；V0.2 L1 契约校正；2026-07-31 V0.1 + T2.2） |
-| 版本号 | V0.4 |
+| 最后更新 | 2026-08-02（V0.5 Gate-4 readiness 卡 `t_e30dc947` 全量范围契约校正（recovery closure 卡 `t_a6b7636e` 完成正文收口）：§5.1.3 与 §5.4 的 Gate-3 全量范围/累计数值引用同步至 SPEC V0.6 / DESIGN V0.9 的 ratio==1.0 满覆盖日模型（1,114 日 / 69,068 行 informational；旧值 6,421/398,102 superseded，见 Changelog）；依赖 SPEC 更新至 V0.6、对应 DESIGN 更新至 V0.9；V0.4 Design Gate `t_1f6c001b` REVISE 七项 minor 闭合的 provenance 指针同步：依赖 SPEC 更新至 V0.5、对应 DESIGN 更新至 V0.8；无语义变更；V0.3 Gate-3 查询预算范围校正：§5.1.3 引用 per-day scoped budget 模型 G3-B-017~020 + G3-S-013，对齐 SPEC V0.4 / DESIGN V0.7；V0.2 L1 契约校正；2026-07-31 V0.1 + T2.2；recovery closure 卡 `t_a6b7636e`（2026-08-02）补齐 §5.1.3/§5.4 遗留旧数值（6,421/398,102 → 1,114/69,068，superseded history 见 Changelog）、依赖 SPEC 指针 V0.5→V0.6、关联 Design 增列 DESIGN-03-016 V0.9；Gate-3 全量 backfill 尚未执行/验证 → Gate-4 consumer binding 仍为 NO-GO） |
+| 版本号 | V0.5 |
 | 所属模块 | 03_data（数据层） |
 | 依赖 RFC | RFC-03-015-historical-sector-ranking（V0.5，冻结基线）、RFC-03-011-unified-data-phase-2-quality-audit-governance（§8 生产 MongoDB 副作用矩阵与确认流程先例）、RFC-03-014-p3a-sector-provider-activation（P3-A 边界） |
-| 依赖 SPEC | SPEC-03-016-historical-sector-ranking-production-rollout（本 RFC 对应之 SPEC，V0.5） |
-| 关联 Design | DESIGN-03-015-historical-sector-ranking.md（V0.5，§8 与附录 A 为本 RFC 的 Gate 参考来源，仅参考，非执行规范） |
+| 依赖 SPEC | SPEC-03-016-historical-sector-ranking-production-rollout（本 RFC 对应之 SPEC，V0.6） |
+| 关联 Design | DESIGN-03-016-historical-sector-ranking-production-rollout（V0.9，本 RFC 对应之实现设计）；DESIGN-03-015-historical-sector-ranking.md（V0.5，§8 与附录 A 为本 RFC 的 Gate 参考来源，仅参考，非执行规范） |
 | 替代 RFC | 无（03-015 已冻结离线语义，本 RFC 独立定义生产 rollout，不替代、不合并） |
 | AI 适配 | Hermes Kanban profile worker |
 | 标签 | #data #unified_data #sector #ranking #production #rollout #gate #mongodb |
@@ -71,6 +71,8 @@
 | A-016-4 | Gate-4：生产读路径激活 | 仅激活读路径；不得改 router/fallback/provider |
 
 **执行状态（当前事实）**：上述授权**均已签署但均未执行**。任何 Gate 的实际执行必须以「本卡 + 后续 Design/Implement/Verify/Review 完成、独立 Review PASS 后创建的分阶段 production activation 卡」为准，并由 Pascal 按 rollout 策略逐 Gate 显式触发。本 RFC 及 SPEC 不得把「授权」误写为「已执行」。
+
+**Gate-3/4 当前状态（recovery closure 卡 `t_a6b7636e` 复核）**：Gate-3 **全量 backfill 尚未执行/验证**（Gate-3 canonical report 仅显示单日 canary PASS，尚无全量 backfill 成功证据），因此 **Gate-4 consumer binding 仍为 NO-GO**；本 RFC/SPEC/DESIGN 三层文档**不产出、不暗示任何 activation approval**。Gate-4 只有在全量 backfill 执行并通过独立只读 Verify 后，由 Pascal 显式触发生产 activation 卡时才有可能激活。
 
 ---
 
@@ -193,7 +195,7 @@ Gate-4 生产读路径激活（只读 smoke + binding 状态）
 | create-index | 无（Gate-2 已完成） |
 | external action | 无外部 Provider；无 router；无 cache；无 realtime fallback |
 | 目标 namespace | 读：`tradingagents.index_daily_quotes`；写：`tradingagents.03_data_ud_sector_ranking_daily` |
-| 最大日期/记录范围 | 日期范围由 Gate-1 证据确认的可用范围（或 Pascal 显式指定的子范围）固定；全量命令必须显式传入 `--range-file`（SPEC G3-B-013~016）；单日最多 `expected_sector_codes` 行（SW L1 一级行业全集，Gate-1 权威枚举）；canary 至多 1 个由 Gate-1 证据选定的 completed trade_date。**查询预算范围模型（SPEC G3-B-017~020）**：Gate-3 查询预算**按日 scoped**（每 `process_day` 独立/reset 计数），**不继承** Gate-1 全局累计 100k 上限（G1-B-006，Gate-1 report scope）；日级上限 = `4 × len(expected_sector_codes)` = 124 行（当日 31 + 前一日 31 + 2× 冗余防 schema 漂移），超过 → G3-S-013 停止；全量累计查询命中行数（数据正常 = 6,421 × 62 = 398,102）仅 informational 记入 report，**不作为停止条件**；扫描保护（G1-B-001~005：白名单/过滤/≤1000/超时/空 filter 拒绝）全部保留 |
+| 最大日期/记录范围 | 日期范围由 Gate-1 证据确认的可用范围（或 Pascal 显式指定的子范围）固定；全量命令必须显式传入 `--range-file`（SPEC G3-B-013~016）；单日最多 `expected_sector_codes` 行（SW L1 一级行业全集，Gate-1 权威枚举）；canary 至多 1 个由 Gate-1 证据选定的 completed trade_date。**查询预算范围模型（SPEC G3-B-017~020）**：Gate-3 查询预算**按日 scoped**（每 `process_day` 独立/reset 计数），**不继承** Gate-1 全局累计 100k 上限（G1-B-006，Gate-1 report scope）；日级上限 = `4 × len(expected_sector_codes)` = 124 行（当日 31 + 前一日 31 + 2× 冗余防 schema 漂移），超过 → G3-S-013 停止；全量累计查询命中行数（数据正常 = 1,114 × 62 = 69,068，ratio==1.0 满覆盖日模型，排除最早满覆盖日后）仅 informational 记入 report，**不作为停止条件**；扫描保护（G1-B-001~005：白名单/过滤/≤1000/超时/空 filter 拒绝）全部保留 |
 | 幂等性 | upsert 幂等（唯一键覆盖）；同一 trade_date 重复执行覆盖更新，`updated_at` 刷新 |
 | 停止条件 | SPEC G3-S-001 ~ G3-S-013（任一触发即停止；失败不自动 retry、扩范围或反向 DDL；G3-S-013 = 单日查询命中 > 日级上限 124 行，表明上游 schema 漂移） |
 | 审计证据 | backfill 日志（每 trade_date 的 `outcome`、failed 计数、upserted 计数、per-day query_budget）+ canary 报告 + 写后读回结果 + 全量汇总（success/failed/stop_conditions_hit/total_query_rows[resumption_boundary]） |
@@ -267,7 +269,7 @@ Gate-4 生产读路径激活（只读 smoke + binding 状态）
 
 - **只允许**从已验证 TA-CN 的 `index_daily_quotes` 读取；禁止任何其他上游（外部 Provider、realtime、cache、router）。
 - 回填目标 dataset 固定为 `sw2021_ta_cn`（常量注入，不从 TA-CN 推断）。
-- 固定日期范围选择：范围来源二选一并冻结——`--range-file PATH`（Gate-1 report，取 `coverage_by_date` 有效交易日，升序去重，默认排除最早可用日）或成对 `--start-date`/`--end-date`（Pascal 显式子范围，⊆ Gate-1 范围）；无任何范围来源 → EXIT_PARAM(1)；全量命令必须显式传 `--range-file`；SPEC G3-B-001/G3-B-013~016 定义范围解析规则。
+- 固定日期范围选择：范围来源二选一并冻结——`--range-file PATH`（Gate-1 report，取 `coverage_by_date` 中 ratio==1.0 的键——31/31 满覆盖共同完整交易日（2021-12-13 → 2026-07-30 共 1,115 日；部分覆盖日 ratio<1.0 不纳入，100% exact-match 下必然 G3-S-004 停止）——升序去重，默认排除 ratio==1.0 键集中最早满覆盖日 2021-12-13〔其前一日 2021-12-10 为部分覆盖 → 无完整 prev close〕，计划范围 1,114 日）或成对 `--start-date`/`--end-date`（Pascal 显式子范围，⊆ Gate-1 范围）；无任何范围来源 → EXIT_PARAM(1)；全量命令必须显式传 `--range-file`；SPEC G3-B-001/G3-B-013~016 定义范围解析规则。
 - **日级原子语义**：每个 `trade_date` 是独立处理单元；该日全部 expected sector_code 构建为 `complete` 且 upsert `outcome.failed==0` 才认定该日成功；否则该日失败并停止（不自动 retry、不扩范围）。
 - **100% exact-match**：`observed_sector_codes == expected_sector_codes` 才生成正式 ranking 并物化（复用 03-015 `build_ranking_rows` 语义）。
 - **有效 close/pre_close**：`close` 为有限数值；`pre_close` 从前一交易日同 `full_symbol`（非 `sector_code`）的 `close` 推导；前一交易日无 `close` → 该行不入库（SPEC-03-015 H-047/H-048）。对最早观测日 `pre_close` 缺失，不得以全历史 OHLC 的不相关严格条件阻断已由上游提供有效 `pct_chg` 的同日横截面（语义跨三层一致）。
@@ -440,8 +442,9 @@ Gate-4 生产读路径激活（只读 smoke + binding 状态）
 
 | 版本 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
+| V0.5（Gate-4 readiness 卡 `t_e30dc947` 全量范围契约校正 + recovery closure `t_a6b7636e` 收口） | 2026-08-02 | P0 Principal recovery（任务 `t_a6b7636e`，替代 timeout 的 Gate-4 readiness 卡 `t_e30dc947`，只读核验 + 授权包）：**全量 backfill 范围契约与 Gate-1 实物证据不一致校正**——Gate-1 report（2026-08-01T07:27:03Z）`coverage_by_date` 6,422 键中仅 **1,115 个 ratio==1.0 满覆盖日**（2021-12-13 → 2026-07-30，= `canary_candidates` 全集）；5,307 个部分覆盖日（observed=16/27/28，ratio 0.516/0.871/0.903）在 100% exact-match（G3-S-004）下必然 incomplete 停止，**不得纳入全量范围**。① §5.1.3 数值边界：全量范围 6,421 日 → **1,114 日**（满覆盖 1,115 − G3-B-016 排除最早满覆盖日 2021-12-13〔前一日 2021-12-10 部分覆盖〕），全量期望累计 398,102 → **69,068 行**（informational）；② §5.4 `--range-file` 范围限定为 `coverage_by_date` 中 **ratio==1.0 的键**，默认排除最早满覆盖日；③ 依赖 SPEC V0.4 → **V0.6**、关联 Design 增列 DESIGN-03-016 V0.9；④ **Gate-3 全量 backfill 尚未执行/验证（canonical report 仅单日 canary PASS）→ Gate-4 consumer binding 仍为 NO-GO**，本层文档不产出 activation approval。旧数值 6,421/398,102 仅保留于本 changelog 及 V0.3 行（superseded history），不再承担现行行为语义。**未改变** Gate 契约、退出码总体集合（仍 0/1/2/3/4）、per-day budget 模型、L1 契约、连接源、授权边界。SPEC 更新至 V0.6、DESIGN 更新至 V0.9 | YQuant-Principal |
 | V0.4（Design Gate `t_1f6c001b` REVISE 七项 minor 闭合 — provenance 指针同步） | 2026-08-01 | P0 Principal amendment（任务 `t_f7922150`）：Design Gate `t_1f6c001b` REVISE 的 M1~M7 全部由 SPEC V0.5 / DESIGN V0.8 闭合（G3-B-018 公式、BudgetReader 构造签名、`reset_stats()` 语义、`total_query_rows` 派生、`failed_days[]` 保留、fixture allowlist、共享目录基线）。本 RFC **无语义变更**，仅同步 provenance：依赖 SPEC V0.4 → V0.5、对应 DESIGN V0.7 → V0.8。**未改变** Gate 契约、退出码总体集合（仍 0/1/2/3/4）、L1 契约、连接源、授权边界 | YQuant-Principal |
-| V0.3（Gate-3 查询预算范围校正） | 2026-08-01 | P0 设计校正（任务 `t_888c30fb`），对齐 SPEC V0.4 / DESIGN V0.7：§5.1.3 Gate-3 副作用矩阵「最大日期/记录范围」行引用 per-day scoped budget 模型——Gate-3 查询预算按日 scoped（每 `process_day` 独立/reset 计数），不继承 Gate-1 全局累计 100k 上限（G1-B-006，Gate-1 report scope）；日级上限 = 4 × expected = 124 行，超过 → G3-S-013；全量累计 398,102（informational）不阻断；扫描保护 G1-B-001~005 全保留。停止条件行更新为 G3-S-001~013（新增 G3-S-013 日级越界）；审计证据行加 per-day query_budget + total_query_rows/resumption_boundary。选 Option A（per-day scoped）而非 B（chunk/resume）或 C（aggregate）的 rationale 见 SPEC §3.4.2.bis。**未改变** Gate 业务语义、退出码总体集合、L1 契约、连接源、授权边界。SPEC 更新至 V0.4、DESIGN 更新至 V0.7 | YQuant-Principal |
+| V0.3（Gate-3 查询预算范围校正） | 2026-08-01 | P0 设计校正（任务 `t_888c30fb`），对齐 SPEC V0.4 / DESIGN V0.7：§5.1.3 Gate-3 副作用矩阵「最大日期/记录范围」行引用 per-day scoped budget 模型——Gate-3 查询预算按日 scoped（每 `process_day` 独立/reset 计数），不继承 Gate-1 全局累计 100k 上限（G1-B-006，Gate-1 report scope）；日级上限 = 4 × expected = 124 行，超过 → G3-S-013；全量累计 398,102（informational）不阻断；扫描保护 G1-B-001~005 全保留。停止条件行更新为 G3-S-001~013（新增 G3-S-013 日级越界）；审计证据行加 per-day query_budget + total_query_rows/resumption_boundary。选 Option A（per-day scoped）而非 B（chunk/resume）或 C（aggregate）的 rationale 见 SPEC §3.4.2.bis。**未改变** Gate 业务语义、退出码总体集合、L1 契约、连接源、授权边界。SPEC 更新至 V0.4、DESIGN 更新至 V0.7。**〔superseded history〕**：本行「全量累计 398,102」基于旧假设（coverage_by_date 全键满覆盖），已被 V0.5 校正为 1,114 × 62 = 69,068（ratio==1.0 满覆盖日模型）；本行不再承担现行行为语义 | YQuant-Principal |
 | V0.2（L1 契约校正） | 2026-08-01 | 根据 Pascal 最新裁定与 2026-08-01 只读生产核验，校正 L1 universe 来源与 join 契约：universe 主来源 `index_basic_info`(market=CN) → `stock_sector_info`(classify_system=SW distinct l1_code/l1_name = 31)；join field `sector_code` → `index_daily_quotes.full_symbol`；code canonical 形态 `.SI` 后缀；`index_basic_info` 降级为可选元数据交叉核对（须按真实 market="申万指数" 字段语义）；明确 L2/L3 不在本期范围（`index_daily_quotes` 仅 L1 行情）；明确最小数据质量（pct_chg 必须、close 缺失 fail-stop、最早日 pre_close 缺失不得以全历史 OHLC 阻断同日有效横截面）。§5.1.1/§5.2/§5.4/§7/§9.1/§11(OQ-016-2) 同步修订 | YQuant-Principal |
 | V0.1（T2.2 修订） | 2026-07-31 | 交叉文档闭合（Gate `t_e1611476` REVISE）：更新依赖 SPEC 版本指针至 V0.2（F4）；Gate-3 范围来源唯一化（`--range-file` / 成对 `--start-date`/`--end-date` 二选一，无范围来源 → EXIT_PARAM(1)，F1）；交易日状态判定归 Gate-4 工具层可注入 CompletedSessionPolicy（非 03-015 冻结 service，F2）。仅修订指针与语义表述，不改变 V0.1 既有设计事实 | YQuant-Principal |
 | V0.1 | 2026-07-31 | 初始创建：生产 rollout Gate-1~4 受控激活 RFC（副作用矩阵、Gate 契约、凭据边界、production task 规则） | YQuant-Principal |

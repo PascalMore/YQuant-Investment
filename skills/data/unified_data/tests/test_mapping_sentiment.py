@@ -435,6 +435,16 @@ class TestFreshnessTableSentiment:
         assert policy.get_ttl("market_sentiment") == 3600
         assert policy.get_ttl("sentiment_limit_up_pool") == 3600
 
+    def test_sentiment_prefix_is_not_a_freshness_ttl_key(self) -> None:
+        """F6 (SPEC-03-014-F6 C-3): ``sentiment`` is only a capability
+        domain prefix — it must never be registered as a freshness TTL
+        key (double key / alias would split freshness semantics)."""
+        assert "sentiment" not in FreshnessPolicy.DEFAULT_TTLS, (
+            "DEFAULT_TTLS must not register 'sentiment'; only the "
+            "canonical keys 'market_sentiment' and "
+            "'sentiment_limit_up_pool' (F6 ruling)."
+        )
+
 
 __all__ = [
     "CAP_LIMIT_UP_POOL",

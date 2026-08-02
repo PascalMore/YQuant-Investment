@@ -118,3 +118,37 @@ class TestTTLOverride:
     def test_default_ttls_constant(self, domain, expected):
         """``DEFAULT_TTLS`` exposes the canonical table from the docs."""
         assert FreshnessPolicy.DEFAULT_TTLS[domain] == expected
+
+
+# ---------------------------------------------------------------------------
+# F6 canonical freshness domain keys (SPEC-03-014-F6 V-1..V-3)
+# ---------------------------------------------------------------------------
+
+
+class TestDefaultTTLSCanonicalSentimentKeys:
+    """V-1/V-2/V-3: ``DEFAULT_TTLS`` exposes the F6 canonical freshness
+    domain keys (``market_sentiment`` / ``sentiment_limit_up_pool``) at
+    3600s, and never registers the capability-domain prefix
+    ``sentiment`` as a TTL key (RFC-03-014-F6 §3.1 / SPEC-03-014-F6
+    C-1..C-4)."""
+
+    def test_market_sentiment_key_and_ttl(self):
+        """V-1 (C-1): ``market_sentiment`` ∈ DEFAULT_TTLS with TTL=3600."""
+        assert "market_sentiment" in FreshnessPolicy.DEFAULT_TTLS
+        assert FreshnessPolicy.DEFAULT_TTLS["market_sentiment"] == 3600
+
+    def test_sentiment_limit_up_pool_key_and_ttl(self):
+        """V-1 (C-2): ``sentiment_limit_up_pool`` ∈ DEFAULT_TTLS with TTL=3600."""
+        assert "sentiment_limit_up_pool" in FreshnessPolicy.DEFAULT_TTLS
+        assert FreshnessPolicy.DEFAULT_TTLS["sentiment_limit_up_pool"] == 3600
+
+    def test_sentiment_not_a_ttl_key(self):
+        """V-2 (C-3): ``sentiment`` must NOT be registered in DEFAULT_TTLS
+        (no double key / alias — a split would cause freshness drift)."""
+        assert "sentiment" not in FreshnessPolicy.DEFAULT_TTLS
+
+    def test_get_ttl_canonical_keys(self):
+        """V-3 (C-4): ``get_ttl`` returns 3600 for both canonical keys."""
+        policy = FreshnessPolicy()
+        assert policy.get_ttl("market_sentiment") == 3600
+        assert policy.get_ttl("sentiment_limit_up_pool") == 3600

@@ -7,9 +7,9 @@
 | 状态 | Draft |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-07-20 |
-|| 最后更新 | 2026-07-31（V0.19 SPEC P1 受控 Mongo 物化与显式 refresh 的零副作用契约冻结：新增 §P1 完整章节——P1 覆盖 capability 与集合文档语义、MongoDB-first 离线实现边界、internal-first read/explicit refresh/cache write 边界与默认禁止规则、完全副作用矩阵、授权关口、零 I/O 边界与验收准则。不动所有已有 P0/P1/P2 边界定义、不动既有授权范围、不动所有 ❌ 状态。与 RFC-03-014 V0.19 一致。） |
-|| 版本号 | V0.19 |
-| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.19） |
+|| 最后更新 | 2026-08-02（V0.20 SPEC F6 freshness canonical key 裁定同步：PC-11 冻结解除——`market_sentiment` 冻结为 `sentiment.market_snapshot` 的 canonical freshness key、`sentiment_limit_up_pool` 冻结为 `sentiment.limit_up_pool` 的 canonical key；§4.4 旧行 `"sentiment": 3600` 替换为两个 canonical 行并标注禁止双 key/alias/fallback；§7 A-006、§P0.6 PC-11、§P1.11 冻结项同步。权威契约见 SPEC-03-014-F6，裁定见 RFC-03-014-F6。不动 P0/P1/P2 边界定义、不动既有授权范围、不动所有 ❌ 状态。） |
+|| 版本号 | V0.20 |
+| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.20） |
 | 关联 RFC | RFC-03-007（Unified Data Layer 总纲）、RFC-03-011（Phase 2 质量与审计治理）、RFC-03-013（Phase 1E 情绪最小切片） |
 | 关联 SPEC | SPEC-03-007（Unified Data Layer 契约基线）、SPEC-03-008（Phase 1B-A 查询平面）、SPEC-03-013（Phase 1E 情绪最小切片） |
 | 关联 Design | DESIGN-03-014（Phase 3 持久化扩展详细设计，V0.21） |
@@ -34,6 +34,7 @@
 || V0.15 | 2026-07-30 | **Pascal 22-field MarketSentimentSnapshot canonical 契约裁定同步**。Pascal 裁定 22 字段全市场多维快照（唯一键 `{market, snapshot_date, snapshot_time}`）为 `MarketSentimentSnapshot` 的 canonical 产品 schema，替代此前离线 T3-B 实现的 10 字段 `sentiment_type` 聚合模型（`{market, sentiment_type, market_date}`）。§3.3 追加 provenance 声明确认 canonical 状态；§1 需求摘要措辞从「候选」升级为「canonical」；§12 追加 developer allowlist（sentiment.py 10→22 字段迁移、fixture 更新、测试断言对齐）。Superseded 离线 10 字段实现保留在磁盘，不作删除，但任何实盘路径必须以 22 字段 canonical 契约为准。不动 §14.4.5.9-§14.4.5.11 B2/R0 裁决内容、不动 §14.6.x DDL 冻结契约、不动既有授权范围。 | YQuant-Principal |
 ||| V0.17 | 2026-07-30 | **P0 真实 Provider 离线可实现契约冻结**。新增 §P0 完整章节：定义六 capability 精确状态矩阵、真实 Provider 统一接口边界（extract→canonical mapping→validation/provenance→DataResult.source_trace）、P3-A/P3-B/P3-C 逐项 mapping 验收项（PA-/PB-/PC- 系列）、P0 vs P1 vs P2 边界依赖、完全副作用矩阵、旧 checkbox 状态纠正；§7 追加 A-026~A-031 P0 验收项；§2.1/§2.2 更新 P0 In/Out scope。全部真实调用声明为未来授权 smoke/production activation。不动 §14.4.5 B2/R0/Pascal C+X2 裁决、不动 §14.6.x DDL 冻结契约、不动既有授权范围。 | YQuant-Principal |
 |  | V0.19 | 2026-07-31 | **P1 受控 Mongo 物化与显式 refresh 的零副作用契约冻结**。新增 §P1 完整章节：P1 覆盖 capability 与集合文档语义、MongoDB-first 离线实现边界、internal-first read/explicit refresh/cache write 边界与默认禁止规则、完全副作用矩阵、授权关口、零 I/O 边界与验收准则。与 RFC-03-014 V0.19 一致。不动 P0/P1/P2 边界定义、不动已有授权范围、不动所有 ❌ 状态。 | YQuant-Principal |
+|  | V0.20 | 2026-08-02 | **F6 freshness canonical key 裁定同步**。Pascal 裁定冻结 `market_sentiment` 为 capability `sentiment.market_snapshot` 的唯一 canonical freshness domain key（TTL=3600），`sentiment_limit_up_pool` 为 capability `sentiment.limit_up_pool` 的唯一 canonical key（TTL=3600）；`sentiment` 不再是 freshness TTL key（仅 capability domain 前缀）。§4.4 旧行 `"sentiment": 3600` 替换为两个 canonical 行；§7 A-006、§P0.6 PC-11（含绝对禁止）、§P1.11 冻结项同步解除并指向 F6 契约。禁止双 key/alias/fallback 造成 freshness 漂移。权威可执行契约见 `SPEC-03-014-F6`，裁定见 `RFC-03-014-F6`。不动 P0/P1/P2 边界定义、不动既有授权范围、不动所有 ❌ 状态。 | YQuant-Principal |
 
 ---
 
@@ -508,7 +509,11 @@ external_fallback_chains = {
 # Phase 3 新增 domain TTL（各域在现有 DEFAULT_TTLS 中已有条目，此处确认值不变）
 "flow": 43200,         # 12h — 资金流数据日盘后刷新即可
 "sector": 21600,       # 6h — 板块快照收盘后刷新即可
-"sentiment": 3600,     # 1h — 情绪数据（已有；确认值对市场级情绪仍然适用）
+"sentiment_limit_up_pool": 3600,  # 1h — 个股涨停池（capability sentiment.limit_up_pool；F6 canonical key，见 SPEC-03-014-F6）
+"market_sentiment": 3600,       # 1h — 市场级情绪快照（capability sentiment.market_snapshot；F6 canonical key，见 SPEC-03-014-F6）
+# ⚠️ F6 裁定（RFC-03-014-F6 / SPEC-03-014-F6）：`"sentiment"` 不再是 freshness TTL key。
+#    `sentiment` 仅保留为 capability domain 前缀（sentiment.market_snapshot / sentiment.limit_up_pool）。
+#    禁止在 DEFAULT_TTLS 注册 `"sentiment"`（双 key/alias 会造成 freshness 漂移）。
 ```
 
 **不改动**：现有所有 TTL 值不变。
@@ -735,7 +740,7 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 | A-003 | `MarketSentimentSnapshot` domain object 定义完整（22 个字段 + `from_dict`） | 同上 | P3-C |
 | A-004 | AKShareProvider 新增 6 个 capability 注册成功 | `registry.has_capability("sector.snapshot", "CN") == True` | 全部 |
 | A-005 | external_fallback_chains 中 Phase 3 六项正确注册 | 断言 `chain` 为 `["akshare"]` | 全部 |
-| A-006 | FreshnessPolicy flow/sector/sentiment TTL 正确注册 | `policy.get_ttl("flow") == 43200` 等 | 全部 |
+| A-006 | FreshnessPolicy flow/sector/market_sentiment/sentiment_limit_up_pool TTL 正确注册（F6 canonical key，见 SPEC-03-014-F6 §2） | `policy.get_ttl("flow") == 43200`、`policy.get_ttl("market_sentiment") == 3600`、`policy.get_ttl("sentiment_limit_up_pool") == 3600`；`"sentiment" not in FreshnessPolicy.DEFAULT_TTLS` | 全部 |
 | A-007 | `_TA_CN_NOT_COVERED` 含 Phase 3 六项 capability | `"sector.snapshot" in Router._TA_CN_NOT_COVERED` | 全部 |
 | A-008 | 现有 Phase 1D 基线测试 Regression PASS | `pytest skills/data/unified_data/tests -q` exit 0 | 全部 |
 | A-009 | P3-A 单元测试：mock provider 注册后 Router 查询返回 DataResult.success | Python 断言 | P3-A |
@@ -1714,13 +1719,13 @@ Step 4: DataResult.source_trace → 四阶段结果封装为 source_trace 条目
 | PC-8 | `get_limit_up_pool()` 返回 `list[dict]`（symbol/reason/days） | Python 断言 |
 | PC-9 | `refresh_market_sentiment_snapshot()` 三态守卫：p3_writer=None→ProviderUnavailableError；injected→NotImplementedError | pytest.raises |
 | PC-10 | `_EXPECTED_*_FIELDS` 与 STUB_COLUMNS 孪生等价 | 孪生等价性测试 |
-| PC-11 | freshness `sentiment` vs `market_sentiment` 命名冲突不擅自裁定 | 仅披露 |
+| PC-11 | freshness canonical key 已冻结（F6 裁定）：`market_sentiment`（capability `sentiment.market_snapshot`）与 `sentiment_limit_up_pool`（capability `sentiment.limit_up_pool`）为唯一 key；`sentiment` 非 TTL key；禁止双 key/alias/fallback | 断言见 SPEC-03-014-F6 §3.2 C-1~C-6 |
 
 **绝对禁止**：
 - ❌ 虚构 `market_temperature` 值。
 - ❌ 虚构 `northbound_net_flow` 值。
 - ❌ 基于 superseded 10 字段模型定义 fixture/expected 字段集。
-- ❌ 擅自裁定 `sentiment` vs `market_sentiment` freshness 命名冲突。
+- ❌ 在 `FreshnessPolicy.DEFAULT_TTLS` 注册 `sentiment` 或引入双 key/alias/fallback（F6 裁定后，见 SPEC-03-014-F6 §3.2）。
 
 ### P0.7 P0 vs P1 vs P2 边界
 
@@ -2040,5 +2045,5 @@ def _try_materialized(self, security_id, domain, operation, params):
 - ❌ `models/domain/*`（P0 已冻结；P1 不修改 schema）
 - ❌ `providers/akshare.py`（真实 endpoint 注册属 P2）
 - ❌ `providers/_stub_columns.py` / `providers/__init__.py`（P0 已冻结 expected 字段集）
-- ❌ `freshness.py`（PC-11 命名冲突冻结）
+- ❌ `freshness.py`（P1 历史限制：PC-11 命名冲突冻结——该冻结已由 RFC/SPEC-03-014-F6 裁定解除；P1 任务仍不得修改 freshness.py，运行时 freshness 对齐归 F6 Implement 阶段）
 - ❌ 任何 `.env`、config、requirements、SKILL.md、README

@@ -7,9 +7,9 @@
 | 状态 | Draft |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-31 |
-| 最后更新 | 2026-08-01（V0.5 Design Gate `t_1f6c001b` REVISE 七项 minor 闭合：G3-B-018 公式校正为 `4 × len(expected_sector_codes)` = 124、G3-B-017 reset_stats 语义、G3-S-013/G3-A-004 失败日记录保留与 `total_query_rows` 派生来源；来源 RFC V0.4；V0.4 Gate-3 查询预算范围校正：固化 per-day scoped budget 模型 G3-B-017~020 + G3-S-013，解决全量回填 6,421 日 × 62 行 = 398,102 > 共享 BudgetReader 全局累计 100k 上限（G1-B-006，Gate-1 report 范围）的可行性阻断；V0.3 REVISE closure `t_cfdad408`：Gate-3 `--expected-file` 必填字段固化，含 `expected_full_symbols`；V0.3 L1 契约校正） |
-| 版本号 | V0.5 |
-| 来源 RFC | RFC-03-016-historical-sector-ranking-production-rollout（V0.4） |
+| 最后更新 | 2026-08-02（V0.6 Gate-4 readiness 卡 `t_e30dc947` 全量范围契约校正 + recovery closure 卡 `t_a6b7636e` 收口：§3.4.2.bis 数值边界从 6,421 日/398,102 行更正为 1,114 日/69,068 行——Gate-1 实物报告 `coverage_by_date` 6,422 键中仅 1,115 个 ratio==1.0 满覆盖日（2021-12-13→2026-07-30），5,307 个部分覆盖日（observed=16/27/28）在 100% exact-match 下必然 G3-S-004 停止，不得纳入全量范围；G3-B-013/G3-B-016 同步限定为 ratio==1.0 键集并排除最早满覆盖日 2021-12-13；G3-B-019 残留数值 6,421×62=398,102 → 1,114×62=69,068；§3.1 连接契约 DESIGN 指针 V0.8 → V0.9；来源 RFC V0.4→V0.5；V0.5 Design Gate `t_1f6c001b` REVISE 七项 minor 闭合：G3-B-018 公式校正为 `4 × len(expected_sector_codes)` = 124、G3-B-017 reset_stats 语义、G3-S-013/G3-A-004 失败日记录保留与 `total_query_rows` 派生来源；来源 RFC V0.4；V0.4 Gate-3 查询预算范围校正：固化 per-day scoped budget 模型 G3-B-017~020 + G3-S-013，解决全量回填 6,421 日 × 62 行 = 398,102 > 共享 BudgetReader 全局累计 100k 上限（G1-B-006，Gate-1 report 范围）的可行性阻断；V0.3 REVISE closure `t_cfdad408`：Gate-3 `--expected-file` 必填字段固化，含 `expected_full_symbols`；V0.3 L1 契约校正；recovery closure 卡 `t_a6b7636e`（2026-08-02）补齐 G3-B-019 残留数值漂移与 DESIGN 版本指针；Gate-3 全量 backfill 尚未执行/验证 → Gate-4 consumer binding 仍为 NO-GO） |
+| 版本号 | V0.6 |
+| 来源 RFC | RFC-03-016-historical-sector-ranking-production-rollout（V0.5） |
 | 目标模块 | 03_data（数据层）— production rollout |
 | 适配 Agent | YQuant-Developer-Engineer（Gate 工具 Implement）、YQuant-Test-Engineer（独立只读 Verify） |
 | 标签 | #data #unified_data #sector #ranking #production #rollout #gate #mongodb |
@@ -83,7 +83,7 @@
 
 #### 连接契约（CL-1 ~ CL-6，唯一受控连接源）
 
-全部 Gate 工具共用的连接来源（RFC CR-016-1/2、DESIGN-03-016 V0.8 §3.3.2）：
+全部 Gate 工具共用的连接来源（RFC CR-016-1/2、DESIGN-03-016 V0.9 §3.3.2）：
 
 | 编号 | 规则 |
 |---|---|
@@ -246,24 +246,24 @@ gate3_backfill.py --expected-file <gate1-report.json 路径>
 
 - `--expected-file`：必须传入 Gate-1 report，其 JSON 必须包含三项必填字段：`expected_sector_codes`（31 个 `.SI` 后缀 L1 code）、`expected_sector_names`（code→name 映射）、`expected_full_symbols`（31 个 `index_daily_quotes.full_symbol` 值集，即 `.SI` 后缀 L1 join 值集，Gate-3 行情 join 键）；任一缺失或非法 → 参数层 fail-fast（G3-S-002，EXIT_PARAM(1)），**不等 process_day**；**禁止**代码内硬编码 universe（03-015 H-049u）。
 - `--canary-date`：至多 1 个由 Gate-1 证据选定的 completed trade_date；传 `--canary-date` 且未传 `--apply` → dry-run 计划；传 `--canary-date` + `--apply` → 执行 canary 并写后读回，**不**继续全量。**canary 单日模式仅在无任何全量范围来源（无 `--range-file`、无 `--start-date`、无 `--end-date`）时合法**；`--canary-date` 与任何全量范围来源互斥——与 `--range-file` 同时传入 → EXIT_PARAM(1)；与成对 `--start-date`/`--end-date` 同时传入 → EXIT_PARAM(1)；与不成对 start/end 同时传入仍按缺配对 → EXIT_PARAM(1)（均 G3-S-003）。
-- 全量模式必须提供**一种范围来源**：`--range-file PATH`（Gate-1 report JSON 路径，取 `coverage_by_date` 有效交易日，默认排除最早可用日）**或**成对 `--start-date`/`--end-date`（Pascal 显式子范围）。`--range-file` 与 `--start-date`/`--end-date` **互斥**；无任何范围来源 → EXIT_PARAM(1)（G3-S-003）；全量范围来源不得与 `--canary-date` 组合（G3-S-003）。范围语义见 G3-B-001 / G3-B-013~016。
+- 全量模式必须提供**一种范围来源**：`--range-file PATH`（Gate-1 report JSON 路径，取 `coverage_by_date` 中 ratio==1.0 的键，默认排除 ratio==1.0 键集中最早满覆盖日）**或**成对 `--start-date`/`--end-date`（Pascal 显式子范围）。`--range-file` 与 `--start-date`/`--end-date` **互斥**；无任何范围来源 → EXIT_PARAM(1)（G3-S-003）；全量范围来源不得与 `--canary-date` 组合（G3-S-003）。范围语义见 G3-B-001 / G3-B-013~016。
 
 #### 3.4.2 日期范围与批次（G3-B-001 ~ G3-B-004 / G3-B-013 ~ G3-B-016）
 
 | 编号 | 规则 | 说明 |
 |---|---|---|
-| G3-B-001 | 范围来源 | 全量范围二选一：`--range-file PATH`（Gate-1 report JSON，范围 = `coverage_by_date` 键集，默认排除最早可用日）或成对 `--start-date`/`--end-date`（Pascal 显式子范围，⊆ Gate-1 `trade_date_range`）；二者互斥；无任何范围来源 → EXIT_PARAM(1)；范围校验经 CompletedSessionPolicy 判定非未来日、非「当日未收盘」（G4-P-001~010） |
+| G3-B-001 | 范围来源 | 全量范围二选一：`--range-file PATH`（Gate-1 report JSON，范围 = `coverage_by_date` 中 ratio==1.0 的键集，默认排除 ratio==1.0 键集中最早满覆盖日）或成对 `--start-date`/`--end-date`（Pascal 显式子范围，⊆ Gate-1 `trade_date_range`）；二者互斥；无任何范围来源 → EXIT_PARAM(1)；范围校验经 CompletedSessionPolicy 判定非未来日、非「当日未收盘」（G4-P-001~010） |
 | G3-B-002 | 日级原子 | 每个 `trade_date` 独立处理：读取 → 构建（100% exact-match）→ upsert → 写后读回；任一日失败即停止后续日 |
 | G3-B-003 | 处理顺序 | 按 `trade_date` 升序处理（保证前一日 close 推导可用） |
 | G3-B-004 | 前一日推导 | `pre_close` 从该 `full_symbol`（非 `sector_code`）前一交易日 `close` 取；前一日无数据 → 该行不入库（SPEC-03-015 H-047/H-048）。对最早观测日 `pre_close` 缺失，不得以全历史 OHLC 的不相关严格条件阻断已由上游提供有效 `pct_chg` 的同日横截面（语义跨三层一致） |
-| G3-B-013 | `--range-file` 语法与包含日期 | 值为 Gate-1 report JSON 路径（与 `--expected-file` 相同的 `gate1-report.json`）；范围 = 其中 `coverage_by_date` 的键（Gate-1 已确认可用交易日），**不**取 `trade_date_range` 的 min/max 闭区间（避免纳入未覆盖日） |
+| G3-B-013 | `--range-file` 语法与包含日期 | 值为 Gate-1 report JSON 路径（与 `--expected-file` 相同的 `gate1-report.json`）；范围 = 其中 `coverage_by_date` 中 **ratio==1.0 的键**（Gate-1 已确认可用交易日 = 31/31 全覆盖共同完整交易日，2021-12-13 → 2026-07-30 共 1,115 天；部分覆盖日 ratio<1.0 不纳入——100% exact-match 下必然 G3-S-004 停止），**不**取 `trade_date_range` 的 min/max 闭区间（避免纳入未覆盖日） |
 | G3-B-014 | 排序/去重 | 处理日按 `trade_date` 升序、去重；重复键只处理一次（G3-B-003 保证前一日 close 推导可用） |
 | G3-B-015 | 范围上限与互斥 | 处理日数 ≤ `coverage_by_date` 键数；`--range-file` 与 `--start-date`/`--end-date` 互斥，同时传入 → EXIT_PARAM(1)（G3-S-003）；`--start-date`/`--end-date` 必须成对，缺一 → EXIT_PARAM(1)；`--canary-date` 与任何全量范围来源（`--range-file` 或成对 `--start-date`/`--end-date`）互斥，同时传入 → EXIT_PARAM(1)（G3-S-003）；canary 单日模式仅在无任何全量范围来源时合法 |
-| G3-B-016 | 默认排除最早可用日 | `--range-file` 模式默认排除 `coverage_by_date` 最早日（首日无前一日 close → 必然 empty 失败，避免「自动失败」）；dry-run 计划显式说明排除的首日与理由；Pascal 显式传成对 `--start-date`/`--end-date` 可覆盖（显式模式不自动排除；若显式范围含最早日，该日按 G3-B-004 语义处理，无前一日 close → empty → G3-S-005 停止，不降级） |
+| G3-B-016 | 默认排除最早可用日 | `--range-file` 模式默认排除 ratio==1.0 键集中最早满覆盖日（2021-12-13：其前一交易日 2021-12-10 为部分覆盖 → 无完整 prev close → 必然 incomplete/empty 失败，避免「自动失败」）；dry-run 计划显式说明排除的首日与理由；Pascal 显式传成对 `--start-date`/`--end-date` 可覆盖（显式模式不自动排除；若显式范围含最早日，该日按 G3-B-004 语义处理，无前一日 close → empty → G3-S-005 停止，不降级） |
 
 #### 3.4.2.bis Gate-3 查询预算范围模型（G3-B-017 ~ G3-B-020）
 
-> **背景与阻断事实（P0 设计校正触发原因）**：Gate-1 report 的 `coverage_by_date` 键数为 6,422；全量 `--range-file` 模式默认排除最早可用日（G3-B-016）后，planned days = 6,421（earliest 2000-01-04 excluded）。每个 `process_day` 对 `index_daily_quotes` 发起 1 次 `find`，filter = `{full_symbol $in [31], trade_date $in [day, prev]}`，实际成功 canary 记录每日命中 **62 行**（当日 31 close + 前一日 31 close）。因此全量回填累计命中下界 = `6,421 × 62 = 398,102`。Gate-1 的记录范围上限（G1-B-006 = 累计 100,000）是**为 Gate-1 单次 report 生成的全集合扫描保护**设计的，其累计计数器挂在共享 `BudgetReader` 实例上。Gate-3 `main` 在日循环前实例化**一个** reader 并传入所有 `process_day` 调用 → 同一累计计数器跨日累加 → 全量 apply 必然在约第 1,613 日（100,000 / 62）命中 `BudgetViolation`（G1-S-007 路径）并退出码 2，此时已完成约 1,612 日的幂等 upsert（剩余 ~75% 日被阻断）。此为**设计契约缺陷**，非数据缺陷。
+> **背景与阻断事实（P0 设计校正触发原因）**：Gate-1 report 的 `coverage_by_date` 键数为 6,422，但其中只有 **1,115 个交易日 ratio==1.0**（31/31 全覆盖，2021-12-13 → 2026-07-30，即 `canary_candidates` 全集）；其余 **5,307 天为部分覆盖**（observed=16/27/28，ratio 0.516/0.871/0.903）。在 100% exact-match 契约（G3-S-004）下部分覆盖日**不可纳入全量范围**——「可用交易日」定义见 G1-C-003：31/31 全覆盖共同完整交易日。全量 `--range-file` 范围 = 这 1,115 个满覆盖日；G3-B-016 默认排除最早满覆盖日 2021-12-13（其前一交易日 2021-12-10 为部分覆盖，无完整 prev close → 必然 incomplete/empty 失败），planned days = **1,114**（2021-12-14 → 2026-07-30）。每个 `process_day` 对 `index_daily_quotes` 发起 1 次 `find`，filter = `{full_symbol $in [31], trade_date $in [day, prev]}`，实际成功 canary 记录每日命中 **62 行**（当日 31 close + 前一日 31 close）。因此全量回填累计命中下界 = `1,114 × 62 = 69,068`。Gate-1 的记录范围上限（G1-B-006 = 累计 100,000）是**为 Gate-1 单次 report 生成的全集合扫描保护**设计的，其累计计数器挂在共享 `BudgetReader` 实例上。Gate-3 `main` 在日循环前实例化**一个** reader 并传入所有 `process_day` 调用 → 同一累计计数器跨日累加 → 全量 apply 必然在约第 1,613 日（100,000 / 62）命中 `BudgetViolation`（G1-S-007 路径）并退出码 2，此时已完成约 1,612 日的幂等 upsert（剩余 ~75% 日被阻断）。此为**设计契约缺陷**，非数据缺陷。
 
 **决策（Option A：per-day scoped budget reader）**：Gate-3 的查询预算上限**不使用** Gate-1 的全局 100k 模型，改为**按日 scoped**——每个 `process_day` 使用独立的 budget 计数，日级上限由 expected universe 规模派生，job 层仅做汇总报告，不再设全局累计阻断阈值。选 A 而非 B（chunk/batch + resumability）的原因：日级原子 + 幂等唯一键 upsert + 失败停止（G3-S-004~007）已天然覆盖「失败后从失败日重跑」的恢复语义，无需额外 chunk/resume 机制；选 A 而非 C（aggregate/batch 降低记账）的原因：`process_day` 的单日 `find` 是 `build_ranking_rows` 纯函数的输入契约（100% exact-match、稳定排序），改为聚合会破坏冻结语义。
 
@@ -271,14 +271,15 @@ gate3_backfill.py --expected-file <gate1-report.json 路径>
 |---|---|---|
 | G3-B-017 | per-day budget reader | 每个 `process_day` 实例化**独立的** `BudgetReader`（或对共享实例调用 `reset_stats()` 清零累计计数**与 stats 列表**——reset_stats 必须同时重置二者，否则 `days[].query_budget` 跨日累加），使预算计数**按日 scoped**，不跨日累加。日级计数器生命周期 = 单个 trade_date 的处理（读 + 构建 + upsert + 读回）|
 | G3-B-018 | 日级上限派生 | 单日上限 = `4 × len(expected_sector_codes)`（31 个 code → `4 × 31 = 124` 行 = 2× 正常单日 62 观察行：当日 31 close + 前一日 31 close + 冗余 2× 防上游 schema 漂移）。单日 `find` 命中行数 > 日级上限 → 该日异常 → G3-S-013 停止（退出码 2），**不静默继续**。此上限是对 G1-B-003（单次 find ≤1000）的更紧约束，二者并存 |
-| G3-B-019 | 全局 100k 不适用 Gate-3 | G1-B-006（累计 100k）**明确限定为 Gate-1 report 范围**；Gate-3 **不继承**该全局阈值。job 层无全局累计阻断阈值；job 汇总仅记录 `total_query_rows`（ informational，见 G3-A-004）用于审计，**不作为停止条件**。原因：6,421 × 62 = 398,102 在数据正常时是**期望值**而非异常；一个会阻断正常全量回填的全局阈值反而是假阳性源 |
+| G3-B-019 | 全局 100k 不适用 Gate-3 | G1-B-006（累计 100k）**明确限定为 Gate-1 report 范围**；Gate-3 **不继承**该全局阈值。job 层无全局累计阻断阈值；job 汇总仅记录 `total_query_rows`（ informational，见 G3-A-004）用于审计，**不作为停止条件**。原因：1,114 × 62 = 69,068 在数据正常时是**期望值**（ratio==1.0 满覆盖日模型，排除最早满覆盖日后）而非异常；一个会阻断正常全量回填的全局阈值反而是假阳性源 |
 | G3-B-020 | 扫描保护保留 | G1-B-001~005（查询类型白名单、过滤强制、单次 find ≤1000、超时、空 filter 拒绝）**全部保留**，按日 scoped 的 reader 同样强制。per-day 模型**不放宽**任何扫描保护——它只重新定义「上限的累加范围」（job-global → per-day），不放宽「单次查询的保护」。每个 `find` 仍带过滤（`full_symbol $in` + `trade_date $in`）、仍 ≤1000 行、仍带 maxTimeMS |
 
 **数值边界固化**：
-- 全量范围 = 6,421 日（`coverage_by_date` 6,422 键，排除最早日 2000-01-04，G3-B-016）。
+- 全量范围 = **1,114 日**（`coverage_by_date` 中 ratio==1.0 的满覆盖可用交易日 1,115 个，2021-12-13 → 2026-07-30；G3-B-016 默认排除最早满覆盖日 2021-12-13，其前一交易日 2021-12-10 为部分覆盖 → 无完整 prev close，计划日从 2021-12-14 起）。
 - 单日期望命中 = 62 行（canary `2026-07-30` 实测：当日 31 close + 前一日 31 close）。
-- 全量期望累计 = 6,421 × 62 = 398,102 行（informational，记录于 `gate3-report.summary.total_query_rows`）。
+- 全量期望累计 = 1,114 × 62 = **69,068 行**（informational，记录于 `gate3-report.summary.total_query_rows`）。
 - 日级阻断上限 = 124 行（4× 安全倍数）；超过 → G3-S-013。
+- 部分覆盖日（5,307 个，observed=16/27/28）**不纳入全量范围**：100% exact-match（G3-S-004）下必然 incomplete 停止，与 G1-C-003「31/31 全覆盖共同完整交易日为可用范围」一致。
 - 此模型下全量回填在数据正常时**不会**命中任何预算停止条件。
 
 #### 3.4.3 backfill 构建规则（G3-B-005 ~ G3-B-012）
@@ -543,6 +544,8 @@ gate4_activate.py --expected-file <gate1-report.json 路径>
 
 本 SPEC 定义生产 rollout 的**契约**，不构成任何真实生产动作的已执行声明；所有 Gate 的真实执行仅在独立 Review PASS 后由 Pascal 显式触发 production activation 卡。
 
+**Gate-3/4 当前状态（recovery closure 卡 `t_a6b7636e` 复核）**：Gate-3 **全量 backfill 尚未执行/验证**（Gate-3 canonical report 仅显示单日 canary PASS，尚无全量 backfill 成功证据），因此 **Gate-4 consumer binding 仍为 NO-GO**；本 SPEC **不产出、不暗示任何 activation approval**。Gate-4 只有在全量 backfill 执行并通过独立只读 Verify 后，由 Pascal 显式触发生产 activation 卡时才有可能激活。
+
 本 SPEC 不修改 RFC-03-015 / SPEC-03-015 / DESIGN-03-015 已冻结内容；所有新定义为新增，不与 P3-A 冻结基线冲突。
 
 ---
@@ -551,8 +554,10 @@ gate4_activate.py --expected-file <gate1-report.json 路径>
 
 | 版本 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
+| V0.6（recovery closure `t_a6b7636e` 收口 — 补齐残留数值/指针漂移） | 2026-08-02 | P0 Principal recovery（任务 `t_a6b7636e`，替代 timeout 的 Gate-4 readiness 卡 `t_e30dc947`，只读核验 + 授权包）：**补齐 V0.6 修订在正文中的残留漂移**——① G3-B-019 原因行残留数值 `6,421 × 62 = 398,102` → **`1,114 × 62 = 69,068`**（ratio==1.0 满覆盖日模型，排除最早满覆盖日后），与 §3.4.2.bis 数值边界固化一致；② §3.1 连接契约 DESIGN 版本指针 V0.8 → **V0.9**（DESIGN-03-016 当前版本）；③ §9 声明固化执行状态：**Gate-3 全量 backfill 尚未执行/验证（canonical report 仅单日 canary PASS）→ Gate-4 consumer binding 仍为 NO-GO**。旧数值 6,421/398,102 仅保留于本 changelog 及 V0.4 行（superseded history），不再承担现行行为语义。**未改变** Gate-4 契约、退出码总体集合（仍 0/1/2/3/4）、per-day budget 模型、L1 契约、连接源、T3 allowlist 总数（14）、生产授权边界。RFC V0.5、DESIGN V0.9 同步收口 | YQuant-Principal |
+| V0.6（Gate-4 readiness 卡 `t_e30dc947` 全量范围契约校正） | 2026-08-02 | P0 Principal readiness（任务 `t_e30dc947`，只读核验 + 授权包）：**全量 backfill 范围契约与 Gate-1 实物证据不一致校正**——Gate-1 report（2026-08-01T07:27:03Z）`coverage_by_date` 6,422 键中仅 **1,115 个 ratio==1.0 满覆盖日**（2021-12-13 → 2026-07-30，= `canary_candidates` 全集）；5,307 个部分覆盖日（observed=16/27/28，ratio 0.516/0.871/0.903）在 100% exact-match（G3-S-004）下必然 incomplete 停止，**不得纳入全量范围**。① §3.4.2.bis 数值边界固化：全量范围 6,421 日 → **1,114 日**（满覆盖 1,115 − G3-B-016 排除最早满覆盖日 2021-12-13〔前一日 2021-12-10 部分覆盖〕），全量期望累计 398,102 → **69,068 行**（informational）；② G3-B-013 `--range-file` 范围限定为 `coverage_by_date` 中 **ratio==1.0 的键**（不取全部键）；③ G3-B-016 默认排除日措辞更新为「ratio==1.0 键集中最早满覆盖日」；④ §3.4.2.bis 背景段同步（1,115/5,307 分布 + 范围推导）。**未改变** Gate-4 契约、退出码总体集合（仍 0/1/2/3/4）、per-day budget 模型、L1 契约、连接源、T3 allowlist 总数（14）、生产授权边界。RFC 更新至 V0.5、DESIGN 更新至 V0.9 | YQuant-Principal |
 | V0.5（Design Gate `t_1f6c001b` REVISE 七项 minor 闭合） | 2026-08-01 | P0 Principal amendment（任务 `t_f7922150`）：① G3-B-018 日级上限公式校正——`2 × len(expected_sector_codes)` → `4 × len(expected_sector_codes)`（31 → 124 = 2× 正常单日 62 观察行，与冻结默认一致，消除公式/默认值矛盾）；② G3-B-017 `reset_stats()` 语义固化（同时清零累计计数与 stats 列表，否则 `days[].query_budget` 跨日累加）；③ G3-S-013 / G3-A-004 失败日记录保留（`failed_days[]`：trade_date/observed/day_limit/stop_id，即使该日不进成功 days 列表）与 `total_query_rows` 派生来源（保留的 per-day 记录求和，informational）。**未改变** Gate 业务语义、退出码总体集合（仍 0/1/2/3/4）、L1 契约、连接源、T3 allowlist 总数（14）、生产授权边界。RFC 更新至 V0.4、DESIGN 更新至 V0.8 | YQuant-Principal |
-| V0.4（Gate-3 查询预算范围校正） | 2026-08-01 | P0 设计校正（任务 `t_888c30fb`）：发现全量回填可行性阻断——6,421 日 × 62 行/日 = 398,102 > 共享 BudgetReader 全局累计上限 100,000（G1-B-006，Gate-1 report 范围），Gate-3 `main` 复用同一 reader 跨日累加 → 全量 apply 必然在约第 1,613 日命中 G1-S-007 BudgetViolation。选定 **Option A（per-day scoped budget reader）** 固化：新增 §3.4.2.bis G3-B-017~020（per-day scoped budget 模型：G3-B-017 每 process_day 独立/reset 计数；G3-B-018 日级上限 = 4×expected=124 行，超过 → G3-S-013；G3-B-019 全局 100k 明确限定 Gate-1 范围，Gate-3 不继承、job 层仅记录 total_query_rows 不阻断；G3-B-020 扫描保护 G1-B-001~005 全部保留）；新增 G3-S-013（日级越界停止，退出码 2，不自动放宽）；G3-A-003 加 per-day query_budget、G3-A-004 加 total_query_rows + resumption_boundary（informational）；§6 测试矩阵加 per-day 预算正/负例。选 A 非 B（chunk/resume）因日级原子+幂等 upsert+失败停止已覆盖恢复语义；选 A 非 C（aggregate）因会破坏 build_ranking_rows 输入契约。固化数值边界：全量 6,421 日、单日 62 行、累计 398,102（informational）、日级上限 124。**未改变** Gate-1/2/4 业务语义、Gate-3 写入/dataset/构建规则/退出码总体集合（仍 0/1/2/3/4，仅新增 G3-S-013）、L1 契约、连接源、T3 allowlist 总数（14）。RFC 更新至 V0.3、DESIGN 更新至 V0.7 | YQuant-Principal |
+| V0.4（Gate-3 查询预算范围校正） | 2026-08-01 | P0 设计校正（任务 `t_888c30fb`）：发现全量回填可行性阻断——6,421 日 × 62 行/日 = 398,102 > 共享 BudgetReader 全局累计上限 100,000（G1-B-006，Gate-1 report 范围），Gate-3 `main` 复用同一 reader 跨日累加 → 全量 apply 必然在约第 1,613 日命中 G1-S-007 BudgetViolation。选定 **Option A（per-day scoped budget reader）** 固化：新增 §3.4.2.bis G3-B-017~020（per-day scoped budget 模型：G3-B-017 每 process_day 独立/reset 计数；G3-B-018 日级上限 = 4×expected=124 行，超过 → G3-S-013；G3-B-019 全局 100k 明确限定 Gate-1 范围，Gate-3 不继承、job 层仅记录 total_query_rows 不阻断；G3-B-020 扫描保护 G1-B-001~005 全部保留）；新增 G3-S-013（日级越界停止，退出码 2，不自动放宽）；G3-A-003 加 per-day query_budget、G3-A-004 加 total_query_rows + resumption_boundary（informational）；§6 测试矩阵加 per-day 预算正/负例。选 A 非 B（chunk/resume）因日级原子+幂等 upsert+失败停止已覆盖恢复语义；选 A 非 C（aggregate）因会破坏 build_ranking_rows 输入契约。固化数值边界：全量 6,421 日、单日 62 行、累计 398,102（informational）、日级上限 124。**〔superseded history〕**：本行数值基于旧假设（coverage_by_date 全键满覆盖），已被 V0.6 校正为 1,114 日 / 69,068 行（ratio==1.0 满覆盖日模型）；本行不再承担现行行为语义。**未改变** Gate-1/2/4 业务语义、Gate-3 写入/dataset/构建规则/退出码总体集合（仍 0/1/2/3/4，仅新增 G3-S-013）、L1 契约、连接源、T3 allowlist 总数（14）。RFC 更新至 V0.3、DESIGN 更新至 V0.7 | YQuant-Principal |
 | V0.3（REVISE closure `t_cfdad408`） | 2026-08-01 | 独立 Design Gate `t_cfdad408` REVISE 闭合（MINOR-1）：固化 Gate-3 `--expected-file` 必填字段——必含 `expected_sector_codes` / `expected_sector_names` / `expected_full_symbols`（后者 = `.SI` 后缀 L1 join 值集即 `index_daily_quotes.full_symbol` 值集）；G3-S-002 / schema-invalid 将缺失或非法 `expected_full_symbols` 作为参数层 fail-fast（EXIT_PARAM(1)），不等 process_day（§3.4.1 / G3-S-002 / §6 测试矩阵同步）。**未改变** Gate-3 范围、写入、退出码总体集合与生产授权边界；RFC 保持 V0.2、DESIGN 更新至 V0.6 | YQuant-Codex-Principal |
 | V0.3（L1 契约校正） | 2026-08-01 | 根据 Pascal 最新裁定与 2026-08-01 只读生产核验，校正 L1 universe 来源与 join 契约：G1-B-002 白名单 `sector_code`(801*)→`full_symbol`+`classify_system`；G1-C-001 主来源 `index_basic_info`→`stock_sector_info`(classify_system=SW distinct=31)；G1-C-002/004 加入 `expected_full_symbols`；G1-C-003/004 join field `sector_code`→`full_symbol`，排除 L2/L3，明确最小数据质量；G1-C-006 隔离改用 full_symbol 值集；G1-S-003 改为 l1_code；G1-R-004/005/V-003 同步；G3-B-004 pre_close 用 full_symbol；§4.1 上游集合；§4.bis sector_code 形态 `.SI`；OQ-016-2 闭合；§3.1 连接契约 DESIGN 版本指针 V0.2→V0.5（内容未变）。**未改变** Gate-2/3/4 业务语义、退出码与停止条件总体集合 | YQuant-Principal |
 | V0.2（T2.3 修订） | 2026-07-31 | 评审 `t_99d11552` REVISE 闭合（F-1）：Gate-3 `--canary-date` 与全量范围来源互斥冻结——与 `--range-file` 同时传入 → EXIT_PARAM(1)、与成对 `--start-date`/`--end-date` 同时传入 → EXIT_PARAM(1)、与不成对 start/end 仍按缺配对 → EXIT_PARAM(1)；canary 单日模式仅在无任何范围来源时合法（§3.4.1 / G3-B-015 / G3-S-003）；§6 测试矩阵补三负例。**未改变** canary 候选选择、date range 计算、Gate-3 回填范围、任何生产动作与退出码总体集合 | YQuant-Codex-Principal |
