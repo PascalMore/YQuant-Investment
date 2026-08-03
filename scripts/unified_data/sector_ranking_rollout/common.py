@@ -30,15 +30,17 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import time as time_mod
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from datetime import date, datetime, time as dt_time, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 from skills.data.unified_data.models.domain.sector_ranking import (
@@ -562,9 +564,149 @@ class CompletedSessionPolicy:
         return SessionStatus.PAST_NON_TRADING_DAY
 
 
+# ---------------------------------------------------------------------------
+# calendar evidence loader（契约 A，SPEC G4-P-011~015 / DESIGN §3.3.5.bis）
+# ---------------------------------------------------------------------------
+
+CANONICAL_TZ = "Asia/Shanghai"  # G4-P-003 / G4-P-011（timezone 必须 == 该值）
+CANONICAL_CUTOFF = "15:00"      # G4-P-003 / G4-P-011（cutoff 必须 == 该值）
+
+
+class CalendarEvidenceError(Exception):
+    """calendar evidence schema 非法（契约 A，G4-P-013 → G4-S-002，退出码 2）。"""
+
+
+@dataclass(frozen=True)
+class CalendarEvidence:
+    """可审计 calendar evidence（SPEC G4-P-011）。
+
+    字段均为必填：``source``（权威来源标识）、``as_of``（YYYY-MM-DD 证据落盘日）、
+    ``timezone``（必须 == ``Asia/Shanghai``）、``cutoff``（必须 == ``15:00``）、
+    ``trading_days``（canonical YYYY-MM-DD 升序去重、非空）。
+    """
+
+    source: str
+    as_of: str
+    timezone: str
+    cutoff: str
+    trading_days: tuple[str, ...]
+
+
+def _require_evidence_fields(data: Mapping[str, Any]) -> None:
+    """必填字段存在性校验（G4-P-011/013）。"""
+    for key in ("source", "as_of", "timezone", "cutoff", "trading_days"):
+        if key not in data:
+            raise CalendarEvidenceError(f"calendar evidence missing required field: {key}")
+
+
+def load_calendar_evidence(path: str | Path) -> CalendarEvidence:
+    """从 ``--calendar-file`` 加载并校验 calendar evidence（契约 A）。
+
+    fail-stop（G4-P-013）：文件缺失 / 不可读 / JSON 非法 / schema 非法（缺必填
+    字段、日期键非 canonical YYYY-MM-DD 且未过 03-015 ``is_valid_trade_date``、
+    ``timezone != "Asia/Shanghai"``、``cutoff != "15:00"``、``trading_days`` 空）
+    → :class:`CalendarEvidenceError`；在连接 / 查询 / smoke 之前停止
+    （0 fetch / 0 smoke / 0 write）；不降级、不猜测、不重试。
+    """
+    p = Path(path)
+    if not p.exists():
+        raise CalendarEvidenceError(f"calendar evidence file not found: {path}")
+    try:
+        text = p.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise CalendarEvidenceError(
+            f"calendar evidence file unreadable: {path} ({type(exc).__name__})"
+        ) from exc
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise CalendarEvidenceError(
+            f"calendar evidence is not valid JSON: {path} ({exc.msg})"
+        ) from exc
+    if not isinstance(data, dict):
+        raise CalendarEvidenceError("calendar evidence JSON must be an object")
+    _require_evidence_fields(data)
+    if data["timezone"] != CANONICAL_TZ:
+        raise CalendarEvidenceError(
+            f"calendar evidence timezone must be {CANONICAL_TZ!r}, "
+            f"got {data['timezone']!r}"
+        )
+    if data["cutoff"] != CANONICAL_CUTOFF:
+        raise CalendarEvidenceError(
+            f"calendar evidence cutoff must be {CANONICAL_CUTOFF!r}, "
+            f"got {data['cutoff']!r}"
+        )
+    if not isinstance(data["source"], str) or not data["source"].strip():
+        raise CalendarEvidenceError("calendar evidence source must be a non-empty string")
+    if not isinstance(data["as_of"], str) or not is_valid_trade_date(data["as_of"]):
+        raise CalendarEvidenceError(
+            f"calendar evidence as_of must be canonical YYYY-MM-DD, got {data['as_of']!r}"
+        )
+    trading_days = data["trading_days"]
+    if not isinstance(trading_days, (list, tuple)) or not trading_days:
+        raise CalendarEvidenceError("calendar evidence trading_days must be a non-empty list")
+    normalized: list[str] = []
+    for raw in trading_days:
+        if not isinstance(raw, str) or not is_valid_trade_date(raw):
+            raise CalendarEvidenceError(
+                f"calendar evidence trading_days must contain canonical YYYY-MM-DD, "
+                f"got {raw!r}"
+            )
+        if raw not in normalized:
+            normalized.append(raw)
+    normalized.sort()
+    return CalendarEvidence(
+        source=str(data["source"]).strip(),
+        as_of=data["as_of"],
+        timezone=data["timezone"],
+        cutoff=data["cutoff"],
+        trading_days=tuple(normalized),
+    )
+
+
+def build_policy_from_calendar_evidence(
+    ev: CalendarEvidence,
+    *,
+    now_fn: Callable[[], datetime] | None = None,
+) -> CompletedSessionPolicy:
+    """从 calendar evidence 精确构造生产 ``CompletedSessionPolicy``（契约 A）。
+
+    从 ``ev.trading_days`` 精确构造 :class:`TradeCalendar`（``is_trading_day``
+    查集），再构造 ``CompletedSessionPolicy(calendar, now_fn=系统时钟)``。
+    禁止用 ``coverage_by_date`` / ``FakeTradeCalendar`` / 周末规则 / 任何硬编码
+    日历构造生产 policy（G4-P-012；``coverage_by_date`` 是行情覆盖证据，不是
+    交易日历——缺行日可能是非交易日也可能是数据缺失，语义不确定）。
+    """
+    return CompletedSessionPolicy(
+        _EvidenceTradeCalendar(ev.trading_days),
+        now_fn=now_fn,
+    )
+
+
+class _EvidenceTradeCalendar(TradeCalendar):
+    """由 calendar evidence ``trading_days`` 精确构造的交易日历（契约 A）。"""
+
+    def __init__(self, trading_days: Sequence[str]) -> None:
+        self._days: set[str] = {str(d) for d in trading_days}
+
+    def is_trading_day(self, day: date) -> bool:
+        return day.isoformat() in self._days
+
+
+def sha256_file(path: str | Path) -> str:
+    """证据文件 SHA-256 十六进制（报告 ``calendar_evidence.sha256``，G4-P-015）。"""
+    h = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 __all__ = [
     "ALLOWED_FILTER_FIELDS",
     "CONN_SOURCE",
+    "CalendarEvidence",
+    "CalendarEvidenceError",
     "CompletedSessionPolicy",
     "ConnLoader",
     "EXIT_CONN",
@@ -582,9 +724,12 @@ __all__ = [
     "BudgetViolation",
     "SessionStatus",
     "TradeCalendar",
+    "build_policy_from_calendar_evidence",
+    "load_calendar_evidence",
     "log_jsonl",
     "redact",
     "resolve_report_dir",
     "scan_secrets",
+    "sha256_file",
     "write_report",
 ]

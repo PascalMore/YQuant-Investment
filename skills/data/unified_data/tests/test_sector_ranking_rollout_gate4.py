@@ -23,6 +23,9 @@ from scripts.unified_data.sector_ranking_rollout.common import (
     CompletedSessionPolicy,
     FakeTradeCalendar,
     PolicyUnavailableError,
+    build_policy_from_calendar_evidence,
+    load_calendar_evidence,
+    sha256_file,
 )
 from scripts.unified_data.sector_ranking_rollout.prod_repository import (
     BindingDisabledError,
@@ -39,6 +42,7 @@ from skills.data.unified_data.tests.fixtures.sector_ranking_rollout_fixtures imp
     AVAILABLE_DATES,
     DATASET,
     EXPECTED_UNIVERSE,
+    make_calendar_evidence,
     make_gate1_report,
     make_mongomock_db,
     make_sw_index_docs,
@@ -61,6 +65,19 @@ class _ClientShim:
 
     def get_database(self, name: str):
         return self._db
+
+
+class _ForbiddenClientFactory:
+    """契约 A spy：断言 fail-stop 路径 0 fetch（client_factory 0 次调用）。"""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def __call__(self, **kwargs):
+        self.calls += 1
+        raise AssertionError(
+            "client_factory must NOT be called (0 fetch / 0 smoke / 0 write)"
+        )
 
 
 def _fresh_db() -> Any:
@@ -373,12 +390,14 @@ class TestGate4Main:
         report_path = make_gate1_report(tmp_path)
         db = _gate4_db()
         out = tmp_path / "out"
+        calendar = make_calendar_evidence(tmp_path / "evidence")
         rc = main(
             ["--expected-file", str(report_path), "--enable", "--apply", "--yes",
+             "--calendar-file", str(calendar),
              "--report-dir", str(out)],
             client_factory=lambda **kwargs: _ClientShim(db),
             env=TEST_ENV,
-            policy=_policy(),
+            now_fn=lambda: _utc(2026, 8, 1),
             git_runner=lambda paths: [],
         )
         assert rc == EXIT_OK
@@ -388,6 +407,16 @@ class TestGate4Main:
         assert payload["stop_conditions_hit"] == []
         cases = {c["id"]: c for c in payload["cases"]}
         assert all(c["passed"] for c in cases.values())
+        # 契约 B：binding_events 原子顺序（G4-V-106）
+        actions = [e["action"] for e in payload["binding_events"]]
+        assert actions == ["precondition-pass", "write_binding(true)", "post-smoke"]
+        assert [e["seq"] for e in payload["binding_events"]] == [1, 2, 3]
+        # 契约 A：calendar evidence 入报告（G4-P-015，不含完整交易日清单）
+        assert payload["calendar_evidence"]["source"] == "SSE_Exchange_Calendar"
+        assert payload["calendar_evidence"]["as_of"] == "2026-07-31"
+        assert payload["calendar_evidence"]["trading_days_count"] == 4
+        assert payload["calendar_evidence"]["sha256"] == sha256_file(str(calendar))
+        assert "trading_days" not in payload["calendar_evidence"]
 
     def test_enable_presmoke_failure_keeps_binding_disabled(self, tmp_path):
         from scripts.unified_data.sector_ranking_rollout.gate4_activate import main
@@ -403,19 +432,23 @@ class TestGate4Main:
         writer.upsert(_partial_rows())
         assert db[COLLECTION].count_documents({"trade_date": "2026-07-14"}) == 2
         out = tmp_path / "out"
+        calendar = make_calendar_evidence(tmp_path / "evidence")
         rc = main(
             ["--expected-file", str(report_path), "--enable", "--apply", "--yes",
+             "--calendar-file", str(calendar),
              "--smoke-dates", "2026-07-14",
              "--report-dir", str(out)],
             client_factory=lambda **kwargs: _ClientShim(db),
             env=TEST_ENV,
-            policy=_policy(),
+            now_fn=lambda: _utc(2026, 8, 1),
             git_runner=lambda paths: [],
         )
         assert rc == EXIT_STOP
         payload = json.loads((out / "gate4-report.json").read_text())
         assert "G4-S-002" in payload["stop_conditions_hit"]
         assert load_binding(str(out))["enabled"] is False
+        # precondition 失败 → binding_events 无 write_binding(true) 条目（G4-B-005）
+        assert "write_binding(true)" not in [e["action"] for e in payload["binding_events"]]
 
     def test_enable_scope_diff_violation_stops(self, tmp_path):
         from scripts.unified_data.sector_ranking_rollout.gate4_activate import main
@@ -423,19 +456,28 @@ class TestGate4Main:
         report_path = make_gate1_report(tmp_path)
         db = _gate4_db()
         out = tmp_path / "out"
+        calendar = make_calendar_evidence(tmp_path / "evidence")
         rc = main(
             ["--expected-file", str(report_path), "--enable", "--apply", "--yes",
+             "--calendar-file", str(calendar),
              "--report-dir", str(out)],
             client_factory=lambda **kwargs: _ClientShim(db),
             env=TEST_ENV,
-            policy=_policy(),
+            now_fn=lambda: _utc(2026, 8, 1),
             git_runner=lambda paths: [
-                "M scripts/unified_data/sector_ranking_rollout/gate3_backfill.py"
+                " M scripts/unified_data/sector_ranking_rollout/gate3_backfill.py"
             ],
         )
         assert rc == EXIT_STOP
         payload = json.loads((out / "gate4-report.json").read_text())
         assert "G4-S-003" in payload["stop_conditions_hit"]
+        # P0-016-1 回归：scope_diff 在 write_binding(True) 之前 → binding 从未写 true
+        assert load_binding(str(out))["enabled"] is False
+        actions = [e["action"] for e in payload["binding_events"]]
+        assert "write_binding(true)" not in actions
+        assert "rollback(false)" not in actions
+        # scope_diff 已记入 report（含 manifest 内 violation）
+        assert any("gate3_backfill.py" in line for line in payload["scope_diff"])
 
 
 def _partial_rows():
@@ -471,3 +513,227 @@ def _partial_rows():
             )
         ),
     ]
+
+
+# ---------------------------------------------------------------------------
+# 契约 A：literal CLI --calendar-file 构造 policy（G4-P-011~015 / G4-V-107/108）
+# ---------------------------------------------------------------------------
+
+
+class TestGate4ContractACalendarFile:
+    def test_enable_no_calendar_file_fails_before_conn(self, tmp_path):
+        # S0：--enable --apply --yes 无 --calendar-file → G4-S-002，
+        # 0 fetch / 0 smoke / 0 write（_ForbiddenClientFactory spy，G4-P-013/014）
+        from scripts.unified_data.sector_ranking_rollout.gate4_activate import main
+
+        report_path = make_gate1_report(tmp_path)
+        out = tmp_path / "out"
+        factory = _ForbiddenClientFactory()
+        rc = main(
+            ["--expected-file", str(report_path), "--enable", "--apply", "--yes",
+             "--report-dir", str(out)],
+            client_factory=factory,
+            env=TEST_ENV,
+        )
+        assert rc == EXIT_STOP
+        assert factory.calls == 0  # 0 fetch（连接从未建立）
+        assert not (out / "binding_state.json").exists()  # 0 binding write
+        payload = json.loads((out / "gate4-report.json").read_text())
+        assert "G4-S-002" in payload["stop_conditions_hit"]
+        assert payload["binding"]["after"] is False
+
+    def test_calendar_file_missing_fails_before_conn(self, tmp_path):
+        from scripts.unified_data.sector_ranking_rollout.gate4_activate import main
+
+        report_path = make_gate1_report(tmp_path)
+        out = tmp_path / "out"
+        factory = _ForbiddenClientFactory()
+        rc = main(
+            ["--expected-file", str(report_path), "--enable", "--apply", "--yes",
+             "--calendar-file", str(tmp_path / "missing.json"),
+             "--report-dir", str(out)],
+            client_factory=factory,
+            env=TEST_ENV,
+        )
+        assert rc == EXIT_STOP
+        assert factory.calls == 0
+        assert not (out / "binding_state.json").exists()
+        payload = json.loads((out / "gate4-report.json").read_text())
+        assert "G4-S-002" in payload["stop_conditions_hit"]
+
+    def test_calendar_file_invalid_json_fails_before_conn(self, tmp_path):
+        from scripts.unified_data.sector_ranking_rollout.gate4_activate import main
+
+        report_path = make_gate1_report(tmp_path)
+        bad = tmp_path / "bad.json"
+        bad.write_text("{not json", encoding="utf-8")
+        out = tmp_path / "out"
+        factory = _ForbiddenClientFactory()
+        rc = main(
+            ["--expected-file", str(report_path), "--enable", "--apply", "--yes",
+             "--calendar-file", str(bad),
+             "--report-dir", str(out)],
+            client_factory=factory,
+            env=TEST_ENV,
+        )
+        assert rc == EXIT_STOP
+        assert factory.calls == 0
+        assert not (out / "binding_state.json").exists()
+        payload = json.loads((out / "gate4-report.json").read_text())
+        assert "G4-S-002" in payload["stop_conditions_hit"]
+
+    def test_calendar_file_invalid_schema_fails_before_conn(self, tmp_path):
+        from scripts.unified_data.sector_ranking_rollout.gate4_activate import main
+
+        report_path = make_gate1_report(tmp_path)
+        bad = make_calendar_evidence(tmp_path / "bad", timezone="UTC")
+        out = tmp_path / "out"
+        factory = _ForbiddenClientFactory()
+        rc = main(
+            ["--expected-file", str(report_path), "--enable", "--apply", "--yes",
+             "--calendar-file", str(bad),
+             "--report-dir", str(out)],
+            client_factory=factory,
+            env=TEST_ENV,
+        )
+        assert rc == EXIT_STOP
+        assert factory.calls == 0
+        assert not (out / "binding_state.json").exists()
+        payload = json.loads((out / "gate4-report.json").read_text())
+        assert "G4-S-002" in payload["stop_conditions_hit"]
+
+    def test_injected_policy_ignored_literal_cli_builds_from_file(self, tmp_path):
+        # G4-P-014 / G4-V-108：literal CLI 无 wrapper —— 注入的 policy 被忽略，
+        # policy 一律从 --calendar-file 构造；enable 不依赖外部注入
+        from scripts.unified_data.sector_ranking_rollout.gate4_activate import main
+
+        report_path = make_gate1_report(tmp_path)
+        db = _gate4_db()
+        out = tmp_path / "out"
+        calendar = make_calendar_evidence(tmp_path / "evidence")
+        injected = CompletedSessionPolicy(
+            FakeTradeCalendar({"2026-07-14"}), now_fn=lambda: _utc(2026, 8, 1)
+        )
+        rc = main(
+            ["--expected-file", str(report_path), "--enable", "--apply", "--yes",
+             "--calendar-file", str(calendar),
+             "--smoke-dates", "2026-07-14",
+             "--report-dir", str(out)],
+            client_factory=lambda **kwargs: _ClientShim(db),
+            env=TEST_ENV,
+            policy=injected,
+            now_fn=lambda: _utc(2026, 8, 1),
+            git_runner=lambda paths: [],
+        )
+        assert rc == EXIT_OK
+        assert load_binding(str(out))["enabled"] is True
+        payload = json.loads((out / "gate4-report.json").read_text())
+        assert payload["calendar_evidence"]["sha256"] == sha256_file(str(calendar))
+
+
+# ---------------------------------------------------------------------------
+# 契约 B：原子 fail-closed 顺序（G4-B-001~006 / G4-V-106）
+# ---------------------------------------------------------------------------
+
+
+class TestGate4ContractBAtomicFailClosed:
+    def test_post_smoke_failure_auto_rollback(self, tmp_path):
+        # S6 POST_SMOKE 失败（未物化日被选为 post-smoke 案例）→ 自动
+        # write_binding(False) 回滚；最终态 false；binding_events 证明
+        # 「曾短暂 true → 自动回滚 false」（G4-B-002 / G4-V-106）
+        from scripts.unified_data.sector_ranking_rollout.gate4_activate import main
+
+        report_path = make_gate1_report(tmp_path)
+        db = _gate4_db()  # 已物化 07-14；07-10 未物化
+        out = tmp_path / "out"
+        calendar = make_calendar_evidence(tmp_path / "evidence")
+        rc = main(
+            ["--expected-file", str(report_path), "--enable", "--apply", "--yes",
+             "--calendar-file", str(calendar),
+             "--smoke-dates", "2026-07-10",
+             "--report-dir", str(out)],
+            client_factory=lambda **kwargs: _ClientShim(db),
+            env=TEST_ENV,
+            now_fn=lambda: _utc(2026, 8, 1),
+            git_runner=lambda paths: [],
+        )
+        assert rc == EXIT_STOP
+        payload = json.loads((out / "gate4-report.json").read_text())
+        assert "G4-S-005" in payload["stop_conditions_hit"]
+        assert load_binding(str(out))["enabled"] is False  # 最终态 false
+        assert payload["binding"]["after"] is False
+        actions = [e["action"] for e in payload["binding_events"]]
+        assert actions == ["precondition-pass", "write_binding(true)", "rollback(false)"]
+
+    def test_manifest_dirty_binding_never_written(self, tmp_path):
+        # 契约 C baseline dirty 场景（G4-V-109）：manifest 内路径 dirty
+        # （test_sector_ranking_rollout_gate3.py）→ G4-S-003，binding 从未写 true
+        from scripts.unified_data.sector_ranking_rollout.gate4_activate import main
+
+        report_path = make_gate1_report(tmp_path)
+        db = _gate4_db()
+        out = tmp_path / "out"
+        calendar = make_calendar_evidence(tmp_path / "evidence")
+        rc = main(
+            ["--expected-file", str(report_path), "--enable", "--apply", "--yes",
+             "--calendar-file", str(calendar),
+             "--report-dir", str(out)],
+            client_factory=lambda **kwargs: _ClientShim(db),
+            env=TEST_ENV,
+            now_fn=lambda: _utc(2026, 8, 1),
+            git_runner=lambda paths: [
+                " M skills/data/unified_data/tests/test_sector_ranking_rollout_gate3.py"
+            ],
+        )
+        assert rc == EXIT_STOP
+        assert load_binding(str(out))["enabled"] is False
+        payload = json.loads((out / "gate4-report.json").read_text())
+        assert "G4-S-003" in payload["stop_conditions_hit"]
+        actions = [e["action"] for e in payload["binding_events"]]
+        assert "write_binding(true)" not in actions
+
+    def test_out_of_manifest_dirty_no_stop(self, tmp_path):
+        # G4-B-006 / OBS-2：清单外 dirty 记入 report.scope_diff 但不触发停止
+        from scripts.unified_data.sector_ranking_rollout.gate4_activate import main
+
+        report_path = make_gate1_report(tmp_path)
+        db = _gate4_db()
+        out = tmp_path / "out"
+        calendar = make_calendar_evidence(tmp_path / "evidence")
+        rc = main(
+            ["--expected-file", str(report_path), "--enable", "--apply", "--yes",
+             "--calendar-file", str(calendar),
+             "--report-dir", str(out)],
+            client_factory=lambda **kwargs: _ClientShim(db),
+            env=TEST_ENV,
+            now_fn=lambda: _utc(2026, 8, 1),
+            git_runner=lambda paths: [
+                "M docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md",
+                "M skills/data/unified_data/models/domain/sentiment.py",
+            ],
+        )
+        assert rc == EXIT_OK
+        assert load_binding(str(out))["enabled"] is True
+        payload = json.loads((out / "gate4-report.json").read_text())
+        assert payload["stop_conditions_hit"] == []
+        assert any("sentiment.py" in line for line in payload["scope_diff"])
+        assert any("DESIGN-03-014" in line for line in payload["scope_diff"])
+
+    def test_disable_records_binding_events_drill(self, tmp_path):
+        # G4-B-003 / G4-V-104：disable 回滚 drill → binding_events = disable → disable-drill
+        from scripts.unified_data.sector_ranking_rollout.gate4_activate import main
+
+        report_path = make_gate1_report(tmp_path)
+        db = _gate4_db()
+        out = tmp_path / "out"
+        rc = main(
+            ["--expected-file", str(report_path), "--disable", "--apply", "--yes",
+             "--report-dir", str(out)],
+            client_factory=lambda **kwargs: _ClientShim(db),
+            env=TEST_ENV,
+        )
+        assert rc == EXIT_OK
+        assert load_binding(str(out))["enabled"] is False
+        payload = json.loads((out / "gate4-report.json").read_text())
+        actions = [e["action"] for e in payload["binding_events"]]
+        assert actions == ["disable", "disable-drill"]

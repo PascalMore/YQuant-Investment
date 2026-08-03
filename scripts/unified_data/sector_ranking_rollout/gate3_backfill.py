@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import time as time_mod
 from dataclasses import asdict, dataclass, field
@@ -79,13 +80,21 @@ class Gate3Stop(Exception):
         super().__init__(message)
 
 
+@dataclass(frozen=True)
+class CoverageSet:
+    """合法 ``coverage_by_date`` 的满覆盖日期集。"""
+
+    full_coverage_dates: tuple[str, ...]
+
+
 @dataclass
 class RangePlan:
     """范围解析结果（DESIGN §3.6.3）。"""
 
-    mode: str  # "canary" | "range"
+    mode: str  # "canary" | "range-file" | "paired"
     dates: list[str] = field(default_factory=list)  # 升序去重处理日
-    excluded_first: str | None = None  # --range-file 模式默认排除的最早可用日
+    full_coverage_dates: tuple[str, ...] = ()  # ratio==1.0 的 canonical 日期集
+    excluded_first: str | None = None  # --range-file 模式默认排除的最早满覆盖日
     reason: str = ""
 
 
@@ -198,6 +207,61 @@ def _validate_trade_date(value: str) -> str:
     return value
 
 
+def parse_coverage_by_date(coverage: Any) -> CoverageSet:
+    """解析满覆盖日期；任一非法键或 ratio 均按 G3-S-003 fail-fast。"""
+    if not isinstance(coverage, Mapping):
+        raise Gate3Stop(
+            "G3-S-003", "coverage_by_date must be an object", exit_code=EXIT_PARAM
+        )
+
+    full_dates: list[str] = []
+    for raw_date, raw_entry in coverage.items():
+        if not isinstance(raw_date, str) or _validate_trade_date(raw_date) != raw_date:
+            raise Gate3Stop(
+                "G3-S-003",
+                f"coverage_by_date key {raw_date!r} must be canonical YYYY-MM-DD",
+                exit_code=EXIT_PARAM,
+            )
+        if not isinstance(raw_entry, Mapping) or "ratio" not in raw_entry:
+            raise Gate3Stop(
+                "G3-S-003",
+                f"coverage_by_date[{raw_date!r}] missing ratio",
+                exit_code=EXIT_PARAM,
+            )
+        raw_ratio = raw_entry["ratio"]
+        if isinstance(raw_ratio, bool):
+            raise Gate3Stop(
+                "G3-S-003",
+                f"coverage_by_date[{raw_date!r}].ratio must be a finite number",
+                exit_code=EXIT_PARAM,
+            )
+        try:
+            ratio = float(raw_ratio)
+        except (TypeError, ValueError) as exc:
+            raise Gate3Stop(
+                "G3-S-003",
+                f"coverage_by_date[{raw_date!r}].ratio must be a finite number",
+                exit_code=EXIT_PARAM,
+            ) from exc
+        if not math.isfinite(ratio):
+            raise Gate3Stop(
+                "G3-S-003",
+                f"coverage_by_date[{raw_date!r}].ratio must be finite",
+                exit_code=EXIT_PARAM,
+            )
+        if ratio == 1.0:
+            full_dates.append(raw_date)
+
+    full_coverage_dates = tuple(sorted(set(full_dates)))
+    if not full_coverage_dates:
+        raise Gate3Stop(
+            "G3-S-003",
+            "coverage_by_date contains no full-coverage date (ratio == 1.0)",
+            exit_code=EXIT_PARAM,
+        )
+    return CoverageSet(full_coverage_dates=full_coverage_dates)
+
+
 def resolve_range(
     report: Mapping[str, Any],
     *,
@@ -212,11 +276,11 @@ def resolve_range(
     * ``--canary-date`` 单日模式仅在无任何全量范围来源时合法；与
       ``--range-file`` / 成对或不成对 ``--start-date``/``--end-date``
       同时传入 → 退出码 1。
-    * ``--range-file`` 模式：范围 = ``coverage_by_date`` 键集，升序去重，
-      默认排除最早可用日（首日无前一日 close，G3-B-016）。
-    * 显式成对 ``--start-date``/``--end-date``：必须成对、start<=end、
-      均 ⊆ Gate-1 ``trade_date_range``、经 ``CompletedSessionPolicy`` 判定
-      非未来日 / 非「当日未收盘」（policy 不可用 → fail-closed 退出码 1）。
+    * ``--range-file`` 模式：范围 = ``coverage_by_date`` 中 ratio==1.0 的
+      canonical 日期键集，升序去重，默认排除最早满覆盖日（G3-B-016）。
+    * 显式成对 ``--start-date``/``--end-date``：必须成对、start<=end，
+      且窗口内全部 ``coverage_by_date`` 键均属于满覆盖集；经
+      ``CompletedSessionPolicy`` 判定非未来日 / 非「当日未收盘」。
     """
     if canary_date is not None:
         if range_file or start_date or end_date:
@@ -234,7 +298,13 @@ def resolve_range(
                 f"{candidates}",
                 exit_code=EXIT_PARAM,
             )
-        return RangePlan(mode="canary", dates=[canary_date], reason="canary single day")
+        coverage_set = parse_coverage_by_date(report.get("coverage_by_date"))
+        return RangePlan(
+            mode="canary",
+            dates=[canary_date],
+            full_coverage_dates=coverage_set.full_coverage_dates,
+            reason="canary single day",
+        )
 
     if range_file:
         if start_date or end_date:
@@ -243,16 +313,15 @@ def resolve_range(
                 "--range-file is mutually exclusive with --start-date/--end-date",
                 exit_code=EXIT_PARAM,
             )
-        coverage = report.get("coverage_by_date") or {}
-        dates = sorted({str(d) for d in coverage.keys()})
-        excluded = dates[0] if dates else None
-        if excluded is not None:
-            dates = dates[1:]
+        coverage_set = parse_coverage_by_date(report.get("coverage_by_date"))
+        full_dates = coverage_set.full_coverage_dates
+        excluded = full_dates[0]
         return RangePlan(
-            mode="range",
-            dates=dates,
+            mode="range-file",
+            dates=list(full_dates[1:]),
+            full_coverage_dates=full_dates,
             excluded_first=excluded,
-            reason="full range from coverage_by_date, earliest excluded",
+            reason="full range from full-coverage dates, earliest excluded",
         )
 
     if start_date or end_date:
@@ -295,9 +364,31 @@ def resolve_range(
                     f"explicit range date {value} rejected by CompletedSessionPolicy: {exc}",
                     exit_code=EXIT_PARAM,
                 ) from exc
-        coverage = report.get("coverage_by_date") or {}
-        dates = [d for d in sorted(coverage) if start <= str(d) <= end]
-        return RangePlan(mode="range", dates=dates, reason="explicit paired subrange")
+        coverage_set = parse_coverage_by_date(report.get("coverage_by_date"))
+        full_dates = coverage_set.full_coverage_dates
+        full_set = set(full_dates)
+        coverage_keys = set(report["coverage_by_date"])
+        window_keys = {d for d in coverage_keys if start <= d <= end}
+        if start not in full_set or end not in full_set or window_keys - full_set:
+            raise Gate3Stop(
+                "G3-S-003",
+                f"explicit range [{start}, {end}] contains date(s) outside the "
+                "full-coverage set",
+                exit_code=EXIT_PARAM,
+            )
+        dates = [d for d in full_dates if start <= d <= end]
+        if not dates:
+            raise Gate3Stop(
+                "G3-S-003",
+                f"explicit range [{start}, {end}] contains no full-coverage date",
+                exit_code=EXIT_PARAM,
+            )
+        return RangePlan(
+            mode="paired",
+            dates=dates,
+            full_coverage_dates=full_dates,
+            reason="explicit paired full-coverage subrange",
+        )
 
     raise Gate3Stop(
         "G3-S-003",
@@ -609,6 +700,7 @@ def _build_report_payload(
             "start": plan.dates[0] if plan.dates else None,
             "end": plan.dates[-1] if plan.dates else None,
             "excluded_first": plan.excluded_first,
+            "full_coverage_days": len(plan.full_coverage_dates),
             "mode": plan.mode,
         },
         "canary": dict(canary) if canary else None,
@@ -682,7 +774,7 @@ def main(
     }
     # L1 契约校正：行情 join 键 = Gate-1 expected_full_symbols（.SI 后缀）。
     expected_full_symbols = [str(s) for s in report.get("expected_full_symbols", [])]
-    full_dates = sorted({str(d) for d in (report.get("coverage_by_date") or {})})
+    full_dates = list(plan.full_coverage_dates)
     date_format = str(report.get("trade_date_format") or "YYYYMMDD")
 
     # G3-B-018 / G3-B-019：Gate-3 reader 禁用全局累计阻断

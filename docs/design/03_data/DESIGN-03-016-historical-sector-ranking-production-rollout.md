@@ -7,9 +7,9 @@
 | 状态 | Draft |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-31 |
-| 最后更新 | 2026-08-02（V0.9 Gate-4 readiness 卡 `t_e30dc947` 全量范围契约校正 + recovery closure 卡 `t_a6b7636e` 收口：§3.6.3 `--range-file` 范围限定为 `coverage_by_date` 中 ratio==1.0 的键（1,115 满覆盖日，2021-12-13→2026-07-30），默认排除最早满覆盖日 2021-12-13 → 计划 1,114 日；§3.6.4 reader 生命周期与 §3.3.3 G3-B-019 数值同步 1,114 × 62 = 69,068（原 6,421 × 62 = 398,102 基于错误假设 coverage_by_date 全键满覆盖，与 Gate-1 实物报告 5,307 部分覆盖日矛盾）；对齐 SPEC V0.6 / RFC V0.5；§9 声明固化 Gate-3 全量 backfill 尚未执行/验证 → Gate-4 consumer binding 仍为 NO-GO；V0.8 Design Gate `t_1f6c001b` REVISE 七项 minor 闭合：BudgetReader 构造签名补 `day_rows_limit`（§3.3.3）、`reset_stats()` 定义固化（§3.3.3/§3.6.4）、report schema 补 `failed_days[]` 与 `summary.total_query_rows`/顶层 `query_budget` 派生（§3.6.6）、fixture allowlist 对齐 `sector_ranking_rollout_fixtures.py`（§3.1.1/§4/§5/§7）、共享目录基线措辞（§2.1）；对齐 SPEC V0.5 / RFC V0.4；V0.7 Gate-3 查询预算范围校正：BudgetReader per-day scoped 模型 §3.3.3 + process_day §3.6.4 + G3-S-013 §3.6.7 + report §3.6.6，对齐 SPEC V0.4 G3-B-017~020；V0.6 REVISE closure `t_cfdad408`；V0.5 L1 契约校正；历史修订见 Changelog） |
-| 来源 RFC | RFC-03-016-historical-sector-ranking-production-rollout（V0.5） |
-| 来源 SPEC | SPEC-03-016-historical-sector-ranking-production-rollout（V0.6） |
+| 最后更新 | 2026-08-03（V0.12 Contract C baseline 集合对齐，本卡 `t_ea99efaa`，仅三层文档）：**契约 C（§3.7.8）baseline 授权集合与 `gate4_activate.py` 实物 `BASELINE_MANIFEST` 对齐**——① 实物核对 `BASELINE_MANIFEST`（gate4_activate.py:62-77）共 **14 条路径**，当前工作树 **manifest 内 dirty 恰 7 条**（`common.py`、`gate3_backfill.py`、`gate4_activate.py`、`sector_ranking_rollout_fixtures.py`、`test_sector_ranking_rollout_common.py`、`test_sector_ranking_rollout_gate3.py`、`test_sector_ranking_rollout_gate4.py`；T3 Gate-4 修复 5 文件 + Gate-3 range 修复 2 文件）；三层文档**不在 manifest 内**（docs dirty 属 out_of_manifest，记录不停止）；② §3.7.8 区分 **baseline commit 集（10 条：7 manifest 内 + RFC/SPEC/DESIGN-03-016）** 与 **activation manifest-relevant required clean set（manifest 14 条全部 clean）**；旧「五候选路径」不足以通过 activation（`common.py`/`gate4_activate.py`/fixture/`test_common.py`/`test_gate4.py` 仍 dirty → G4-S-003 必触发）；③ GIT-016-1 改为逐路径列出 10 条 `git add` 目标；禁止 `git add -A/.`、restore/reset/stash/clean；④ 新增 baseline 形成前独立 scope/test/secret/manifest diff 验证（§3.7.8 第 2 步）；⑤ 明确本卡不构成 Git commit / activation / production credential 许可；⑥ §3.1.1.bis 明确不修改、§7.2 风险表、§8.4 命令、Verify 判定同步；历史见 Changelog） |
+| 版本号 | V0.12 |
+| 来源 SPEC | SPEC-03-016-historical-sector-ranking-production-rollout（V0.9） |
 | 目标模块 | 03_data（数据层）— 生产 rollout 工具与 Gate 执行 |
 | 适配 Agent | YQuant-Developer-Engineer（T3 Implement）、YQuant-Test-Engineer（T4 Verify / 逐 Gate 只读 Verify）、YQuant-Reviewer-Principal（T5 Review） |
 
@@ -24,6 +24,12 @@ V0.1 为初始版本。本设计把 RFC-03-016 的 4 个生产 Gate 与 SPEC-03-
 **V0.2 修订（评审 #864 闭合）**：仅闭合两处——① 连接源收敛为 RFC CR-016-1/2 的唯一受控 `MONGODB_*` 组件来源（`MONGODB_HOST/PORT/USERNAME/PASSWORD/DATABASE`），组件式构造、不允许 URI、CLI 不再暴露 `--conn`/prefix 选择、无 alias/fallback；② T3 allowlist 统一为 **14 个新文件**（8 工具/数据 + 1 fixture + 5 tests）并全篇一致。**不改变** Gate-1~4 业务语义、退出码与停止条件；report 字段仅替换连接源字段（`conn_prefix` → `conn_source`/`conn_fingerprint`，见 §3.4.4 G1-R-002 落实说明）。
 
 **V0.3 修订（T2.2 交叉文档闭合，Gate `t_e1611476` REVISE 关闭）**：闭合 2 项 MAJOR 与 2 项 MINOR——F1 Gate-3 范围来源唯一化（`--range-file` 进入 CLI synopsis，与成对 `--start-date`/`--end-date` 互斥，无范围来源 → EXIT_PARAM(1)，§8.3 全量命令显式传 `--range-file`）；F2 交易日状态判定由 Gate-4 工具层新建可注入 TradeCalendar / CompletedSessionPolicy 执行（§3.3.5，非修改 03-015 冻结 service），G4-R-003/G4-V-004 以 fake calendar + fake clock 逐项证伪；F3 G1-B-002 过滤白名单统一（含 `market`）；F4 provenance 修正（RFC V0.1 / SPEC V0.2 / DESIGN V0.3）。同步闭合 OBS-1（`conn_prefix` 为被 V0.2 替代的旧概念）、OBS-2（Gate-4 git-status 收敛为 activation 卡路径 allowlist / baseline manifest）。**未改变** V0.1/V0.2 已冻结的 Gate 业务语义、退出码、连接源与 allowlist 总数（仍 14）。
+
+**V0.10 修订（Full Flow T2 Design 同步，卡 `t_03ffa0c5`）**：Design 的 Gate-3 range 契约与 fail-fast 与 RFC V0.6 / SPEC V0.7 **完全一致**——① 新增可测试的 `coverage_by_date` 解析辅助函数边界（§3.6.3 `parse_coverage_by_date` / `resolve_range` / `RangePlan`）：日期键必须可解析为 canonical `YYYY-MM-DD`，ratio 必须可转换为 finite 数值且严格 `==1.0` 才纳入满覆盖键集；缺失 / 非数值 / NaN / 非 canonical 日期键 → 参数层 fail-fast（G3-S-003，EXIT_PARAM(1)），**禁止静默忽略**；② `--range-file` 使用**所有**合格满覆盖日并默认剔除最早满覆盖日（`excluded_first`）；成对 `--start-date`/`--end-date` **先校验格式/顺序，再仅在满覆盖键集取交集**——用户边界或区间含非满覆盖日（部分覆盖日/无覆盖日）→ G3-S-003 fail-fast，不静默跳过部分日（paired 不能作为绕过 ratio 过滤的替代路径）；③ 明确所有范围 fail-fast 均发生于 `process_day` 之前：**0 fetch / 0 upsert / 0 readback**；④ §5.1/§5.2 测试矩阵补齐 range 契约用例（range-file 正常、显式完整子范围、全键含 partial、invalid/missing/nonfinite ratio、非 canonical 日期、边界越界、默认剔除首日、无副作用 spy）；⑤ §9 声明同步：Gate-3 已执行并经独立只读 Verify PASS（1,114 日 / 34,534 行 / 0 failed / 0 stop），Gate-4 已获 Pascal 授权但本修复链 Review PASS 前禁止 enable/disable（真实 activation 另卡 + 独立 Verify 后才生效），Verify 凭据授权范围偏差（卡 `t_1ae1dc26`）作为历史审计事实保留、不表述为 clean closure。**未改变** Gate 业务语义、退出码总体集合（仍 0/1/2/3/4）、per-day budget 模型（G3-B-017~020）、L1 契约、连接源、T3 allowlist 总数（仍 14）、生产授权边界。
+
+**V0.11 修订（Full Flow Gate-4 P0 修复链 T2 Design，卡 `t_702b97fe`）**：本设计落实 RFC V0.7 / SPEC V0.8 的 Gate-4 P0 修复契约 A/B/C（详见 Changelog）——① 契约 A（§3.3.5.bis）：literal production CLI 从 `--calendar-file` 构造 `CompletedSessionPolicy`，无 wrapper / 无 Python 注入；② 契约 B（§3.7.4.bis）：enable 路径原子 fail-closed 状态机，所有 precondition（含 scope/baseline diff）在 `write_binding(True)` 之前，post-smoke 失败自动回滚 + binding_events；③ 契约 C（§3.7.8）：五文件 Git baseline 动作计划 + commit 前独立验证 + Pascal 授权边界（GIT-016-1~3，禁 restore 为推荐路径）；④ 修复链 T3 allowlist（§3.1.1.bis，5 文件修改）；⑤ 错误/回滚矩阵（§3.7.7）与测试矩阵（§5.1/§5.2）补契约 A/B/C。**未改变** Gate 业务语义、退出码总体集合（仍 0/1/2/3/4）、per-day budget 模型（G3-B-017~020）、L1 契约、连接源、原 T3 allowlist 总数（仍 14）、生产授权边界。
+
+**V0.12 修订（Contract C baseline 集合对齐，卡 `t_ea99efaa`，仅三层文档）**：本设计把契约 C（§3.7.8）的 baseline 授权集合与 `gate4_activate.py` 实物 `BASELINE_MANIFEST` 对齐——① 实物核对：`BASELINE_MANIFEST`（gate4_activate.py:62-77）共 **14 条路径**，当前工作树 **manifest 内 dirty 恰 7 条**（T3 Gate-4 修复 5 文件 + Gate-3 range 修复 2 文件）；三层文档（RFC/SPEC/DESIGN-03-016）**不在 manifest 内**（docs dirty 属 out_of_manifest，记录不停止）；② §3.7.8 区分 **baseline commit 集（10 条：7 manifest 内 + 三层文档）** 与 **activation manifest-relevant required clean set（manifest 14 条全部 clean）**，明确旧「五候选路径」不足以通过 activation（只 commit 5 条时 `common.py`/`gate4_activate.py`/fixture/`test_common.py`/`test_gate4.py` 仍 dirty → G4-S-003 必触发）；③ GIT-016-1 改为逐路径列出 10 条 `git add` 目标；禁止 `git add -A/.`、restore/reset/stash/clean；④ 新增 baseline 形成前独立 scope/test/secret/manifest diff 验证（§3.7.8 第 2 步）；⑤ 明确本卡不构成 Git commit / activation / production credential 许可；⑥ §3.1.1.bis 明确不修改、§7.2 风险表、§8.4 命令、Verify 判定同步。**未改变** Gate 业务语义、退出码总体集合（仍 0/1/2/3/4）、per-day budget 模型（G3-B-017~020）、L1 契约、连接源、原 T3 allowlist 总数（仍 14）、契约 A/B 语义、生产授权边界。
 
 本设计**不修改** 03-015 已冻结语义（schema、pct_chg 口径、完整性判定、结果语义冻结表、warning token、source_trace 枚举）与既有代码；**不执行**任何真实连接 / DDL / DML / Provider / 回填 / 服务 / cron / Git 操作（T3 仅 mongomock + 显式 fixture）。
 
@@ -41,7 +47,7 @@ RFC-03-016 / SPEC-03-016 定义了生产 rollout 的**契约**（副作用矩阵
 | 工具与运行时库分离 | Gate 工具全部是**新文件**，不触碰 `skills/data/unified_data/` 任何既有文件 | SPEC §7：实现阶段只新增 Gate 工具文件与测试；03-015 冻结文件清单见 §2.2 |
 | 真实写入路径 | 新建 `ProdRankingWriter`（允许真实 pymongo + namespace 白名单），复用 `UpsertOutcome` | 03-015 `HistoricalRankingWriter` 的 `_assert_fake_db` 拒绝真实 pymongo 且文件冻结，Gate-3 必须新增生产 writer |
 | 真实读路径 | 新建 `ProdRankingReader`（实现与 `HistoricalRankingWriter.get()` 相同的 duck-typed 接口），注入**冻结的** `HistoricalSectorService` | 复用 03-015 全部冻结读契约（参数校验、token、排序、limit、source_trace），零修改 service |
-| Gate-4 激活机制 | `binding_state.json` 开关 + `ProdRankingReader` fail-closed | RFC §5.5「回滚 = 禁用 facade / feature binding」；开关可测、可回滚；consumer 集成属独立变更（G4-R-005） |
+| Gate-4 激活机制 | `binding_state.json` 开关 + `ProdRankingReader` fail-closed；enable 路径按契约 A/B/C（literal CLI `--calendar-file` 构造 policy + 原子 fail-closed 顺序 + baseline 前置） | RFC §5.5「回滚 = 禁用 facade / feature binding」；开关可测、可回滚；consumer 集成属独立变更（G4-R-005）；契约 A/B/C 见 §3.3.5.bis / §3.7.4.bis / §3.7.8 |
 | 复用点 | `build_ranking_rows` / `SectorRankingDaily` / `is_valid_trade_date` / `coerce_float` / warning token 常量 | 03-015 已冻结的纯函数与常量，Gate-1/3/4 直接 import |
 | 离线/真实分离 | 工具核心逻辑全部可注入 mongomock db；`--apply` 才产生真实副作用；真实执行仅在 production activation 卡 | SPEC §2.2 / RFC §4.1 幂等、可停止、可审计 |
 | 退出码 | 严格按 SPEC G0-C-004：0 成功 / 1 参数前置失败 / 2 停止条件 / 3 连接凭据 / 4 verify 失败 | 与 audit_rollout.py 的映射不同，03-016 以 SPEC 为准 |
@@ -98,6 +104,9 @@ RFC-03-016 / SPEC-03-016 定义了生产 rollout 的**契约**（副作用矩阵
 | 真实连接构造 | 新建 `ConnLoader`（仅 `MONGODB_HOST/PORT/USERNAME/PASSWORD/DATABASE` 五键组件式构造；无 URI/prefix/alias/fallback；不打印值） | §3.3 |
 | Gate-1/3 查询预算强制 | 新建 `BudgetReader`（白名单 + limit + maxTimeMS + 统计） | §3.3 |
 | 交易日状态判定（未来日/当日未收盘/非交易日，F2） | 新建 `TradeCalendar`（抽象 + `FakeTradeCalendar`）/ `CompletedSessionPolicy` + `SessionStatus`（可注入；common.py 提供）；`ProdRankingReader` 读入口执行；生产以受控 live calendar evidence 激活（fail-closed） | §3.3.5 / §3.7.2 |
+| literal CLI 无 wrapper 构造 policy（契约 A，P0-016-2） | 新增 `CalendarEvidence` + `load_calendar_evidence` / `build_policy_from_calendar_evidence`（common.py，§3.3.5.bis）：`--calendar-file` schema 校验 + fail-stop（G4-S-002，0 fetch / 0 smoke / 0 write）；`main(policy=...)` 仅测试注入，`__main__` 为 None | §3.3.5.bis / §3.7.4 |
+| 原子 fail-closed 顺序（契约 B，P0-016-1） | enable 路径状态机（§3.7.4.bis）：precondition（policy 构造、pre-smoke、scope/baseline diff）全前置 + post-smoke 自动回滚 + binding_events（gate4_activate.py apply 流程重构） | §3.7.4.bis / §3.7.7 |
+| Gate-4 baseline 前置（契约 C） | **baseline commit 集（10 条：7 manifest 内 dirty + 三层文档）+ commit 前独立验证（scope/test/secret/manifest diff）+ Pascal 显式授权 GIT-016-1~3（§3.7.8）**；activation 前置要求 manifest 14 条路径全部 clean；**禁 restore 为推荐路径** | §3.7.8 |
 | Gate-4 激活/回滚开关 | `binding_state.json` + fail-closed 读取 | §3.7 |
 
 ---
@@ -126,6 +135,20 @@ RFC-03-016 / SPEC-03-016 定义了生产 rollout 的**契约**（副作用矩阵
 | `skills/data/unified_data/tests/test_sector_ranking_rollout_gate2.py` | Gate-2 单测（G2-D / G2-S） | SPEC §6 |
 | `skills/data/unified_data/tests/test_sector_ranking_rollout_gate3.py` | Gate-3 单测（G3-B / G3-S / G3-V） | SPEC §6 |
 | `skills/data/unified_data/tests/test_sector_ranking_rollout_gate4.py` | Gate-4 单测（G4-R / G4-S / G4-V） | SPEC §6 |
+
+#### 3.1.1.bis Gate-4 P0 修复链 T3 allowlist（卡 `t_702b97fe` 定义；仅修改，不新增文件）
+
+> 原 §3.1.1 的 14 文件为 rollout 实现 allowlist（已由先前 T3 落地，代码现存）。本修复链 T3 只**修改**其中 **5 个文件**，全部 ⊂ 原 14 文件集合；**不新增任何文件、不新增第三方依赖**。下表为修复链 T3 唯一权威清单；与 §5.1/§5.2 测试矩阵、§7.1 交接、§8 验收一致。
+
+| 文件 | 修改内容 | 最小理由 |
+|---|---|---|
+| `scripts/unified_data/sector_ranking_rollout/gate4_activate.py` | ① CLI 新增 `--calendar-file`（契约 A，SPEC §3.5.1/§3.5.7.bis）；② apply enable 路径重构为契约 B 状态机（§3.7.4.bis）：precondition（policy 构造、pre-smoke、scope/baseline diff）在 `write_binding(True)` **之前**；post-smoke 失败自动 `write_binding(False)` 回滚；③ `binding_events` 记录并写入 report；④ `__main__` 调用 `main()` 时 `policy=None`（G4-P-014，禁 wrapper） | P0-016-1/P0-016-2 修复主体 |
+| `scripts/unified_data/sector_ranking_rollout/common.py` | 新增 `CalendarEvidence`（dataclass + schema 校验）+ `load_calendar_evidence(path) -> CalendarEvidence` + `build_policy_from_calendar_evidence(evidence) -> CompletedSessionPolicy` + `sha256_file(path) -> str` | 契约 A：literal CLI 需要可测试、可审计的 calendar evidence loader；policy 构造复用共享组件，**不新建 calendar adapter 文件**（`TradeCalendar` 直接由 `trading_days` 构造，`FakeTradeCalendar` 仅测试） |
+| `skills/data/unified_data/tests/fixtures/sector_ranking_rollout_fixtures.py` | 新增 `make_calendar_evidence(tmp_path, ...)`（合法/非法 schema 变体）+ `make_binding_state(tmp_path, enabled)` | 契约 A/B 测试 fixture；不与 03-015 fixture 混用 |
+| `skills/data/unified_data/tests/test_sector_ranking_rollout_gate4.py` | 新增契约 A/B/C 用例（§5.1/§5.2 矩阵）：`--calendar-file` 合法/非法、0 fetch spy、scope_diff 前置、post-smoke 自动回滚、binding_events 顺序、baseline dirty 场景 | 契约 A/B/C 验收（SPEC §6 + RFC §10 E） |
+| `skills/data/unified_data/tests/test_sector_ranking_rollout_common.py` | 新增 `load_calendar_evidence` schema 校验正/负例 + sha256 一致性 + 禁止伪造 calendar 拒绝用例 | 契约 A loader 单元测试（SPEC §6） |
+
+**明确不修改**（修复链 T3）：`prod_repository.py`（binding_events 由工具层记录，`BindingState`/`write_binding` 签名不变——RFC §10 的「如 Design 需要」判定为**不需要**）；`gate3_backfill.py`、`test_sector_ranking_rollout_gate3.py`（Gate-3 range 修复产物，属契约 C baseline commit 集（10 条）中的 manifest 内路径，本链 T3 不得触碰）；RFC/SPEC/DESIGN 文档（本卡只改 DESIGN）；config / binding_state.json / reports / `skills/.env`。
 
 #### 3.1.2 修改文件
 
@@ -158,8 +181,9 @@ orchestrator 创建 Production activation 分阶段卡（RFC PT-016-2，逐 Gate
    │    → yquanttester 只读 Verify（G2-V-001~005）PASS → 建 Gate-3 卡
    ├─ Gate-3: canary → verify → Pascal 放行 → 全量 → verify（G3-V-101~105）
    │    → PASS → 建 Gate-4 卡
-   └─ Gate-4: python3 -m ...gate4_activate --enable --apply --yes
-        → yquanttester 只读 Verify（G4-V-101~105）PASS → rollout 完成
+   ├─ [契约 C baseline 形成：Review PASS → T4/T5 独立验证（scope/test/secret/manifest diff）→ Pascal 显式授权 GIT-016-1~3 提交 10 条 baseline 集路径]
+   └─ Gate-4: python3 -m ...gate4_activate --enable --apply --yes --calendar-file <evidence>
+        → yquanttester 只读 Verify（G4-V-101~109）PASS → rollout 完成
 ```
 
 工具内部控制流（4 个 Gate 一致）：
@@ -344,6 +368,46 @@ class CompletedSessionPolicy:
 | G4-P-005 当日未收盘 | FakeTradeCalendar 含 2026-08-01（交易日）；fake clock=2026-08-01T04:00:00Z（=12:00 CST） | classify → `TODAY_UNCLOSED` → ValueError（G4-V-004 正例） |
 | G4-P-006 当日已收盘 | 同上；fake clock=2026-08-01T07:30:00Z（=15:30 CST） | classify → `TODAY_CLOSED` → 不抛错（G4-V-004 反例 1） |
 | G4-P-007 非交易日 | FakeTradeCalendar 不含 2026-08-02（非交易日）；clock=2026-08-03 | classify(2026-08-02) → `PAST_NON_TRADING_DAY` → 不抛错；读路径 empty token（G4-V-004 反例 2） |
+
+#### 3.3.5.bis calendar evidence loader（契约 A，SPEC §3.5.7.bis G4-P-011~015 / RFC §5.5.1）
+
+> P0-016-2 修复：literal production CLI 自行从 `--calendar-file` 构造 policy；禁止 wrapper / `/tmp` / REPL 注入（旧 activation 卡 `t_aaeb7319` 的 `FakeTradeCalendar(coverage_by_date ∪ {today})` 属被禁止的伪造 calendar 形态）。
+
+```python
+@dataclass(frozen=True)
+class CalendarEvidence:
+    source: str                       # 权威来源标识（交易所/行情商官方日历）
+    as_of: str                        # YYYY-MM-DD 证据落盘日
+    timezone: str                     # 必须 == "Asia/Shanghai"（G4-P-003/011）
+    cutoff: str                       # 必须 == "15:00"（G4-P-003/011）
+    trading_days: tuple[str, ...]     # canonical YYYY-MM-DD，升序去重；非空
+
+class CalendarEvidenceError(Exception): ...   # → G4-S-002，退出码 2，参数层 fail-fast
+
+def load_calendar_evidence(path: str | Path) -> CalendarEvidence:
+    """G4-P-013 fail-stop：文件缺失/不可读/JSON 非法/schema 非法（缺 source/as_of/
+    timezone/cutoff/trading_days 任一必填字段、日期键非 canonical YYYY-MM-DD 且未过
+    03-015 is_valid_trade_date、timezone != "Asia/Shanghai"、cutoff != "15:00"、
+    trading_days 空）→ CalendarEvidenceError；在连接/查询/smoke 之前停止
+    （0 fetch / 0 smoke / 0 write）；不降级、不猜测、不重试。"""
+
+def build_policy_from_calendar_evidence(ev: CalendarEvidence) -> CompletedSessionPolicy:
+    """G4-P-012：从 trading_days 精确构造 TradeCalendar（is_trading_day 查集），
+    再 CompletedSessionPolicy(calendar, now_fn=系统时钟)。
+    禁止用 coverage_by_date / FakeTradeCalendar / 周末规则 / 任何硬编码日历构造
+    生产 policy（coverage_by_date 是行情覆盖证据，不是交易日历）。"""
+
+def sha256_file(path: str | Path) -> str:
+    """G4-P-015：证据文件 SHA-256（报告 calendar_evidence.sha256 使用）。"""
+```
+
+| SPEC 规则 | 设计落实 |
+|---|---|
+| G4-P-011 schema | `--calendar-file PATH` → `load_calendar_evidence` 全字段校验（source / as_of / timezone / cutoff / trading_days 均必填；`trading_days` 含未来日仅影响分类，不改变 G4-P-004 未来日语义） |
+| G4-P-012 构造规则 | `build_policy_from_calendar_evidence`：`trading_days` → `TradeCalendar`（查集）→ `CompletedSessionPolicy(calendar, now_fn=系统时钟)`；测试断言以 coverage_by_date / FakeTradeCalendar / 硬编码日历构造 → 拒绝（§5.1） |
+| G4-P-013 fail-stop | 任何失败 → `CalendarEvidenceError` → 映射 G4-S-002（退出码 2），在连接/查询/smoke 之前（0 fetch / 0 smoke / 0 write；§5.1 `_ForbiddenClientFactory` spy 断言） |
+| G4-P-014 无 wrapper | `main(policy=...)` 仅测试注入（CL-5 同纪律）；`__main__` 调用 `main()` 时 policy 必须为 None；`--enable --apply --yes` 无 `--calendar-file` → G4-S-002（即使测试注入 policy 也拒绝——防止 wrapper 绕过） |
+| G4-P-015 证据入报告 | `gate4-report.json` 记录 `calendar_evidence: {source, as_of, trading_days_count, sha256}`；**不**记录完整交易日清单；不得记录 secrets（G4-A-006） |
 
 ### 3.4 Gate-1 详细设计（gate1_smoke.py）
 
@@ -559,24 +623,76 @@ python3 -m scripts.unified_data.sector_ranking_rollout.gate3_backfill \
 
 - `--expected-file`：必须传入 Gate-1 report，其 JSON 必须包含三项必填字段：`expected_sector_codes`（31 个 `.SI` 后缀 L1 code）、`expected_sector_names`（code→name 映射）、`expected_full_symbols`（31 个 `index_daily_quotes.full_symbol` 值集，即 `.SI` 后缀 L1 join 值集，Gate-3 行情 join 键）；任一缺失或非法 → G3-S-002 参数层 fail-fast（退出码 1），**不等 process_day**（与 SPEC §3.4.1 逐字一致）。
 
-#### 3.6.3 范围解析（OQ-016-4 解决；F1 冻结）
+#### 3.6.3 范围解析（OQ-016-4 解决；F1 冻结；V0.10 对齐 RFC V0.6 / SPEC V0.7 range 契约修复）
+
+**范围解析唯一入口**：`resolve_range(args, coverage_by_date) -> RangePlan`。所有范围来源（`--range-file` / 成对 `--start-date`/`--end-date` / `--canary-date`）在 `main` 的**日循环之前**完成解析与校验；任何 `RangeParamError` → 映射 G3-S-003（EXIT_PARAM(1)）→ 工具立即退出，**0 fetch / 0 upsert / 0 readback**（不发起任何 Mongo 查询、不写入任何行、不做写后读回；§5.1 以 mock reader/writer spy 断言零调用）。
+
+**可测试的 `coverage_by_date` 解析辅助函数（fail-fast 边界，V0.10 新增，与 SPEC G3-B-013/G3-S-003 逐字一致）**：
+
+```python
+class RangeParamError(Exception): ...   # → G3-S-003，EXIT_PARAM(1)，发生在 process_day 之前
+
+@dataclass(frozen=True)
+class CoverageSet:
+    full_coverage_dates: tuple[str, ...]   # 升序去重；ratio==1.0 的 canonical YYYY-MM-DD 键
+
+def parse_coverage_by_date(coverage: Mapping[str, Any]) -> CoverageSet:
+    """coverage_by_date 解析（G3-B-013/014/016 落地）。逐键执行，任一 fail-fast 即抛
+    RangeParamError（→ G3-S-003，EXIT_PARAM(1)），禁止静默忽略：
+      1) 日期键解析：键必须为 canonical YYYY-MM-DD 且经 03-015 is_valid_trade_date；
+         不可解析 / 非 canonical（如 '20260730'、'2026/07/30'）→ fail-fast；
+      2) ratio 解析：键值必须存在 ratio 字段，且 coerce_float 可转换为 finite 数值；
+         缺失 / 非数值 / NaN / inf（非 finite）→ fail-fast；
+      3) ratio 严格 == 1.0 → 满覆盖日，纳入 full_coverage_dates；
+         ratio 可解析 finite 但 != 1.0（部分覆盖日，如 0.516）→ 排除，不纳入、不 fail-fast
+         （100% exact-match 下部分覆盖日必然 G3-S-004 停止，故不进入计划范围）。
+    解析结果全为空（coverage 空 dict / 全部 ratio<1.0 / 全部不可解析）→ fail-fast（无满覆盖日期）。
+    """
+
+@dataclass(frozen=True)
+class RangePlan:
+    mode: str                              # "range-file" | "paired" | "canary"
+    dates: tuple[str, ...]                 # 最终处理日（升序去重）
+    full_coverage_dates: tuple[str, ...]   # 满覆盖键集（ratio==1.0，升序）——range 取交集的唯一合格集合
+    excluded_first: str | None             # range-file 模式默认剔除的最早满覆盖日
+
+def resolve_range(args, coverage_by_date: Mapping[str, Any]) -> RangePlan:
+    """范围解析（G3-S-003 全部触发路径在此收敛；均发生于 process_day 之前）。
+    - range-file：先 parse_coverage_by_date → full_coverage_dates；
+        dates = full_coverage_dates[1:]（默认剔除最早满覆盖日 excluded_first=full_coverage_dates[0]，
+        G3-B-016）；禁止以 coverage_by_date 全部键作为 range（部分覆盖日不得混入，G3-B-013）。
+    - paired：先校验成对（缺一 → fail-fast）、格式 YYYY-MM-DD、start <= end；
+        再仅在 full_coverage_dates 取交集：dates = [d for d in full_coverage_dates if start <= d <= end]；
+        用户边界或区间内含任何非满覆盖日（部分覆盖日/无覆盖日）→ fail-fast（不静默跳过部分日；
+        paired 不能作为绕过 ratio 过滤的替代路径，G3-B-015）。
+    - canary：单日，必须 ∈ gate1-report.canary_candidates；与任何全量范围来源互斥（G3-S-003）。
+    """
 
 | 模式 | 规则 |
 |---|---|
 | `--canary-date`（无 `--range-file` / 无 `--start-date`/`--end-date`） | 只处理 1 日；`--canary-date` 必须在 `gate1-report.json.canary_candidates` 中，否则退出码 1（G3-S-003）。**canary 单日模式仅在无任何全量范围来源（无 `--range-file`、无 `--start-date`、无 `--end-date`）时合法** |
 | `--canary-date` 与任何全量范围来源互斥 | `--canary-date` + `--range-file` → 退出码 1；`--canary-date` + 成对 `--start-date`/`--end-date` → 退出码 1；`--canary-date` + 不成对 start/end 仍按缺配对 → 退出码 1（均 G3-S-003） |
-| `--range-file PATH`（全量，推荐） | 值 = Gate-1 report JSON 路径（与 `--expected-file` 相同的 `gate1-report.json`）；范围 = `coverage_by_date` 中 **ratio==1.0 的键**（已确认可用交易日 = 31/31 全覆盖共同完整交易日，2021-12-13 → 2026-07-30 共 1,115 天；部分覆盖日 ratio<1.0 不纳入——100% exact-match 下必然 G3-S-004 停止，G3-B-013 校正），升序去重（G3-B-013/014）；**默认排除 ratio==1.0 键集中最早满覆盖日 2021-12-13**（其前一交易日 2021-12-10 为部分覆盖 → 无完整 prev close → 必然 incomplete/empty 失败，避免「自动失败」，G3-B-016）；dry-run 计划显式说明排除的首日与理由 |
-| 显式 `--start-date` / `--end-date` | 必须成对（缺一 → 退出码 1）；start ≤ end；两者均 ∈ Gate-1 `trade_date_range`；均经 CompletedSessionPolicy 判定非未来日、非「今日且未收盘」（§3.3.5 / G4-P-004/005）→ 否则退出码 1（G3-S-003） |
+| `--range-file PATH`（全量，推荐） | 值 = Gate-1 report JSON 路径（与 `--expected-file` 相同的 `gate1-report.json`）；范围经 `parse_coverage_by_date` 解析 `coverage_by_date`——**仅取可解析且数值 `ratio==1.0` 的满覆盖键集**（已确认可用交易日 = 31/31 全覆盖共同完整交易日，2021-12-13 → 2026-07-30 共 1,115 天；**禁止以 `coverage_by_date` 全部键作为 range**；部分覆盖日 ratio<1.0 不纳入——100% exact-match 下必然 G3-S-004 停止，G3-B-013 校正）；日期键不可解析 / ratio 缺失 / 非数值 / NaN → **参数层 fail-fast**（G3-S-003，EXIT_PARAM(1)）；升序去重（G3-B-013/014）；**使用所有合格满覆盖日并默认剔除最早满覆盖日**（`excluded_first` = 满覆盖键集最早日 2021-12-13，其前一交易日 2021-12-10 为部分覆盖 → 无完整 prev close → 必然 incomplete/empty 失败，避免「自动失败」，G3-B-016）；dry-run 计划显式说明排除的首日与理由 |
+| 显式 `--start-date` / `--end-date` | 必须成对（缺一 → 退出码 1）；**先校验格式 `YYYY-MM-DD` 与顺序 `start <= end`**；再**仅在满覆盖键集取交集**（`full_coverage_dates`，不能作为绕过 ratio 过滤的替代路径，G3-B-015）——start/end 或区间内任何日期不在满覆盖键集内（部分覆盖日/无覆盖日）→ 退出码 1（G3-S-003，fail-fast，**不静默跳过部分日**）；均经 CompletedSessionPolicy 判定非未来日、非「今日且未收盘」（§3.3.5 / G4-P-004/005）→ 否则退出码 1（G3-S-003） |
 | `--range-file` 与 `--start-date`/`--end-date` 互斥 | 同时传入 → 退出码 1（G3-S-003 / G3-B-015） |
 | 无任何范围来源 | 退出码 1（G3-S-003）；§8.3 全量命令必须显式传 `--range-file` |
+| 无满覆盖日期 / 非法 ratio | `coverage_by_date` 为空、全部 ratio<1.0、全部不可解析 → 无满覆盖日期 → 退出码 1；存在非法 ratio（日期键不可解析、ratio 缺失或非数值/NaN）→ 退出码 1（均 G3-S-003，fail-fast，**不等 process_day**） |
+| fail-fast 时序 | 所有 G3-S-002/G3-S-003 参数层 fail-fast 均发生于 `process_day` 之前：**0 fetch / 0 upsert / 0 readback**（§5.1 无副作用 spy 用例断言） |
 
 #### 3.6.4 日级处理流程（核心）
 
+> **前置（V0.10 固化）**：日循环**之前**先执行 `resolve_range(args, coverage_by_date)`（§3.6.3）得到 `RangePlan`，并完成 `--expected-file` schema 校验（§3.6.2）。任何 G3-S-002/G3-S-003 参数层 fail-fast 均在进入 `process_day` **之前**退出：**0 fetch / 0 upsert / 0 readback**（无 Mongo 查询、无写入、无写后读回；§5.1 无副作用 spy 用例断言）。`process_day` 只接收 `RangePlan.dates` 中的 `trade_date`（升序、去重）。
+
 ```text
-process_day(trade_date: str) -> DayOutcome
+process_day(trade_date: str, plan: RangePlan) -> DayOutcome
   ├─ reader.reset_stats()                                    # G3-B-017：清零累计计数与 stats 列表，per-day scoped（M2）
-  ├─ prev_date = ordered_available_dates[day_index - 1]      # 来自 Gate-1 coverage_by_date keys（升序）
-  │     day_index == 0 → DayOutcome(status="empty", reason="no-prev-close")
+  ├─ prev_date = trade_date 在 plan.full_coverage_dates 中的前一个满覆盖日（升序）
+  │     （V0.10 对齐 G3-B-016：range-file 模式 dates=full_coverage_dates[1:]，故
+  │       dates[0]（2021-12-14）的 prev = excluded_first（2021-12-13，满覆盖日，完整 close）→ 正常 complete；
+  │       不得因 day_index==0 误判 empty）
+  │     若 trade_date 为 full_coverage_dates 首个（paired 显式含最早满覆盖日 2021-12-13 / canary 模式）：
+  │       无计划内 prev → 按 G3-B-004 语义从 index_daily_quotes 探测前一交易日（2021-12-10，部分覆盖）
+  │       → 缺 prev close 的 code 不入库 → 完整性失败 → G3-S-004/005（不降级）
   ├─ docs = reader.find("index_daily_quotes",
   │        {"full_symbol": {"$in": expected_full_symbols},      # join field = full_symbol（非 sector_code）
   │         "trade_date": {"$in": [to_internal(day), to_internal(prev_date)]}})
@@ -631,7 +747,9 @@ def read_back_verify(writer, trade_date: str, expected: list[str]) -> None:
 
 #### 3.6.6 Report 结构
 
-`gate3-report.json`：`{tool, version, timestamp, conn_source, conn_fingerprint, range: {start, end, excluded_first}, canary: {date, outcome, read_back}, days: [{trade_date, status, expected, observed, upserted, failed, ms, query_budget}], failed_days: [{trade_date, status, observed, day_limit, stop_id, ms, query_budget}], summary: {success_days, failed_days, stop_conditions_hit, total_query_rows, resumption_boundary, day_rows_limit}, expected_sector_codes, expected_sector_names, checks, query_budget}`（G3-A-001~005）。
+`gate3-report.json`：`{tool, version, timestamp, conn_source, conn_fingerprint, range: {mode, start, end, excluded_first, full_coverage_days}, canary: {date, outcome, read_back}, days: [{trade_date, status, expected, observed, upserted, failed, ms, query_budget}], failed_days: [{trade_date, status, observed, day_limit, stop_id, ms, query_budget}], summary: {success_days, failed_days, stop_conditions_hit, total_query_rows, resumption_boundary, day_rows_limit}, expected_sector_codes, expected_sector_names, checks, query_budget}`（G3-A-001~005）。
+
+> **`range` 字段（V0.10 对齐 RangePlan）**：`mode` = `RangePlan.mode`（`"range-file"` / `"paired"` / `"canary"`）；`start`/`end` = 实际处理首/末日（`dates[0]` / `dates[-1]`）；`excluded_first` = range-file 模式默认剔除的最早满覆盖日（`RangePlan.excluded_first`）；`full_coverage_days` = `len(RangePlan.full_coverage_dates)`（informational，满覆盖键集大小；数据正常 = 1,115，`--range-file` 计划 1,114 日 = 1,115 − 1）。
 
 > **新增字段说明（G3-B-017~020 + M4/M5 固化）**：
 > - `days[].query_budget` = 每日 per-day 预算统计（G3-A-003，来自 `reader.stats()` 经 `reset_stats()` 清零后的**单日**计数；该日总命中行数 = 其各查询类别条数之和）。
@@ -648,7 +766,7 @@ def read_back_verify(writer, trade_date: str, expected: list[str]) -> None:
 |---|---|---|
 | G3-S-001 | 连接/认证失败 | 3 |
 | G3-S-002 | `--expected-file` 缺失 / JSON schema 不完整（缺 `expected_sector_codes` / `expected_sector_names` / `expected_full_symbols` 任一必填字段或类型非法——`expected_full_symbols` 须为 `.SI` 后缀 L1 join 值集；参数层 fail-fast，不等 process_day） | 1 |
-| G3-S-003 | 范围非法（无任何范围来源；`--range-file` 与 `--start-date`/`--end-date` 互斥冲突；start 缺 end（或反之）；`--canary-date` 与任何全量范围来源同时传入〔`--range-file`，或成对 `--start-date`/`--end-date`；与不成对 start/end 仍按缺配对〕；start>end；超 Gate-1 范围；未来日 / 今日未收盘〔CompletedSessionPolicy，§3.3.5〕；canary 不在候选清单） | 1 |
+| G3-S-003 | 范围非法——**全部 fail-fast 发生于 `process_day` 之前：0 fetch / 0 upsert / 0 readback**（V0.10 固化）：无任何范围来源；`--range-file` 与 `--start-date`/`--end-date` 互斥冲突；start 缺 end（或反之）；`--canary-date` 与任何全量范围来源同时传入〔`--range-file`，或成对 `--start-date`/`--end-date`；与不成对 start/end 仍按缺配对〕；start>end 或 start/end 格式非 `YYYY-MM-DD`；**`--range-file` 指向的 `coverage_by_date` 无任何可解析且数值 ratio==1.0 的满覆盖日期（空 / 全部 ratio<1.0 / 全部不可解析）**；**`coverage_by_date` 存在非法 ratio（日期键不可解析、ratio 缺失或非数值/NaN/inf——非 finite）**；**成对 `--start-date`/`--end-date` 范围超出满覆盖子集（含任何 ratio<1.0 或不在满覆盖键集内的日期——不能借显式范围绕过 ratio 过滤，不静默跳过部分日）**；未来日 / 今日未收盘〔CompletedSessionPolicy，§3.3.5〕；canary 不在候选清单） | 1 |
 | G3-S-004 | 目标日 `observed != expected`（incomplete） | 2 |
 | G3-S-005 | 目标日零有效行（empty） | 2 |
 | G3-S-006 | upsert `outcome.failed > 0` | 2 |
@@ -677,6 +795,7 @@ def write_binding(report_dir: str, enabled: bool) -> dict:
 
 - Gate-4 **默认 `--disable`**（安全默认，SPEC §3.5.1）；`--enable` + `--apply` + `--yes` 才写 `enabled=true`。
 - 回滚 = `--disable` + `--apply` + `--yes`（G4-R-006），**不删除数据**。
+- **binding_events（G4-B-004，V0.11）**：binding_events 由 gate4 工具在 apply 流程中按序记录（`precondition-pass` / `write_binding(true)` / `post-smoke` / `rollback(false)` / `disable` / `disable-drill`），随 `gate4-report.json` 输出（§3.7.5）。**binding_state.json 文件 schema 保持 `{capability, enabled, gate, updated_at, previous}` 不变**——report 已是持久审计物；把事件写进状态文件会增加幂等复杂度且不增加审计价值（设计决策，T3 不得改 `write_binding` 签名）。
 
 #### 3.7.2 `ProdRankingReader`
 
@@ -708,7 +827,7 @@ class ProdRankingReader:
 
 ```python
 policy = CompletedSessionPolicy(
-    calendar=live_calendar,          # 生产：受控 live calendar evidence（§8.4）；测试：FakeTradeCalendar
+    calendar=live_calendar,          # 生产：build_policy_from_calendar_evidence（§3.3.5.bis，--calendar-file）；测试：FakeTradeCalendar
     now_fn=lambda: datetime.now(timezone.utc),   # 测试注入 fake clock
 )
 service = HistoricalSectorService(
@@ -727,67 +846,167 @@ result = service.get_sector_ranking_history(trade_date, dataset, limit)
 | G4-R-003 交易日状态检查 | `ProdRankingReader` 内注入的 `CompletedSessionPolicy`（§3.3.5）：未来日 → ValueError（G4-P-004）；当日未收盘 → ValueError（G4-P-005）；当日已收盘/历史交易日/非交易日 → 不抛错（G4-P-006/007）；冻结 service 只做 `is_valid_trade_date` 格式校验，**零修改** |
 | G4-R-004 不改 router/fallback/provider | Gate-4 零代码改动；scope diff 断言（G4-S-003） |
 
-#### 3.7.3 CLI（对齐 SPEC §3.5.1）
+#### 3.7.3 CLI（对齐 SPEC §3.5.1；V0.11 新增 `--calendar-file`，契约 A）
 
 ```text
 python3 -m scripts.unified_data.sector_ranking_rollout.gate4_activate \
   --expected-file <gate1-report.json 路径> \
   [--enable|--disable] [--apply] [--yes] \
+  --calendar-file <calendar evidence JSON 路径>   # --enable --apply --yes 必填（契约 A，G4-P-011/013）
   [--smoke-dates YYYY-MM-DD[,YYYY-MM-DD]] \
   [--report-dir data/rollout/sector-ranking]
 ```
 
-#### 3.7.4 apply 流程
+- **`--calendar-file`（契约 A，V0.11）**：`--enable --apply --yes` 必须显式传可审计 calendar evidence JSON（schema 见 §3.3.5.bis G4-P-011）；literal CLI 自行经 `load_calendar_evidence` + `build_policy_from_calendar_evidence` 构造 `CompletedSessionPolicy`，**无 wrapper / 无 `main(policy=...)` 外部注入**（G4-P-014）；文件缺失/不可读/JSON 非法/schema 非法 → 参数层 fail-fast（G4-S-002，退出码 2），在连接/查询/smoke 之前停止（0 fetch / 0 smoke / 0 write，G4-P-013）。`--disable` 路径不需要该文件（回滚 drill 在 binding 门禁处拒绝读，policy 可 None）。
+
+#### 3.7.4 apply 流程（契约 B：原子 fail-closed 顺序）
 
 ```text
 main()
-  ├─ dry-run：print 当前 binding 状态、smoke 日期清单与预期结果 → 0
+  ├─ dry-run：print 当前 binding 状态、smoke 日期清单、--calendar-file 需求与预期结果 → 0
   └─ apply：
-      ├─ conn/db 加载；--expected-file 校验（缺 → 1）
-      ├─ smoke_dates = args.smoke_dates 或默认集：
+      ├─ conn/db 加载（失败 → 3）；--expected-file 校验（缺 → 1）
+      ├─ smoke_dates = args.smoke_dates 或默认集（同 V0.10）：
       │     最近 canary 日（complete 案例）+ 最早可用日（未物化 empty 案例）
-      │     + "2026-13-45"（非法格式 ValueError 案例，G4-V-003，冻结 service 格式校验）
+      │     + "2026-13-45"（非法格式 ValueError 案例，G4-V-003）
       │     + 今日（G4-V-004 Category 1）：policy 以 live clock 分类今日并对照
-      │       受控 live calendar evidence（§3.3.5/§8.4）——TODAY_UNCLOSED → 断言 ValueError；
+      │       受控 calendar evidence（--calendar-file）——TODAY_UNCLOSED → 断言 ValueError；
       │       TODAY_CLOSED/非交易日 → 记录 evidence 与分类（离线 T3 已确定性覆盖正例）；
       │       policy 不可用 → fail-closed 不激活（G4-P-008/009）
-      ├─ 若 --enable：
-      │     a) pre-smoke：以 bypass-binding 的 reader（binding=lambda: True）
-      │          跑全部 smoke 用例（G4-V-001~008）           # 先证数据与契约正确
-      │          任一失败 → G4-S-002 → 退出码 2（binding 保持 disabled）
-      │     b) write_binding(enabled=True)
-      │     c) post-smoke：以绑定 reader 重跑 1 个成功案例
-      │          （证明 binding 门禁放行真实读；G4-S-005 数据与 Gate-3 快照一致）
-      ├─ 若 --disable：
-      │     a) write_binding(enabled=False)
-      │     b) 以绑定 reader 跑 1 个用例 → 期望 BindingDisabledError（G4-V-104 回滚预案）
-      ├─ 越权扫描（path-scoped baseline manifest，OBS-2 闭合）：
-      │     基线清单 = §3.1.1 T3 allowlist（14 文件）+ data/rollout/sector-ranking/**
-      │     仅对基线清单内路径执行 `git status --porcelain -- <allowlist 路径>` 比对；
-      │     基线清单内出现修改/删除/新增外状态 → G4-S-003 / G4-S-004 → 退出码 2
-      │     共享树既有未提交修改（基线清单外、与本 rollout 无关，如历史 03-015/P3-A 阶段文件）→ 记入 report.scope_diff，不触发停止
-      │     不 reset / 不 stash / 不 clean / 不修改共享树
-      ├─ 只读证明：目标集合 estimated_document_count 前后一致（G4-A-004）
-      ├─ report + logs + scan_secrets
+      ├─ 若 --enable：执行 enable 状态机（§3.7.4.bis）     # 契约 B，G4-B-001~006
+      ├─ 若 --disable：执行回滚 drill（§3.7.4.bis）       # G4-B-003 / G4-V-104
+      ├─ readonly proof + scan_secrets（失败 → 若 binding 已写 true 则自动回滚至 false，§3.7.7）
+      ├─ report（含 binding_events + calendar_evidence）+ logs
       └─ return 0 / 2 / 3 / 4
 ```
 
+#### 3.7.4.bis enable 状态机（契约 B 精确顺序；任一 precondition 失败 → binding 从未写入 true；post-smoke 失败 → 自动回滚）
+
+```text
+enable 路径（--enable --apply --yes）：
+
+S0 ARGS        argparse：--expected-file 存在；--enable 时 --calendar-file 必填
+               （缺 → G4-S-002，退出码 2，0 fetch / 0 smoke / 0 write）
+S1 CONN        ConnLoader().load_db()；失败 → G4-S-001（退出码 3）
+S2 POLICY      load_calendar_evidence(--calendar-file) → build_policy_from_calendar_evidence → policy
+               失败 → G4-S-002（退出码 2；0 fetch / 0 smoke / 0 write）
+S3 PRE_SMOKE   bypass-binding reader（binding=lambda: True）跑全部 smoke 用例
+               （G4-V-001~008，含 G4-V-004 今日分类 + G4-V-008 无越权写）
+               任一失败 → G4-S-002（退出码 2；binding 从未写入 true）
+S4 SCOPE_DIFF  _run_scope_diff(BASELINE_MANIFEST)（只读 `git status --porcelain`）
+               manifest 内路径 dirty（M/D/新增外状态）→ G4-S-003/G4-S-004（退出码 2；
+               binding 从未写入 true）【P0-016-1 修复核心：scope_diff 在 write_binding(True) 之前】
+               清单外 dirty（03-014/sentiment/data-pipeline 等共享树既有修改）→
+               记入 report.scope_diff，不触发停止（OBS-2 / G4-B-006）
+S5 WRITE_TRUE  binding_events += {precondition-pass} → write_binding(True)
+               → binding_events += {write_binding(true)}；binding_after=True
+S6 POST_SMOKE  绑定 reader（binding=lambda: load_binding(...)["enabled"]）重跑 1 个成功案例
+               （G4-S-005：数据与 Gate-3 快照一致）
+               失败 → 自动 write_binding(False)（同一受控 rollback，G4-B-002）→
+               binding_events += {rollback(false)} → 退出码 2，最终态 false
+S7 PROOF       readonly proof（目标集合 estimated_document_count 前后一致，G4-A-004）
+               + scan_secrets（G4-S-006）
+               失败 → 若 binding 已写 true 则自动 write_binding(False) 回滚 +
+               binding_events += {rollback(false)} → 退出码 2，最终态 false
+S8 OK          binding=true，退出码 0
+
+disable 路径（--disable --apply --yes，回滚 drill，G4-B-003 / G4-V-104）：
+  write_binding(False) → binding_events += {disable} → 绑定 reader 跑 1 用例
+  → 期望 BindingDisabledError（回滚预案证明）；读成功 → G4-S-002（退出码 2）；
+  总是优先回滚、只改 binding、不删数据
+```
+
+> **失败证明（G4-B-005）**：任何失败路径的 report 必须使「binding 最终为 false」可验证——precondition 失败 → `binding_events` 无 write_binding(true) 条目；post-smoke/proof 失败 → 含 rollback(false) 条目。Verify 判定 G4-V-106/107（§3.5.6）。
+
 #### 3.7.5 Report 结构
 
-`gate4-report.json`：`{tool, version, timestamp, conn_source, conn_fingerprint, binding: {before, after}, smoke_dates, cases: [{id: "G4-V-001", input, expected, actual, passed}], token_verbatim: bool, readonly_proof: {...}, scope_diff: [...], stop_conditions_hit}`（G4-A-001~005）。
+`gate4-report.json`：`{tool, version, timestamp, conn_source, conn_fingerprint, binding: {before, after}, binding_events: [{seq, action, state_before, state_after, timestamp}], calendar_evidence: {source, as_of, trading_days_count, sha256} | null, smoke_dates, cases: [{id: "G4-V-001", input, expected, actual, passed}], token_verbatim: bool, readonly_proof: {...}, scope_diff: [...], stop_conditions_hit}`（G4-A-001~006；binding_events 见 G4-B-004，calendar_evidence 见 G4-A-006/G4-P-015）。
 
-#### 3.7.6 停止条件映射（G4-S-001~008）
+#### 3.7.6 停止条件映射（G4-S-001~008；V0.11 按契约 A/B 修订）
 
 | SC | 触发点 | 退出码 |
 |---|---|---|
-| G4-S-001 | 连接/认证失败 | 3 |
-| G4-S-002 | pre-smoke 任一用例失败（`--enable` 不生效） | 2 |
-| G4-S-003 | 检测到 router/fallback/provider 代码变更（scope diff） | 2 |
-| G4-S-004 | 检测到 consumer/service 代码变更（scope diff） | 2 |
-| G4-S-005 | 读回数据与 Gate-3 快照不一致（post-smoke 行数/字段比对） | 2 |
-| G4-S-006 | `scan_secrets` 命中 | 2 |
-| G4-S-007 | 未物化/不完整时返回了部分榜单（冻结 token 行为被破坏） | 2 |
-| G4-S-008 | 任意未知异常 | 2 |
+| G4-S-001 | 连接/认证失败（S1 CONN） | 3 |
+| G4-S-002 | policy 构造失败（`--calendar-file` 缺失/不可读/JSON 非法/schema 非法，契约 A G4-P-013；S0/S2）**或** pre-smoke 任一用例失败（S3）——`--enable` 不生效，binding 从未写入 true（G4-B-001 ②③） | 2 |
+| G4-S-003 | 检测到 router/fallback/provider 被改动（scope/baseline diff 命中 manifest 内路径）——**precondition 阶段（S4，write 前）**；binding 从未写入 true（G4-B-001 ④ / G4-B-006） | 2 |
+| G4-S-004 | 检测到 consumer/service 改动（scope/baseline diff）——precondition 阶段（S4）；binding 从未写入 true | 2 |
+| G4-S-005 | 读回数据与 Gate-3 快照不一致（post-smoke 行数/字段比对，S6）——**工具自动 `write_binding(False)` 回滚**（G4-B-002）；report 记录 binding_events（含 rollback(false)）；最终态 false | 2 |
+| G4-S-006 | 身份泄露告警（S7 scan_secrets）——binding 已写入则自动回滚至 false | 2 |
+| G4-S-007 | 未物化/不完整时返回了部分榜单（冻结 token 行为被破坏）——binding 已写入则自动回滚至 false | 2 |
+| G4-S-008 | 任意未知异常——binding 已写入则自动回滚至 false | 2 |
+
+#### 3.7.7 错误/回滚矩阵（V0.11 新增；binding 最终态可证伪）
+
+| 停止条件 | 触发阶段 | binding 最终态 | binding_events 关键条目 | 退出码 |
+|---|---|---|---|---|
+| G4-S-001 | S1 CONN | false（从未写） | 无写入条目 | 3 |
+| G4-S-002 | S0 ARGS / S2 POLICY / S3 PRE_SMOKE | false（从未写） | 无 write_binding(true)（可选 precondition-fail 条目） | 2 |
+| G4-S-003/004 | S4 SCOPE_DIFF | false（从未写） | 无 write_binding(true) | 2 |
+| G4-S-005 | S6 POST_SMOKE | false（自动回滚） | write_binding(true) → rollback(false) | 2 |
+| G4-S-006/007/008 | S7 PROOF / 任意 | false（自动回滚） | write_binding(true) → rollback(false)（若已写） | 2 |
+| 成功 | S8 OK | true | precondition-pass → write_binding(true) → post-smoke | 0 |
+| disable drill | disable 路径 | false | disable → disable-drill（BindingDisabledError） | 0 |
+
+> Verify 判定（G4-V-106/107）：`binding_events` 证明所有 precondition 成功后才出现 write_binding(true)；任何失败路径最终态 false。
+
+#### 3.7.8 Gate-4 baseline 前置（契约 C，SPEC §3.5.8 / RFC §5.8；V0.12 修订）
+
+> **实物问题**：`gate4_activate.py` 的 `BASELINE_MANIFEST`（gate4_activate.py:62-77）共 **14 条路径**（scripts 7 + data 目录 1 + tests 6）。当前工作树 **manifest 内 dirty 恰 7 条**：`scripts/unified_data/sector_ranking_rollout/common.py`、`scripts/unified_data/sector_ranking_rollout/gate3_backfill.py`、`scripts/unified_data/sector_ranking_rollout/gate4_activate.py`、`skills/data/unified_data/tests/fixtures/sector_ranking_rollout_fixtures.py`、`skills/data/unified_data/tests/test_sector_ranking_rollout_common.py`、`skills/data/unified_data/tests/test_sector_ranking_rollout_gate3.py`、`skills/data/unified_data/tests/test_sector_ranking_rollout_gate4.py`（= T3 Gate-4 修复 5 文件 + Gate-3 range 修复 2 文件，均未提交）→ 任何 Gate-4 enable 必然 G4-S-003（实测 `gate4-report-20260803T105744.json`）。**三层文档（RFC/SPEC/DESIGN-03-016）不在 `BASELINE_MANIFEST` 内**：docs dirty 属于 out_of_manifest（记录入 `report.scope_diff` 但不触发 G4-S-003，G4-B-006/OBS-2）。**生产 activation 卡不得自行 Git 操作**。
+
+**两个集合（必须区分，不得混同）**：
+
+| 集合 | 定义 | 对 G4-S-003 的影响 |
+|---|---|---|
+| **baseline commit 集**（GIT-016-1 的 `git add` 目标） | **10 条路径** = 7 条 manifest 内 dirty + 3 条三层文档（RFC/SPEC/DESIGN-03-016） | 其中 7 条为 G4-S-003 硬性要求（不 commit → activation 必停）；3 条文档为审计基线完整性 |
+| **activation manifest-relevant required clean set** | `BASELINE_MANIFEST` 全部 **14 条路径**（gate4_activate.py:62-77） | activation 运行前必须全部 clean；**清单外 dirty（03-014/sentiment/data-pipeline 等）记录不停止** |
+
+> 关键推论：**只 commit 三层文档 + `gate3_backfill.py` + `test_sector_ranking_rollout_gate3.py`（旧「五候选路径」）不足以通过 activation**——`common.py`/`gate4_activate.py`/fixture/`test_common.py`/`test_gate4.py` 仍 dirty 且均在 manifest 内 → G4-S-003 必然触发。baseline 必须覆盖全部 7 条 manifest 内 dirty 路径；三层文档一并纳入以形成完整、可审计的单基线 commit。
+
+**baseline commit 集（10 条精确路径，唯一允许的 `git add` 目标）与 commit 前独立验证：**
+
+| # | 路径 | 在 manifest 内？ | 当前状态（2026-08-03 实物） | 独立验证（commit 前，T4 Verify / T5 Review） |
+|---|---|---|---|---|
+| 1 | `docs/rfc/03_data/RFC-03-016-historical-sector-ranking-production-rollout.md` | 否（审计基线） | ` M`（V0.7→V0.8 工作树） | 内容与 SPEC V0.9 / DESIGN V0.12 一致；无 secrets；`git diff --check` PASS |
+| 2 | `docs/spec/03_data/SPEC-03-016-historical-sector-ranking-production-rollout.md` | 否（审计基线） | ` M`（V0.8→V0.9 工作树） | 同上 |
+| 3 | `docs/design/03_data/DESIGN-03-016-historical-sector-ranking-production-rollout.md` | 否（审计基线） | ` M`（V0.11→V0.12 工作树；本卡升级） | 同上 |
+| 4 | `scripts/unified_data/sector_ranking_rollout/common.py` | **是** | ` M`（T3 Gate-4 修复产物） | 单测通过；无 secrets |
+| 5 | `scripts/unified_data/sector_ranking_rollout/gate3_backfill.py` | **是** | ` M`（Gate-3 range 修复产物） | 单测通过；无 secrets |
+| 6 | `scripts/unified_data/sector_ranking_rollout/gate4_activate.py` | **是** | ` M`（T3 Gate-4 修复产物） | 单测通过；无 secrets |
+| 7 | `skills/data/unified_data/tests/fixtures/sector_ranking_rollout_fixtures.py` | **是** | ` M`（T3 Gate-4 修复产物） | 单测通过；无 secrets |
+| 8 | `skills/data/unified_data/tests/test_sector_ranking_rollout_common.py` | **是** | ` M`（T3 Gate-4 修复产物） | 单测通过；无 secrets |
+| 9 | `skills/data/unified_data/tests/test_sector_ranking_rollout_gate3.py` | **是** | ` M`（Gate-3 range 修复产物） | 单测通过；无 secrets |
+| 10 | `skills/data/unified_data/tests/test_sector_ranking_rollout_gate4.py` | **是** | ` M`（T3 Gate-4 修复产物） | 单测通过；无 secrets |
+
+> 其余 manifest 7 条路径（`__init__.py`、`gate1_smoke.py`、`gate2_ddl.py`、`prod_repository.py`、`data/rollout/sector-ranking/`、`test_gate1.py`、`test_gate2.py`）当前 CLEAN，无需 commit 但必须保持 clean。
+
+**baseline 形成前独立验证（T4 Verify / T5 Review 各自独立完成）**：
+
+- **scope 验证**：`git status --porcelain` 确认 dirty 路径恰为上表 10 条，无新增/删除/改名（`??` 未跟踪不计入 violations）；对 manifest 14 条路径逐条确认状态（7 dirty + 7 clean）。
+- **测试验证**：T4 已运行测试全 PASS（common 58 + gate4 37 + gate1/2/3 130 + 03-015 51 = 276）；T5 独立复核。
+- **secret 验证**：`git diff` 全文静态扫描无 secrets（URI/密码/token/连接串），`git diff --check` exit 0。
+- **manifest diff 验证**：模拟 activation 的 `_collect_scope_entries`（gate4_activate.py:244-275）只读比对，确认 violations 恰为 7 条 manifest 内路径、out_of_manifest 为其余 dirty；确认 `data/rollout/sector-ranking/`（manifest 目录条目）无 manifest 相关 dirty。
+
+**精确动作（Pascal 显式授权后执行；activation 卡自身禁 Git）：**
+
+| 编号 | 动作 | 授权要求 |
+|---|---|---|
+| GIT-016-1 | `git add <上述 10 个精确路径，逐路径列出>`（**禁止** `git add -A` / `git add .` / 通配符 / 目录级 add） | Pascal 显式授权（修复链 Review PASS 后） |
+| GIT-016-2 | `git commit -m "<message>"`，message 说明 03-016 Gate-4 P0 修复链基线（RFC V0.8 / SPEC V0.9 / DESIGN V0.12 / Gate-3 range 修复 / Gate-4 修复链 5 文件） | Pascal 显式授权；不绕过 hooks |
+| GIT-016-3 | （可选）基线 commit 打 tag/ref note 便于 activation diff 引用 | Pascal 显式授权 |
+
+**授权边界声明（本卡）**：本卡 `t_ea99efaa` **不构成** Git commit 许可、activation 许可或 production credential 许可。仅定义契约 C 的集合与授权动作形态；实际 `git add`/`git commit` 必须由 Pascal 在独立授权卡/显式指令中逐项批准后执行。本卡未执行、也不授权执行任何 Git/Mongo/Provider/.env/CLI/service/cron 操作。
+
+**禁止事项（不得作为推荐路径）**：
+
+- **`git restore` / `git checkout` / `git reset --hard` / `git stash` / `git clean` 一律不得写为推荐路径**：会丢弃已审查通过的 Gate-3 range 修复与三层文档，违反「不得重跑、不得回滚」事实。
+- 生产 activation 卡自身不得执行任何 Git 操作；Git 基线只能由 Pascal 授权的独立动作完成。
+- 清单外 dirty 文件（03-014 文档、sentiment 系列、data-pipeline 诊断脚本等共享树既有修改）**不**阻止 activation：按 OBS-2 语义记入 `report.scope_diff` 但不触发 G4-S-003；**只有 manifest 内路径**的 dirty 才触发停止（G4-B-006）。
+
+**后继隔离（activation / 独立生产 Verify，RFC PT-016-6/7 / SPEC §3.5.8 / §9）**：
+
+- 本修复链 T3~T5 **一律无 Mongo / credentials / CLI / binding 操作**（T3 离线 mongomock + 显式 fixture；T4 只读验证；T5 独立审查）。
+- **Review APPROVE 后才允许创建新的受控 activation 卡**（assignee 按工具职责，body 引用 RFC §5.5/§5.8 + SPEC §3.5.2.bis/§3.5.7.bis/§3.5.8 + 本设计 §3.7.4.bis/§3.7.8；Pascal 显式触发 + 单独授权，含 calendar evidence 落盘授权）。
+- activation 成功后**仍需 Pascal 另行确认独立生产 Verify 卡（yquanttester）的凭据使用**——单独取得独立明示的凭据授权选择（吸取 `t_1ae1dc26` 审计教训）；Verify 卡只读 Mongo、不写 binding、不执行 Git；两张卡不得互相代替。
 
 ### 3.8 数据流/控制流图（汇总）
 
@@ -814,6 +1033,7 @@ Gate-4（读）:     03_data_ud_sector_ranking_daily(RO)
 | `BudgetReader.find/distinct/count/aggregate` | §3.3.3 | `common.py` |
 | `TradeCalendar.is_trading_day(date) -> bool` / `FakeTradeCalendar` | §3.3.5 | `common.py` |
 | `CompletedSessionPolicy.classify(trade_date, now) -> SessionStatus` | §3.3.5 | `common.py` |
+| `CalendarEvidence` / `load_calendar_evidence(path) -> CalendarEvidence` / `build_policy_from_calendar_evidence(ev) -> CompletedSessionPolicy` / `sha256_file(path) -> str` | §3.3.5.bis（契约 A，G4-P-011~015） | `common.py` |
 | `SessionStatus` 枚举 | §3.3.5 | `common.py` |
 | `ProdRankingWriter.get/upsert/count` | §3.6.1 | `prod_repository.py` |
 | `ProdRankingReader.get` | §3.7.2 | `prod_repository.py` |
@@ -843,12 +1063,14 @@ Gate-4（读）:     03_data_ud_sector_ranking_daily(RO)
 | OQ-016-1 | 现有连接源是否满足最小权限（只读/只写/DDL 分离） | **复用 `MONGODB_*` 唯一受控连接源**（RFC CR-016-1），不新建账号/角色（超授权）。静态无法证明其角色权限 → Gate-1 G1-C-007 证明只读、Gate-2 apply 证明 DDL（fail-fast G2-S-001/002）；DDL 权限不足 → STOP 并上报 Pascal（不自动建账号）。残余风险见 §6 | §3.3.2 / §3.4 / §3.5 |
 | OQ-016-2 | ~~`index_basic_info` 是否含 SW L1 权威 code/name~~ **已校正（L1 契约校正）**：主来源 = `stock_sector_info`（`{classify_system:"SW"}` distinct `(l1_code,l1_name)` = 31）；行情 join field = `index_daily_quotes.full_symbol`；`index_basic_info`（真实 `market="申万指数"`）降级为可选元数据交叉核对，**不得**用作 L1 universe 主来源；reference 缺失不再阻断（仅记 `reference_missing`） | §3.4.3 |
 | OQ-016-3 | canary 候选日选定规则 | 候选 = coverage 100% + close 完整 + 无 rt 标记 + 非今日；`recommended = max(trade_date)`（最近日最接近当前 schema/source 状态）；`--canary-date` 必须 ∈ 候选清单 | §3.4.2 |
-| OQ-016-4 | 全量 backfill 日期范围解析 | 范围来源二选一：成对 `--start-date`/`--end-date`（Pascal 子范围）或 `--range-file`（Gate-1 全范围，**默认排除最早可用日**）；互斥；无范围来源 → EXIT_PARAM(1)；校验 start≤end ⊆ Gate-1 范围、经 CompletedSessionPolicy 判定已收盘 | §3.6.3 |
+| OQ-016-4 | 全量 backfill 日期范围解析 | 范围来源二选一：成对 `--start-date`/`--end-date`（Pascal 子范围）或 `--range-file`（Gate-1 全范围）；互斥；无范围来源 → EXIT_PARAM(1)。**V0.10 对齐 RFC V0.6 / SPEC V0.7**：`--range-file` 经 `parse_coverage_by_date` 仅取可解析且数值 `ratio==1.0` 的满覆盖键集并默认剔除最早满覆盖日；成对 start/end **先校验格式/顺序，再仅在满覆盖键集取交集**，用户边界或区间含非满覆盖日 → G3-S-003 fail-fast（不静默跳过部分日，不能绕过 ratio 过滤）；无满覆盖日期/非法 ratio（缺失/非数值/NaN/非 canonical 日期键）→ G3-S-003 fail-fast；经 CompletedSessionPolicy 判定已收盘 | §3.6.3 |
 | OQ-016-5 | Gate-4 后是否需查询辅助索引 `idx_dataset_date` | 不创建（Gate-2 范围外）；Gate-4 smoke 查询均按 `{dataset, trade_date}` 过滤，由唯一索引前缀支持；留待未来 RFC 评估 | §3.5 / §3.7 |
 
 ---
 
 ## 4. 实现计划（T3 Implement worker 按 §4.1 ~ §4.6 顺序实现）
+
+> **V0.11 说明**：§4.1~§4.6 为**原始 rollout 实现计划**（14 个新文件，已由先前 T3 落地）。**Gate-4 P0 修复链 T3** 的计划与 allowlist 见 **§3.1.1.bis**（5 个文件修改，不新增文件），并按 §3.3.5.bis / §3.7.4.bis / §3.7.8 实现契约 A/B/C；T3 完成后由 T4 Verify 按 §5.1.bis 失败模式矩阵实测。
 
 ### 4.1 Step 1 — 包骨架与共享组件
 
@@ -895,23 +1117,39 @@ Gate-4（读）:     03_data_ud_sector_ranking_daily(RO)
 
 | 文件 | 覆盖（SPEC §6 编号 → 用例） |
 |---|---|
-| `test_sector_ranking_rollout_common.py` | CL-1~6（五键组件形态、缺失任一必需键 fail-fast、无 URI/prefix 分支、fingerprint 无连接值/无 username 信息）；G1-B-001~007（BudgetReader 白名单/过滤强制/limit/超时/扫描保护/记录上限/预算统计）；G1-B-002 负向（空 filter → BudgetViolation；aggregate 首 stage 非 `$match` → BudgetViolation；`$match` 无白名单字段 → BudgetViolation；白名单外字段 → BudgetViolation）；G0-C-005（redact/scan_secrets）；退出码常量；G4-P-001~010（CompletedSessionPolicy：FakeTradeCalendar + fake clock 注入逐项断言，fail-closed：policy=None → 拒绝读） |
+| `test_sector_ranking_rollout_common.py` | CL-1~6（五键组件形态、缺失任一必需键 fail-fast、无 URI/prefix 分支、fingerprint 无连接值/无 username 信息）；G1-B-001~007（BudgetReader 白名单/过滤强制/limit/超时/扫描保护/记录上限/预算统计）；G1-B-002 负向（空 filter → BudgetViolation；aggregate 首 stage 非 `$match` → BudgetViolation；`$match` 无白名单字段 → BudgetViolation；白名单外字段 → BudgetViolation）；G0-C-005（redact/scan_secrets）；退出码常量；G4-P-001~010（CompletedSessionPolicy：FakeTradeCalendar + fake clock 注入逐项断言，fail-closed：policy=None → 拒绝读）；**契约 A loader（G4-P-011~015，V0.11）**：`load_calendar_evidence` 合法 schema → CalendarEvidence；缺失/不可读/JSON 非法/schema 非法（缺字段、非 canonical 日期、timezone≠Asia/Shanghai、cutoff≠15:00、trading_days 空）→ `CalendarEvidenceError`；`build_policy_from_calendar_evidence` 以 trading_days 精确构造 TradeCalendar → classify 正确；禁止伪造 calendar（coverage_by_date / FakeTradeCalendar / 硬编码）→ 断言拒绝；`sha256_file` 与文件实际哈希一致（**失败模式**：loader 校验放宽 → 负例不抛错测试 FAIL；sha256 不一致 → 报告哈希校验 FAIL） |
 | `test_sector_ranking_rollout_gate1.py` | G1-C-001~007（权威枚举/参考文件交叉核对/coverage/close 完整性/source 分布/隔离/连接指纹）；G1-S-001~008 每条触发路径 → 退出码；G1-R-001~010 report 字段齐备；G1-V-005 只读证明（计数前后一致） |
 | `test_sector_ranking_rollout_gate2.py` | G2-D-001/002 幂等（重复执行跳过）；G2-S-003 规格不一致停止；G2-S-004 namespace 白名单；G2-S-002 前置 verify 失败 → 4；G2-A-001~004 审计证据 |
-| `test_sector_ranking_rollout_gate3.py` | G3-S-002（expected-file schema：缺 `expected_full_symbols` → 1；参数层 fail-fast，不等 process_day）；G3-B-002 日级原子（一日失败停止后续）；G3-B-003 升序处理；G3-B-004 前一日推导（首日 empty）；G3-B-007 日期转换；G3-B-008 重算 pct_chg（禁止上游值）；G3-B-009/010 rt 剔除、close/pre_close 校验；G3-B-012 incomplete/empty 不物化；G3-B-013~016 范围解析（`--range-file` 取 coverage_by_date 升序去重；默认排除最早日；`--range-file` 与 start/end 互斥 → 1；start 缺 end → 1；无范围来源 → 1；canary/范围来源互斥三负例：`--canary-date` + `--range-file` → 1、`--canary-date` + 成对 `--start-date`/`--end-date` → 1、`--canary-date` + 不成对 start/end → 1〔按缺配对〕；canary 单日模式无范围来源时合法 → 0/dry-run 计划）；G3-S-002~013 触发路径；G3-V-001~004 写后读回；canary 不进入全量（G3-S-008）；**per-day 查询预算模型（G3-B-017~020：跨 10 日 mock 每日 62 行，验证 reader.reset_stats() 使累计不跨日累加 → 全量退出码 0 不命中 BudgetViolation；单日注入 125 行 mock → G3-S-013 退出码 2；BudgetReader cumulative_rows_limit=None 时全局 100k 不触发；扫描保护仍强制：空 filter → BudgetViolation、单次 find >1000 → BudgetViolation；report 含 days[].query_budget + summary.total_query_rows（= 保留的逐日记录求和）+ summary.day_rows_limit；G3-S-013 失败日记录保留于 failed_days[]（observed=125 / day_limit=124 / stop_id）且 resumption_boundary=前一日）** |
-| `test_sector_ranking_rollout_gate4.py` | G4-V-001~008 全部 smoke 用例（complete/empty/非法日期/当日未收盘/跨 dataset 混读/排序/limit/无越权写）；G4-V-004 正/反例（FakeTradeCalendar + fake clock：交易日未收盘 → ValueError；已收盘 → 不抛错；非交易日 → empty token）；G4-S-002~008 触发路径；binding fail-closed（disable 后读取拒绝）；policy fail-closed（无日历证据 → 拒绝读）；`--enable` 顺序（pre-smoke → binding → post-smoke）；回滚预案（G4-V-104） |
+| `test_sector_ranking_rollout_gate3.py` | G3-S-002（expected-file schema：缺 `expected_full_symbols` → 1；参数层 fail-fast，不等 process_day）；G3-B-002 日级原子（一日失败停止后续）；G3-B-003 升序处理；G3-B-004 前一日推导（**V0.10：range-file 首日 `dates[0]=2021-12-14` 的 prev = 被剔除的 `excluded_first=2021-12-13`（满覆盖日）→ 正常 complete，不误判 empty；paired 显式含满覆盖键集最早日 2021-12-13 → 无计划内 prev → 探测 2021-12-10（部分覆盖）→ 缺 prev close → empty/incomplete → G3-S-005/004 停止，不降级**）；G3-B-007 日期转换；G3-B-008 重算 pct_chg（禁止上游值）；G3-B-009/010 rt 剔除、close/pre_close 校验；G3-B-012 incomplete/empty 不物化；**G3-B-013~016 范围解析（V0.10 对齐 RFC V0.6 / SPEC V0.7，`parse_coverage_by_date` / `resolve_range` / `RangePlan` 直测）**：`--range-file` 经 `parse_coverage_by_date` 取 coverage_by_date 中可解析且数值 ratio==1.0 的键、升序去重、**禁止以全部键作为 range**；默认剔除最早满覆盖日（`excluded_first`）→ 计划首日为第二早；**range-file 正常**：coverage_by_date 全合格 → `RangePlan.dates == full_coverage_dates[1:]`；**显式完整子范围**：成对 start/end 均在满覆盖键集且区间全为满覆盖日 → dates = 交集，正常执行；**全键包含 partial**：coverage_by_date 含 ratio<1.0 部分覆盖日 → 仅取 ratio==1.0 键，partial 排除且正常执行（不 fail-fast）；**invalid/missing/nonfinite ratio**：ratio 缺失 / 非数值 / NaN / inf → 1（G3-S-003，参数层 fail-fast）；**非 canonical 日期**：日期键 `20260730` / `2026/07/30` → 1（G3-S-003，禁止静默忽略）；**range 边界越界**：paired start 或 end 不在满覆盖键集 → 1；paired 区间含部分覆盖日/无覆盖日 → 1（G3-S-003，不静默跳过部分日）；`--range-file` 与 start/end 互斥 → 1；start 缺 end → 1；无范围来源 → 1；canary/范围来源互斥三负例：`--canary-date` + `--range-file` → 1、`--canary-date` + 成对 `--start-date`/`--end-date` → 1、`--canary-date` + 不成对 start/end → 1〔按缺配对〕；canary 单日模式无范围来源时合法 → 0/dry-run 计划）；**无副作用 spy（V0.10）**：任一 G3-S-002/G3-S-003 fail-fast 时注入 mock reader/writer spy，断言 **0 fetch / 0 upsert / 0 readback**（fail-fast 发生于 process_day 之前）；G3-S-002~013 触发路径；G3-V-001~004 写后读回；canary 不进入全量（G3-S-008）；**per-day 查询预算模型（G3-B-017~020：跨 10 日 mock 每日 62 行，验证 reader.reset_stats() 使累计不跨日累加 → 全量退出码 0 不命中 BudgetViolation；单日注入 125 行 mock → G3-S-013 退出码 2；BudgetReader cumulative_rows_limit=None 时全局 100k 不触发；扫描保护仍强制：空 filter → BudgetViolation、单次 find >1000 → BudgetViolation；report 含 days[].query_budget + summary.total_query_rows（= 保留的逐日记录求和）+ summary.day_rows_limit；G3-S-013 失败日记录保留于 failed_days[]（observed=125 / day_limit=124 / stop_id）且 resumption_boundary=前一日）** |
+| `test_sector_ranking_rollout_gate4.py` | G4-V-001~008 全部 smoke 用例（complete/empty/非法日期/当日未收盘/跨 dataset 混读/排序/limit/无越权写）；G4-V-004 正/反例（FakeTradeCalendar + fake clock：交易日未收盘 → ValueError；已收盘 → 不抛错；非交易日 → empty token）；**契约 A（G4-P-011~015 / G4-V-107/108，V0.11）**：`--calendar-file` 合法 → literal CLI 无 wrapper 构造 policy、enable 全路径走通；缺失/不可读/JSON 非法/schema 非法 → G4-S-002（退出码 2）+ **0 fetch / 0 smoke / 0 write（`_ForbiddenClientFactory` spy 断言）**；伪造 calendar（coverage_by_date / FakeTradeCalendar / 硬编码）→ 拒绝；**契约 B（G4-B-001~006 / G4-V-106，V0.11）**：全 precondition 通过 → binding=true → post-smoke 通过 → binding=true（binding_events 顺序 precondition-pass → write_binding(true) → post-smoke）；scope_diff 含 manifest 内 dirty → exit 2 + binding remains false（binding_events **无** write_binding(true) 条目）；post-smoke 注入失败 → exit 2 + 自动 `write_binding(False)` + binding_events 含 rollback(false)，最终态 false；`--disable` 回滚 drill（G4-V-104）；**契约 C（G4-B-006 / G4-V-109，V0.11）**：fixture 工作树 manifest 内 dirty → G4-S-003 + binding remains false；清单外 dirty 记入 scope_diff 不触发停止；binding fail-closed（disable 后读取拒绝）；policy fail-closed（无日历证据 → 拒绝读） |
+
+### 5.1.bis 契约 A/B/C 新增/改动测试失败模式（V0.11；每个测试「实现错则断言失败」的可证伪点）
+
+| 测试 | 场景 | 断言 | 捕获的实现错误（失败模式） |
+|---|---|---|---|
+| gate4：`test_enable_no_calendar_file_fails_before_conn` | `--enable --apply --yes` 无 `--calendar-file` | exit 2；`_ForbiddenClientFactory` 0 次调用（0 fetch）；binding 文件不存在/仍 false | 实现漏掉 `--calendar-file` 必填校验（S0）→ 测试 FAIL |
+| gate4：`test_calendar_file_invalid_schema_fails` | `--calendar-file` JSON 非法 / schema 非法（缺字段、timezone≠Asia/Shanghai、cutoff≠15:00、非 canonical 日期） | exit 2；0 fetch / 0 smoke / 0 write | `load_calendar_evidence` 校验放宽 → 负例不抛错 → 测试 FAIL |
+| gate4：`test_forbidden_fake_calendar_rejected` | 以 `coverage_by_date` / `FakeTradeCalendar` / 硬编码日历构造 policy | 拒绝（异常 / 断言） | 实现允许伪造 calendar 构造（G4-P-012 违反）→ 测试 FAIL |
+| gate4：`test_enable_full_path_binding_events_order` | 合法 `--calendar-file` + mongomock 全 precondition 通过 | binding=true；binding_events = precondition-pass → write_binding(true) → post-smoke | 事件顺序错 / 缺 precondition-pass → G4-V-106 FAIL |
+| gate4：`test_scope_diff_dirty_binding_never_written` | fixture 工作树 manifest 内 dirty | exit 2；binding remains false；binding_events **无** write_binding(true) | **P0-016-1 回归**：实现仍在 write 后跑 scope_diff（:391-396 旧序）→ binding 残留 true → 测试 FAIL |
+| gate4：`test_post_smoke_failure_auto_rollback` | post-smoke 注入失败 | exit 2；自动 `write_binding(False)`；binding_events 含 rollback(false)；最终态 false | 实现不自动回滚（旧 except 处理器 :435-443 行为）→ binding 残留 true → 测试 FAIL |
+| gate4：`test_out_of_manifest_dirty_no_stop` | 清单外 dirty（03-014/sentiment） | exit 0（成功）；scope_diff 记录不停止 | 实现误把清单外 dirty 当 G4-S-003 → 假阳性停止 → 测试 FAIL |
+| common：`test_load_calendar_evidence_valid` | 合法 schema | CalendarEvidence 字段正确 | loader 字段解析错 → 测试 FAIL |
+| common：`test_load_calendar_evidence_invalid` | 5 类 schema 非法变体 | 每类抛 `CalendarEvidenceError` | loader 校验放宽 → 负例不抛错 → 测试 FAIL |
+| common：`test_build_policy_from_evidence` | trading_days → TradeCalendar → classify | classify 与 trading_days 一致 | 构造错（查错集 / 未用 evidence）→ 测试 FAIL |
+| common：`test_sha256_file` | 已知内容文件 | sha256 == 预期 | 哈希实现错 → 测试 FAIL（G4-P-015） |
 
 ### 5.2 集成测试
 
 - 每个 Gate 用 mongomock + fixture（`make_mongomock_db` 的**新增** `sector_ranking_rollout_fixtures.py` 版本）端到端跑 `main(argv)`：dry-run 零副作用 → apply 产生 report → 断言 report 与退出码。
-- Gate-3 集成：fixture 中构造 31 个 SW L1 code 的连续 3 个交易日文档 → canary + 全量 → 写后读回全部 PASS；**额外多日预算集成（G3-B-017~020）：构造连续 10 个交易日（每日 62 行）→ 全量 apply 退出码 0，验证 reader.reset_stats() 使累计不跨日累加（summary.total_query_rows ≈ 620 = 保留的 days[].query_budget 求和，无 BudgetViolation）；构造 1 个异常日（125 行）→ 退出码 2（G3-S-013），failed_days[] 保留该日（observed=125 / day_limit=124 / stop_id），resumption_boundary 记录前一日**。
-- Gate-4 集成：fixture 物化 canary 日数据 → `--enable` 全套 smoke → `--disable` 回滚证明。
+- Gate-3 集成：fixture 中构造 31 个 SW L1 code 的连续 3 个交易日文档 → canary + 全量 → 写后读回全部 PASS；**range 契约 fail-fast 集成（V0.10）：`--range-file` 指向无 ratio==1.0 键（空 / 全部 ratio<1.0 / 全部不可解析）或含非法 ratio（缺失 / 非数值 / NaN / 非 canonical 日期键）的 report → 退出码 1，注入 spy 断言 0 fetch / 0 upsert / 0 readback；paired 越界（start/end 或区间含非满覆盖日）同理 → 退出码 1**；**额外多日预算集成（G3-B-017~020）：构造连续 10 个交易日（每日 62 行）→ 全量 apply 退出码 0，验证 reader.reset_stats() 使累计不跨日累加（summary.total_query_rows ≈ 620 = 保留的 days[].query_budget 求和，无 BudgetViolation）；构造 1 个异常日（125 行）→ 退出码 2（G3-S-013），failed_days[] 保留该日（observed=125 / day_limit=124 / stop_id），resumption_boundary 记录前一日**。
+- Gate-4 集成（契约 A/B/C，V0.11）：fixture 物化 canary 日数据 + `make_calendar_evidence(tmp_path)` → literal CLI `--enable --apply --yes --calendar-file <合法>` 全套 smoke → binding=true（binding_events 顺序正确）；`--disable --apply --yes` 回滚证明（G4-V-104）；**失败注入**：scope_diff 含 manifest 内 dirty → exit 2 + binding remains false（无 write_binding(true) 事件）；post-smoke 注入失败 → exit 2 + 自动回滚（binding_events 含 rollback(false)，最终态 false）；`--calendar-file` 缺失/非法 → exit 2 + 0 fetch spy 断言。
 
 ### 5.3 手工验证（不可自动化项）
 
 - 真实 Mongo 连接与权限：仅 production activation 卡（§8）由 Pascal 显式触发后验证。
 - 权威 expected universe：Gate-1 真实 smoke 双源核对。
-- 当日未收盘（G4-V-004）生产实况：依赖系统时钟与受控 live calendar evidence（§3.3.5/§8.4）；离线单测由 FakeTradeCalendar + fake clock 注入确定性覆盖（正/反例）。
+- 当日未收盘（G4-V-004）生产实况：依赖系统时钟与受控 calendar evidence（契约 A，§3.3.5.bis `--calendar-file`；§3.7.4.bis S3）；离线单测由 FakeTradeCalendar + fake clock 注入确定性覆盖（正/反例）。
 
 ### 5.4 回归范围
 
@@ -932,7 +1170,11 @@ Gate-4（读）:     03_data_ud_sector_ranking_daily(RO)
 | 身份泄露（连接值/密码进日志） | `redact()` + `scan_secrets` + 静态扫描 | SC-016-G0-1 停止；rotate 后重跑 |
 | Gate-4 激活后查询行为与离线不符 | 冻结 service 复用 + pre/post-smoke + token 逐字断言 | `--disable` 立即禁用 binding；数据保留 |
 | consumer 集成需求被误并入 Gate-4 | 显式 scope diff（G4-S-003/004） | 独立变更上报 Pascal（G4-R-005） |
-| 生产无受控交易日历证据（今日是否交易日/收盘状态未知） | CompletedSessionPolicy fail-closed（G4-P-008/009） | Gate-4 卡先取得受控 live calendar evidence；未确认不激活 binding；不猜测 |
+| 生产无受控交易日历证据（今日是否交易日/收盘状态未知） | CompletedSessionPolicy fail-closed（G4-P-008/009）+ 契约 A `--calendar-file`（G4-P-011~015） | Gate-4 卡先取得受控 calendar evidence；未确认不激活 binding；不猜测 |
+| **Gate-4 fail-closed 原子性缺陷（P0-016-1，已发生）** | 已发生 | 高 | enable 路径 `write_binding(True)` 在 strict `scope_diff` 之前 + 失败不自动回滚 → binding 残留 enabled=true（实物 `gate4-report-20260803T105744.json`：before=false/after=true/stop=G4-S-003；105826/105832 同态；105840 人工 disable 回滚）。**修复契约 B（§3.7.4.bis）**：precondition（含 scope/baseline diff）全前置、post-smoke 失败自动 `write_binding(False)` 回滚、binding_events 审计；T3 落实、T4 失败注入实测 | 当前 binding 已人工回滚至 `enabled=false`（fail-closed 恢复）；修复前禁止 enable/disable |
+| **literal CLI 无法构造 policy（P0-016-2，已发生）** | 已发生 | 高 | `main(policy=...)` 仅 Python 注入，literal CLI 必 G4-S-002（实物 `gate4-report-20260803T105510.json`）；旧卡 `t_aaeb7319` 以 `/tmp` wrapper + `FakeTradeCalendar(coverage_by_date ∪ {today})` 绕过（伪造 calendar，被禁止）。**修复契约 A（§3.3.5.bis/§3.7.4）**：`--calendar-file` 构造 + fail-stop（G4-S-002，0 fetch/0 smoke/0 write）+ 禁伪造 | 修复前 Gate-4 保持 NO-GO；禁 wrapper/`/tmp`/REPL 注入 |
+| **manifest 内 dirty 阻断 Gate-4（契约 C 前置缺失）** | 高（当前存在） | 高 | 当前工作树 manifest 内 7 条 dirty（`common.py`、`gate3_backfill.py`、`gate4_activate.py`、fixture、`test_common.py`、`test_gate3.py`、`test_gate4.py`）→ G4-S-003 必然触发。**修复契约 C（§3.7.8）**：修复链 Review PASS 后 Pascal 显式授权 `git add/commit` **10 条 baseline 集路径**（7 manifest 内 + 三层文档）形成可审计基线；**不得用 `git restore`** | activation 保持 NO-GO；不自行 Git 操作 |
+| Verify 凭据授权范围偏差（审计事件 `t_1ae1dc26`，既有事实，2026-08-03 同步） | Verify 卡 `t_1ae1dc26` 在收到独立明示凭据授权选择前，沿用父任务 `t_df73e76d` 对 `skills/.env` 的临时读取例外完成只读 Mongo Verify；数据核验 PASS，无 DML/DDL、无凭据输出或持久化。**该偏差必须作为历史审计事实保留，不得抹除或称为 clean credential closure**；后续 Verify/activation 卡必须取得独立明示的凭据授权选择 | 不触发回滚/重跑；数据证据继续有效；记录在案 |
 
 ---
 
@@ -952,6 +1194,9 @@ Gate-4（读）:     03_data_ud_sector_ranking_daily(RO)
 10. **冻结 token 逐字**：`historical-ranking-empty` / `historical-ranking-incomplete`（import 03-015 常量，不自造）。
 11. 完成后：验收标准全 PASS → `kanban_complete(status="done", summary=..., metadata={...})`；任何 FAIL → `kanban_block(reason="<哪条验收 FAIL + 期望 vs 实际>")`。残余风险（如 OQ-016-1 真实权限未知）属于 done 的 summary/metadata，**不构成 block 理由**（P-5）。
 12. **交易日状态判定只经 `CompletedSessionPolicy`**（§3.3.5）：未来日/当日未收盘 ValueError 由 policy 抛出（ProdRankingReader 读入口），**不得**修改或声称冻结 `HistoricalSectorService` 抛此类异常（F2）。
+13. **契约 A（P0-016-2，V0.11）**：`--calendar-file` 构造 policy 只经 `load_calendar_evidence` + `build_policy_from_calendar_evidence`（common.py §3.3.5.bis）；禁止 wrapper / `/tmp` / REPL 注入、禁止用 `coverage_by_date` / `FakeTradeCalendar` / 硬编码日历构造生产 policy；`__main__` 调用 `main()` 时 `policy=None`（G4-P-014）。
+14. **契约 B（P0-016-1，V0.11）**：enable 路径严格按 §3.7.4.bis 状态机——scope/baseline diff 必须在 `write_binding(True)` **之前**；post-smoke 失败自动 `write_binding(False)` 回滚；`binding_events` 全记录并写入 report（G4-B-004）。
+15. **契约 C（V0.11）**：本链 T3/T4/T5 **不得执行任何 Git 操作**；baseline 只能由 Pascal 授权 GIT-016-1~3 后形成（§3.7.8）；**不把 `git restore` 写为推荐路径**。
 
 ### 7.2 可自行判断
 
@@ -1036,10 +1281,12 @@ python3 -m scripts.unified_data.sector_ranking_rollout.gate3_backfill \
   --range-file data/rollout/sector-ranking/gate1-report.json \
   --apply --yes --report-dir data/rollout/sector-ranking
 
-# 2'. 全量子范围（Pascal 显式指定；成对传入；经 CompletedSessionPolicy 校验已收盘）
+# 2'. 全量子范围（Pascal 显式指定；成对传入；边界必须在满覆盖键集内——V0.10 对齐
+#     RFC V0.6 / SPEC V0.7：start/end 或区间含任何 ratio<1.0 或不在满覆盖键集内的日期
+#     → G3-S-003 fail-fast，不静默跳过；经 CompletedSessionPolicy 校验已收盘）
 python3 -m scripts.unified_data.sector_ranking_rollout.gate3_backfill \
   --expected-file data/rollout/sector-ranking/gate1-report.json \
-  --start-date 2010-01-05 --end-date 2026-07-30 \
+  --start-date 2022-01-04 --end-date 2026-07-30 \
   --apply --yes --report-dir data/rollout/sector-ranking
 ```
 
@@ -1048,11 +1295,17 @@ Verify 全量（G3-V-102~105）：`summary.failed_days==0` 且 `stop_conditions_
 ### 8.4 Gate-4 卡
 
 ```bash
-# 0. 受控 live calendar evidence（F2 闭合，G4-P-009）：operator/Pascal 对照权威来源
-#    确认「今日是否为交易日、是否已收盘（Asia/Shanghai 15:00 CST）」，写入
-#    data/rollout/sector-ranking/gate4-calendar-evidence.json；未确认 → fail-closed 不激活
+# 0. 前置（契约 C，§3.7.8）：修复链 Review PASS → T4/T5 独立验证（scope/test/secret/manifest diff）→
+#    Pascal 显式授权 GIT-016-1~3（git add 10 条 baseline 集路径 + git commit 形成可审计基线）；
+#    activation 卡自身禁 Git
+# 1. 受控 calendar evidence（契约 A，G4-P-009/011）：operator/Pascal 对照权威来源确认
+#    「今日是否为交易日、是否已收盘（Asia/Shanghai 15:00 CST）」，写入
+#    data/rollout/sector-ranking/gate4-calendar-evidence.json
+#    （schema：source / as_of / timezone=Asia/Shanghai / cutoff=15:00 / trading_days，G4-P-011）；
+#    未确认 → fail-closed 不激活
 python3 -m scripts.unified_data.sector_ranking_rollout.gate4_activate \
   --expected-file data/rollout/sector-ranking/gate1-report.json \
+  --calendar-file data/rollout/sector-ranking/gate4-calendar-evidence.json \
   --enable --apply --yes --report-dir data/rollout/sector-ranking
 
 # 回滚演练（Verify 用）：禁用 binding → 证明读取被拒绝 → 重新启用
@@ -1061,7 +1314,7 @@ python3 -m scripts.unified_data.sector_ranking_rollout.gate4_activate \
   --disable --apply --yes --report-dir data/rollout/sector-ranking
 ```
 
-Verify（G4-V-101~105）：smoke 全部 PASS（G4-V-001~008）；warning token 逐字一致；activation 卡路径 allowlist / baseline manifest 与基线 diff 为空（共享树既有 03-015 dirty 不计，OBS-2）；`--disable` 后绑定 reader 拒绝读取（回滚预案可执行）；无 secrets；calendar evidence 存在且与当日分类一致（G4-P-009）。
+Verify（G4-V-101~109，V0.12）：smoke 全部 PASS（G4-V-001~008）；warning token 逐字一致；**binding_events 原子顺序证明（G4-V-106）**；**calendar evidence 真实性（G4-V-107：文件存在 + schema 合法 + report sha256 与文件一致 + 非 coverage_by_date/FakeTradeCalendar/硬编码）**；**无 wrapper（G4-V-108：literal CLI 独立完成 policy 构造与 enable 全流程）**；**baseline clean（G4-V-109：manifest 内 14 条路径已 commit 形成基线、全部 clean，激活运行中 scope_diff 对 manifest 内路径为空；baseline commit 集 10 条含 7 条 manifest 内 dirty + 三层文档）**；`--disable` 后绑定 reader 拒绝读取（回滚预案可执行）；无 secrets。**activation 卡与独立生产 Verify 卡分离（RFC PT-016-7）**：Verify 卡由 yquanttester 单独取得独立明示凭据授权后执行，只读 Mongo、不写 binding、不执行 Git；两张卡不得互相代替。
 
 ### 8.5 失败处理
 
@@ -1077,7 +1330,7 @@ Verify（G4-V-101~105）：smoke 全部 PASS（G4-V-001~008）；warning token �
 
 本设计定义 Gate 工具的**实现与执行设计**，不构成任何真实生产动作的已执行声明；所有 Gate 的真实执行仅在独立 Review PASS 后由 Pascal 逐 Gate 显式触发 production activation 卡。
 
-**Gate-3/4 当前状态（recovery closure 卡 `t_a6b7636e` 复核）**：Gate-3 **全量 backfill 尚未执行/验证**（Gate-3 canonical report 仅显示单日 canary PASS，尚无全量 backfill 成功证据），因此 **Gate-4 consumer binding 仍为 NO-GO**；本设计 **不产出、不暗示任何 activation approval**。Gate-4 只有在全量 backfill 执行并通过独立只读 Verify 后，由 Pascal 显式触发生产 activation 卡时才有可能激活。
+**Gate-3/4 当前状态（修复链同步，2026-08-03，对齐 RFC V0.8 / SPEC V0.9）**：Gate-3 **全量 backfill 已执行并经独立只读 Verify PASS**（1,114 日 / 34,534 行 / 0 failed / 0 stop；canonical report `data/rollout/sector-ranking/gate3-report.json`，2026-08-03T09:03:41Z；Verify 卡 `t_1ae1dc26`）。本修复链（T1~T5）**不回滚、不重跑、不触碰已有 34,534 行**。**Gate-4 consumer binding 仍为 NO-GO / P0 BLOCKED**：P0-016-1（fail-closed 原子性，实物 `gate4-report-20260803T105744.json` binding after=true + G4-S-003）与 P0-016-2（literal CLI policy 构造，实物 `gate4-report-20260803T105510.json` G4-S-002）为**真实 blocker**（RFC §1/§2.4/§5.5、SPEC §9）；虽已获 Pascal 授权（生产读路径绑定），但本修复链 Review PASS 前禁止 enable/disable。修复契约 A/B/C（§3.3.5.bis / §3.7.4.bis / §3.7.8）经 T3~T5 落实并独立验证、且契约 C baseline 形成（Pascal 授权 GIT-016-1~3 提交 10 条 baseline 集路径）后，才允许创建真实 activation + 独立 Verify 卡。本设计 **不产出、不暗示任何 activation approval**；**不把 P0 blocker 以 APPROVE/PASS 掩盖**。
 
 ---
 
@@ -1085,6 +1338,9 @@ Verify（G4-V-101~105）：smoke 全部 PASS（G4-V-001~008）；warning token �
 
 | 版本 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
+| V0.12（Contract C baseline 集合对齐，本卡 `t_ea99efaa`） | 2026-08-03 | P0 Principal（Full Flow Contract C 对齐卡，仅三层文档）：**baseline 授权集合与 `gate4_activate.py` 实物 `BASELINE_MANIFEST` 对齐**——① 实物核对 `BASELINE_MANIFEST`（gate4_activate.py:62-77）共 **14 条路径**（scripts 7 + data 目录 1 + tests 6），当前工作树 **manifest 内 dirty 恰 7 条**（`common.py`、`gate3_backfill.py`、`gate4_activate.py`、`sector_ranking_rollout_fixtures.py`、`test_sector_ranking_rollout_common.py`、`test_sector_ranking_rollout_gate3.py`、`test_sector_ranking_rollout_gate4.py`；T3 Gate-4 修复 5 文件 + Gate-3 range 修复 2 文件）；三层文档**不在 manifest 内**（docs dirty 属 out_of_manifest，记录不停止）；② §3.7.8 区分 **baseline commit 集（10 条：7 manifest 内 + 三层文档）** 与 **activation manifest-relevant required clean set（manifest 14 条全部 clean）**，明确旧「五候选路径」不足以通过 activation（`common.py`/`gate4_activate.py`/fixture/`test_common.py`/`test_gate4.py` 仍 dirty → G4-S-003 必触发）；③ GIT-016-1 改为逐路径列出 10 条 `git add` 目标；禁止 `git add -A/.`、restore/reset/stash/clean；④ 新增 baseline 形成前独立 scope/test/secret/manifest diff 验证（§3.7.8）；⑤ 明确本卡不构成 Git commit / activation / production credential 许可；⑥ §3.1.1.bis 明确不修改、§1 决策表、§3.2 控制流、§7.2 风险表、§8.4 命令、Verify 判定、§9 声明同步。**未改变** Gate 业务语义、退出码总体集合（仍 0/1/2/3/4）、per-day budget 模型（G3-B-017~020）、L1 契约、连接源、原 T3 allowlist 总数（仍 14）、契约 A/B 语义、Gate-3 已执行实物（34,534 行不回滚/不重跑）、生产授权边界。Gate-4 保持 **NO-GO / P0 BLOCKED**。来源 RFC V0.7 → V0.8、来源 SPEC V0.8 → V0.9 | YQuant-Principal |
+| V0.11（Full Flow Gate-4 P0 修复链 T2 Design，卡 `t_702b97fe`） | 2026-08-03 | P0 Principal（Full Flow T2，仅文档）：**Gate-4 P0 修复 Design 与 RFC V0.7 / SPEC V0.8 完全一致**——① **契约 A（§3.3.5.bis G4-P-011~015）**：新增 `CalendarEvidence` + `load_calendar_evidence` / `build_policy_from_calendar_evidence` / `sha256_file`（common.py，§3.1.1.bis）：`--calendar-file` schema 校验（source/as_of/timezone=Asia/Shanghai/cutoff=15:00/trading_days）、fail-stop（G4-S-002，退出码 2，0 fetch / 0 smoke / 0 write）、禁止伪造 calendar（coverage_by_date/FakeTradeCalendar/硬编码）、证据入报告（sha256）、`main(policy=...)` 仅测试注入 + `__main__` policy=None。② **契约 B（§3.7.4.bis G4-B-001~006）**：enable 原子 fail-closed 状态机（S0 ARGS→S1 CONN→S2 POLICY→S3 PRE_SMOKE→S4 SCOPE_DIFF→S5 WRITE_TRUE→S6 POST_SMOKE→S7 PROOF→S8 OK）——scope/baseline diff 移至 `write_binding(True)` **之前**（P0-016-1 修复核心）；任一 precondition 失败 binding 从未写入 true；post-smoke 失败自动 `write_binding(False)` 回滚 + binding_events；§3.7.6 停止条件映射修订（G4-S-002 扩展 policy 构造失败、G4-S-003/004 precondition 阶段、G4-S-005~008 自动回滚语义）。③ **§3.7.5 report** 新增 binding_events + calendar_evidence；§3.7.1 BindingState 明确 binding_state.json schema 不变（binding_events 只在 report）。④ **§3.7.7 错误/回滚矩阵**（每 SC → binding 最终态 + binding_events 内容 + 退出码）。⑤ **§3.7.8 契约 C baseline 动作计划**（五候选路径 + commit 前独立验证 + Pascal 授权 GIT-016-1~3；禁 restore 为推荐路径；activation 卡禁 Git；清单外 dirty 记录不停止；后继隔离 PT-016-6/7）。⑥ **§3.1.1.bis 修复链 T3 allowlist**（5 文件修改，全部 ⊂ 原 14 allowlist；prod_repository.py 明确不修改的理由；不新增文件/依赖）。⑦ §5.1/§5.2 测试矩阵补契约 A/B/C 用例与失败模式（`_ForbiddenClientFactory` spy 0 fetch 断言、binding_events 顺序、scope_diff 前置、post-smoke 自动回滚、baseline dirty 场景）；§3.2/§3.9/§6/§7.1/§8.4 同步（G4-V-101~109、--calendar-file 命令、15 条交接规则）。⑧ §9 声明 Gate-4 保持 **NO-GO / P0 BLOCKED**（P0-016-1/P0-016-2 为真实 blocker，不掩盖）。**未改变** Gate 业务语义、退出码总体集合（仍 0/1/2/3/4）、per-day budget 模型（G3-B-017~020）、L1 契约、连接源、原 T3 allowlist 总数（仍 14）、Gate-3 已执行实物（34,534 行不回滚/不重跑）。来源 RFC V0.6 → V0.7、来源 SPEC V0.7 → V0.8 | YQuant-Principal |
+| V0.10（Full Flow T2 Design 同步，卡 `t_03ffa0c5`） | 2026-08-03 | P0 Principal（Full Flow T2，仅文档）：**Gate-3 range 契约修复与 fail-fast 与 RFC V0.6 / SPEC V0.7 完全一致**——① §3.6.3 新增可测试的 `coverage_by_date` 解析辅助函数边界（`parse_coverage_by_date` / `resolve_range` / `RangePlan` / `CoverageSet` / `RangeParamError`）：日期键必须可解析为 canonical `YYYY-MM-DD` 且经 03-015 `is_valid_trade_date`，ratio 必须存在且 `coerce_float` 可转换为 finite 数值并严格 `==1.0` 才纳入满覆盖键集；缺失 / 非数值 / NaN / inf / 非 canonical 日期键 → 参数层 fail-fast（G3-S-003，EXIT_PARAM(1)），**禁止静默忽略**；部分覆盖日（ratio 可解析 finite 但 !=1.0）排除、不 fail-fast。② `--range-file` **使用所有合格满覆盖日并默认剔除最早满覆盖日**（`excluded_first`，G3-B-016），禁止以 `coverage_by_date` 全部键作为 range；成对 `--start-date`/`--end-date` **先校验格式 `YYYY-MM-DD` 与顺序 `start<=end`，再仅在满覆盖键集取交集**，用户边界或区间含非满覆盖日 → G3-S-003 fail-fast（不静默跳过部分日，paired 不能绕过 ratio 过滤）。③ §3.6.4/§3.6.7 明确所有范围 fail-fast 均发生于 `process_day` 之前：**0 fetch / 0 upsert / 0 readback**。④ §3.6.6 report `range` 字段对齐 `RangePlan`（`mode` / `start` / `end` / `excluded_first` / `full_coverage_days`）。⑤ §5.1/§5.2 测试矩阵补齐 range 契约用例（range-file 正常、显式完整子范围、全键含 partial、invalid/missing/nonfinite ratio、非 canonical 日期、range 边界越界、默认剔除首日、**无副作用 spy**）。⑥ §8.3 子范围示例边界修正（`2010-01-05` → `2022-01-04`，须在满覆盖键集内）。⑦ §9 声明同步：Gate-3 已执行并经独立只读 Verify PASS（1,114 日 / 34,534 行 / 0 failed / 0 stop），Gate-4 已获 Pascal 授权但本修复链 Review PASS 前禁止 enable/disable（不得设计或执行 binding 变更），本修复不回滚/不重跑/不触碰已有 34,534 行。⑧ §6 风险表固化 Verify 凭据授权范围偏差审计事件（卡 `t_1ae1dc26`），不表述为 clean closure。**未改变** Gate 业务语义、退出码总体集合（仍 0/1/2/3/4）、per-day budget 模型（G3-B-017~020）、L1 契约、连接源、T3 allowlist 总数（仍 14）、生产授权边界。来源 RFC V0.5 → V0.6、来源 SPEC V0.6 → V0.7 | YQuant-Principal |
 | V0.9（recovery closure `t_a6b7636e` 收口 — 补齐残留指针/状态声明） | 2026-08-02 | P0 Principal recovery（任务 `t_a6b7636e`，替代 timeout 的 Gate-4 readiness 卡 `t_e30dc947`，只读核验 + 授权包）：**补齐 V0.9 修订在正文中的残留漂移**——① §9 声明固化执行状态：**Gate-3 全量 backfill 尚未执行/验证（canonical report 仅单日 canary PASS）→ Gate-4 consumer binding 仍为 NO-GO**，本层文档不产出 activation approval；② 与 RFC V0.5 / SPEC V0.6 的 provenance 指针核对一致（本设计来源 RFC V0.5、来源 SPEC V0.6）；③ 旧数值 6,421/398,102 在 V0.7 行标注 superseded history，不再承担现行行为语义。**未改变** Gate 契约、数值边界（1,114 日 / 69,068 行）、退出码总体集合（仍 0/1/2/3/4）、per-day budget 模型、L1 契约、连接源、T3 allowlist 总数（14）、生产授权边界。RFC V0.5、SPEC V0.6 同步收口 | YQuant-Principal |
 | V0.9（Gate-4 readiness 卡 `t_e30dc947` 全量范围契约校正） | 2026-08-02 | P0 Principal readiness（任务 `t_e30dc947`，只读核验 + 授权包）：**全量 backfill 范围契约与 Gate-1 实物证据不一致校正**——Gate-1 report（2026-08-01T07:27:03Z）`coverage_by_date` 6,422 键中仅 1,115 个 ratio==1.0 满覆盖日（2021-12-13 → 2026-07-30，= canary_candidates 全集）；5,307 个部分覆盖日（observed=16/27/28）在 100% exact-match（G3-S-004）下必然 incomplete 停止。① §3.6.3 `--range-file` 范围限定为 `coverage_by_date` 中 ratio==1.0 的键（不取全部键），默认排除 ratio==1.0 键集中最早满覆盖日 2021-12-13 → 计划 1,114 日（2021-12-14 → 2026-07-30）；② §3.6.4 reader 生命周期与 §3.3.3 G3-B-019 数值同步：全量累计 6,421 × 62 = 398,102 → 1,114 × 62 = 69,068（informational）；③ §3.6.6 `summary.total_query_rows` 期望值同步（planned_days = 1,114 → ~69,068）。**未改变** Gate-4 契约、退出码总体集合（仍 0/1/2/3/4）、per-day budget 模型、L1 契约、连接源、T3 allowlist 总数（14）、生产授权边界。RFC 更新至 V0.5、SPEC 更新至 V0.6 | YQuant-Principal |
 | V0.8（Design Gate `t_1f6c001b` REVISE 七项 minor 闭合） | 2026-08-01 | P0 Principal amendment（任务 `t_f7922150`），Design Gate `t_1f6c001b` REVISE（0 blocker / 0 major / 7 minor）全部闭合：M1 §3.3.3 `BudgetReader.__init__` 签名补 `day_rows_limit`（类级默认 `None`=不启用，Gate-3 `main` 显式传 `4*len(expected)`）；M2 `reset_stats()` 定义固化——**同时**清零累计计数器（`cumulative_rows`）与 stats 列表，job 级聚合在 reset 外基于保留记录（reset-safe）；M3 SPEC G3-B-018 公式校正为 `4 × len(expected_sector_codes)` = 124（SPEC V0.5）；M4 §3.6.6 `summary.total_query_rows` 与顶层 `query_budget` 定义为**保留的逐日记录**（days[] ∪ failed_days[]）求和（informational，不读 reader 实时累计状态）；M5 report schema 新增 `failed_days[]`（trade_date/status/observed/day_limit/stop_id/ms/query_budget），G3-S-013 失败日必须保留即使不进成功 `days[]`；M6 fixture allowlist 全篇对齐实际文件名 `sector_ranking_rollout_fixtures.py`（§3.1.1/§4.2/§5.1/§5.2/§7.2/§7.4）；M7 §2.1 工作树声明替换为共享目录基线措辞（11 文件快照非归属证明，Verify/Review 用路径过滤归属，不做 mtime/dirty 总数等易变声明），§4.6 验收同步。**未改变** Gate 业务语义、退出码总体集合（仍 0/1/2/3/4）、L1 契约、Gate-2 namespace/唯一索引、canonical 排序/读回、既有 G3-V 检查、连接源、T3 allowlist 总数（14）、生产授权边界。RFC 更新至 V0.4、SPEC 更新至 V0.5 | YQuant-Principal |

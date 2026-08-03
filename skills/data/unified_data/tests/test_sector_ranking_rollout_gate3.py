@@ -378,8 +378,13 @@ class TestRangeResolution:
             end_date=None,
             policy=None,
         )
-        assert plan.mode == "range"
+        assert plan.mode == "range-file"
         assert plan.dates == ["2026-07-13", "2026-07-14"]
+        assert plan.full_coverage_dates == (
+            "2026-07-10",
+            "2026-07-13",
+            "2026-07-14",
+        )
         assert plan.excluded_first == "2026-07-10"
 
     def test_range_file_dedups_and_sorts(self, tmp_path):
@@ -553,6 +558,110 @@ class TestRangeResolution:
             )
         assert exc.value.sc_id == "G3-S-003"
 
+    def test_range_file_filters_partial_dates_before_excluding_earliest(self, tmp_path):
+        from scripts.unified_data.sector_ranking_rollout.gate3_backfill import resolve_range
+
+        report = _load_report(tmp_path)
+        report["coverage_by_date"]["2026-07-09"] = {
+            "expected": 3,
+            "observed": 2,
+            "ratio": 2 / 3,
+        }
+        report["coverage_by_date"]["2026-07-13"]["ratio"] = 0.5
+        plan = resolve_range(
+            report,
+            canary_date=None,
+            range_file="x.json",
+            start_date=None,
+            end_date=None,
+            policy=None,
+        )
+        assert plan.full_coverage_dates == ("2026-07-10", "2026-07-14")
+        assert plan.excluded_first == "2026-07-10"
+        assert plan.dates == ["2026-07-14"]
+
+    @pytest.mark.parametrize("ratio", [None, "bad", float("nan"), float("inf"), float("-inf")])
+    def test_invalid_or_nonfinite_ratio_exit_param(self, tmp_path, ratio):
+        from scripts.unified_data.sector_ranking_rollout.gate3_backfill import (
+            Gate3Stop,
+            parse_coverage_by_date,
+        )
+
+        report = _load_report(tmp_path)
+        if ratio is None:
+            report["coverage_by_date"]["2026-07-13"].pop("ratio")
+        else:
+            report["coverage_by_date"]["2026-07-13"]["ratio"] = ratio
+        with pytest.raises(Gate3Stop) as exc:
+            parse_coverage_by_date(report["coverage_by_date"])
+        assert exc.value.sc_id == "G3-S-003"
+        assert exc.value.exit_code == EXIT_PARAM
+
+    @pytest.mark.parametrize("key", ["20260713", "2026/07/13", "2026-7-13"])
+    def test_noncanonical_coverage_key_exit_param(self, tmp_path, key):
+        from scripts.unified_data.sector_ranking_rollout.gate3_backfill import (
+            Gate3Stop,
+            parse_coverage_by_date,
+        )
+
+        report = _load_report(tmp_path)
+        report["coverage_by_date"][key] = report["coverage_by_date"].pop("2026-07-13")
+        with pytest.raises(Gate3Stop) as exc:
+            parse_coverage_by_date(report["coverage_by_date"])
+        assert exc.value.sc_id == "G3-S-003"
+        assert exc.value.exit_code == EXIT_PARAM
+
+    @pytest.mark.parametrize("coverage", [{}, {"2026-07-13": {"ratio": 0.5}}])
+    def test_no_full_coverage_date_exit_param(self, coverage):
+        from scripts.unified_data.sector_ranking_rollout.gate3_backfill import (
+            Gate3Stop,
+            parse_coverage_by_date,
+        )
+
+        with pytest.raises(Gate3Stop) as exc:
+            parse_coverage_by_date(coverage)
+        assert exc.value.sc_id == "G3-S-003"
+        assert exc.value.exit_code == EXIT_PARAM
+
+    def test_explicit_range_containing_partial_date_exit_param(self, tmp_path):
+        from scripts.unified_data.sector_ranking_rollout.gate3_backfill import (
+            Gate3Stop,
+            resolve_range,
+        )
+
+        report = _load_report(tmp_path)
+        report["coverage_by_date"]["2026-07-13"]["ratio"] = 0.5
+        with pytest.raises(Gate3Stop) as exc:
+            resolve_range(
+                report,
+                canary_date=None,
+                range_file=None,
+                start_date="2026-07-10",
+                end_date="2026-07-14",
+                policy=_policy(),
+            )
+        assert exc.value.sc_id == "G3-S-003"
+        assert exc.value.exit_code == EXIT_PARAM
+
+    def test_explicit_range_boundary_not_full_exit_param(self, tmp_path):
+        from scripts.unified_data.sector_ranking_rollout.gate3_backfill import (
+            Gate3Stop,
+            resolve_range,
+        )
+
+        report = _load_report(tmp_path)
+        report["coverage_by_date"]["2026-07-13"]["ratio"] = 0.5
+        with pytest.raises(Gate3Stop) as exc:
+            resolve_range(
+                report,
+                canary_date=None,
+                range_file=None,
+                start_date="2026-07-13",
+                end_date="2026-07-14",
+                policy=_policy(),
+            )
+        assert exc.value.sc_id == "G3-S-003"
+
     def test_valid_paired_range_selects_coverage_subset(self, tmp_path):
         from scripts.unified_data.sector_ranking_rollout.gate3_backfill import (
             resolve_range,
@@ -567,8 +676,13 @@ class TestRangeResolution:
             end_date="2026-07-14",
             policy=_policy(),
         )
-        assert plan.mode == "range"
+        assert plan.mode == "paired"
         assert plan.dates == ["2026-07-13", "2026-07-14"]
+        assert plan.full_coverage_dates == (
+            "2026-07-10",
+            "2026-07-13",
+            "2026-07-14",
+        )
         assert plan.excluded_first is None
 
 
@@ -798,6 +912,14 @@ DATASET_COLLECTION = "03_data_ud_sector_ranking_daily"
 # ---------------------------------------------------------------------------
 
 
+class _ForbiddenClientFactory:
+    calls = 0
+
+    def __call__(self, **kwargs):
+        self.calls += 1
+        raise AssertionError("range fail-fast must not construct a database client")
+
+
 class TestGate3Main:
     def test_dry_run_returns_zero_without_connection(self, tmp_path):
         from scripts.unified_data.sector_ranking_rollout.gate3_backfill import main
@@ -906,6 +1028,32 @@ class TestGate3Main:
             ["--expected-file", str(report_path), "--report-dir", str(tmp_path / "out")]
         )
         assert rc == EXIT_PARAM
+
+    def test_invalid_range_fail_fast_before_database_side_effects(self, tmp_path):
+        from scripts.unified_data.sector_ranking_rollout.gate3_backfill import main
+
+        report_path = make_gate1_report(tmp_path, universe=EXPECTED_UNIVERSE_SI)
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        report["coverage_by_date"]["2026-07-13"].pop("ratio")
+        report_path.write_text(json.dumps(report), encoding="utf-8")
+        factory = _ForbiddenClientFactory()
+        rc = main(
+            [
+                "--expected-file",
+                str(report_path),
+                "--range-file",
+                str(report_path),
+                "--apply",
+                "--yes",
+                "--report-dir",
+                str(tmp_path / "out"),
+            ],
+            client_factory=factory,
+            env=TEST_ENV,
+        )
+        assert rc == EXIT_PARAM
+        assert factory.calls == 0
+        assert not (tmp_path / "out" / "gate3-report.json").exists()
 
     def test_canary_success_writes_report_and_materializes_day(self, tmp_path):
         from scripts.unified_data.sector_ranking_rollout.gate3_backfill import main

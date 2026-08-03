@@ -366,6 +366,53 @@ def make_binding(tmp_path: Path, *, enabled: bool = False) -> Path:
     return path
 
 
+def make_binding_state(tmp_path: Path, *, enabled: bool = False) -> Path:
+    """契约 A/B fixture：写 ``binding_state.json``（与 ``make_binding`` 等价，
+    显式命名便于 gate4 契约用例引用）。
+
+    与 ``make_binding`` 行为一致；本函数供契约 A/B 测试显式构造 binding 初态。
+    """
+    return make_binding(tmp_path, enabled=enabled)
+
+
+def make_calendar_evidence(
+    tmp_path: Path,
+    *,
+    source: str = "SSE_Exchange_Calendar",
+    as_of: str = "2026-07-31",
+    timezone: str = "Asia/Shanghai",
+    cutoff: str = "15:00",
+    trading_days: Iterable[str] | None = None,
+    filename: str = "calendar-evidence.json",
+) -> Path:
+    """契约 A fixture：写 calendar evidence JSON 到 tmp_path 并返回路径。
+
+    默认 trading_days 为 ``AVAILABLE_DATES`` 加未来日（G4-P-011：含未来日用于
+    判定，只影响分类）；调用方可传任意字段覆盖以构造非法 schema 变体。
+    """
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    days = list(trading_days) if trading_days is not None else [
+        *AVAILABLE_DATES,
+        "2026-08-03",
+    ]
+    path = tmp_path / filename
+    path.write_text(
+        json.dumps(
+            {
+                "source": source,
+                "as_of": as_of,
+                "timezone": timezone,
+                "cutoff": cutoff,
+                "trading_days": days,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
 __all__ = [
     "AVAILABLE_DATES",
     "AVAILABLE_DATES_INTERNAL",
@@ -377,6 +424,8 @@ __all__ = [
     "REFERENCE_CSV_HEADER",
     "SOURCE_DATE_FORMAT",
     "make_binding",
+    "make_binding_state",
+    "make_calendar_evidence",
     "make_expected_universe",
     "make_expected_universe_si",
     "make_gate1_report",

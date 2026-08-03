@@ -10,6 +10,7 @@ reads and zero real I/O** (CL-5).
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import mongomock
 import pytest
@@ -22,6 +23,7 @@ from scripts.unified_data.sector_ranking_rollout.common import (
     EXIT_VERIFY,
     BudgetReader,
     BudgetViolation,
+    CalendarEvidenceError,
     CompletedSessionPolicy,
     ConnLoader,
     FakeTradeCalendar,
@@ -29,10 +31,13 @@ from scripts.unified_data.sector_ranking_rollout.common import (
     REPORT_DIR_DEFAULT,
     SessionStatus,
     TradeCalendar,
+    build_policy_from_calendar_evidence,
+    load_calendar_evidence,
     log_jsonl,
     redact,
     resolve_report_dir,
     scan_secrets,
+    sha256_file,
     write_report,
 )
 
@@ -460,3 +465,124 @@ def _utc(year, month, day, hour, minute, second):
     from datetime import datetime, timezone
 
     return datetime(year, month, day, hour, minute, second, tzinfo=timezone.utc)
+
+
+# ---------------------------------------------------------------------------
+# calendar evidence loader（契约 A，SPEC G4-P-011~015 / DESIGN §3.3.5.bis）
+# ---------------------------------------------------------------------------
+
+
+def _write_evidence(tmp_path, **overrides) -> "Path":
+    from pathlib import Path
+
+    from skills.data.unified_data.tests.fixtures.sector_ranking_rollout_fixtures import (
+        make_calendar_evidence,
+    )
+
+    return make_calendar_evidence(tmp_path, **overrides)
+
+
+class TestCalendarEvidenceLoader:
+    def test_load_valid_schema(self, tmp_path):
+        from scripts.unified_data.sector_ranking_rollout.common import CalendarEvidence
+
+        path = _write_evidence(tmp_path)
+        ev = load_calendar_evidence(path)
+        assert isinstance(ev, CalendarEvidence)
+        assert ev.source == "SSE_Exchange_Calendar"
+        assert ev.as_of == "2026-07-31"
+        assert ev.timezone == "Asia/Shanghai"
+        assert ev.cutoff == "15:00"
+        # 默认 trading_days = AVAILABLE_DATES + 未来日；升序去重
+        assert ev.trading_days == ("2026-07-10", "2026-07-13", "2026-07-14", "2026-08-03")
+
+    def test_load_missing_file_raises(self, tmp_path):
+        with pytest.raises(CalendarEvidenceError):
+            load_calendar_evidence(tmp_path / "does-not-exist.json")
+
+    def test_load_invalid_json_raises(self, tmp_path):
+        path = tmp_path / "bad.json"
+        path.write_text("{not json", encoding="utf-8")
+        with pytest.raises(CalendarEvidenceError):
+            load_calendar_evidence(path)
+
+    def test_load_missing_required_field_raises(self, tmp_path):
+        path = _write_evidence(tmp_path)
+        data = json.loads(path.read_text(encoding="utf-8"))
+        del data["source"]
+        path.write_text(json.dumps(data), encoding="utf-8")
+        with pytest.raises(CalendarEvidenceError, match="missing required field"):
+            load_calendar_evidence(path)
+
+    def test_load_wrong_timezone_raises(self, tmp_path):
+        path = _write_evidence(tmp_path, timezone="UTC")
+        with pytest.raises(CalendarEvidenceError, match="timezone"):
+            load_calendar_evidence(path)
+
+    def test_load_wrong_cutoff_raises(self, tmp_path):
+        path = _write_evidence(tmp_path, cutoff="15:30")
+        with pytest.raises(CalendarEvidenceError, match="cutoff"):
+            load_calendar_evidence(path)
+
+    def test_load_non_canonical_trading_day_raises(self, tmp_path):
+        path = _write_evidence(tmp_path, trading_days=["20260710", "2026-07-13"])
+        with pytest.raises(CalendarEvidenceError, match="trading_days"):
+            load_calendar_evidence(path)
+
+    def test_load_empty_trading_days_raises(self, tmp_path):
+        path = _write_evidence(tmp_path, trading_days=[])
+        with pytest.raises(CalendarEvidenceError, match="trading_days"):
+            load_calendar_evidence(path)
+
+    def test_load_invalid_as_of_raises(self, tmp_path):
+        path = _write_evidence(tmp_path, as_of="2026/07/31")
+        with pytest.raises(CalendarEvidenceError, match="as_of"):
+            load_calendar_evidence(path)
+
+
+class TestBuildPolicyFromEvidence:
+    def test_classify_follows_trading_days(self):
+        from scripts.unified_data.sector_ranking_rollout.common import CalendarEvidence
+
+        ev = CalendarEvidence(
+            source="SSE",
+            as_of="2026-07-31",
+            timezone="Asia/Shanghai",
+            cutoff="15:00",
+            trading_days=("2026-08-01", "2026-08-03"),
+        )
+        policy = build_policy_from_calendar_evidence(ev, now_fn=lambda: _utc(2026, 8, 3, 7, 0, 0))
+        assert policy.classify("2026-08-01") == SessionStatus.PAST_TRADING_DAY
+        assert policy.classify("2026-08-02") == SessionStatus.PAST_NON_TRADING_DAY
+        # 2026-08-03 在 trading_days 中 → 交易日；now=15:00 CST → TODAY_CLOSED
+        assert policy.classify("2026-08-03") == SessionStatus.TODAY_CLOSED
+
+    def test_built_policy_uses_evidence_set_not_fake_calendar(self, tmp_path):
+        # G4-P-012：禁止用 FakeTradeCalendar / coverage_by_date / 硬编码构造生产 policy；
+        # build_policy_from_calendar_evidence 只接受 CalendarEvidence 且从 trading_days 构造。
+        from scripts.unified_data.sector_ranking_rollout.common import CalendarEvidence
+
+        ev = CalendarEvidence(
+            source="SSE",
+            as_of="2026-07-31",
+            timezone="Asia/Shanghai",
+            cutoff="15:00",
+            trading_days=("2026-08-01",),
+        )
+        policy = build_policy_from_calendar_evidence(ev, now_fn=lambda: _utc(2026, 8, 3, 7, 0, 0))
+        # 2026-07-31 不在 evidence trading_days → 非交易日
+        assert policy.classify("2026-07-31") == SessionStatus.PAST_NON_TRADING_DAY
+
+
+class TestSha256File:
+    def test_sha256_matches_known_content(self, tmp_path):
+        path = tmp_path / "evidence.json"
+        path.write_text("hello evidence\n", encoding="utf-8")
+        import hashlib
+
+        expected = hashlib.sha256(b"hello evidence\n").hexdigest()
+        assert sha256_file(path) == expected
+
+    def test_sha256_deterministic(self, tmp_path):
+        path = _write_evidence(tmp_path)
+        assert sha256_file(path) == sha256_file(path)
