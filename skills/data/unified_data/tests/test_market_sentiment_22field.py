@@ -693,3 +693,113 @@ class TestLimitUpPoolRecordRegressionBaseline:
         assert record.symbol == "600519"
         assert record.order_amount == 850_000_000.0
         assert record.consecutive_days == 3
+
+
+# ===========================================================================
+# Test ⑩ — EOD-6 / SPEC-03-014 V0.22 §3.3: total_turnover is permanently None
+# ===========================================================================
+#
+# Per V0.22 §3.3 EOD-6: ``MarketSentimentSnapshot.total_turnover`` is
+# permanently ``None`` on the canonical output path. The single
+# implementation site is :meth:`MarketSentimentSnapshot.from_dict` — the
+# offline default stub payload and both canonical fixtures also carry
+# ``None`` so the contract is enforced at every ingress.
+
+
+class TestTotalTurnoverPermanentlyNone:
+    """``total_turnover`` is permanently ``None`` on the canonical path."""
+
+    def test_offline_default_stub_payload_carries_none(self):
+        """The default :class:`StubSentimentProvider` payload has ``total_turnover=None``."""
+        records = StubSentimentProvider().fetch(
+            "sentiment",
+            "market_snapshot",
+            None,
+        )
+        assert records
+        for record in records:
+            assert record["total_turnover"] is None
+
+    def test_canonical_fixture_record_1_carries_none(self):
+        """The first canonical fixture payload (``sample_market_sentiment_records()[0]``)
+        has ``total_turnover=None``."""
+        records = sample_market_sentiment_records()
+        assert records
+        assert records[0]["total_turnover"] is None
+
+    def test_canonical_fixture_record_2_carries_none(self):
+        """The second canonical fixture payload (extreme bull) also
+        has ``total_turnover=None``."""
+        records = sample_market_sentiment_records()
+        assert len(records) >= 2
+        assert records[1]["total_turnover"] is None
+
+    def test_from_dict_keeps_none_when_source_is_none(self):
+        """``from_dict({..., 'total_turnover': None})`` keeps ``total_turnover=None``."""
+        snap = MarketSentimentSnapshot.from_dict(
+            {
+                "snapshot_date": "2026-07-21",
+                "snapshot_time": "close",
+                "total_turnover": None,
+            }
+        )
+        assert snap.total_turnover is None
+
+    def test_from_dict_clamps_numeric_total_turnover_to_none(self):
+        """``from_dict`` rejects a numeric ``total_turnover`` and
+        coerces it to ``None`` (SPEC EOD-6 Pascal C-style fail-stop,
+        mirroring the ``northbound_net_flow`` pattern)."""
+        snap = MarketSentimentSnapshot.from_dict(
+            {
+                "snapshot_date": "2026-07-21",
+                "snapshot_time": "close",
+                "total_turnover": 850_000_000_000.0,
+            }
+        )
+        assert snap.total_turnover is None, (
+            "EOD-6: total_turnover is permanently None on the canonical "
+            "read path; from_dict must not propagate a numeric value"
+        )
+
+    def test_from_dict_clamps_fabricated_capital_flow_to_none(self):
+        """A pseudo-value (e.g. capital flow) cannot be silently mapped
+        to ``total_turnover`` — :func:`from_dict` coerces to ``None``."""
+        snap = MarketSentimentSnapshot.from_dict(
+            {
+                "snapshot_date": "2026-07-21",
+                "snapshot_time": "close",
+                # 资金净流入 fabricated value — must not survive.
+                "total_turnover": -12345678.9,
+            }
+        )
+        assert snap.total_turnover is None
+
+    def test_from_dict_does_not_mutate_caller_dict(self):
+        """``from_dict`` does not mutate the caller-supplied dict —
+        the canonical ``None`` is only enforced on the resulting
+        dataclass instance (defensive copy semantics)."""
+        source = {
+            "snapshot_date": "2026-07-21",
+            "snapshot_time": "close",
+            "total_turnover": 42.0,
+        }
+        MarketSentimentSnapshot.from_dict(source)
+        # Caller's dict is not mutated — the caller's value is preserved.
+        assert source["total_turnover"] == 42.0
+
+    def test_other_fields_unchanged_when_clamps_total_turnover(self):
+        """The total_turnover fail-stop must not affect any other field."""
+        snap = MarketSentimentSnapshot.from_dict(
+            {
+                "snapshot_date": "2026-07-21",
+                "snapshot_time": "close",
+                "limit_up_count": 7,
+                "advance_count": 1000,
+                "total_turnover": 1.5e12,
+                "northbound_net_flow": 999.0,  # must also be clamped
+            }
+        )
+        assert snap.total_turnover is None
+        assert snap.northbound_net_flow is None
+        assert snap.limit_up_count == 7
+        assert snap.advance_count == 1000

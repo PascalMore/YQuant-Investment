@@ -36,6 +36,19 @@ does not point at any real endpoint; the field is preserved for schema
 completeness but never populated with a non-``None`` value. This is a
 hard constraint (DESIGN §4.2.1, SPEC §14.4.5.2 Pascal C).
 
+EOD-6 — ``total_turnover`` is permanently ``None``
+--------------------------------------------------
+
+Per SPEC-03-014 V0.22 §3.3 EOD-6, ``total_turnover`` is **permanently**
+``None`` on the canonical output path. The dataclass still declares
+the field for schema completeness (so Mongo round-trips stay typed),
+but ``from_dict`` coerces **every** non-``None`` input — including
+fabricated "资金净流入" pseudo-values — to ``None`` on the way out.
+This is the same hard-constraint pattern as ``northbound_net_flow``
+above. The unique implementation site is :meth:`from_dict`; the
+offline stub payload and canonical fixtures must also be explicitly
+``None`` so the contract is enforced at every ingress.
+
 Pascal OQ-2 — temperature
 ------------------------
 
@@ -202,7 +215,13 @@ class MarketSentimentSnapshot:
             total_listed_count=data.get("total_listed_count"),
             # Pascal OQ-2 — temperature is allowed None; no fabrication.
             market_temperature=data.get("market_temperature"),
-            total_turnover=data.get("total_turnover"),
+            # EOD-6 (SPEC V0.22): total_turnover is permanently None on
+            # the canonical output path. Even if upstream supplies a
+            # numeric value (or a fabricated 资金净流入 pseudo-value),
+            # ``from_dict`` coerces it to ``None`` so every ingress
+            # converges on the same hard constraint (mirrors the
+            # ``northbound_net_flow`` fail-stop pattern below).
+            total_turnover=None,
             hot_concepts=data.get("hot_concepts"),
             continuous_limit_up=data.get("continuous_limit_up"),
             max_continuous_days=data.get("max_continuous_days"),

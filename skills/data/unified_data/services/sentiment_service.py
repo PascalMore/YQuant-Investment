@@ -48,7 +48,8 @@ future cross-validation — unused on the read path.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from enum import Enum
+from typing import Any, Protocol, runtime_checkable
 
 from ..adapters import TA_CNMongoAdapter
 from ..adapters.p3_persistence_writer import (
@@ -56,15 +57,128 @@ from ..adapters.p3_persistence_writer import (
     P3_UNIQUE_KEYS_BY_CAPABILITY,
     P3PersistenceWriter,
 )
-from ..exceptions import ProviderUnavailableError
+from ..exceptions import ProviderUnavailableError, UnifiedDataError
 from ..models import DataResult, Market, SecurityId
 from ..models.domain.sentiment import (
     LimitUpPoolRecord,
     MarketSentimentSnapshot,
 )
 from ..router import DataRouter
+# OQ-11 / DESIGN-03-014 V0.32 §OQ-11.2.1 — canonical location of
+# ``SessionStatus`` and ``CompletedSessionPolicy`` migrates to the
+# infra layer (``skills.infra.session_policy``). The service re-
+# exports both names so existing module-level imports
+# (``from skills.data.unified_data.services.sentiment_service
+# import SessionStatus, CompletedSessionPolicy``) keep working
+# unchanged. ``SessionPolicyError`` is imported so the validation
+# helpers can map adapter failures onto the existing
+# ``ProviderUnavailableError`` token without introducing a new
+# public error.
+from skills.infra.session_policy import (
+    SessionStatus as _InfraSessionStatus,
+    CompletedSessionPolicy as _InfraCompletedSessionPolicy,
+    SessionPolicyError,
+)
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# EOD-1 / EOD-2 / EOD-3 closure (SPEC-03-014 V0.22 §3.3 / DESIGN-03-014 V0.29 §5.3)
+# ---------------------------------------------------------------------------
+#
+# This block defines the canonical EOD validation surface for
+# ``sentiment.market_snapshot`` / ``sentiment.limit_up_pool``. It is the
+# **only** validation owner on the read or refresh path (DESIGN EOD-1);
+# domain / provider / router / caller layers must not duplicate the
+# judgement. The validation owner rule and the five stable error codes
+# are frozen by SPEC-03-014 V0.22 §3.3 EOD-1~EOD-6 and inherited as-is
+# by V0.23 (refresh-signature only).
+# ---------------------------------------------------------------------------
+
+
+# OQ-11 / DESIGN-03-014 V0.32 §OQ-11.2.3: canonical location of
+# ``SessionStatus`` and ``CompletedSessionPolicy`` migrates to the
+# infra layer (``skills.infra.session_policy``). The service re-
+# exports both names via module-level aliases so existing callers
+# (and existing tests) that import either symbol from
+# ``skills.data.unified_data.services.sentiment_service`` continue
+# to work unchanged. Behaviour, value, and identity are preserved:
+# ``sentiment_service.SessionStatus is
+# skills.infra.session_policy.SessionStatus`` and the four members
+# are the same Python objects.
+SessionStatus = _InfraSessionStatus
+CompletedSessionPolicy = _InfraCompletedSessionPolicy
+
+
+# Stable error code enum mirrored from SPEC §3.3 EOD-3. The string
+# values are stable public tokens — tests and external callers assert
+# on them. Renaming or widening the set requires a new SPEC iteration.
+CODE_INVALID_DATE_FORMAT = "invalid_date_format"
+CODE_INVALID_SNAPSHOT_TIME = "invalid_snapshot_time"
+CODE_NOT_TRADING_DAY = "not_trading_day"
+CODE_FUTURE_TRADING_DAY = "future_trading_day"
+CODE_SESSION_NOT_COMPLETED = "session_not_completed"
+
+
+class SentimentSessionValidationError(UnifiedDataError):
+    """Stable EOD validation error raised by the service layer (SPEC EOD-3).
+
+    Inherits :class:`UnifiedDataError` so consumers can catch either
+    the base class or this specific subclass. The ``code`` attribute
+    carries one of the five stable canonical codes from
+    SPEC §3.3 EOD-3; ``message`` is a human-readable hint.
+
+    No new codes may be added at the service layer — if an additional
+    failure mode appears it must graduate through a new SPEC iteration
+    first. The error never carries raw query payloads or secrets.
+    """
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+# Canonical ``YYYY-MM-DD`` format pattern. Used by every public ingress
+# to fail fast on non-conforming input before any provider fetch,
+# writer upsert, or cache put (DESIGN EOD-3 / EOD-5).
+_DATE_REGEX = None  # lazy-imported; see :func:_is_canonical_date`.
+
+
+def _is_canonical_date(date: object) -> bool:
+    """Return ``True`` iff ``date`` is a canonical ``YYYY-MM-DD`` string.
+
+    Pure-stdlib check (calendar / datetime are intentionally NOT used
+    here so the T3 path stays side-effect-free — the production
+    calendar reality is owned by the injected
+    :class:`CompletedSessionPolicy`). The check tolerates ``None`` /
+    non-string inputs by returning ``False`` so the caller can map to
+    ``INVALID_DATE_FORMAT`` uniformly.
+    """
+    import re
+
+    if not isinstance(date, str):
+        return False
+    return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", date))
+
+
+def _coerce_session_status_to_code(status: SessionStatus) -> str:
+    """Map a :class:`SessionStatus` verdict to its stable error code.
+
+    Centralised so all four public ingress points share the same
+    mapping table. The mapping is frozen by SPEC §3.3 EOD-3; do not
+    alter without a spec update.
+    """
+    if status == SessionStatus.NOT_A_TRADING_DAY:
+        return CODE_NOT_TRADING_DAY
+    if status == SessionStatus.FUTURE_TRADING_DAY:
+        return CODE_FUTURE_TRADING_DAY
+    if status == SessionStatus.SESSION_NOT_COMPLETED:
+        return CODE_SESSION_NOT_COMPLETED
+    # COMPLETED → caller checks status, not error code.
+    raise AssertionError(
+        f"_coerce_session_status_to_code called with non-error verdict {status!r}"
+    )
 
 
 class MarketSentimentService:
@@ -93,6 +207,7 @@ class MarketSentimentService:
         p3_writer: P3PersistenceWriter | None = None,
         audit_logger: Any | None = None,
         cache_manager: Any | None = None,
+        completed_session_policy: CompletedSessionPolicy | None = None,
     ) -> None:
         """Build the service.
 
@@ -108,12 +223,34 @@ class MarketSentimentService:
                 fail-open audit logger.
             cache_manager: P1 Step-4 cache write target
                 (DESIGN §P1.5.2.bis); ``None`` skips the cache write.
+            completed_session_policy: Optional EOD session-validation
+                seam (SPEC-03-014 V0.22 §3.3 EOD-2). When ``None``
+                (default) the service preserves the legacy offline
+                stub / defer path (no EOD check is performed). When
+                injected, all four public ingress points
+                (``get_market_sentiment_snapshot`` /
+                ``get_limit_up_pool` / ``refresh_market_sentiment_snapshot`` /
+                ``refresh_limit_up_pool``) call
+                ``completed_session_policy.session_status(date)``
+                **before** any provider fetch / writer upsert / cache
+                put, and fail-fast with the stable
+                :class:`SentimentSessionValidationError`. T3 forbids
+                any implementation from consulting real calendars,
+                system clocks, or the network — fakes only.
         """
         self._adapter = adapter
         self._router = router
         self._p3_writer = p3_writer
         self._audit_logger = audit_logger
         self._cache_manager = cache_manager
+        # EOD-2 injection seam (SPEC-03-014 V0.22 §3.3). The default
+        # ``None`` keeps the pre-T3 / legacy offline stub path intact
+        # so existing tests that do not care about EOD validation do
+        # not regress. Once a non-``None`` policy is injected all four
+        # public ingress points fail-fast on the five stable codes.
+        self._completed_session_policy: CompletedSessionPolicy | None = (
+            completed_session_policy
+        )
         # P1 refresh-path three-state guard: the per-instance
         # ``_refresh_authorized`` flag defaults to ``False``
         # (default-deny). Tests / Pascal Gate flip it to ``True`` to
@@ -172,6 +309,14 @@ class MarketSentimentService:
         that field was part of the superseded T3-B 10-field offline
         schema).
 
+        EOD-1 / EOD-4 (SPEC V0.22 §3.3): when a
+        :class:`CompletedSessionPolicy` is injected via the constructor,
+        this method acts as the canonical validation owner —
+        :meth:`_validate_eod_market_snapshot` runs **before** any
+        provider fetch / writer upsert / cache put and raises
+        :class:`SentimentSessionValidationError` on failure. When no
+        policy is injected the legacy offline stub path is preserved.
+
         Args:
             snapshot_date: Calendar date the snapshot covers
                 (``"YYYY-MM-DD"``). Part of the unique key
@@ -186,9 +331,21 @@ class MarketSentimentService:
             candidate failed.
 
         Raises:
+            SentimentSessionValidationError: When a
+                :class:`CompletedSessionPolicy` is injected and the
+                canonical ``snapshot_date`` fails any of the five
+                stable EOD checks (invalid format / non-``close``
+                time / non-trading-day / future / session-not-completed).
             ProviderUnavailableError: When no router was injected
                 (offline-only default — caller must inject).
         """
+        # EOD-1 fail-fast (DESIGN §3.3): service-layer is the *only*
+        # validation owner. When a policy is injected, the gate runs
+        # before the router query (no provider fetch on failure).
+        self._validate_eod_market_snapshot(
+            snapshot_date=snapshot_date,
+            snapshot_time=snapshot_time,
+        )
         if self._router is None:
             raise ProviderUnavailableError(
                 "MarketSentimentService has no router wired; pass "
@@ -254,6 +411,11 @@ class MarketSentimentService:
         schemas are forbidden by P1.2 — the writer.upsert call
         refuses records missing the canonical key fields.
 
+        EOD-1 (SPEC V0.22 §3.3): when a
+        :class:`CompletedSessionPolicy` is injected, the EOD gate
+        runs **before** the three-state guard short-circuits (i.e.
+        before any provider fetch / writer upsert / cache put).
+
         Args:
             snapshot_date: Calendar date (``"YYYY-MM-DD"``).
             snapshot_time: Observation time (``"HH:MM:SS"`` or
@@ -262,6 +424,11 @@ class MarketSentimentService:
                 to the router's external chain.
 
         Raises:
+            SentimentSessionValidationError: When a
+                :class:`CompletedSessionPolicy` is injected and the
+                canonical input fails the five-stable-code EOD gate.
+                Raised **before** the three-state guard so a forbidden
+                ``snapshot_time`` cannot be silently swallowed.
             ProviderUnavailableError: When ``p3_writer`` not injected
                 (default).
             ValueError: When capability is not registered in
@@ -273,6 +440,13 @@ class MarketSentimentService:
                 to ship partial work. P1 widens the guard to a
                 per-instance ``_refresh_authorized`` flag.
         """
+        # EOD-1 fail-fast: must run before any provider fetch / writer
+        # upsert / cache put. When no policy is injected the helper is
+        # a no-op so the legacy offline stub path is preserved.
+        self._validate_eod_market_snapshot(
+            snapshot_date=snapshot_date,
+            snapshot_time=snapshot_time,
+        )
         if self._p3_writer is not None and self._is_refresh_authorized(
             capability=self.capability
         ):
@@ -333,10 +507,19 @@ class MarketSentimentService:
         ``list[dict]`` that maps to :class:`LimitUpPoolRecord` via
         :meth:`LimitUpPoolRecord.from_dict`.
 
+        EOD-1 (SPEC V0.22 §3.3): when a :class:`CompletedSessionPolicy`
+        is injected AND a non-``None`` ``trade_date`` is supplied,
+        :meth:`_validate_eod_limit_up_pool` runs first and raises
+        :class:`SentimentSessionValidationError` on failure. The
+        implicit ``trade_date=None`` latest-available branch (read-only
+        exception per SPEC §3.3) is preserved when no policy is
+        injected.
+
         Args:
             trade_date: Trading day (``"YYYY-MM-DD"``). When ``None``
                 the query returns records for the most recent available
-                date as determined by the provider.
+                date as determined by the provider (legacy stub
+                fallback / latest branch).
 
         Returns:
             A :class:`DataResult` whose ``data`` field is a
@@ -345,9 +528,23 @@ class MarketSentimentService:
             ``provider == "error"`` when every candidate failed.
 
         Raises:
+            SentimentSessionValidationError: When a
+                :class:`CompletedSessionPolicy` is injected and the
+                explicit ``trade_date`` fails any of the four
+                date-stable codes (format / non-trading / future /
+                session-not-completed). ``INVALID_SNAPSHOT_TIME`` is
+                N/A for this capability.
             ProviderUnavailableError: When no router was injected
                 (offline-only default — caller must inject).
         """
+        # EOD-1 fail-fast (DESIGN §3.3): the read path runs the same
+        # gate when a policy is injected AND the caller passed an
+        # explicit date. ``trade_date=None`` keeps the legacy
+        # latest-available branch (read-only exception per SPEC §3.3).
+        self._validate_eod_limit_up_pool(
+            trade_date=trade_date,
+            explicit=False,
+        )
         if self._router is None:
             raise ProviderUnavailableError(
                 "MarketSentimentService has no router wired; pass "
@@ -380,6 +577,7 @@ class MarketSentimentService:
 
     def refresh_limit_up_pool(
         self,
+        trade_date: str,
         *,
         p3_writer: Any | None = None,
         provider: Any | None = None,
@@ -396,7 +594,28 @@ class MarketSentimentService:
            using the ``{market, symbol, trade_date}`` business
            unique key (V0.5 §2.2).
 
+        EOD-1 (SPEC V0.23 §3.3 Closure-2): ``trade_date`` is a
+        **required** positional argument of canonical ``YYYY-MM-DD``
+        shape. ``None`` / ``"latest"`` are forbidden at the type
+        level — the strict signature raises ``TypeError`` on
+        omission. The :meth:`_validate_eod_limit_up_pool` helper
+        runs **before** any provider fetch / writer upsert / cache
+        put and is the only validation owner. Five stable codes
+        apply on this entry (the four date-related ones inherited
+        from V0.22 plus the explicit ``INVALID_DATE_FORMAT`` for
+        the ``"latest"`` smuggling case).
+
+        The happy path passes the **same** canonical ``trade_date``
+        to both the provider ``params`` dictionary and the
+        date-scoped cache key inside :meth:`_run_limit_up_pool_refresh`
+        so the date is never re-derived from the records after the
+        fetch.
+
         Args:
+            trade_date: Canonical ``YYYY-MM-DD`` trading date
+                (**required** positional). ``None`` /
+                ``"latest"`` are forbidden on this entry per
+                SPEC-03-014 V0.23 Closure-2.
             p3_writer: :class:`P3PersistenceWriter` for the refresh
                 path. ``None`` keeps refresh opt-in (offline scope).
                 When supplied, it overrides the writer wired at
@@ -405,12 +624,34 @@ class MarketSentimentService:
                 back to the router's external chain.
 
         Raises:
+            TypeError: When ``trade_date`` is omitted at the call
+                site (the strict signature enforces the
+                ``None``/``latest`` ban at the type level).
+            SentimentSessionValidationError: When a
+                :class:`CompletedSessionPolicy` is injected and the
+                supplied canonical ``trade_date`` fails any of the
+                four date-stable codes (format / non-trading / future
+                / session-not-completed). Raised **before** the
+                three-state guard so a forbidden date cannot silently
+                fall through to the writer.
             ProviderUnavailableError: When ``p3_writer`` is ``None``.
             ValueError: When capability is not registered in
                 :data:`P3_COLLECTION_BY_CAPABILITY`.
             NotImplementedError: When ``_is_refresh_authorized`` is
                 ``False``.
         """
+        # EOD-1 fail-fast (SPEC V0.23 Closure-2): ``trade_date`` is a
+        # required positional argument at the type level; the helper
+        # also rejects ``"latest"`` / non-canonical tokens. Runs
+        # before any provider fetch / writer upsert / cache put.
+        validated_trade_date = self._validate_eod_limit_up_pool(
+            trade_date=trade_date,
+            explicit=True,
+        )
+        # ``validated_trade_date`` is the canonical string when a
+        # policy is wired; otherwise it is the caller-supplied value
+        # when that value is canonical. The helper guarantees
+        # non-None here on the explicit path.
         effective_writer = p3_writer if p3_writer is not None else self._p3_writer
         if (
             effective_writer is not None
@@ -419,6 +660,7 @@ class MarketSentimentService:
             return self._run_limit_up_pool_refresh(
                 p3_writer=effective_writer,
                 provider=provider,
+                trade_date=validated_trade_date,
             )
         if effective_writer is None:
             raise ProviderUnavailableError(
@@ -471,6 +713,180 @@ class MarketSentimentService:
         by the Pascal Gate per P1.10 (G-C-2).
         """
         self._refresh_authorized = True
+
+    # ------------------------------------------------------------------
+    # EOD validation helpers (SPEC-03-014 V0.22 §3.3 EOD-1~EOD-6)
+    # ------------------------------------------------------------------
+    #
+    # The two ``_validate_eod_*`` helpers below are the **only**
+    # validation owner seam for the four public ingress points. They
+    # are no-ops when no ``completed_session_policy`` was injected at
+    # construction time — this preserves the legacy offline stub path
+    # so existing callers do not regress. Once a policy is injected
+    # all four ingress points route through the helpers and fail-fast
+    # before any provider fetch / writer upsert / cache put.
+
+    def _validate_eod_market_snapshot(
+        self,
+        *,
+        snapshot_date: str,
+        snapshot_time: str,
+    ) -> None:
+        """Run the EOD gate for :meth:`get_market_sentiment_snapshot`.
+
+        Order is deterministic so the failure code is unique:
+
+        1. ``snapshot_date`` must be a canonical ``YYYY-MM-DD`` →
+           ``INVALID_DATE_FORMAT`` (no provider call).
+        2. ``snapshot_time`` must equal ``"close"`` →
+           ``INVALID_SNAPSHOT_TIME`` (no provider call). This is a
+           **service-layer** judgement (``MarketSentimentSnapshot.from_dict``
+           stays a permissive parsing seam by design).
+        3. When a policy was injected, ``session_status(snapshot_date)``
+           must return ``COMPLETED``; any other verdict maps to its
+           stable error code (``NOT_TRADING_DAY`` /
+           ``FUTURE_TRADING_DAY`` / ``SESSION_NOT_COMPLETED``).
+        """
+        # Step 1: format check (canonical YYYY-MM-DD).
+        if not _is_canonical_date(snapshot_date):
+            raise SentimentSessionValidationError(
+                code=CODE_INVALID_DATE_FORMAT,
+                message=(
+                    "snapshot_date must be a canonical YYYY-MM-DD string; "
+                    f"got {snapshot_date!r}"
+                ),
+            )
+        # Step 2: snapshot_time must be 'close' (DESIGN EOD-4).
+        # ``MarketSentimentSnapshot.from_dict`` keeps the permissive
+        # parsing seam — the service layer is the only judge.
+        if snapshot_time != "close":
+            raise SentimentSessionValidationError(
+                code=CODE_INVALID_SNAPSHOT_TIME,
+                message=(
+                    "snapshot_time must be 'close' on the canonical EOD "
+                    f"service path; got {snapshot_time!r}"
+                ),
+            )
+        # Step 3: policy-driven session check.
+        if self._completed_session_policy is None:
+            return  # legacy offline stub path; preserve behaviour
+        # OQ-11 / SPEC EOD-7.4: a production ``CompletedSessionPolicy``
+        # may raise ``SessionPolicyError`` (calendar unavailable /
+        # out-of-range / naive clock / invalid format). The service
+        # layer maps the dependency-unavailable subclasses onto
+        # the existing ``ProviderUnavailableError`` token so no new
+        # public error code is introduced. The format error is
+        # unreachable here (Step 1 already gated it).
+        try:
+            verdict = self._completed_session_policy.session_status(
+                snapshot_date
+            )
+        except SessionPolicyError as exc:
+            raise ProviderUnavailableError(
+                f"CompletedSessionPolicy unavailable for "
+                f"snapshot_date {snapshot_date!r}: "
+                f"clock_source_class={exc.clock_source_class!r}, "
+                f"reason={exc.reason!r}"
+            ) from exc
+        if verdict == SessionStatus.COMPLETED:
+            return
+        # Non-COMPLETED verdict → raise with the stable error code.
+        code = _coerce_session_status_to_code(verdict)
+        raise SentimentSessionValidationError(
+            code=code,
+            message=(
+                f"CompletedSessionPolicy rejected snapshot_date "
+                f"{snapshot_date!r}: verdict={verdict.value!r}"
+            ),
+        )
+
+    def _validate_eod_limit_up_pool(
+        self,
+        *,
+        trade_date: str | None,
+        explicit: bool,
+    ) -> str | None:
+        """Run the EOD gate for the limit-up pool ingress points.
+
+        Args:
+            trade_date: The caller-supplied trade date (or ``None``).
+            explicit: ``True`` for refresh / explicit-date read paths
+                (``:refresh_limit_up_pool`` and read with a supplied
+                ``trade_date``); ``False`` for
+                ``get_limit_up_pool(trade_date=None)`` which is the
+                documented **read-only** "latest available" exception
+                (SPEC §3.3).
+
+        Returns:
+            ``None`` when the helper short-circuited the legacy
+            offline path (no policy injected) **or** when the
+            exception clause fired (only for the implicit read).
+            Otherwise the *normalised* canonical ``YYYY-MM-DD`` string
+            is returned so the caller can use it as the
+            ``trade_date`` for provider params and the date-scoped
+            cache key.
+        """
+        # Implicit-date read exception (SPEC §3.3): only allowed on the
+        # read path with ``trade_date=None`` and no policy injected. If
+        # a policy IS injected the explicit read must still validate.
+        if trade_date is None:
+            if not explicit:
+                # Read path with implicit date → legacy latest branch.
+                # Return ``None`` to signal "skip the policy check".
+                return None
+            # Refresh path with implicit date is forbidden
+            # (``refresh_limit_up_pool`` never accepts ``None``); the
+            # format check below is the only safety net.
+            raise SentimentSessionValidationError(
+                code=CODE_INVALID_DATE_FORMAT,
+                message=(
+                    "trade_date must be a canonical YYYY-MM-DD string; "
+                    "got None on the explicit-date refresh path"
+                ),
+            )
+        # Step 1: canonical format check.
+        if not _is_canonical_date(trade_date):
+            raise SentimentSessionValidationError(
+                code=CODE_INVALID_DATE_FORMAT,
+                message=(
+                    "trade_date must be a canonical YYYY-MM-DD string; "
+                    f"got {trade_date!r}"
+                ),
+            )
+        # Step 2 (refresh only): also reject the literal ``"latest"``
+        # token explicitly so the explicit-date promise holds even
+        # for callers that smuggle a non-empty non-canonical token.
+        if explicit and trade_date == "latest":
+            raise SentimentSessionValidationError(
+                code=CODE_INVALID_DATE_FORMAT,
+                message=(
+                    "trade_date 'latest' is forbidden on the explicit "
+                    "refresh path; supply a canonical YYYY-MM-DD"
+                ),
+            )
+        # Step 3: policy-driven session check.
+        if self._completed_session_policy is None:
+            return trade_date  # legacy offline stub path
+        verdict = self._completed_session_policy.session_status(trade_date)
+        if verdict == SessionStatus.COMPLETED:
+            return trade_date
+        code = _coerce_session_status_to_code(verdict)
+        raise SentimentSessionValidationError(
+            code=code,
+            message=(
+                f"CompletedSessionPolicy rejected trade_date "
+                f"{trade_date!r}: verdict={verdict.value!r}"
+            ),
+        )
+
+    def _has_eod_policy(self) -> bool:
+        """Return ``True`` iff a :class:`CompletedSessionPolicy` is wired.
+
+        Convenience used by the four public ingress points that
+        previously had no notion of an EOD seam — letting tests
+        detect whether legacy offline behaviour still applies.
+        """
+        return self._completed_session_policy is not None
 
     def _fetch_for_refresh(
         self,
@@ -596,6 +1012,7 @@ class MarketSentimentService:
         *,
         p3_writer: Any,
         provider: Any | None,
+        trade_date: str | None = None,
     ) -> Any:
         """Happy-path runner for ``sentiment.limit_up_pool``.
 
@@ -604,6 +1021,18 @@ class MarketSentimentService:
         the writer is supplied by the caller (the
         :meth:`refresh_limit_up_pool` kwarg overrides the
         constructor-wired one).
+
+        SPEC V0.23 Closure-2 routing:
+
+        * The same canonical ``trade_date`` is forwarded to both the
+          Provider params ``{"trade_date": trade_date}`` and the
+          date-scoped cache key. The date is **never** re-derived
+          from the fetched records.
+        * When ``trade_date`` is ``None`` (legacy / pre-V0.23
+          callers that bypassed the EOD gate by passing no policy)
+          the cache key remains the legacy suffix-less form so
+          pre-existing callers do not regress; provider params
+          remain empty to mirror the historical contract.
         """
         from .flow_service import PersistenceResult  # local import — same package
 
@@ -622,10 +1051,15 @@ class MarketSentimentService:
         collection = P3_COLLECTION_BY_CAPABILITY[capability]
         unique_key = P3_UNIQUE_KEYS_BY_CAPABILITY[capability]
 
+        # Forward the canonical trade_date to the Provider when the
+        # caller threaded one through (SPEC V0.23 Closure-2).
+        fetch_params: dict[str, Any] = {}
+        if trade_date is not None:
+            fetch_params["trade_date"] = trade_date
         records = self._fetch_for_refresh(
             capability=capability,
             provider=provider,
-            params={},
+            params=fetch_params,
         )
         if not records:
             return PersistenceResult(
@@ -644,7 +1078,9 @@ class MarketSentimentService:
             unique_key=unique_key,
         )
         # Step 4: CacheManager.put (catch-and-log, mock-only in P1).
-        self._put_cache(capability, records, None, None)
+        # Pass the canonical trade_date through to the date-scoped
+        # cache key so the cache entry is date-addressable.
+        self._put_cache(capability, records, trade_date, None)
         return PersistenceResult(
             status="ok" if outcome.failed == 0 else "partial_failure",
             capability=capability,
@@ -701,4 +1137,14 @@ class MarketSentimentService:
             )
 
 
-__all__ = ["MarketSentimentService"]
+__all__ = [
+    "MarketSentimentService",
+    "SessionStatus",
+    "CompletedSessionPolicy",
+    "SentimentSessionValidationError",
+    "CODE_INVALID_DATE_FORMAT",
+    "CODE_INVALID_SNAPSHOT_TIME",
+    "CODE_NOT_TRADING_DAY",
+    "CODE_FUTURE_TRADING_DAY",
+    "CODE_SESSION_NOT_COMPLETED",
+]  # noqa: E501

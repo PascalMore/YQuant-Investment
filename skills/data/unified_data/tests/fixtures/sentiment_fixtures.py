@@ -62,7 +62,11 @@ _SAMPLE_MARKET_SENTIMENT_RECORDS: tuple[dict, ...] = (
         "total_listed_count": 5000,
         # 指数与温度 (Pascal OQ-2 — temperature is None, no fabricated formula)
         "market_temperature": None,
-        "total_turnover": 850_000_000_000.0,
+        # EOD-6 (SPEC V0.22 §3.3): total_turnover is permanently None
+        # on the canonical output path. Fixture is explicit so the
+        # contract is enforced at every ingress — ``from_dict`` will
+        # additionally coerce any non-None value back to ``None``.
+        "total_turnover": None,
         # 热门概念与连板
         "hot_concepts": ["AI", "白酒", "新能源"],
         "continuous_limit_up": [
@@ -98,7 +102,10 @@ _SAMPLE_MARKET_SENTIMENT_RECORDS: tuple[dict, ...] = (
         "total_listed_count": 5000,
         # 指数与温度 (extreme bull — temperature still None per Pascal OQ-2)
         "market_temperature": None,
-        "total_turnover": 1_500_000_000_000.0,
+        # EOD-6 (SPEC V0.22 §3.3): total_turnover is permanently None
+        # on the canonical output path — enforced both by the fixture
+        # itself and by ``from_dict`` re-coercion.
+        "total_turnover": None,
         # 热门概念与连板
         "hot_concepts": ["AI", "新能源", "军工", "半导体"],
         "continuous_limit_up": [

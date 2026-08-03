@@ -278,9 +278,19 @@ class TestLimitUpPoolFakeRefreshUpsert:
         assert docs[0]["order_amount"] == 850_000_000.0
 
     def test_refresh_limit_up_pool_without_writer_raises(self):
+        """``refresh_limit_up_pool(trade_date=..., p3_writer=None)``
+        raises :class:`ProviderUnavailableError` from the three-state
+        guard, **after** the mandatory-date EOD seam accepts the
+        canonical ``YYYY-MM-DD`` value (SPEC V0.23 Closure-2).
+
+        The canonical date must be supplied first so the EOD helper
+        routes into the writer check rather than failing the strict
+        signature with ``TypeError``.
+        """
         svc = MarketSentimentService(adapter=None)
         with pytest.raises(ProviderUnavailableError) as excinfo:
             svc.refresh_limit_up_pool(
+                trade_date="2026-07-22",
                 p3_writer=None,
             )
         assert "no P3PersistenceWriter" in str(excinfo.value)

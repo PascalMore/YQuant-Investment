@@ -446,6 +446,65 @@ class TestFreshnessTableSentiment:
         )
 
 
+# ===========================================================================
+# (8b) Total-turnover None invariant — SPEC-03-014 V0.22 §3.3 EOD-6
+# ===========================================================================
+
+
+class TestTotalTurnoverNoneInvariant:
+    """``total_turnover`` is permanently ``None`` on the canonical read path.
+
+    Per SPEC-03-014 V0.22 §3.3 EOD-6, ``total_turnover`` joins the
+    pre-existing ``northbound_net_flow`` fail-stop pattern. The
+    :meth:`MarketSentimentSnapshot.from_dict` ingress is the single
+    implementation site; the offline default stub and the canonical
+    fixtures also carry ``None``.
+    """
+
+    def test_default_total_turnover_is_none(self) -> None:
+        """Direct constructor call defaults ``total_turnover`` to ``None``."""
+        snap = MarketSentimentSnapshot(
+            snapshot_date="2026-07-21",
+            snapshot_time="close",
+        )
+        assert snap.total_turnover is None
+
+    def test_from_dict_zeroes_total_turnover_when_numeric(self) -> None:
+        """Numeric ``total_turnover`` is coerced back to ``None`` —
+        even if the upstream source (e.g. a fabricated 资金净流入
+        pseudo-value) tries to slip it in via the field key."""
+        snap = MarketSentimentSnapshot.from_dict(
+            {
+                "snapshot_date": "2026-07-21",
+                "snapshot_time": "close",
+                "total_turnover": 1.2e12,
+            }
+        )
+        assert snap.total_turnover is None
+
+    def test_from_dict_zeroes_fabricated_capital_flow_value(self) -> None:
+        """A 资金净流入-style number cannot map to ``total_turnover``."""
+        snap = MarketSentimentSnapshot.from_dict(
+            {
+                "snapshot_date": "2026-07-21",
+                "snapshot_time": "close",
+                "total_turnover": -98765432.10,
+            }
+        )
+        assert snap.total_turnover is None
+
+    def test_default_stub_payload_has_none_total_turnover(self) -> None:
+        """The offline default :class:`StubSentimentProvider` payload
+        itself ships ``total_turnover=None`` (defence in depth)."""
+        records = StubSentimentProvider().fetch(
+            "sentiment",
+            "market_snapshot",
+            None,
+        )
+        assert records
+        assert records[0]["total_turnover"] is None
+
+
 __all__ = [
     "CAP_LIMIT_UP_POOL",
     "CAP_SENTIMENT_SNAPSHOT",
@@ -455,8 +514,9 @@ __all__ = [
     "TestExpectedLimitUpFieldsContract",
     "TestMarketTemperatureNoneInvariant",
     "TestNorthboundNetFlowNoneInvariant",
+    "TestTotalTurnoverNoneInvariant",
     "TestSentimentEmptyResultSemantics",
     "TestPoolStableDedup",
     "TestSentimentSourceTraceDiscipline",
     "TestFreshnessTableSentiment",
-]
+]  # noqa: E501

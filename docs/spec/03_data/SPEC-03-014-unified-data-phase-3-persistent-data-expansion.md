@@ -7,12 +7,12 @@
 | 状态 | Draft |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-07-20 |
-|| 最后更新 | 2026-08-02（V0.20 SPEC F6 freshness canonical key 裁定同步：PC-11 冻结解除——`market_sentiment` 冻结为 `sentiment.market_snapshot` 的 canonical freshness key、`sentiment_limit_up_pool` 冻结为 `sentiment.limit_up_pool` 的 canonical key；§4.4 旧行 `"sentiment": 3600` 替换为两个 canonical 行并标注禁止双 key/alias/fallback；§7 A-006、§P0.6 PC-11、§P1.11 冻结项同步。权威契约见 SPEC-03-014-F6，裁定见 RFC-03-014-F6。不动 P0/P1/P2 边界定义、不动既有授权范围、不动所有 ❌ 状态。） |
-|| 版本号 | V0.20 |
-| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.20） |
+| 最后更新 | 2026-08-03（V0.25 OQ-11 生产 CompletedSessionPolicy 契约，对应 RFC-03-014 V0.25）：Pascal 明确推进 OQ-11 并优先复用 `skills/infra/date_utils.py`。§3.3 新增 EOD-7 系列可执行契约：① 唯一事实源 = `date_utils`（动态 `exchange_calendars.get_calendar('XSHG')`，实测 `exchange_calendars==4.13.2`、timezone `Asia/Shanghai`、`session_close` = UTC 07:00 = Shanghai 15:00），production policy 仅经正式 adapter/contract 消费，禁止复制清单/直连 provider 网络/以 `TRADING_DAYS_2026` 为真相；② 四态判定链与状态优先级/判定表（invalid → calendar unavailable/out-of-range → not trading → future → pre-close → completed），close 以 `calendar.session_close(date)` 为准，业务 cutoff grace 为独立可配置可审计 policy；③ fail-closed：calendar 不可用/越界/clock 无时区/异常 → 明确不可判定/可映射错误，禁止 fallback 与误判 NOT_A_TRADING_DAY；④ 可审计字段清单；⑤ 兼容四态 `SessionStatus` 与五稳定 code，internal adapter error 规定到 service 映射；⑥ 测试矩阵（fake calendar + fake timezone-aware clock，零 I/O）与 T2 provisional 文件 allowlist（仅建议、禁止本阶段动代码）。§7 A-037、§11 OQ-11 同步标记已裁定。保留 V0.24 全部冻结项：offline stub/defer；AKShare sentiment 未注册、live-read 不重跑；`total_turnover=None`；OQ-10；F6 TTL/key；真实 refresh 仍禁止。不动 P0/P1/P2 边界定义、不动既有授权范围、不动所有 ❌ 状态。） |
+| 版本号 | V0.25 |
+| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.25） |
 | 关联 RFC | RFC-03-007（Unified Data Layer 总纲）、RFC-03-011（Phase 2 质量与审计治理）、RFC-03-013（Phase 1E 情绪最小切片） |
 | 关联 SPEC | SPEC-03-007（Unified Data Layer 契约基线）、SPEC-03-008（Phase 1B-A 查询平面）、SPEC-03-013（Phase 1E 情绪最小切片） |
-| 关联 Design | DESIGN-03-014（Phase 3 持久化扩展详细设计，V0.21） |
+| 关联 Design | DESIGN-03-014（Phase 3 持久化扩展详细设计，V0.31） |
 | 目标模块 | unified_data（`skills/data/unified_data/`） |
 | 适配 Agent | YQuant-Developer-Engineer, YQuant-Test-Engineer, YQuant-Principal（T4 阶段） |
 
@@ -35,6 +35,11 @@
 ||| V0.17 | 2026-07-30 | **P0 真实 Provider 离线可实现契约冻结**。新增 §P0 完整章节：定义六 capability 精确状态矩阵、真实 Provider 统一接口边界（extract→canonical mapping→validation/provenance→DataResult.source_trace）、P3-A/P3-B/P3-C 逐项 mapping 验收项（PA-/PB-/PC- 系列）、P0 vs P1 vs P2 边界依赖、完全副作用矩阵、旧 checkbox 状态纠正；§7 追加 A-026~A-031 P0 验收项；§2.1/§2.2 更新 P0 In/Out scope。全部真实调用声明为未来授权 smoke/production activation。不动 §14.4.5 B2/R0/Pascal C+X2 裁决、不动 §14.6.x DDL 冻结契约、不动既有授权范围。 | YQuant-Principal |
 |  | V0.19 | 2026-07-31 | **P1 受控 Mongo 物化与显式 refresh 的零副作用契约冻结**。新增 §P1 完整章节：P1 覆盖 capability 与集合文档语义、MongoDB-first 离线实现边界、internal-first read/explicit refresh/cache write 边界与默认禁止规则、完全副作用矩阵、授权关口、零 I/O 边界与验收准则。与 RFC-03-014 V0.19 一致。不动 P0/P1/P2 边界定义、不动已有授权范围、不动所有 ❌ 状态。 | YQuant-Principal |
 |  | V0.20 | 2026-08-02 | **F6 freshness canonical key 裁定同步**。Pascal 裁定冻结 `market_sentiment` 为 capability `sentiment.market_snapshot` 的唯一 canonical freshness domain key（TTL=3600），`sentiment_limit_up_pool` 为 capability `sentiment.limit_up_pool` 的唯一 canonical key（TTL=3600）；`sentiment` 不再是 freshness TTL key（仅 capability domain 前缀）。§4.4 旧行 `"sentiment": 3600` 替换为两个 canonical 行；§7 A-006、§P0.6 PC-11（含绝对禁止）、§P1.11 冻结项同步解除并指向 F6 契约。禁止双 key/alias/fallback 造成 freshness 漂移。权威可执行契约见 `SPEC-03-014-F6`，裁定见 `RFC-03-014-F6`。不动 P0/P1/P2 边界定义、不动既有授权范围、不动所有 ❌ 状态。 | YQuant-Principal |
+|  | V0.21 | 2026-08-03 | **P3-C 时间语义裁定同步**。Pascal 裁定 `sentiment.market_snapshot` 与 P3-C 相关 `sentiment.limit_up_pool` 当前目标为**已完成交易日 / 收盘后 / 可重放**；`snapshot_time` 当前实现/映射仅可落地 `close`，禁止 intraday snapshot；实时情绪路径（盘中实时）属未来独立 capability——需独立 Provider/字段契约/freshness/时间边界与新的用户授权，不得以本卡放行。使用 `stock_market_fund_flow()` 必须按其返回日线序列按目标 `trade_date/snapshot_date` 精确筛选（无 date 参数、`klt=101` 日线，不得写成接受指定日期的实时查询）；资金净流入不得映射 `total_turnover`。2026-08-03 受控单次 live-read 冻结（zt_pool 55 行 / dtgc 2 行 / fund_flow 单次 `ConnectionError`；boundary PASS、Provider evidence FAIL；预算耗尽，报告 `/tmp/yquant-p3c-live-read-20260803/report.json`，不得重跑），sentiment 两 capability 未注册、保持 offline stub/defer，局部池子端点非空不得夸大为可激活 Provider。§0、§2.1、§3.3、§4.2、§5.1、§P0.6、§14.4.5.3、§14.4.5.9 同步。不动 P0/P1/P2 边界定义、不动既有授权范围、不动所有 ❌ 状态。 | YQuant-Principal |
+|  | V0.22 | 2026-08-03 | **Design Gate REVISE closure（P3-C Principal Closure，对应 RFC/SPEC-03-014 V0.22 / DESIGN-03-014 V0.29）**。一次性闭合独立 Design Gate REVISE 的 2 MAJOR + 1 MINOR：① **EOD 验证执行契约**（§3.3 冻结）：唯一 validation owner = `MarketSentimentService` 公开入口（`get_market_sentiment_snapshot` / `get_limit_up_pool` / `refresh_market_sentiment_snapshot` / `refresh_limit_up_pool`）；注入最小只读 `CompletedSessionPolicy` 协议（方法签名冻结：`session_status(date: str) -> SessionStatus`，接受 canonical `YYYY-MM-DD`，经可注入 fake calendar + fake clock 判定已完成 A 股交易日；T3 禁止读真实日历/系统日期/网络）；public ingress 在 provider fetch / writer upsert / cache put 之前 fail-fast；错误类型/稳定 code/message 唯一（`SentimentSessionValidationError` + code `INVALID_DATE_FORMAT` / `INVALID_SNAPSHOT_TIME` / `NOT_TRADING_DAY` / `FUTURE_TRADING_DAY` / `SESSION_NOT_COMPLETED`）；snapshot_time 非 close 输入统一在 **service 层**处理（domain `from_dict` 保持宽松解析 seam）。② **`total_turnover` 强制 None**：domain `from_dict` 规范化（与 `northbound_net_flow` 恒 None 同构），默认 offline stub / canonical fixtures 全部 `None`，任意非 None 输入（含资金净流入映射）不得进入输出。③ **测试矩阵修正**：删除不存在的 `tests/test_market_sentiment.py` 引用，改为真实 `test_market_sentiment_22field.py`；基线按 Gate 证据 5 文件 98 passed + 22field 既有文件划分；T3 最小 allowlist 明确（§12.bis.1 更新：sentiment.py / sentiment_stub.py / sentiment_fixtures.py / sentiment_service.py / colocated tests 增补）。§3.3、§5.1、§7、§8.1、§8.2、§12.bis.1、§14.4.5.9 同步。不动 P0/P1/P2 边界定义、不动既有授权范围、不动所有 ❌ 状态。 | YQuant-Principal |
+| V0.23 | 2026-08-03 | **P3-C Principal Closure-2（closure-only 文档修订，对应 RFC-03-014 V0.23 / DESIGN-03-014 V0.30）**。独立 closure Verify `t_1761343d` verdict = **FAIL**（2 个未闭合 MAJOR），本卡一次性修订：① **`refresh_limit_up_pool` 可执行 EOD 契约**——服务签名冻结为 `refresh_limit_up_pool(trade_date: str, *, p3_writer=None, provider=None)`（§3.3 EOD-1 / EOD-3 / EOD-5、§5.1、§7 A-032、§8.1 同步）；本轮 refresh **不允许** `None`/latest 语义；`trade_date` 必须 canonical `YYYY-MM-DD`，由 `CompletedSessionPolicy` 在 provider fetch / writer upsert / cache put **之前**校验（5 个既有错误 code 的日期相关分支适用，无新增模糊 code）；happy path 将同一 canonical `trade_date` 传入 provider params 并用于 date-scoped cache key，**不得先 fetch 后推断日期**。② **唯一 7 文件 closure-only T3 allowlist**——新增 §12.bis.4「P3-C V0.22/V0.29 closure-only T3 allowlist」，路径集合与 RFC §5.3.5 / DESIGN-03-014 §8.3 逐项严格相同（`models/domain/sentiment.py` / `providers/sentiment_stub.py` / `tests/fixtures/sentiment_fixtures.py` / `services/sentiment_service.py` / `tests/test_market_sentiment_22field.py` / `tests/test_sentiment_service.py` / `tests/test_mapping_sentiment.py`），对本轮 T3 **优先于所有旧 Phase-3 总体迁移表**（含 §12.bis.1 旧 10 项表）；显式禁止 `providers/akshare.py`、provider registry/fallback、router、writer、Mongo、cache、client facade、refresh activation、网络、外部 provider、调度；§12.bis.1 中不在 7 项内的 P3-C 行标记 superseded / non-applicable；`refresh_limit_up_pool` 离线 service 签名/guard/test 属 T3，真实执行仍禁止。§3.3、§7、§8.1、§8.2、§12.bis.1、§12.bis.4 同步。不动 P0/P1/P2 边界定义、不动既有授权范围、不动所有 ❌ 状态。 | YQuant-Principal |
+| V0.24 | 2026-08-03 | **P3-C Scope Reconcile（用户授权，仅文档；对应 RFC-03-014 V0.24 / DESIGN-03-014 V0.31）**。Pascal 明确授权：维持 `refresh_limit_up_pool(trade_date: str, ...)` 已批准 EOD 契约，并将唯一 T3 allowlist 从 7 项**最小扩展至 8 项**——唯一新增 `skills/data/unified_data/tests/test_sentiment_limit_up_pool.py`（触发证据：旧 T3 retries exhausted；恢复验证实测 161 passed / 4 failed，其中 1 个失败位于未被允许修改的 `tests/test_sentiment_limit_up_pool.py:283`——新 mandatory `trade_date` 签名使该遗留测试 TypeError，表明测试 allowlist 漏项）。§12.bis.4 升级为「P3-C V0.24/V0.31 closure-only T3 allowlist」并逐项列出恰好 8 个路径；第 8 项唯一职责：更新既有 fake refresh / missing-writer regression 显式提供 canonical `trade_date` + 验证 mandatory-date 契约与 ProviderUnavailable/error behavior，不得引入任何 Provider/registry/router/writer/Mongo/cache/client/network/refresh activation/scheduling 文件；`test_sentiment_service.py` 继续负责 mandatory-date、稳定错误码和零副作用 spies；新增第 8 项不得成为扩大生产范围的依据。保留全部冻结项：offline stub/defer；AKShare sentiment 未注册、live-read 不重跑；`total_turnover=None`；OQ-10/OQ-11；F6 TTL/key；真实 refresh 仍禁止。不动 P0/P1/P2 边界定义、不动既有授权范围、不动所有 ❌ 状态。 | YQuant-Principal |
+| V0.25 | 2026-08-03 | **OQ-11 生产 CompletedSessionPolicy 可执行契约（Pascal 明确推进，仅文档；对应 RFC-03-014 V0.25）**。§3.3 新增 EOD-7 系列：① 唯一事实源 = `skills.infra.date_utils`（动态 `exchange_calendars.get_calendar('XSHG')`，实测 `exchange_calendars==4.13.2`、timezone `Asia/Shanghai`、`session_close` = UTC 07:00 = Shanghai 15:00），production policy 仅经正式 adapter/contract 消费，禁止复制清单/直连 provider 网络/以 `TRADING_DAYS_2026` 为真相，裸 `is_trading_day()` 不得为唯一判定；② 最小 public/internal 接口边界——现有 date_utils API 保持兼容，production-only adapter（`AShareCompletedSessionPolicy`）显式依赖注入 clock、禁止 `datetime.now()` 隐式读取，生产 composition root 才提供 real clock；canonical `YYYY-MM-DD` 严格性，禁止宽松 `YYYYMMDD` 静默通过 public 边界；③ 状态优先级/判定表与 fail-closed 映射（calendar 不可用/越界/clock 无时区/异常 → 明确不可判定/可映射错误，禁止 fallback 与误判 NOT_A_TRADING_DAY）；④ 可审计字段清单；⑤ 兼容四态 `SessionStatus` 与五稳定 code，internal adapter error 规定到 service 映射；⑥ 测试矩阵（fake calendar + fake timezone-aware clock，零 I/O）与 T2 provisional 文件 allowlist。§7 A-037、§11 OQ-11 同步标记已裁定。不动 P0/P1/P2 边界定义、不动既有授权范围、不动所有 ❌ 状态。 | YQuant-Principal |
 
 ---
 
@@ -47,6 +52,7 @@
 - **P3-B** = `03_data_ud_stock_capital_flow` 个股资金流。Capabilities: `flow.capital_flow_daily`, `flow.northbound_daily`。
 - **P3-C** = `03_data_ud_market_sentiment_snapshot` 市场情绪快照。Capabilities: `sentiment.market_snapshot`, `sentiment.limit_up_pool`。
 - **AKShare 是 Phase 3 外部 Provider**：上述六个 capability 的 external_fallback_chain 为 `["akshare"]`。
+- **P3-C 时间语义（2026-08-03 Pascal 裁定）**：`sentiment.market_snapshot` / `sentiment.limit_up_pool` 当前目标为**已完成交易日 / 收盘后 / 可重放**；`snapshot_time` 当前仅 `close`；盘中实时情绪属未来独立 capability（独立 Provider/字段契约/freshness/时间边界/新用户授权），不在本 Phase 3 范围。`stock_market_fund_flow()` 无 date 参数（`klt=101` 日线），使用时必须按返回日线序列按目标 `trade_date/snapshot_date` 精确筛选，资金净流入不得映射 `total_turnover`。
 - **MongoDB 是 Phase 3 唯一生产持久化目标**：所有 `03_data_ud_*` 物化集合以 **MongoDB（`tradingagents` 库）** 为默认生产写入与读取目标。SQLite 仅可用于以下明确限定场景：
   - 现有 legacy adapter 的数据源（如 DSA 的 SQLite 路径——DSA 不是运行时数据源，不出现在外部 fallback 链）
   - 单元测试 / 集成测试中的隔离数据库（如 mongomock 或临时 SQLite 替代）
@@ -98,7 +104,7 @@
 - [ ] P3-B: AKShareProvider 的 `flow.capital_flow_daily` / `flow.northbound_daily` fetch 实现（❌ 属 P2 真实 Provider smoke）
 - [x] P3-B: `03_data_ud_stock_capital_flow` 物化集合写入 + P3PersistenceWriter 读取（P1 ✅ mongomock fake-only；❌ 真实 MongoDB 属 P1.5/P2；⚠️ northbound_daily 始终 fail-stop Pascal C）
 - [x] P3-B: `flow_service.get_capital_flow()` / `flow_service.get_northbound_flow()` 实现（P0 ✅ offline；northbound 恒 None-Pascal C）
-- [x] P3-C: `MarketSentimentSnapshot` domain object 定义（22 字段 canonical）+ `sentiment.market_snapshot` / `sentiment.limit_up_pool` 能力注册（P0 ✅ canonical 22-field）
+- [x] P3-C: `MarketSentimentSnapshot` domain object 定义（22 字段 canonical）+ `sentiment.market_snapshot` / `sentiment.limit_up_pool` 能力注册（P0 ✅ canonical 22-field；AKShareProvider 未注册，保持 offline stub/defer——2026-08-03 裁定）
 - [ ] P3-C: AKShareProvider 的 `sentiment.market_snapshot` / `sentiment.limit_up_pool` fetch 实现（❌ 属 P2 真实 Provider smoke）
 - [x] P3-C: `03_data_ud_market_sentiment_snapshot` 物化集合写入 + P3PersistenceWriter 读取（P1 ✅ mongomock fake-only；❌ 真实 MongoDB 属 P1.5/P2；limit_up_pool 独立键 `{market, symbol, trade_date}` 已验证 F1/F4）
 - [x] P3-C: `sentiment_service.get_market_snapshot()` / `sentiment_service.get_limit_up_pool()` 实现（P0 ✅ offline）
@@ -328,7 +334,7 @@ class MarketSentimentSnapshot:
     本数据为辅助研究数据，不构成交易指令或投资建议。
     """
     snapshot_date: str                        # (必填) 快照日期，格式 "YYYY-MM-DD"
-    snapshot_time: str                        # (必填) 快照时间，24h 格式如 "15:00:00" 或 "close"
+    snapshot_time: str                        # (必填) 快照时间，24h 格式如 "15:00:00" 或 "close"。当前实现/映射仅可落地 "close"（收盘后快照），禁止 intraday snapshot（2026-08-03 裁定）
     market: str = "CN"                        # (必填) 市场
 
     # 涨跌停数据
@@ -380,7 +386,10 @@ class MarketSentimentSnapshot:
             flat_count=d.get("flat_count", 0) or 0,
             total_listed_count=d.get("total_listed_count"),
             market_temperature=d.get("market_temperature"),
-            total_turnover=d.get("total_turnover"),
+            # Pascal 2026-08-03 裁定：total_turnover 当前无合规来源，
+            # 恒 None（与 northbound_net_flow 同构 fail-stop）。
+            # 任意输入的非 None 值（含资金净流入映射）不得进入输出。
+            total_turnover=None,
             hot_concepts=d.get("hot_concepts"),
             continuous_limit_up=d.get("continuous_limit_up"),
             max_continuous_days=d.get("max_continuous_days"),
@@ -399,10 +408,11 @@ class MarketSentimentSnapshot:
 |---|---|---|
 | `continuous_limit_up` | list of dict，每条含 `symbol`, `days`, `reason` | reason 为自由字符串 |
 | `market_temperature` | 0-100 区间，可 None | 合成指标，Pascal 确认允许 None（不强制合成，禁止编造） |
+| `total_turnover` | **恒 None（2026-08-03 裁定）** | 全市场成交额（元）。当前无合规来源（`stock_market_fund_flow` 返回列无「成交额」），`from_dict` 强制规范化为 `None`；资金净流入不得映射本字段 |
 | `limit_up_pool` / `limit_down_pool` | 每个列表最大 500 个代码 | 若独立提供 `sentiment.limit_up_pool` capability，此集合中的对应字段可为空 |
 
 | `snapshot_date` | 格式 `YYYY-MM-DD` | 唯一键 `{market, snapshot_date, snapshot_time}` 的组成部分 |
-| `snapshot_time` | 格式 `HH:MM:SS` 或 `close` | 唯一键组成部分。`close` 表示收盘后快照 |
+| `snapshot_time` | 格式 `HH:MM:SS` 或 `close` | 唯一键组成部分。`close` 表示收盘后快照。**当前 Phase 3 实现/映射仅可落地 `close`（已完成交易日/可重放），禁止 intraday snapshot**（2026-08-03 裁定） |
 | `market` | 如 `"CN"` | 唯一键组成部分 |
 
 **MongoDB 唯一键**：`{market, snapshot_date, snapshot_time}`
@@ -411,6 +421,96 @@ class MarketSentimentSnapshot:
 - `{snapshot_time: -1}` — 按时点查询
 
 **温度合成公式待定**：`market_temperature` 为派生字段，由 `sentiment_service` 在 Provider 原始数据上合成。Pascal 确认该字段可保持为 `None`（不强制合成，禁止编造）。T2 Design 阶段需定义合成公式或确认保留为 `None` 由消费方自行计算。
+
+**P3-C 时间语义冻结（2026-08-03 裁定）**：`sentiment.market_snapshot` / `sentiment.limit_up_pool` 当前目标为已完成交易日 / 收盘后 / 可重放；`snapshot_time` 当前仅 `close`。盘中实时情绪属未来独立 capability——需独立 Provider/字段契约/freshness/时间边界与新的用户授权，不得以本卡放行。`total_turnover` 无合规来源时保持 `None`/unavailable——`stock_market_fund_flow()` 返回列无「成交额」（SDK 静态，见 RESEARCH-03-014 E15/E23），资金净流入不得映射为 `total_turnover`。
+
+**EOD 验证执行契约（V0.22 Design Gate REVISE closure 冻结；V0.23 Closure-2 修正 `refresh_limit_up_pool` 签名，本规范为权威可执行契约）**：
+
+**EOD-1 唯一 validation owner**：`MarketSentimentService`（`services/sentiment_service.py`）的公开入口：
+- `get_market_sentiment_snapshot(snapshot_date: str, snapshot_time: str = "close")`
+- `get_limit_up_pool(trade_date: str | None = None)`
+- `refresh_market_sentiment_snapshot(snapshot_date: str, snapshot_time: str = "close", *, provider=None)`
+- `refresh_limit_up_pool(trade_date: str, *, p3_writer=None, provider=None)`
+
+四个入口**必须**执行 EOD 校验（get_limit_up_pool 的 `trade_date=None` 表示「最近可用日期」——**仅读路径例外**，允许跳过 completed-session 校验；显式传入日期时校验）。**`refresh_limit_up_pool` 的 `trade_date` 为本轮 refresh 必填参数——不允许 `None`/latest 语义**；`trade_date` 必须 canonical `YYYY-MM-DD`，由 `CompletedSessionPolicy` 在 provider fetch / writer upsert / cache put **之前**校验（5 个既有错误 code 的日期相关分支适用于本入口：`INVALID_DATE_FORMAT` / `NOT_TRADING_DAY` / `FUTURE_TRADING_DAY` / `SESSION_NOT_COMPLETED`，无新增模糊 code）；happy path 将同一 canonical `trade_date` 传入 provider params 并用于 date-scoped cache key，**不得先 fetch 后从 records 推断日期**。校验逻辑不得分散交由 domain、provider、router 或 caller 裁决。
+
+**EOD-2 注入 seam（`CompletedSessionPolicy`）**：新增最小只读协议：
+
+```python
+class SessionStatus(Enum):
+    COMPLETED = "completed"              # 已完成 A 股交易日
+    NOT_A_TRADING_DAY = "not_a_trading_day"
+    FUTURE_TRADING_DAY = "future_trading_day"
+    SESSION_NOT_COMPLETED = "session_not_completed"
+
+class CompletedSessionPolicy(Protocol):
+    """只读协议：判定某 canonical YYYY-MM-DD 是否「已完成 A 股交易日」。
+
+    实现必须通过可注入 fake calendar（交易日序列判定）+ fake clock
+    （当前时间判定）组合出上述 SessionStatus；禁止 T3 直接读真实
+    交易日历、系统日期或网络。生产实现未来由授权 Gate 注入。
+    """
+
+    def session_status(self, date: str) -> SessionStatus: ...
+```
+
+注入点：`MarketSentimentService.__init__(..., completed_session_policy: CompletedSessionPolicy | None = None)`。`None` 默认表示离线宽松模式（保留现有 stub 路径）；注入后 service 在四个公开入口调用 `session_status(date)`。
+
+**EOD-3 输入规范与失败语义**：public service 接受 canonical `YYYY-MM-DD`；以下五类失败均在 provider fetch / writer upsert / cache put **之前** fail-fast，错误类型/稳定 code/message 唯一（禁止 `error 或 empty` 模糊分支）：
+
+| 场景 | 触发条件 | 异常 | 稳定 code |
+|---|---|---|---|
+| 格式非法 | 非 `YYYY-MM-DD` 或不可解析日期 | `SentimentSessionValidationError` | `INVALID_DATE_FORMAT` |
+| 非 close | `snapshot_time != "close"`（仅 market_snapshot 类入口） | 同上 | `INVALID_SNAPSHOT_TIME` |
+| 非交易日 | policy 返回 `NOT_A_TRADING_DAY` | 同上 | `NOT_TRADING_DAY` |
+| 未来交易日 | policy 返回 `FUTURE_TRADING_DAY` | 同上 | `FUTURE_TRADING_DAY` |
+| 未完成当日 | policy 返回 `SESSION_NOT_COMPLETED` | 同上 | `SESSION_NOT_COMPLETED` |
+
+**refresh 无 latest/None 语义（V0.23 Closure-2）**：`refresh_limit_up_pool` 的 `trade_date` 必填，上表 5 个 code 的日期相关分支（`INVALID_DATE_FORMAT` / `NOT_TRADING_DAY` / `FUTURE_TRADING_DAY` / `SESSION_NOT_COMPLETED`）直接适用于本入口，无新增模糊 code；happy path 将同一 canonical `trade_date` 传入 provider params 并用于 date-scoped cache key，**不得先 fetch 后从 records 推断日期**。
+
+`SentimentSessionValidationError(UnifiedDataError)` 携带 `code: str` 与稳定 message 模板；`code` 为可断言公共 token（SPEC/Design 引用同一枚举）。
+
+**EOD-4 `snapshot_time` 处理层**：非 close 输入统一在 **service 层** fail-fast（唯一层）。`MarketSentimentSnapshot.from_dict` 保持离线 canonical parsing seam（宽松解析，不裁决业务语义），但所有 public ingress 不得产生/持久化 intraday。`get_limit_up_pool` 的 trade_date 仅校验「已完成交易日」，不涉及 snapshot_time。
+
+**EOD-5 测试契约**：T3 以 fake completed session policy + spy 证明：(a) close + completed day 走现有离线路径（1 provider fetch / 可选 upsert）；`refresh_limit_up_pool` 的 fake policy 必须记录收到显式 canonical `trade_date`，happy path 的 provider params 含同一 `trade_date`、cache key 为 date-scoped；(b) 非 close、格式错误、非交易日、未来日、未完成当日均为唯一失败，且每个失败 `0 provider fetch / 0 writer upsert / 0 cache put`。不要求真实 provider、真实时钟、真实 calendar、Mongo 或网络。
+
+**EOD-6 `total_turnover` 强制 None**：canonical output（默认 offline stub、canonical fixtures、`MarketSentimentSnapshot.from_dict` ingress）必须强制 `None`；任何输入的非 None 值（包括伪造资金净流入）都不得进入输出。唯一实施层为 domain `from_dict` 规范化（与 `northbound_net_flow` 恒 None 同构），使所有 mapping/fixture/injection 一致。
+
+**EOD-7 生产 `CompletedSessionPolicy` 可执行契约（V0.25 OQ-11 裁定，对应 RFC-03-014 V0.25；本规范为权威可执行契约，T2 Design 承接精确文件 allowlist）**：
+
+**EOD-7.1 唯一事实源与消费边界**：A 股交易日历底座 = `skills.infra.date_utils`（内部优先动态 `exchange_calendars.get_calendar('XSHG')`；当前环境实测 `exchange_calendars==4.13.2`、calendar `XSHG`、timezone `Asia/Shanghai`、`session_close` = UTC 07:00 = Shanghai 15:00）。生产 `CompletedSessionPolicy` 只能通过正式 adapter/contract 消费 date_utils；**禁止**复制交易日清单、直连 provider 网络取日历、以 `TRADING_DAYS_2026` 硬编码 fallback 为生产真相、以裸 `is_trading_day()` 作为 production policy 唯一判定。**明确选择「复用 date_utils 底座 + 小型 adapter」方案，禁止新建孤立日历模块**。
+
+**EOD-7.2 最小 public/internal 接口边界**：
+- 现有 `date_utils` 公共 API（`is_trading_day` / `get_latest_trading_day` / `get_next_trading_day` / `get_trading_dates` / `parse_date` / `format_date`）**保持兼容，不改变签名与语义**。
+- 新增 production-only adapter：命名裁定为 **`AShareCompletedSessionPolicy`**，实现 `CompletedSessionPolicy` Protocol（`session_status(date: str) -> SessionStatus`）。构造必须**显式依赖注入 clock**（timezone-aware，如 `Callable[[], datetime]` 或等价 Clock 协议）；**禁止 `datetime.now()` / `date.today()` 隐式读取**。生产 composition root 是唯一允许提供 real clock 的位置；测试/离线一律注入 fake clock。
+- 内部 calendar 查询必须能**区分三种结果**：calendar unavailable / 日期越界 / 真实非交易日；不得把前两者折叠成 `False`。date_utils 若需扩展严格查询能力，必须新增**独立方法**（不改现有 API 行为），由 adapter 专用。
+- 适配层若抛出 internal adapter error，必须在 service 层映射为既有可判定语义，**不得新增含混 public token**（映射规则见 EOD-7.5）。
+
+**EOD-7.3 canonical 日期严格性**：`CompletedSessionPolicy.session_status(date)` 与 `MarketSentimentService` 四个公开入口的日期参数必须严格接受 canonical `YYYY-MM-DD`。date_utils 当前宽松解析（`YYYYMMDD` 等）**不得**在 public 边界静默通过——非 canonical 输入在 service 层按既有 `INVALID_DATE_FORMAT` 处理；policy/adapter 对非 canonical 输入应直接返回格式错误，不落入宽松解析。
+
+**EOD-7.4 close instant 来源与 cutoff grace**：close instant 以 `calendar.session_close(date)`（或等价 date_utils 严格封装）产生；**禁止硬编码裸 `15:00` 作为唯一真相**（当前 XSHG 实测 close = UTC 07:00 = Shanghai 15:00，但必须以 calendar 输出为准）。若使用业务 cutoff grace（如 close 后 N 分钟才视为 COMPLETED），必须声明为**独立、可配置、可审计的 policy 参数**（如 `cutoff_grace: timedelta`），与日历事实分离；`cutoff_grace=timedelta(0)` 为默认（即 close 到达即 COMPLETED）。
+
+**EOD-7.5 状态优先级/判定表与 fail-closed 映射**：`session_status(date)` 判定严格按以下优先级，未知依赖状态**不允许**误判为 `NOT_A_TRADING_DAY`：
+
+| 优先级 | 场景 | 结果 | 说明 |
+|---|---|---|---|
+| 1 | 非 canonical `YYYY-MM-DD` / 不可解析 | 格式错误 | service 映射 `INVALID_DATE_FORMAT` |
+| 2 | calendar 依赖不可用 / 日期越界 / calendar 异常 | **不可判定（fail-closed）** | 返回明确「不可用」结果或抛 internal adapter error，service 映射为可判定失败；**禁止** fallback 到 `TRADING_DAYS_2026`、周末规则或 latest |
+| 3 | clock 无时区 / 无法判定当前 Shanghai 时间 | **不可判定（fail-closed）** | 同上；构造时即校验 clock timezone，缺失则 fail-fast |
+| 4 | 非 XSHG 交易日 | `NOT_A_TRADING_DAY` | 仅当 calendar 明确回答「非交易日」时才允许 |
+| 5 | 晚于 Shanghai 当前交易日 | `FUTURE_TRADING_DAY` | date > 当前 Shanghai 日期 |
+| 6 | 当前交易日且未达 close/cutoff | `SESSION_NOT_COMPLETED` | date == 当前交易日 且 now < session_close(+grace) |
+| 7 | 当前交易日已过 close/cutoff，或历史交易日 | `COMPLETED` | now >= session_close(+grace) 或 date < 当前交易日（已由步骤 4 确认交易日） |
+
+internal adapter error 到 service 的映射：`CalendarUnavailableError` / `DateOutOfRangeError` / `NaiveClockError`（名称以 T2 Design 为准）一律在 service 层转换为 fail-fast，且**不新增 public error code**；若 service 无法给出既有五 code 之一，则按依赖不可用语义（`ProviderUnavailableError` 或既有等价错误）抛出，禁止静默返回成功或误判为 `NOT_A_TRADING_DAY`。
+
+**EOD-7.6 可审计字段**：production policy 每次判定仅记录最小审计字段（**不记录日历全量数据或凭证**）：calendar identity/version、timezone、cutoff policy id、输入日期、clock 来源类别（real/fake）、最终 `SessionStatus`、降级/错误原因（如有）。审计写入走既有 AuditLogger 约定（默认关闭），不在本契约新增日志侧写。
+
+**EOD-7.7 测试矩阵与零 I/O**：production adapter 单元测试必须使用 **fake calendar + fake timezone-aware clock** 覆盖 EOD-7.5 全部优先级路径（含 calendar unavailable、日期越界、clock 无时区、异常分支），并断言：(a) 每个不可判定路径不落入 hardcoded fallback（不引用 `TRADING_DAYS_2026`、不引用周末规则）；(b) 所有判定路径 `0 provider fetch / 0 writer upsert / 0 cache put / 0 Mongo / 0 网络`。date_utils 自身的单元测试必须覆盖「calendar 异常 / 越界时不落入 hardcoded fallback」的 production adapter 分支。真实 calendar / 真实 clock / 网络在本阶段全部禁止。
+
+**EOD-7.8 T2 Design provisional 文件 allowlist（仅建议，本阶段禁止写代码）**：T2 Design 在下列候选内裁定精确文件范围（**不得超出**，且不得触碰下列「禁止动」清单）：
+- 建议候选：`skills/infra/date_utils.py`（新增严格查询独立方法，保持现有 API 兼容）、`skills/infra/` 下新增 production adapter 文件（如 `session_policy.py` 或等效，含 `AShareCompletedSessionPolicy` + internal adapter errors）、`skills/data/unified_data/services/sentiment_service.py`（仅 composition root 注入 real clock 时引用；离线注入 seam 保持 `None` 宽松路径）、对应 colocated 测试文件（fake calendar + fake clock）。
+- **禁止动**：`skills/data/unified_data/providers/akshare.py`（不得直连取日历）、provider registry/fallback、router、writer、Mongo、cache、client facade、`models/domain/sentiment.py` 既有 canonical 契约字段、Gate-4 相关（`binding_state.json`、Gate-4 CLI）、`skills/data/data-pipeline/**`。`refresh_limit_up_pool` 真实执行仍禁止；生产注入时机与 Gate 归属由 Pascal 在 Design 验收后另行授权。
 
 ---
 
@@ -455,6 +555,8 @@ external_fallback_chains = {
     "sentiment.limit_up_pool": ["akshare"],
 }
 ```
+
+**注册状态（2026-08-03 冻结）**：sentiment 两 capability（`sentiment.market_snapshot` / `sentiment.limit_up_pool`）在 AKShareProvider **未注册**（当前 9 项 capability，含 P3-A sector 2 项，见 §14.4.5.9）；保持 offline stub/defer。上方链为**计划态契约**，仅在 G-1 交易日 live-read 通过 + Pascal 授权后激活（§14.4.5.3 2026-08-03 冻结证据；RESEARCH-03-014 §6 门禁）。
 
 **不改动**：现有所有 capability 的 fallback 链不变。
 
@@ -625,7 +727,7 @@ SENTIMENT_LIMIT_UP_POOL = "sentiment.limit_up_pool"
 | sector | `get_sector_ranking(date=None, sector_type=None, limit=20)` | `list[SectorSnapshot]` | P3-A |
 | flow | `get_capital_flow(security_id, limit=60, start_date=None, end_date=None)` | `list[CapitalFlowRecord]` | P3-B |
 | flow | `get_northbound_flow(security_id=None, date=None, start_date=None, end_date=None)` | `list[CapitalFlowRecord]`（仅 `northbound_*` 字段；个股级北向） | P3-B |
-| sentiment | `get_market_sentiment(date=None)` | `MarketSentimentSnapshot`（单条，收盘后） | P3-C |
+| sentiment | `get_market_sentiment(date=None)` | `MarketSentimentSnapshot`（单条，收盘后；已完成交易日可重放，`snapshot_time=close`） | P3-C |
 | sentiment | `get_limit_up_pool(date=None)` | `list[dict]`（symbol + reason + days） | P3-C |
 
 **异常边界与默认行为**：
@@ -634,6 +736,8 @@ SENTIMENT_LIMIT_UP_POOL = "sentiment.limit_up_pool"
 |------|-------------|-------------|-------------|--------|
 | `get_sector_snapshot` | `sector_code` 为空 → 抛出 `InvalidSecurityIdError` 或等价 ValueError | —（`UnifiedDataClient` facade 保证 router 始终非空；若 SectorService.router is None → `ProviderUnavailableError("P3-A methods require DataRouter: not injected")`，DESIGN-03-014 §5.1） | → `DataResult.error(provider="error", source_trace=["akshare(error: ...)"])` | → `DataResult.success(data=None/is_empty, provider="akshare")` |
 | `get_sector_ranking` | `limit` ≤ 0 → 默认 20；`sector_type` 无效值 → 作为查询参数传递，由 Provider 容纳 | 同上 | 同上 | → `DataResult.success(data=[], provider="akshare")` |
+| `get_market_sentiment` | **EOD 校验（V0.22）：`snapshot_date` 非 canonical `YYYY-MM-DD` → `SentimentSessionValidationError(code=INVALID_DATE_FORMAT)`；`snapshot_time != "close"` → `code=INVALID_SNAPSHOT_TIME`；注入 `CompletedSessionPolicy` 后判定非已完成交易日 → `NOT_TRADING_DAY` / `FUTURE_TRADING_DAY` / `SESSION_NOT_COMPLETED`。全部在 provider fetch / writer upsert / cache put 之前 fail-fast** | router 未注入 → `ProviderUnavailableError("MarketSentimentService has no router wired; pass `router=...` at construction time to enable reads.")` | → `DataResult.error(provider="error", ...)` | → `DataResult.success(data=None, provider="empty")` |
+| `get_limit_up_pool` | **EOD 校验（V0.22）：显式 `trade_date` 非 canonical `YYYY-MM-DD` 或非已完成交易日 → 同上异常/code；`trade_date=None` 表示最近可用日期，跳过 completed-session 校验** | router 未注入 → 同上 `ProviderUnavailableError` | → `DataResult.error(provider="error", ...)` | → `DataResult.success(data=[], provider="empty")` |
 
 ### 5.2 Read Path（Internal-First）
 
@@ -766,6 +870,12 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 || **A-029** | **P3-B 映射验收**：§P0.5 的 PB-1~PB-10 全部通过；PB-5（northbound 恒 None）/PB-7（refresh 三态守卫）/PB-8（northbound fail path）包含精确 Python 验收断言 | 逐项验证 | P0 P3-B |
 || **A-030** | **P3-C 映射验收**：§P0.6 的 PC-1~PC-11 全部通过；PC-3（market_temperature 恒 None）/PC-4（northbound_net_flow 恒 None）确保不虚构值 | 逐项验证 | P0 P3-C |
 || **A-031** | **P0 vs P1 vs P2 边界**：§P0.7 的三阶段边界表与副作用矩阵（§P0.8）在所有三层文档中一致；实现阶段不越界执行 P1/P2 操作 | 静态核对 + 端到端离线 smoke 确认无真实网络调用 | P0 全部 |
+| **A-032** | **EOD 验证 owner（V0.22，V0.23 Closure-2 修正签名）**：`MarketSentimentService` 四个公开入口（`get_market_sentiment_snapshot` / `get_limit_up_pool` / `refresh_market_sentiment_snapshot` / `refresh_limit_up_pool(trade_date: str, *, p3_writer=None, provider=None)`）为唯一 validation owner；`refresh_limit_up_pool` 的 `trade_date` 必填 canonical `YYYY-MM-DD`，本轮 refresh 不允许 None/latest，校验不得分散到 domain/provider/router/caller | Python 断言：调用任一入口 + fake CompletedSessionPolicy，验证失败路径全部在 service 层抛 `SentimentSessionValidationError`；fake policy 记录 `refresh_limit_up_pool` 收到显式 canonical `trade_date`，happy path 的 provider params 含同一值 | P3-C |
+| **A-033** | **EOD 注入 seam（V0.22）**：`CompletedSessionPolicy` 协议可注入 `MarketSentimentService`（`session_status(date: str) -> SessionStatus`，接受 canonical `YYYY-MM-DD`，经 fake calendar + fake clock 判定）；T3 不读真实日历/系统日期/网络 | Python 断言：注入 fake policy 返回各 SessionStatus，断言 service 映射唯一 code | P3-C |
+| **A-034** | **EOD 失败语义（V0.22）**：格式非法 / 非 close / 非交易日 / 未来日 / 未完成当日五类失败均唯一 code（`INVALID_DATE_FORMAT` / `INVALID_SNAPSHOT_TIME` / `NOT_TRADING_DAY` / `FUTURE_TRADING_DAY` / `SESSION_NOT_COMPLETED`），且每个失败 `0 provider fetch / 0 writer upsert / 0 cache put` | Python spy 断言（mock provider / mock writer / mock cache） | P3-C |
+| **A-035** | **`total_turnover` 强制 None（V0.22）**：默认 offline stub、两条 canonical fixture、`MarketSentimentSnapshot.from_dict` 输出的 `total_turnover` 均为 `None`；任意输入提供非 None（含资金净流入映射）时输出仍为 `None` | Python 断言：stub 默认 payload、fixture、`from_dict({"total_turnover": 123})` | P3-C |
+| **A-036** | **测试矩阵精确 allowlist（V0.22）**：SPEC §8.1 不再引用不存在的 `tests/test_market_sentiment.py`；已存回归基线（Gate 证据：`test_sentiment_service.py` / `test_sentiment_limit_up_pool.py` / `test_router_p3_freshness_domain.py` / `test_mapping_sentiment.py` / `test_provider_phase3.py`，98 passed）与 `test_market_sentiment_22field.py` 既有基线并列；T3 只增补真实 colocated 测试文件 | heading-slice 文本扫描 + `pytest skills/data/unified_data/tests/test_market_sentiment_22field.py skills/data/unified_data/tests/test_sentiment_service.py skills/data/unified_data/tests/test_mapping_sentiment.py skills/data/unified_data/tests/test_sentiment_limit_up_pool.py` 通过 | P3-C |
+| **A-037** | **生产 `CompletedSessionPolicy` 契约（V0.25 OQ-11 裁定）**：① 唯一事实源 = `skills.infra.date_utils`（`exchange_calendars.get_calendar('XSHG')`，实测 `exchange_calendars==4.13.2`、timezone `Asia/Shanghai`、`session_close` = UTC 07:00 = Shanghai 15:00），production policy 仅经正式 adapter/contract 消费，禁止复制清单 / 直连 provider 网络 / 以 `TRADING_DAYS_2026` 为真相 / 裸 `is_trading_day()` 为唯一判定；② production-only adapter（`AShareCompletedSessionPolicy`）显式注入 timezone-aware clock，禁止 `datetime.now()` 隐式读取；③ EOD-7.5 判定表全路径（invalid / calendar unavailable / 越界 / not trading / future / pre-close / completed）用 fake calendar + fake timezone-aware clock 覆盖且零 I/O；④ 未知依赖状态不误判 `NOT_A_TRADING_DAY`，fail-closed 不落入 hardcoded fallback；⑤ 四态 `SessionStatus` 与五稳定 code 兼容性不变 | 静态核对 §3.3 EOD-7 系列 + Python 断言（fake calendar + fake clock，断言判定表与零副作用，断言无 `datetime.now()` 隐式读取） | P3-C（OQ-11） |
 
 ---
 
@@ -779,9 +889,11 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 | `test_sector_service.py` | get_sector_snapshot/ranking（mock provider）、空数据、error 分支 | 6 | P3-A | 否 |
 | `test_capital_flow.py` | CapitalFlowRecord 构造、from_dict、符号约定、北向空处理 | 10 | P3-B | 否 |
 | `test_flow_service.py` | get_capital_flow/northbound_flow（mock provider）、分页、限流 | 6 | P3-B | 否 |
-| `test_market_sentiment.py` | MarketSentimentSnapshot 构造、from_dict、温度范围 | 8 | P3-C | 否 |
-| `test_sentiment_service.py` | get_market_snapshot/limit_up_pool（mock provider）、连板交叉验证 | 6 | P3-C | 否 |
-| `test_provider_phase3.py` | AKShareProvider Phase 3 新增 capability 的 stub/fake fetch；**STUB_COLUMNS 双定义等价性测试**（`stub_columns.STUB_COLUMNS == providers.STUB_COLUMNS`，DESIGN-03-014 §4.1） | 8 | 全部 | 否 |
+| `test_market_sentiment_22field.py` | MarketSentimentSnapshot 构造、from_dict、温度范围；**V0.22 增补：`total_turnover` 强制 None 断言（stub 默认 + fixture + from_dict 非 None 输入）** | 32（既有）+ 增补 | P3-C | 否 |
+| `test_sentiment_service.py` | get_market_snapshot/limit_up_pool（mock provider）、连板交叉验证；**V0.22 增补：EOD 验证 owner + CompletedSessionPolicy 注入 + 5 类失败唯一 code + 0 side-effect spy；V0.23 Closure-2 增补：`refresh_limit_up_pool(trade_date)` 显式 canonical 日期 + fake policy 收到同一 `trade_date` + provider params 含同值** | 25（既有）+ 增补 | P3-C | 否 |
+| `test_sentiment_limit_up_pool.py` | limit_up_pool 读/写路径（mock provider）；**V0.24（Scope Reconcile）增补：fake refresh / missing-writer regression 显式提供 canonical `trade_date` + mandatory-date 契约与 ProviderUnavailable/error behavior 验证** | 15（既有）+ 增补 | P3-C | 否 |
+| `test_mapping_sentiment.py` | AKShare→Canonical 映射、**V0.22 增补：total_turnover 不得映射资金净流入负例** | 23（既有）+ 增补 | P3-C | 否 |
+| `test_provider_phase3.py` | AKShareProvider Phase 3 新增 capability 的 stub/fake fetch；**STUB_COLUMNS 双定义等价性测试**（`stub_columns.STUB_COLUMNS == providers.STUB_COLUMNS`，DESIGN-03-014 §4.1） | 27（既有） | 全部 | 否 |
 
 ### 8.2 Fixture
 
@@ -789,7 +901,7 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 |---|---|---|
 | `skills/data/unified_data/tests/fixtures/sector_fixtures.py` | 2 条 SectorSnapshot：industry（白酒）+ concept（AI），正常交易日 + 极端行情 | P3-A |
 | `skills/data/unified_data/tests/fixtures/flow_fixtures.py` | 2 条 CapitalFlowRecord：含北向数据（沪深港通标的）+ 不含北向（非标的） | P3-B |
-| `skills/data/unified_data/tests/fixtures/sentiment_fixtures.py` | 2 条 MarketSentimentSnapshot：正常交易日 + 极端行情（大量涨停） | P3-C |
+| `skills/data/unified_data/tests/fixtures/sentiment_fixtures.py` | 2 条 MarketSentimentSnapshot：正常交易日 + 极端行情（大量涨停）；**V0.22：两条 fixture 的 `total_turnover` 均强制 `None`（无合规来源，禁止伪造成交额）** | P3-C |
 
 ### 8.3 回归测试
 
@@ -903,6 +1015,8 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 - [ ] **OQ-7（T4 新增）**：T4 生产就绪 PR-smoke 的执行人是否由当前 Agent 承担，还是需 Pascal 手动执行？PR-2/PR-3/PR-4 标注为「Dev/Agent」，若 Agent 无真实网络/API 权限则降级为 Pascal 手动
 - [ ] **OQ-8（V0.5 更新）**：AKShare 无需 token（已确认为匿名数据源），OQ-8 已解决。PR-0 审计仅覆盖 MongoDB 的五组件键（`MONGODB_HOST`/`PORT`/`USERNAME`/`PASSWORD`/`DATABASE`），来源为 `skills/.env`。V0.4 中使用的 `MONGO_URI` 单键来源已 superseded——复用 Phase 2 PortfolioMongoLoader 组件式构造连接语义。
 - [ ] **OQ-9（T4 新增）**：Provider smoke 结论中字段映射差异的阈值如何设定？RFC §6.3 提议 >50% 字段不匹配为停止条件——是否调整？
+- [ ] **OQ-10（2026-08-03 新增）**：实时市场情绪路径（盘中实时 snapshot）是否立项？已裁定属未来独立 capability——需独立 Provider/字段契约/freshness/时间边界与新的用户授权，本 Phase 3 不放行。另：`stock_market_fund_flow` 在 2026-08-03 live-read 中单次 `ConnectionError`，若未来需要大盘资金流侧数据，须 Pascal 独立授权新的交易日 live-read（预算已耗尽，见 §14.4.5.3）。
+- [x] **OQ-11（V0.22 新增，V0.25 已裁定）**：生产环境 `CompletedSessionPolicy`（真实 A 股交易日历 + 系统时钟）由哪个 Gate/Provider 注入？**V0.25 裁定**：底座唯一事实源 = `skills.infra.date_utils`（动态 `exchange_calendars.get_calendar('XSHG')`，实测 `exchange_calendars==4.13.2`、timezone `Asia/Shanghai`、`session_close` = UTC 07:00 = Shanghai 15:00）；生产 policy 通过正式 adapter/contract 消费（四态判定链、fail-closed、可审计、兼容五稳定 code，见 §3.3 EOD-7 系列与 RFC-03-014 §5.3.1 EOD-7）；**不在本 Phase 3 放行生产注入**——T2 Design 承接精确文件 allowlist（§3.3 EOD-7.8），注入时机与 Gate 归属由 Pascal 在 Design 验收后另行授权。
 
 ---
 
@@ -929,18 +1043,22 @@ UnifiedDataClient.query("sector", "snapshot", sector_code=SectorCode("BK0489"))
 
 Pascal 裁定（2026-07-30）确认 22 字段全市场多维快照为 MarketSentimentSnapshot 的 canonical 产品 schema。以下为 T3 Implement 或后续对齐阶段必须执行的文件变更清单。**当前（100%）不对齐 canonical 的离线实现保留不删**，但任何持久化/Provider 调用必须基于 canonical 契约。
 
+> **V0.24（Scope Reconcile）**：本表为 10→22 字段迁移的**总体**变更清单（历史/总路线）。本轮 P3-C T3 仅允许 §12.bis.4「P3-C V0.24/V0.31 closure-only T3 allowlist」中的 8 个文件；本表中不在该 8 项内的 P3-C 相关行（`providers/_stub_columns.py`、`providers/__init__.py`、`models/domain/__init__.py`）对本轮标记为 **superseded / non-applicable**，Developer 不得从本表取额外路径。
+
 #### 12.bis.1 必需变更（Allowlist）
 
 | 路径 | 允许操作 | 约束 |
 |------|---------|------|
-| `models/domain/sentiment.py` | `MarketSentimentSnapshot` dataclass 从 10 字段（`market`, `sentiment_type`, `market_date`, `score`, `sample_size`, `source`, `provider`, `fetched_at`, `notes`, `metadata`）重构为 22 字段 canonical 契约（`snapshot_date`, `snapshot_time`, `market`, `limit_up_count`, `limit_down_count`, `limit_up_count_ex_st`, `limit_down_count_ex_st`, `advance_count`, `decline_count`, `flat_count`, `total_listed_count`, `market_temperature`, `total_turnover`, `hot_concepts`, `continuous_limit_up`, `max_continuous_days`, `northbound_net_flow`, `limit_up_pool`, `limit_down_pool`, `fetched_at`, `provider`, `raw_payload`），唯一键由 `{market, sentiment_type, market_date}` 改为 `{market, snapshot_date, snapshot_time}`；`from_dict()` 同步更新；关闭 `frozen=True, slots=True`（按 SPEC §3.3 可修改的 dataclass 模式） | 不得保留旧 10 字段的任何引用在新 dataclass 中；不得在`from_dict()` 中引用 `sentiment_type`、`market_date`、`score`、`sample_size`、`notes`、`metadata` 等淘汰字段 |
-| `services/sentiment_service.py` | 更新引用类型：所有 `get_market_sentiment_snapshot()` 返回类型改为新 `MarketSentimentSnapshot`；`refresh_market_sentiment_snapshot()` 写入路径基于新 schema | 不改动 read path 的 capability 注册逻辑；不改动 `PersistenceResult`；不改动三态守卫 |
-| `tests/fixtures/sentiment_fixtures.py` | fixture 数据从 10 字段重建为 22 字段 canonical 映射；覆盖正常交易日 + 极端行情两种场景 | 至少 2 条记录；所有非 None 字段填充合法值 |
-| `tests/test_market_sentiment.py` | 断言更新：字段计数从 10→22；唯一键断言从 `sentiment_type`→`snapshot_date+snapshot_time`；温度范围验证；列表长度约束 | 不得缩减已有测试覆盖的边界条件 |
-| `tests/test_sentiment_service.py` | service 层 fixture 引用更新；Spy 断言更新 | 同上 |
-| `providers/_stub_columns.py` | `sentiment.market_snapshot` STUB_COLUMNS 更新为 22 字段 canonical 列 | 与 `providers/__init__.py` 保持孪生等价 |
-| `providers/__init__.py` | 同上同步更新 | 保持与 `_stub_columns.py` 孪生等价 |
-| `models/domain/__init__.py` | 确认 `MarketSentimentSnapshot` 仍在导出列表（保持不变） | 不改变导出符号名 |
+| `models/domain/sentiment.py` | `MarketSentimentSnapshot` dataclass 从 10 字段（`market`, `sentiment_type`, `market_date`, `score`, `sample_size`, `source`, `provider`, `fetched_at`, `notes`, `metadata`）重构为 22 字段 canonical 契约（`snapshot_date`, `snapshot_time`, `market`, `limit_up_count`, `limit_down_count`, `limit_up_count_ex_st`, `limit_down_count_ex_st`, `advance_count`, `decline_count`, `flat_count`, `total_listed_count`, `market_temperature`, `total_turnover`, `hot_concepts`, `continuous_limit_up`, `max_continuous_days`, `northbound_net_flow`, `limit_up_pool`, `limit_down_pool`, `fetched_at`, `provider`, `raw_payload`），唯一键由 `{market, sentiment_type, market_date}` 改为 `{market, snapshot_date, snapshot_time}`；`from_dict()` 同步更新；关闭 `frozen=True, slots=True`（按 SPEC §3.3 可修改的 dataclass 模式）。**V0.22：`from_dict()` 中 `total_turnover` 强制规范化为 `None`（与 `northbound_net_flow` 恒 None 同构 fail-stop）；`snapshot_time` 保持宽松解析（不裁决业务语义，非 close 拒绝在 service 层）** | 不得保留旧 10 字段的任何引用在新 dataclass 中；不得在`from_dict()` 中引用 `sentiment_type`、`market_date`、`score`、`sample_size`、`notes`、`metadata` 等淘汰字段 |
+| `services/sentiment_service.py` | 更新引用类型：所有 `get_market_sentiment_snapshot()` 返回类型改为新 `MarketSentimentSnapshot`；`refresh_market_sentiment_snapshot()` 写入路径基于新 schema。**V0.22：四个公开入口（`get_market_sentiment_snapshot` / `get_limit_up_pool` / `refresh_market_sentiment_snapshot` / `refresh_limit_up_pool`）为唯一 EOD validation owner；新增 `CompletedSessionPolicy` 注入参数（`session_status(date) -> SessionStatus`，fake calendar + fake clock）；非 close 输入在 service 层 fail-fast（`INVALID_SNAPSHOT_TIME`）。V0.23（Closure-2）：`refresh_limit_up_pool` 签名冻结为 `refresh_limit_up_pool(trade_date: str, *, p3_writer=None, provider=None)`，`trade_date` 必填 canonical `YYYY-MM-DD`，本轮 refresh 不允许 None/latest，happy path 将同一 `trade_date` 传入 provider params 并用于 date-scoped cache key** | 不改动 read path 的 capability 注册逻辑；不改动 `PersistenceResult`；不改动三态守卫；`completed_session_policy=None` 时保持现有离线宽松路径（不破坏既有测试） |
+| `skills/data/unified_data/tests/fixtures/sentiment_fixtures.py` | fixture 数据从 10 字段重建为 22 字段 canonical 映射；覆盖正常交易日 + 极端行情两种场景。**V0.22：两条 fixture 的 `total_turnover` 强制为 `None`** | 至少 2 条记录；所有非 None 字段填充合法值 |
+| `skills/data/unified_data/tests/test_market_sentiment_22field.py` | **V0.22（既有文件增补）**：追加 `total_turnover is None` 断言（默认构造、stub 默认 payload、from_dict 非 None 输入 → 输出仍 None）；断言更新：字段计数从 10→22；唯一键断言从 `sentiment_type`→`snapshot_date+snapshot_time`；温度范围验证；列表长度约束 | 不得缩减已有测试覆盖的边界条件；`tests/test_market_sentiment.py` 不存在，禁止引用 |
+| `skills/data/unified_data/tests/test_sentiment_service.py` | service 层 fixture 引用更新；Spy 断言更新。**V0.22（既有文件增补）**：EOD 验证 owner 契约——fake CompletedSessionPolicy 注入 + spy 证明 5 类失败唯一 code + `0 provider fetch / 0 writer upsert / 0 cache put`；close + completed day 走现有离线路径 | 同上 |
+| `skills/data/unified_data/tests/test_mapping_sentiment.py` | **V0.22（既有文件增补）**：追加「资金净流入不得映射 `total_turnover`」负例（mapping/input 提供非 None `total_turnover` 或资金净流入字段时，输出仍 `None`） | 不得缩减已有测试覆盖的边界条件 |
+| `providers/_stub_columns.py` | `sentiment.market_snapshot` STUB_COLUMNS 更新为 22 字段 canonical 列。**V0.23（Closure-2）：本轮 P3-C T3 non-applicable（不在 §12.bis.4 closure-only 8 项内，superseded）** | 与 `providers/__init__.py` 保持孪生等价 |
+| `providers/__init__.py` | 同上同步更新。**V0.23（Closure-2）：本轮 P3-C T3 non-applicable（不在 §12.bis.4 closure-only 8 项内，superseded）** | 保持与 `_stub_columns.py` 孪生等价 |
+| `providers/sentiment_stub.py` | **V0.22（T3 最小 allowlist 追加）**：`_DEFAULT_SENTIMENT_PAYLOAD` 的 `total_turnover` 由 `850_000_000_000.0` 改为 `None`（无合规来源，禁止伪造成交额）；docstring 同步 | 仅改默认 payload 与注释；不改 provider 协议/能力声明 |
+| `models/domain/__init__.py` | 确认 `MarketSentimentSnapshot` 仍在导出列表（保持不变）。**V0.23（Closure-2）：本轮 P3-C T3 non-applicable（不在 §12.bis.4 closure-only 8 项内，superseded）** | 不改变导出符号名 |
 
 #### 12.bis.2 禁止修改（Blocklist）
 
@@ -964,6 +1082,23 @@ Pascal 裁定（2026-07-30）确认 22 字段全市场多维快照为 MarketSent
 - 现有 10 字段测试保留作为 regression baseline。
 
 此 superseded 状态由 Pascal 2026-07-30 裁定锁死，不得未经 Pascal 确认恢复 10 字段为 canonical。
+
+#### 12.bis.4 P3-C V0.24/V0.31 closure-only T3 allowlist
+
+本 closure-only allowlist 由 P3-C Principal Closure-2（RFC/SPEC-03-014 V0.23、DESIGN-03-014 V0.30）冻结，并经 **用户授权 scope reconciliation（RFC/SPEC-03-014 V0.24、DESIGN-03-014 V0.31）** 最小扩展——原因：public `refresh_limit_up_pool` 必填日期迁移影响既有 colocated 回归（旧 T3 retries exhausted；恢复验证实测 161 passed / 4 failed，`tests/test_sentiment_limit_up_pool.py:283` 遗留 TypeError 表明测试 allowlist 漏项）。对本轮 P3-C T3 **优先于所有旧 Phase-3 总体迁移/实施范围表**（本 SPEC §12.bis.1、DESIGN-03-014 §8.1/§8.2 及任何 P3-C 相关总表）。T3 仅允许修改以下 **8 个文件**（三层路径集合逐项、严格相同；heading-slice 提取必须精确等于此集合，不得含第 9 项）：
+
+1. `skills/data/unified_data/models/domain/sentiment.py`
+2. `skills/data/unified_data/providers/sentiment_stub.py`
+3. `skills/data/unified_data/tests/fixtures/sentiment_fixtures.py`
+4. `skills/data/unified_data/services/sentiment_service.py`
+5. `skills/data/unified_data/tests/test_market_sentiment_22field.py`
+6. `skills/data/unified_data/tests/test_sentiment_service.py`
+7. `skills/data/unified_data/tests/test_mapping_sentiment.py`
+8. `skills/data/unified_data/tests/test_sentiment_limit_up_pool.py`
+
+**第 8 项唯一职责**：`skills/data/unified_data/tests/test_sentiment_limit_up_pool.py` 仅用于更新既有 fake refresh / missing-writer regression，使其显式提供 canonical `trade_date`，并验证新的 mandatory-date 契约与原有 ProviderUnavailable/error behavior。**不得**引入任何 Provider/registry/router/writer/Mongo/cache/client/network/refresh activation/scheduling 文件。原 7 项中的 `test_sentiment_service.py` 继续负责 mandatory-date、稳定错误码和零副作用 spies；新增第 8 项**不得**成为扩大生产范围的依据。保留全部冻结项：offline stub/defer；AKShare sentiment 未注册、live-read 不重跑；`total_turnover=None`；OQ-10/OQ-11；F6 TTL/key；真实 refresh 仍禁止。
+
+**Blocklist（显式禁止，否定语义）**：`providers/akshare.py`、provider registry/fallback、router、writer、Mongo、cache、client facade、refresh activation、网络、外部 provider、调度均不得在本轮 T3 修改/激活。§12.bis.1 总表中不在上述 8 项内的 P3-C 相关行对本轮标记为 **superseded / non-applicable**，Developer 不得从旧表取额外路径。`refresh_limit_up_pool` 本身不得被排除为「activation」：离线 service 签名/guard/test（含 `trade_date` 契约）属 T3 允许范围，真实 refresh 执行仍禁止。
 
 ---
 
@@ -1200,6 +1335,8 @@ Pascal 已明确选择 **C**：当前 Phase 3 不提供北向净流入数据，`
 - 空返回 verdict 一律 fail；不引入 verdict 篡改逻辑。
 - PR-4 的 expected 字段集仍保留（基于公开文档推断），后续独立 live-read 复验时使用。
 
+**2026-08-03 交易日 live-read 补充冻结（G-1 前置，本卡同步）**：受控单次 live-read（`trade_date=20260803`）——`stock_zt_pool_em` success 55 行（16 列，列名与 SDK 1.17.54 静态一致）、`stock_zt_pool_dtgc_em` success 2 行（16 列）、`stock_market_fund_flow` 单次 `ConnectionError`（row_count=0）。边界 PASS（零重试/零 fallback/零 Mongo/零写入），**provider_evidence=fail**（总体 Provider 证据失败）。zt_pool/dtgc_pool 交易日非空仅证明局部池子端点可用，**不得夸大为可激活 Provider**；`stock_market_fund_flow` 仍不可用，且其返回列无「成交额」，不得映射 `total_turnover`。调用预算已耗尽（3/3），冻结报告 `/tmp/yquant-p3c-live-read-20260803/report.json` 只读、不得重跑；任何新 live-read 须 Pascal 独立授权。时间语义：当前目标为已完成交易日/收盘后/可重放，`snapshot_time` 仅 `close`（2026-08-03 裁定）。详细冻结表见 RFC-03-014 §13.4.5.11。
+
 #### 14.4.5.4 PR-2 sector SSL 网络停止诊断边界
 
 **冻结事实**（来自 PR-2 smoke 报告）：
@@ -1291,6 +1428,8 @@ T2 Design 完成时须满足：
 | `sentiment.limit_up_pool` | success 但空返回（row_count=0） | ❌ 未注册 | **offline stub** — 同 market_snapshot | §14.4.5.3 |
 
 **AKShareProvider 注册缺口**：当前 `AKShareProvider`（`akshare.py`）仅声明 9 项 capability（7 项 Phase 1D + 2 项 P3-A sector）。`flow.capital_flow_daily`、`flow.northbound_daily`、`sentiment.market_snapshot`、`sentiment.limit_up_pool` 四项**未注册**。T3 须按映射裁决逐项注册：real-mappable 的 `flow.capital_flow_daily` 须注册真实调用路径；offline stub 的 sentiment 和 fail-stop 的 northbound 可注册 stub 路径或暂不注册。
+
+> **2026-08-03 更新（本段 superseded 部分）**：sentiment 两 capability 保持 offline stub/未注册、**defer**——2026-08-03 live-read 总体 provider_evidence=fail（§14.4.5.3），局部池子端点非空不得夸大为可激活 Provider。本段 B2 时点「offline stub 的 sentiment 可注册 stub 路径」指引 superseded：注册前必须过 G-1 交易日 live-read + Pascal 授权（RFC-03-014 §13.4.5.11；RESEARCH-03-014 §6）。
 
 #### 14.4.5.10 Refresh 授权前状态机
 
@@ -1726,6 +1865,13 @@ Step 4: DataResult.source_trace → 四阶段结果封装为 source_trace 条目
 - ❌ 虚构 `northbound_net_flow` 值。
 - ❌ 基于 superseded 10 字段模型定义 fixture/expected 字段集。
 - ❌ 在 `FreshnessPolicy.DEFAULT_TTLS` 注册 `sentiment` 或引入双 key/alias/fallback（F6 裁定后，见 SPEC-03-014-F6 §3.2）。
+
+**P3-C 时间语义冻结项（2026-08-03 裁定同步）**：
+- `sentiment.market_snapshot` / `sentiment.limit_up_pool` 当前目标 = 已完成交易日 / 收盘后 / 可重放；`snapshot_time` 当前仅可落地 `close`，禁止 intraday snapshot。
+- 实时情绪路径（盘中实时）属未来独立 capability——需独立 Provider/字段契约/freshness/时间边界 + 新的用户授权，不得以本卡放行。
+- `stock_market_fund_flow()` 无 date 参数（`klt=101` 日线）；使用时必须按其返回日线序列按目标 `trade_date/snapshot_date` 精确筛选；不得写成接受指定日期的实时查询。
+- `total_turnover` 无合规来源时保持 `None`/unavailable；资金净流入（主力/超大单等）**不得**映射为 `total_turnover`（SDK 静态：fund_flow 无「成交额」列；2026-08-03 live-read 该 endpoint `ConnectionError`）。
+- Provider 证据失败（boundary PASS / provider_evidence FAIL，§14.4.5.3），sentiment 两 capability 未注册，保持 offline stub/defer；局部池子端点（zt_pool 55 行 / dtgc 2 行）非空证据不得夸大为可激活 Provider。
 
 ### P0.7 P0 vs P1 vs P2 边界
 

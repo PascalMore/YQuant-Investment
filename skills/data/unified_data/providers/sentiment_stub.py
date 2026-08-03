@@ -59,7 +59,12 @@ _DEFAULT_SENTIMENT_PAYLOAD: tuple[dict, ...] = (
         "flat_count": 250,
         "total_listed_count": 5000,
         "market_temperature": None,
-        "total_turnover": 850_000_000_000.0,
+        # EOD-6 (SPEC V0.22 §3.3): total_turnover is permanently None on
+        # the canonical offline stub. The contract is enforced twice:
+        # (a) the stub payload itself ships ``None``; (b) ``from_dict``
+        # coerces any non-None value back to ``None`` so an upstream
+        # change cannot silently reintroduce a numeric value.
+        "total_turnover": None,
         "hot_concepts": ["offline_fixture"],
         "continuous_limit_up": [
             {

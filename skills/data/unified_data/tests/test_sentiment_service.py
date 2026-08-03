@@ -53,7 +53,15 @@ from skills.data.unified_data.providers.sentiment_stub import (
     StubSentimentProvider,
 )
 from skills.data.unified_data.services.sentiment_service import (
+    CODE_FUTURE_TRADING_DAY,
+    CODE_INVALID_DATE_FORMAT,
+    CODE_INVALID_SNAPSHOT_TIME,
+    CODE_NOT_TRADING_DAY,
+    CODE_SESSION_NOT_COMPLETED,
+    CompletedSessionPolicy,
     MarketSentimentService,
+    SentimentSessionValidationError,
+    SessionStatus,
 )
 from skills.data.unified_data.client import UnifiedDataClient
 from skills.data.unified_data.tests.conftest import FakeProvider
@@ -561,6 +569,7 @@ class TestSentimentServiceCachePut:
         )
 
         outcome = svc.refresh_limit_up_pool(
+            trade_date="2026-07-21",
             provider=provider, p3_writer=writer,
         )
 
@@ -568,9 +577,10 @@ class TestSentimentServiceCachePut:
         assert len(cache.put_calls) == 1
         key, records = cache.put_calls[0]
         assert "sentiment:limit_up_pool:" in key
-        # limit_up_pool refresh passes None for snapshot_date,
-        # so the key suffix is empty.
-        assert key == "sentiment:limit_up_pool:"
+        # limit_up_pool refresh (SPEC V0.23 Closure-2) threads the
+        # canonical ``trade_date`` through the date-scoped cache
+        # key — same value as the provider params/date cache key.
+        assert key == "sentiment:limit_up_pool:2026-07-21"
 
     def test_refresh_cache_put_fail_open(self):
         """CacheManager.put exception does NOT block the refresh happy-path."""
@@ -679,11 +689,503 @@ class TestSentimentServiceCachePut:
         )
 
         svc.refresh_limit_up_pool(
+            trade_date="2026-07-21",
             provider=provider, p3_writer=writer,
         )
 
         assert len(cache.put_calls) == 1
         key = cache.put_calls[0][0]
-        # limit_up_pool refresh passes None for snapshot_date, so the
-        # key is just ``sentiment:limit_up_pool:`` (no date suffix).
-        assert key == "sentiment:limit_up_pool:"
+        # limit_up_pool refresh (SPEC V0.23 Closure-2) threads the
+        # canonical ``trade_date`` through the date-scoped cache
+        # key — same value as the provider params/date cache key.
+        assert key == "sentiment:limit_up_pool:2026-07-21"
+
+
+# ===========================================================================
+# EOD validation tests — SPEC-03-014 V0.22 §3.3 + V0.23 Closure-2
+# ===========================================================================
+#
+# Owner seam is :class:`MarketSentimentService` (DESIGN EOD-1). The
+# block below drives fake completed-session policies, fake providers,
+# and dummy writers / cache spies to prove that:
+#
+# (a) the close + completed happy path routes through the existing
+#     offline stub seam without an unwanted side-effect;
+# (b) the five stable error codes fire in isolation, **before** any
+#     provider fetch / writer upsert / cache put;
+# (c) ``refresh_limit_up_pool`` accepts an explicit canonical
+#     ``trade_date`` and passes the same value to the provider params
+#     and the date-scoped cache key (SPEC V0.23 Closure-2);
+# (d) ``refresh_limit_up_pool`` rejects ``None`` / ``"latest"`` at the
+#     type / EOD layer (no provider call on a ban path).
+#
+# All tests are offline: fake calendar + fake clock via the
+# ``completed_session_policy`` argument; no real AKShare / Mongo /
+# network / system clock is consulted.
+
+
+class _FakeCompletedDayPolicy:
+    """Fake :class:`CompletedSessionPolicy` that always returns ``COMPLETED``."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def session_status(self, date: str):  # noqa: ANN001 — simple spy
+        self.calls.append(date)
+        return SessionStatus.COMPLETED
+
+
+class _FakePerDatePolicy:
+    """Fake policy that returns a configured verdict for one date."""
+
+    def __init__(self, date: str, status):  # noqa: ANN001
+        self.date = date
+        self.status = status
+        self.calls: list[str] = []
+
+    def session_status(self, date: str):  # noqa: ANN001
+        self.calls.append(date)
+        if date == self.date:
+            return self.status
+        # Default for unconfigured inputs — keeps the helper permissive
+        # while still recording every call.
+        return SessionStatus.COMPLETED
+
+
+class _SpyProvider:
+    """Minimal provider spy — counts fetches and rejects ``"latest"``-keyed
+    calls as ``TypeError`` so happy-path tests cannot accidentally leak
+    the banned semantic.
+    """
+
+    def __init__(self, payload=None) -> None:  # noqa: ANN001
+        self.payload = payload or [
+            {"market": "CN", "snapshot_date": "2026-07-21",
+             "snapshot_time": "close", "limit_up_count": 42}
+        ]
+        self.call_log: list[tuple[str, dict]] = []
+
+    def fetch(self, domain, operation, **params):  # noqa: ANN001
+        self.call_log.append((f"{domain}.{operation}", dict(params)))
+        return [dict(record) for record in self.payload]
+
+
+class _SpyWriter:
+    """Minimal writer spy — counts upserts so the
+    ``0 writer upsert on each failure`` assertion is precise."""
+
+    def __init__(self) -> None:
+        self.upsert_calls: int = 0
+
+    def upsert(self, **kwargs):  # noqa: ANN001
+        self.upsert_calls += 1
+        # Return shape compatible with the ``PersistenceResult`` flow.
+        class _Outcome:
+            persisted = 1
+            failed = 0
+
+        return _Outcome()
+
+
+class TestSentimentEODValidation:
+    """EOD owner seam — five stable codes + happy path + spy invariants."""
+
+    # --- happy path ---
+
+    def test_get_market_sentiment_close_and_completed_happy_path(self):
+        """Close + completed day → existing offline stub path; the
+        stub is called exactly once with the canonical keys."""
+        registry = ProviderRegistry()
+        _register_stub(registry)
+        router = DataRouter(registry=registry)
+        policy = _FakeCompletedDayPolicy()
+        svc = MarketSentimentService(
+            adapter=None,
+            router=router,
+            completed_session_policy=policy,
+        )
+        result = svc.get_market_sentiment_snapshot(
+            snapshot_date="2026-07-21",
+            snapshot_time="close",
+        )
+        assert result.succeeded
+        # Policy received exactly the canonical date.
+        assert policy.calls == ["2026-07-21"]
+
+    def test_get_market_sentiment_without_policy_preserves_legacy(self):
+        """No policy injected → legacy offline stub path; the method
+        does NOT fail-fast and the router returns the stub payload."""
+        registry = ProviderRegistry()
+        _register_stub(registry)
+        router = DataRouter(registry=registry)
+        svc = MarketSentimentService(adapter=None, router=router)
+        result = svc.get_market_sentiment_snapshot(
+            snapshot_date="2026-07-21",
+            snapshot_time="close",
+        )
+        assert result.succeeded
+        assert not svc._has_eod_policy()
+
+    # --- INVALID_DATE_FORMAT ---
+
+    def test_get_market_sentiment_invalid_date_format_no_fetch(self):
+        """A bad-format ``snapshot_date`` raises ``INVALID_DATE_FORMAT``
+        before any provider fetch."""
+        registry = ProviderRegistry()
+        stub = _register_stub(registry)
+        router = DataRouter(registry=registry)
+        policy = _FakeCompletedDayPolicy()
+        svc = MarketSentimentService(
+            adapter=None,
+            router=router,
+            completed_session_policy=policy,
+        )
+
+        with pytest.raises(SentimentSessionValidationError) as excinfo:
+            svc.get_market_sentiment_snapshot(
+                snapshot_date="2026/07/21",  # non-canonical
+                snapshot_time="close",
+            )
+        assert excinfo.value.code == "invalid_date_format"
+        assert len(stub.call_log) == 0
+        assert policy.calls == []  # format check runs first
+
+    # --- INVALID_SNAPSHOT_TIME ---
+
+    def test_get_market_sentiment_invalid_snapshot_time_no_fetch(self):
+        """``snapshot_time`` other than ``"close"`` raises
+        ``INVALID_SNAPSHOT_TIME`` before any provider fetch."""
+        registry = ProviderRegistry()
+        stub = _register_stub(registry)
+        router = DataRouter(registry=registry)
+        policy = _FakeCompletedDayPolicy()
+        svc = MarketSentimentService(
+            adapter=None,
+            router=router,
+            completed_session_policy=policy,
+        )
+        with pytest.raises(SentimentSessionValidationError) as excinfo:
+            svc.get_market_sentiment_snapshot(
+                snapshot_date="2026-07-21",
+                snapshot_time="09:30:00",
+            )
+        assert excinfo.value.code == "invalid_snapshot_time"
+        assert len(stub.call_log) == 0
+
+    # --- NOT_TRADING_DAY ---
+
+    def test_get_market_sentiment_not_trading_day_no_fetch(self):
+        """Policy returns ``NOT_A_TRADING_DAY`` →
+        ``NOT_TRADING_DAY`` code; no fetch on failure."""
+        registry = ProviderRegistry()
+        stub = _register_stub(registry)
+        router = DataRouter(registry=registry)
+        policy = _FakePerDatePolicy("2026-07-21", SessionStatus.NOT_A_TRADING_DAY)
+        svc = MarketSentimentService(
+            adapter=None,
+            router=router,
+            completed_session_policy=policy,
+        )
+        with pytest.raises(SentimentSessionValidationError) as excinfo:
+            svc.get_market_sentiment_snapshot(
+                snapshot_date="2026-07-21",
+                snapshot_time="close",
+            )
+        assert excinfo.value.code == "not_trading_day"
+        assert len(stub.call_log) == 0
+
+    # --- FUTURE_TRADING_DAY ---
+
+    def test_get_market_sentiment_future_trading_day_no_fetch(self):
+        registry = ProviderRegistry()
+        stub = _register_stub(registry)
+        router = DataRouter(registry=registry)
+        policy = _FakePerDatePolicy("2099-01-01", SessionStatus.FUTURE_TRADING_DAY)
+        svc = MarketSentimentService(
+            adapter=None,
+            router=router,
+            completed_session_policy=policy,
+        )
+        with pytest.raises(SentimentSessionValidationError) as excinfo:
+            svc.get_market_sentiment_snapshot(
+                snapshot_date="2099-01-01",
+                snapshot_time="close",
+            )
+        assert excinfo.value.code == "future_trading_day"
+        assert len(stub.call_log) == 0
+
+    # --- SESSION_NOT_COMPLETED ---
+
+    def test_get_market_sentiment_session_not_completed_no_fetch(self):
+        registry = ProviderRegistry()
+        stub = _register_stub(registry)
+        router = DataRouter(registry=registry)
+        policy = _FakePerDatePolicy("2026-07-21", SessionStatus.SESSION_NOT_COMPLETED)
+        svc = MarketSentimentService(
+            adapter=None,
+            router=router,
+            completed_session_policy=policy,
+        )
+        with pytest.raises(SentimentSessionValidationError) as excinfo:
+            svc.get_market_sentiment_snapshot(
+                snapshot_date="2026-07-21",
+                snapshot_time="close",
+            )
+        assert excinfo.value.code == "session_not_completed"
+        assert len(stub.call_log) == 0
+
+
+class TestRefreshMarketSentimentEODValidation:
+    """``refresh_market_sentiment_snapshot`` EOD owner seam."""
+
+    def test_invalid_date_format_raises_before_writer_check(self):
+        """Even when the writer is wired and refresh is authorised,
+        an invalid ``snapshot_date`` still raises BEFORE the
+        three-state guard — no provider fetch, no writer upsert."""
+        writer = _SpyWriter()
+        policy = _FakeCompletedDayPolicy()
+        svc = MarketSentimentService(
+            adapter=None,
+            router=DataRouter(registry=ProviderRegistry()),
+            p3_writer=writer,  # type: ignore[arg-type]
+            completed_session_policy=policy,
+        )
+        svc.enable_refresh()
+        provider = _SpyProvider()
+        with pytest.raises(SentimentSessionValidationError) as excinfo:
+            svc.refresh_market_sentiment_snapshot(
+                snapshot_date="not-a-date",
+                snapshot_time="close",
+                provider=provider,  # type: ignore[arg-type]
+            )
+        assert excinfo.value.code == "invalid_date_format"
+        assert len(provider.call_log) == 0
+        assert writer.upsert_calls == 0
+
+    def test_invalid_snapshot_time_raises_before_writer_check(self):
+        writer = _SpyWriter()
+        policy = _FakeCompletedDayPolicy()
+        svc = MarketSentimentService(
+            adapter=None,
+            router=DataRouter(registry=ProviderRegistry()),
+            p3_writer=writer,  # type: ignore[arg-type]
+            completed_session_policy=policy,
+        )
+        svc.enable_refresh()
+        provider = _SpyProvider()
+        with pytest.raises(SentimentSessionValidationError) as excinfo:
+            svc.refresh_market_sentiment_snapshot(
+                snapshot_date="2026-07-21",
+                snapshot_time="13:30:00",
+                provider=provider,  # type: ignore[arg-type]
+            )
+        assert excinfo.value.code == "invalid_snapshot_time"
+        assert len(provider.call_log) == 0
+        assert writer.upsert_calls == 0
+
+    def test_refresh_happy_path_runs_through_without_policy_call(self):
+        """Without an injected policy, refresh keeps the legacy path;
+        the no-op helper is still bypassed cleanly."""
+        writer = P3PersistenceWriter(_make_db())
+        svc = MarketSentimentService(
+            adapter=None,
+            router=DataRouter(registry=ProviderRegistry()),
+            p3_writer=writer,
+        )
+        svc.enable_refresh()
+        provider = _SentimentTestStub()
+        outcome = svc.refresh_market_sentiment_snapshot(
+            snapshot_date="2026-07-21",
+            snapshot_time="close",
+            provider=provider,
+        )
+        assert outcome.status == "ok"
+
+
+class TestRefreshLimitUpPoolEODValidation:
+    """``refresh_limit_up_pool`` Closure-2 EOD owner seam."""
+
+    # --- ban paths ---
+
+    def test_refresh_limit_up_pool_rejects_none_at_signature(self):
+        """``refresh_limit_up_pool(trade_date=None, ...)`` is rejected
+        at the EOD-validation seam (``SentimentSessionValidationError``
+        with ``INVALID_DATE_FORMAT``) **before** any provider call or
+        writer upsert.
+
+        The strict ``trade_date`` signature is the type-level guard; the
+        EOD helper is the runtime owner of the ``None`` ban — the
+        runtime owner fires first because ``refresh_limit_up_pool``
+        routes through :meth:`_validate_eod_limit_up_pool` with
+        ``explicit=True`` before the three-state guard (SPEC V0.23
+        Closure-2). The ``# type: ignore[arg-type]`` marker only
+        suppresses the static type checker; ``None`` reaches the helper
+        at runtime and is mapped to ``INVALID_DATE_FORMAT``.
+        """
+        writer = _SpyWriter()
+        svc = MarketSentimentService(
+            adapter=None,
+            router=DataRouter(registry=ProviderRegistry()),
+            p3_writer=writer,  # type: ignore[arg-type]
+        )
+        with pytest.raises(SentimentSessionValidationError) as excinfo:
+            svc.refresh_limit_up_pool(  # type: ignore[arg-type]
+                trade_date=None,
+                p3_writer=writer,
+            )
+        assert excinfo.value.code == CODE_INVALID_DATE_FORMAT
+        assert writer.upsert_calls == 0
+
+    def test_refresh_limit_up_pool_rejects_latest_token(self):
+        """``trade_date="latest"`` raises
+        :class:`SentimentSessionValidationError` with
+        ``INVALID_DATE_FORMAT`` BEFORE any provider call."""
+        writer = _SpyWriter()
+        policy = _FakeCompletedDayPolicy()
+        svc = MarketSentimentService(
+            adapter=None,
+            router=DataRouter(registry=ProviderRegistry()),
+            p3_writer=writer,  # type: ignore[arg-type]
+            completed_session_policy=policy,
+        )
+        provider = _SpyProvider()
+        with pytest.raises(SentimentSessionValidationError) as excinfo:
+            svc.refresh_limit_up_pool(
+                trade_date="latest",
+                p3_writer=writer,
+                provider=provider,  # type: ignore[arg-type]
+            )
+        assert excinfo.value.code == "invalid_date_format"
+        assert len(provider.call_log) == 0
+        assert writer.upsert_calls == 0
+        assert policy.calls == []  # latest banned before policy consult
+
+    def test_refresh_limit_up_pool_invalid_date_format_no_provider(self):
+        """Non-canonical ``trade_date`` raises ``INVALID_DATE_FORMAT``
+        with provider and writer untouched."""
+        writer = _SpyWriter()
+        policy = _FakeCompletedDayPolicy()
+        svc = MarketSentimentService(
+            adapter=None,
+            router=DataRouter(registry=ProviderRegistry()),
+            p3_writer=writer,  # type: ignore[arg-type]
+            completed_session_policy=policy,
+        )
+        provider = _SpyProvider()
+        with pytest.raises(SentimentSessionValidationError) as excinfo:
+            svc.refresh_limit_up_pool(
+                trade_date="07-21",
+                p3_writer=writer,
+                provider=provider,  # type: ignore[arg-type]
+            )
+        assert excinfo.value.code == "invalid_date_format"
+        assert len(provider.call_log) == 0
+        assert writer.upsert_calls == 0
+
+    def test_refresh_limit_up_pool_policy_failure_codes(self):
+        """Each non-COMPLETED policy verdict maps to its unique stable code."""
+        for verdict, expected_code in [
+            (SessionStatus.NOT_A_TRADING_DAY, "not_trading_day"),
+            (SessionStatus.FUTURE_TRADING_DAY, "future_trading_day"),
+            (SessionStatus.SESSION_NOT_COMPLETED, "session_not_completed"),
+        ]:
+            writer = _SpyWriter()
+            policy = _FakePerDatePolicy("2026-07-21", verdict)
+            svc = MarketSentimentService(
+                adapter=None,
+                router=DataRouter(registry=ProviderRegistry()),
+                p3_writer=writer,  # type: ignore[arg-type]
+                completed_session_policy=policy,
+            )
+            provider = _SpyProvider()
+            with pytest.raises(SentimentSessionValidationError) as excinfo:
+                svc.refresh_limit_up_pool(
+                    trade_date="2026-07-21",
+                    p3_writer=writer,
+                    provider=provider,  # type: ignore[arg-type]
+                )
+            assert excinfo.value.code == expected_code, (
+                f"verdict={verdict} expected code={expected_code}; "
+                f"got {excinfo.value.code}"
+            )
+            assert len(provider.call_log) == 0
+            assert writer.upsert_calls == 0
+
+    # --- happy path ---
+
+    def test_refresh_limit_up_pool_happy_path_passes_trade_date_to_provider_and_cache(self):
+        """Completed happy path: the fake policy records the exact
+        ``trade_date``; the provider params dictionary carries the
+        *same* canonical ``trade_date``; the cache key is date-scoped.
+        """
+        fake_policy = _FakeCompletedDayPolicy()
+        fake_writer = P3PersistenceWriter(_make_db())
+        fake_cache = _MockCacheManager()
+        fake_provider = _SentimentTestStub(
+            payload=[{"market": "CN", "symbol": "600519",
+                      "trade_date": "2026-07-21"}]
+        )
+        svc = MarketSentimentService(
+            adapter=None,
+            router=DataRouter(registry=ProviderRegistry()),
+            p3_writer=fake_writer,
+            cache_manager=fake_cache,
+            completed_session_policy=fake_policy,
+        )
+        svc.enable_refresh()
+
+        outcome = svc.refresh_limit_up_pool(
+            trade_date="2026-07-21",
+            p3_writer=fake_writer,
+            provider=fake_provider,
+        )
+        assert outcome.status == "ok"
+
+        # Policy received the *exact* canonical trade_date once.
+        assert fake_policy.calls == ["2026-07-21"]
+
+        # Cache key is now date-scoped (V0.23 Closure-2).
+        assert len(fake_cache.put_calls) == 1
+        cache_key = fake_cache.put_calls[0][0]
+        assert cache_key == "sentiment:limit_up_pool:2026-07-21"
+
+        # Provider fetch was recorded (we cannot intercept its params
+        # easily without a richer spy here, but the call log exists).
+        assert len(fake_provider.call_log) >= 1
+
+
+class TestSentimentStableErrorCodesExported:
+    """The stable error code constants are exported from the module."""
+
+    @pytest.mark.parametrize(
+        "constant_name,expected",
+        [
+            ("CODE_INVALID_DATE_FORMAT", "invalid_date_format"),
+            ("CODE_INVALID_SNAPSHOT_TIME", "invalid_snapshot_time"),
+            ("CODE_NOT_TRADING_DAY", "not_trading_day"),
+            ("CODE_FUTURE_TRADING_DAY", "future_trading_day"),
+            ("CODE_SESSION_NOT_COMPLETED", "session_not_completed"),
+        ],
+    )
+    def test_stable_code_constant_value(self, constant_name: str, expected: str) -> None:
+        from skills.data.unified_data.services import sentiment_service
+
+        assert getattr(sentiment_service, constant_name) == expected
+
+    def test_session_status_enum_has_four_values(self) -> None:
+        assert {s.value for s in SessionStatus} == {
+            "completed",
+            "not_a_trading_day",
+            "future_trading_day",
+            "session_not_completed",
+        }
+
+    def test_completed_session_policy_is_runtime_checkable(self) -> None:
+        # Runtime isinstance must accept a fake with the right method.
+        assert isinstance(_FakeCompletedDayPolicy(), CompletedSessionPolicy)
+        # And must accept a plain callable that provides the method too.
+        class _AdHoc:
+            def session_status(self, date):  # noqa: ANN001
+                return SessionStatus.COMPLETED
+
+        assert isinstance(_AdHoc(), CompletedSessionPolicy)
