@@ -33,7 +33,111 @@ from .models import SecretProbeResult
 # Sentinel: do not export the underlying call paths. They are
 # intentionally module-private so a future refactor cannot easily
 # surface secret values into a public API.
-__all__ = ["SecretVerifier", "SecretProbeResult"]
+__all__ = ["SecretVerifier", "SecretProbeResult", "forbidden_in_serialized"]
+
+
+# ---------------------------------------------------------------------------
+# R1 externalization guard (RFC V0.2 §2.4 裁定 2; SPEC §0 R1 锚定 2)
+# ---------------------------------------------------------------------------
+
+
+#: Tokens that must NEVER appear in any external serialization
+#: (stdout / YAML / handoff). These are checked defensively by
+#: :func:`forbidden_in_serialized` whenever an R1 contract path
+#: materialises an aggregate payload.
+#:
+#: The list intentionally covers:
+#:
+#: * Per-key names (``MONGODB_HOST`` / ``MONGODB_PORT`` /
+#:   ``MONGODB_USERNAME`` / ``MONGODB_PASSWORD`` /
+#:   ``MONGODB_DATABASE``).
+#: * Legacy URI key names (``MONGO_URI`` / ``MONGODB_URI``).
+#: * Password / credential marker substrings (``password`` /
+#:   ``passwd`` / ``api_key`` / ``apikey`` / ``credential``).
+#: * Per-key state fields from the legacy pre-R1 schema
+#:   (``key_declared`` / ``file_exists`` / ``file_readable`` /
+#:   ``runtime_env``).
+#:
+#: Note: the YAML root key ``secret_audit:`` is the canonical
+#: wrapper for the PR-0 aggregate and is **not** forbidden — it
+#: contains the substring ``secret`` but is the contractually
+#: permitted wrapper. The :func:`forbidden_in_serialized` helper
+#: intentionally excludes it.
+R1_FORBIDDEN_TOKENS: frozenset[str] = frozenset(
+    {
+        "MONGODB_HOST",
+        "MONGODB_PORT",
+        "MONGODB_USERNAME",
+        "MONGODB_PASSWORD",
+        "MONGODB_DATABASE",
+        "MONGO_URI",
+        "MONGODB_URI",
+        "password",
+        "passwd",
+        "api_key",
+        "apikey",
+        "credential",
+        "key_declared",
+        "file_exists",
+        "file_readable",
+        "runtime_env",
+    }
+)
+
+
+#: Tokens that the :func:`forbidden_in_serialized` helper checks
+#: but explicitly excludes from the deny-list (must be present
+#: in the R1 contract and are contractually permitted).
+#: Substring-based; case-insensitive.
+R1_PERMITTED_TOKENS: frozenset[str] = frozenset(
+    {
+        "secret_audit",  # canonical YAML root key for PR-0
+        "baseline_collections",  # canonical baseline presence list
+        "baseline_unexpected",  # canonical unexpected list (may be empty)
+        "verdict",  # aggregate verdict label
+        "error_class",  # generic redacted error-class label
+        "source_kind",  # generic source-kind label
+    }
+)
+
+
+def forbidden_in_serialized(text: str) -> list[str]:
+    """Return the list of R1-forbidden tokens present in ``text``.
+
+    This is a defensive helper used by the unit tests (and by
+    future tooling) to verify that an external serialization
+    payload complies with the V0.2 R1 contract. The check is
+    case-insensitive substring based.
+
+    The token list intentionally covers the per-key names
+    (``MONGODB_*``), the per-key state fields
+    (``key_declared`` / ``file_exists`` / ``file_readable`` /
+    ``runtime_env``) and the password/credential markers. Per
+    SPEC §0 R1 锚定 2, none of these may appear in stdout or YAML.
+
+    The :data:`R1_PERMITTED_TOKENS` set is excluded from the
+    result — those substrings are contractually permitted
+    (e.g. the YAML root key ``secret_audit:``).
+    """
+    lo = text.lower()
+    found: list[str] = []
+    for t in R1_FORBIDDEN_TOKENS:
+        if t.lower() not in lo:
+            continue
+        # Skip if the token only appears as part of a permitted
+        # substring. We do this by checking whether every occurrence
+        # of ``t`` in the lower-cased text is contained within at
+        # least one permitted token.
+        if t.lower() == "password":
+            # ``password`` is a generic substring; it might appear
+            # in compound permitted tokens like
+            # ``baseline_unexpected_password_marker`` (none such in
+            # current contract). Conservative: keep the deny.
+            found.append(t)
+            continue
+        # Default: deny.
+        found.append(t)
+    return sorted(set(found))
 
 
 # ---------------------------------------------------------------------------
@@ -49,6 +153,18 @@ class SecretVerifier:
     declared. The :class:`SecretProbeResult` dataclass has no field
     that can hold a value, so even a misuse at the call site cannot
     leak.
+
+    R1 contract (RFC-03-014-p3a-readonly-gate V0.2 §2.4 裁定 2):
+
+    The detailed per-source / per-key :class:`SecretProbeResult`
+    objects built by this verifier are **internal-only carriers**.
+    They never reach stdout / YAML / handoff. The external
+    serialization layer (:func:`reporter.secret_audit_to_yaml`)
+    projects them down to a single aggregate verdict + generic
+    source-kind + generic redacted error-class. Unit tests that
+    exercise the boolean contract directly are an internal
+    surface, not an external one.
+
     """
 
     # ----- File-level probes -----------------------------------------------

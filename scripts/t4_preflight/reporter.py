@@ -36,7 +36,11 @@ import re
 from datetime import date, datetime
 from typing import Any
 
-from .config import SANITIZER_MAX_LIST_LENGTH, SANITIZER_MAX_STRING_LENGTH
+from .config import (
+    P3_BUSINESS_COLLECTIONS,
+    SANITIZER_MAX_LIST_LENGTH,
+    SANITIZER_MAX_STRING_LENGTH,
+)
 from .models import (
     ConnectionResult,
     AuthResult,
@@ -46,9 +50,12 @@ from .models import (
     DataSampleResult,
     FixtureDeviationResult,
     OverallVerdict,
+    SecretAuditAggregate,
     SecretAuditResult,
     SecretProbeResult,
     SmokeReport,
+    MongoPreflightAggregate,
+    BaselineCollectionPresence,
 )
 
 # ---------------------------------------------------------------------------
@@ -492,27 +499,172 @@ if __name__ == "__main__":
 
 
 def secret_audit_to_yaml(result: SecretAuditResult) -> str:
-    """Convenience: serialize a SecretAuditResult to YAML."""
-    payload = {
+    """R1 aggregate-only serialization of a :class:`SecretAuditResult`.
+
+    Per RFC-03-014-p3a-readonly-gate V0.2 §2.4 裁定 2 / SPEC §0 R1
+    锚定 2 / DESIGN §4.4, the **only** fields permitted to reach
+    stdout / YAML for PR-0 are:
+
+    * ``generated_at`` — ISO 8601 timestamp.
+    * ``source_kind`` — generic label from :data:`R1_SOURCE_KINDS`.
+    * ``overall.verdict`` — single aggregate verdict.
+    * ``overall.error_class`` — generic redacted error-class label.
+
+    The legacy fields ``sources[]``, ``missing_keys``,
+    per-source / per-key boolean detail (file_exists /
+    file_readable / key_declared / is_loadable) are explicitly
+    omitted. Reviewers cannot derive key names, declared/runtime
+    state, password markers, paths, values, lengths, hashes, or
+    URIs from the resulting YAML.
+
+    The internal :class:`SecretAuditResult` still carries the full
+    boolean detail for the verdict computation; this serializer is
+    the gate that decides what reaches the wire.
+    """
+    aggregate = _to_secret_audit_aggregate(result)
+    return _yaml_dump(sanitize(_secret_aggregate_to_payload(aggregate)))
+
+
+def _to_secret_audit_aggregate(result: SecretAuditResult) -> SecretAuditAggregate:
+    """Project a :class:`SecretAuditResult` to its R1 aggregate form.
+
+    The mapping is deterministic and does NOT carry any per-key /
+    per-source boolean detail. Only the verdict, a generic
+    source-kind label, and a generic redacted error-class reach the
+    :class:`SecretAuditAggregate`.
+    """
+    # Source-kind selection: we always emit the canonical
+    # ``phase2_skills_env`` label regardless of which candidate
+    # produced the verdict (RFC V0.2 §5.1; SPEC F-PR0-005). The
+    # internal probe may have inspected multiple paths; the
+    # external surface collapses them to one generic label.
+    source_kind = "phase2_skills_env"
+
+    # Error-class mapping: coarse category derived from the
+    # aggregate verdict, never the per-key detail. ``unauthorized``
+    # with no probe detail → ``file_missing`` (the canonical
+    # not-found state for ``skills/.env``). ``conditional_authorized``
+    # has no error to surface. ``authorized`` has no error either.
+    verdict = result.status
+    if verdict == "authorized":
+        error_class = None
+    elif verdict == "conditional_authorized":
+        # R1: file-declared / runtime env absent = conditional. We
+        # emit no error-class here (the verdict itself carries the
+        # conditional signal); keeping ``None`` ensures no
+        # forbidden tokens can leak through this channel.
+        error_class = None
+    else:  # unauthorized
+        # Coarse: only the presence/absence of a candidate file is
+        # summarised; we never name which key or path is missing.
+        # ``file_missing`` is the canonical signal for
+        # ``skills/.env`` not being present.
+        error_class = "file_missing"
+
+    return SecretAuditAggregate(
+        source_kind=source_kind,
+        verdict=verdict,
+        error_class=error_class,
+        generated_at=result.generated_at,
+    )
+
+
+def _secret_aggregate_to_payload(agg: SecretAuditAggregate) -> dict[str, Any]:
+    """Render an R1 :class:`SecretAuditAggregate` to the YAML payload.
+
+    The payload is structurally minimal — exactly the four permitted
+    top-level keys (RFC V0.2 §4.4 / SPEC §4.1).
+    """
+    return {
         "secret_audit": {
-            "generated_at": result.generated_at,
-            "sources": [
-                {
-                    "source": s.source_name,
-                    "file_exists": s.file_exists,
-                    "file_readable": s.file_readable,
-                    "key_declared": s.key_declared,
-                    "is_loadable": s.is_loadable,
-                }
-                for s in result.sources
-            ],
+            "generated_at": agg.generated_at,
+            "source_kind": agg.source_kind,
             "overall": {
-                "status": result.status,
-                "missing_keys": list(result.missing_keys),
+                "verdict": agg.verdict,
+                "error_class": agg.error_class,
             },
         }
     }
-    return _yaml_dump(sanitize(payload))
+
+
+def mongo_preflight_aggregate_to_yaml(agg: MongoPreflightAggregate) -> str:
+    """R1 aggregate-only serialization of a :class:`MongoPreflightAggregate`.
+
+    The external PR-1 surface exposes designated baseline presence plus a
+    generic unexpected-presence signal. It never emits arbitrary collection
+    names or the internal collection enumeration.
+
+    * ``generated_at`` — ISO 8601 timestamp.
+    * ``preflight_mongo.connectivity`` — generic label.
+    * ``preflight_mongo.latency_ms`` — coarse latency number (no
+      per-operation breakdown).
+    * ``preflight_mongo.baseline_collections`` — presence booleans
+      for the 3 designated baseline collections, by name. Never the
+      full :func:`list_collection_names` enumeration.
+    * ``preflight_mongo.unexpected_presence`` — generic boolean for
+      non-designated collection presence (``true`` → Pascal review).
+      Collection names are never emitted.
+    * ``preflight_mongo.warnings`` — generic warning labels.
+    * ``overall.verdict`` — pass / conditional_pass / fail /
+      unauthorized.
+
+    The legacy fields ``collections`` (full enumeration),
+    ``p3_collections_found`` (the old name), ``detail``, and
+    ``MONGODB_*``-shaped strings are explicitly omitted.
+    """
+    return _yaml_dump(sanitize(_mongo_aggregate_to_payload(agg)))
+
+
+def _mongo_aggregate_to_payload(agg: MongoPreflightAggregate) -> dict[str, Any]:
+    """Render an R1 :class:`MongoPreflightAggregate` to YAML payload.
+
+    The payload is structurally minimal — exactly the allowed
+    aggregate keys; no free-form collection names are serialized.
+    """
+    # Treat the aggregate as an external boundary, not as a trusted
+    # internal object.  Only the canonical designated names may appear
+    # in the wire payload, even if a malformed/synthetic aggregate was
+    # constructed by a caller with arbitrary ``BaselineCollectionPresence``
+    # entries.  Fill absent entries with ``False`` so the three-state
+    # surface remains stable without echoing unknown names.
+    observed_presence = {
+        entry.name: entry.present
+        for entry in agg.baseline_collections
+        if entry.name in P3_BUSINESS_COLLECTIONS
+    }
+    baseline_collections = [
+        {"name": name, "present": observed_presence.get(name, False)}
+        for name in P3_BUSINESS_COLLECTIONS
+    ]
+
+    # Warning values are also an external boundary.  Preserve only the
+    # known generic labels; collapse arbitrary text (which may contain a
+    # collection name) to a fixed generic signal.  Prefix matching keeps
+    # the generic unexpected-presence meaning while discarding any suffix.
+    safe_warnings: list[str] = []
+    for warning in agg.warnings:
+        if warning.startswith("unexpected_collection_presence"):
+            safe_warnings.append("unexpected_collection_presence")
+        elif warning.startswith("list_collections_unauthorized"):
+            safe_warnings.append("list_collections_unauthorized")
+        elif warning in {"dry_run", "env_missing", "preflight_warning"}:
+            safe_warnings.append(warning)
+        else:
+            safe_warnings.append("preflight_warning")
+
+    return {
+        "preflight_mongo": {
+            "generated_at": agg.generated_at,
+            "connectivity": agg.connectivity,
+            "latency_ms": agg.latency_ms,
+            "baseline_collections": baseline_collections,
+            "unexpected_presence": agg.unexpected_presence,
+            "warnings": safe_warnings,
+        },
+        "overall": {
+            "verdict": agg.overall_verdict,
+        },
+    }
 
 
 def smoke_report_to_yaml(report: SmokeReport) -> str:
@@ -611,6 +763,7 @@ __all__ = [
     "sanitize",
     "to_yaml",
     "secret_audit_to_yaml",
+    "mongo_preflight_aggregate_to_yaml",
     "smoke_report_to_yaml",
     "detect_worktree_changed",
     "ConnectionResult",
@@ -624,4 +777,7 @@ __all__ = [
     "SmokeReport",
     "SecretProbeResult",
     "SecretAuditResult",
+    "SecretAuditAggregate",
+    "MongoPreflightAggregate",
+    "BaselineCollectionPresence",
 ]

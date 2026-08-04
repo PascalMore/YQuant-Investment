@@ -25,6 +25,8 @@ from .session_policy import (
     NaiveClockError,
     InvalidDateFormatError,
     AShareCompletedSessionPolicy,
+    # OQ-11 production real-clock (DESIGN-03-014 V0.33 §OQ-11B.2).
+    SystemClock,
 )
 
 __all__ = [
@@ -49,4 +51,6 @@ __all__ = [
     'NaiveClockError',
     'InvalidDateFormatError',
     'AShareCompletedSessionPolicy',
-]
+    # OQ-11 production real-clock (DESIGN-03-014 V0.33 §OQ-11B.2).
+    'SystemClock',
+]  # noqa: E501

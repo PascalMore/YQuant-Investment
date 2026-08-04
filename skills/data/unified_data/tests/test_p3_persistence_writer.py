@@ -654,6 +654,25 @@ class TestAllP3CollectionsCovered:
             P3_UNIQUE_KEYS_BY_CAPABILITY["sector.snapshot"]
         )
 
+    def test_sentiment_market_snapshot_key_differs_from_limit_up_pool_key(self):
+        # F3 direct tripwire (SPEC-03-014-F1 §4.1 C-1):
+        # the two sentiment capabilities share a collection but must
+        # carry distinct canonical business keys; accidental conflation
+        # would silently collapse the dual-write semantics.
+        market_snapshot_key = P3_UNIQUE_KEYS_BY_CAPABILITY[
+            "sentiment.market_snapshot"
+        ]
+        limit_up_pool_key = P3_UNIQUE_KEYS_BY_CAPABILITY[
+            "sentiment.limit_up_pool"
+        ]
+        assert market_snapshot_key != limit_up_pool_key
+        assert market_snapshot_key == frozenset(
+            {"market", "snapshot_date", "snapshot_time"}
+        )
+        assert limit_up_pool_key == frozenset(
+            {"market", "symbol", "trade_date"}
+        )
+
     def test_collection_map_contains_sector_flow_sentiment(self):
         expected = {
             SECTOR_COLLECTION,

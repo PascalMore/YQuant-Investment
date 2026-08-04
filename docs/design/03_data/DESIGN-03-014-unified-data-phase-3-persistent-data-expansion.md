@@ -7,10 +7,10 @@
 | 状态 | Draft |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-21 |
-| 最后更新 | 2026-08-03（V0.31 P3-C Scope Reconcile：用户授权将唯一 T3 allowlist 从 7 项最小扩展至 8 项，唯一新增 `skills/data/unified_data/tests/test_sentiment_limit_up_pool.py`——public `refresh_limit_up_pool` 必填日期迁移影响既有 colocated 回归（旧 T3 retries exhausted；恢复验证实测 161 passed / 4 failed，`test_sentiment_limit_up_pool.py:283` 遗留 TypeError 表明测试 allowlist 漏项）；§8.3 升级为「P3-C V0.24/V0.31 closure-only T3 allowlist」（恰好 8 个路径，优先于所有旧 Phase-3 总体迁移表，显式禁止 akshare/registry/router/writer/Mongo/cache/client/refresh activation/网络/调度，不得含第 9 项）；第 8 项唯一职责为更新 fake refresh / missing-writer regression 显式提供 canonical `trade_date` + 验证 mandatory-date 契约与 ProviderUnavailable/error behavior，不得引入 Provider/registry/router/writer/Mongo/cache/client/network/refresh activation/scheduling 文件；`test_sentiment_service.py` 继续负责 mandatory-date、稳定错误码和零副作用 spies。保留全部冻结项：offline stub/defer；AKShare sentiment 未注册、live-read 不重跑；`total_turnover=None`；OQ-10/OQ-11；F6 TTL/key；真实 refresh 仍禁止。V0.30 的 EOD 执行契约、V0.29 的 EOD 验证执行契约、测试矩阵修正与 V0.28 的 P3-C 时间语义裁定同步保持不变。不动 P0/§P1 各节既有内容、不动 DDL/Gate 授权、不动 F6 canonical freshness key 与 TTL=3600、不动所有 ❌ 状态。V0.32 **OQ-11 生产 CompletedSessionPolicy 详细设计（Design-only，对应 RFC/SPEC-03-014 V0.25）**：新增 §OQ-11——裁定 date_utils 最小严格查询 seam（`CalendarDayStatus` 五态 + `query_trading_day_status(d)` + `session_close_strict(d)` + `parse_date_strict(d)`，现有 6 个 public API 兼容）、新增 infra adapter 文件 `skills/infra/session_policy.py`（`SessionStatus` 迁移为 infra 唯一定义并由 service re-export、`Clock` Protocol（naive → 构造期 fail-fast）、`SessionPolicyError` 层次（CalendarUnavailableError/DateOutOfRangeError/NaiveClockError，携带安全 audit metadata）、`AShareCompletedSessionPolicy`（仅依赖 date_utils strict seam，无 unified_data 反向依赖））、EOD-7.5 优先级 1-7 严格一致的判定算法（invalid/unavailable/out_of_range/calendar error 全部 fail-closed，禁止 fallback `TRADING_DAYS_2026`/周末/latest，禁止误判 `NOT_A_TRADING_DAY`）、composition root 为未来 seam（本阶段不创建）、production injection 不放行（默认 `completed_session_policy=None` 离线路径保持）、最小 audit record（AuditLogger 默认关闭，本任务不新增写入）、OQ-11 T3 精确 7 文件 allowlist 与 fake calendar + fake clock 测试矩阵（零 I/O 断言）与纯代码 rollback。不动 §3.3 EOD-1~EOD-6 既有内容、不动 §5.3 既有 EOD seam、不动 §8.3 P3-C closure-only allowlist、不动 P0/§P1/§15/§17、不动 DDL/Gate 授权、不动所有 ❌ 状态。） |
-| 版本号 | V0.32 |
-| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.25） |
-| 来源 SPEC | SPEC-03-014（Phase 3 持久化扩展契约，V0.25） |
+| 最后更新 | 2026-08-04（V0.35 **P3-A read-path 结果词汇三态统一仲裁**（P0 Contract Arbitration，对应 RFC/SPEC-03-014 V0.31）：§R2.0 来源指针同步至 V0.31、§R2 标题补注「V0.31 三态统一仲裁」、§R2.4 追加 P3-A read-path census → 三态唯一映射——成功态唯一映射 `production-validated`（仅 read-path scope，≠ 实时 Provider 验证，仅能由未来获授权且实际执行、独立验证的 G-R2-1 census 产生）；不可用态唯一映射 `provider-unavailable-frozen`；schema drift / 认证失败 / 越界写入 / Verify 未通过 = 非结论 fail-stop（不落三态）；`intentionally-unavailable` 不适用于 P3-A read-path；禁止杜撰第四/第五状态；本同步自身不产生任何生产结论。**V0.34** **R2 Design Sync**（Design-only，对应 RFC/SPEC-03-014 V0.30 的 §R2 生产验证 Re-baseline；本同步**不产生任何生产结论**）：新增 §R2 生产验证 Re-baseline 同步章节（R2.0 元数据与 §R2 标题语义 / R2.1 范畴裁定与执行边界 / R2.2 旧 PR-2 语义 superseded / R2.3 三子阶段冻结语义 / R2.4 生产结论词汇 / R2.5 后续生产 Gate 授权骨架 / R2.6 双向引用与一致性声明）；来源 RFC/SPEC 指针同步至 **V0.30**；§R2 标题语义消歧（RFC=V0.27 引入/V0.29 同步、SPEC=V0.28 引入/V0.29 同步，本 Design 仅引用其冻结版 V0.30）；`name_em`/`cons_em` 禁入任何执行计划、旧 PR-2 仅历史证据、后续 Gate G-R2-1~G-R2-4 均需逐项独立 Pascal 授权。**V0.33** **OQ-11 生产注入 Gate 详细设计**（Design-only，对应 RFC/SPEC-03-014 V0.26 EOD-8 系列；Pascal 已授权但**尚未执行**）：新增 §OQ-11B——唯一 production composition root = 新增 `skills/data/unified_data/services/composition.py`（候选 b `services/__init__.py` 扩展 / c `client.py` 构造 / d `scripts/unified_data/` CLI 均以仓库事实排除）；`SystemClock` 追加于 `skills/infra/session_policy.py`（实现 infra `Clock` Protocol）；本地 preflight CLI = 新增 `scripts/unified_data/preflight_sentiment_policy.py`（默认 `--dry-run`、零工作树写入/零 secrets/零网络/Mongo）；T3 精确 7 文件 allowlist；T4 `.venv/bin/python` 锁定；**T6 裁定 fail-stop**（仓库事实：无 in-repo systemd unit、HEARTBEAT.md host 级条目均非 OQ-11 目标、TradingAgents-CN start/stop_all.sh 管理无关 Web 应用且重启含 Mongo/Tushare 副作用、无 MarketSentimentService 生产 consumer → 无可安全重启 target，禁臆造/增设 unit；T6 仅执行只读 preflight 后 fail-stop，注入不执行，`completed_session_policy=None` 全路径保持）；回滚仅撤销注入恢复 None、禁 DB 删除/自动回滚。**V0.32** OQ-11 生产 `CompletedSessionPolicy` 详细设计（Design-only，对应 RFC/SPEC-03-014 V0.25 EOD-7 系列）：新增 §OQ-11——date_utils 最小严格查询 seam（`CalendarDayStatus` 五态 + `query_trading_day_status`/`session_close_strict`/`parse_date_strict`，现有 6 个 public API 兼容）、新增 infra adapter `skills/infra/session_policy.py`（`SessionStatus` 迁移为 infra 唯一定义 + `Clock` Protocol（naive → 构造期 fail-fast）+ `SessionPolicyError` 层次 + `AShareCompletedSessionPolicy`，无 unified_data 反向依赖）、EOD-7.5 优先级 1-7 判定算法（invalid/unavailable/out_of_range/calendar error 全部 fail-closed，禁 fallback `TRADING_DAYS_2026`/周末/latest）、composition root 为未来 seam（本阶段不创建）、production injection 不放行（默认 `completed_session_policy=None` 离线路径保持）、最小 audit record（AuditLogger 默认关闭，本任务不新增写入）、OQ-11 T3 精确 7 文件 allowlist 与 fake calendar + fake clock 测试矩阵（零 I/O 断言）与纯代码 rollback。**V0.31** P3-C Scope Reconcile（用户授权，仅文档；对应 RFC/SPEC-03-014 V0.24）：唯一 T3 allowlist 从 7 项最小扩展至 8 项（唯一新增 `skills/data/unified_data/tests/test_sentiment_limit_up_pool.py`），§8.3 升级为「P3-C V0.24/V0.31 closure-only T3 allowlist」（恰好 8 个路径，优先于所有旧 Phase-3 总体迁移表，显式禁止 akshare/registry/router/writer/Mongo/cache/client/refresh activation/网络/调度，不得含第 9 项）。保留全部冻结项：offline stub/defer；AKShare sentiment 未注册、live-read 不重跑；`total_turnover=None`；OQ-10/OQ-11；F6 TTL/key；真实 refresh 仍禁止。不动 P0/§P1 各节既有内容、不动 DDL/Gate 授权、不动 F6 canonical freshness key 与 TTL=3600、不动所有 ❌ 状态。） |
+| 版本号 | V0.35 |
+| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.31） |
+| 来源 SPEC | SPEC-03-014（Phase 3 持久化扩展契约，V0.31） |
 | 关联 Design | DESIGN-03-007（Unified Data Layer 总体设计，V3.4） |
 | 关联 RFC | RFC-03-012（Phase 1D CN 日线真实外部 Provider 激活）、RFC-03-011（Phase 2 质量与审计治理）、RFC-03-013（Phase 1E 情绪最小切片） |
 | 关联 SPEC | SPEC-03-007（Unified Data Layer 契约基线）、SPEC-03-008（Phase 1B-A 查询平面）、SPEC-03-013（Phase 1E 情绪最小切片） |
@@ -39,6 +39,9 @@
 | V0.30 | 2026-08-03 | **P3-C Principal Closure-2（closure-only 文档修订，对应 RFC/SPEC-03-014 V0.23）**。独立 closure Verify `t_1761343d` verdict = **FAIL**（2 个未闭合 MAJOR），本卡一次性修订：① **`refresh_limit_up_pool` 可执行 EOD 契约**——§3.3/§5.3 服务签名冻结为 `refresh_limit_up_pool(trade_date: str, *, p3_writer=None, provider=None)`（docstring + 伪代码 + EOD-1/EOD-5/§8.1/§9.1 同步）；本轮 refresh **不允许** `None`/latest 语义；`trade_date` 必须 canonical `YYYY-MM-DD`，由 `CompletedSessionPolicy` 在 provider fetch / writer upsert / cache put **之前**校验（5 个既有错误 code 的日期相关分支适用，无新增模糊 code）；happy path 将同一 canonical `trade_date` 传入 provider params 并用于 date-scoped cache key，**不得先 fetch 后推断日期**。② **唯一 7 文件 closure-only T3 allowlist**——新增 §8.3「P3-C V0.22/V0.29 closure-only T3 allowlist」，路径集合与 RFC §5.3.5 / SPEC-03-014 §12.bis.4 逐项严格相同（`models/domain/sentiment.py` / `providers/sentiment_stub.py` / `tests/fixtures/sentiment_fixtures.py` / `services/sentiment_service.py` / `tests/test_market_sentiment_22field.py` / `tests/test_sentiment_service.py` / `tests/test_mapping_sentiment.py`），对本轮 T3 **优先于所有旧 Phase-3 总体迁移表**（含 §8.1/§8.2 总表）；显式禁止 `providers/akshare.py`、provider registry/fallback、router、writer、Mongo、cache、client facade、refresh activation、网络、外部 provider、调度；§8.1 总表中不在 7 项内的 P3-C 相关行标记 superseded / non-applicable；`refresh_limit_up_pool` 离线 service 签名/guard/test 属 T3，真实执行仍禁止。§3.3、§5.3、§8.1、§8.2、§8.3、§9.1 同步。不动 P0/§P1 各节既有内容、不动 DDL/Gate 授权、不动 F6 canonical freshness key 与 TTL=3600、不动所有 ❌ 状态。 | YQuant-Principal |
 | V0.31 | 2026-08-03 | **P3-C Scope Reconcile（用户授权，仅文档；对应 RFC/SPEC-03-014 V0.24）**。Pascal 明确授权：维持 `refresh_limit_up_pool(trade_date: str, ...)` 已批准 EOD 契约，并将唯一 T3 allowlist 从 7 项**最小扩展至 8 项**——唯一新增 `skills/data/unified_data/tests/test_sentiment_limit_up_pool.py`（触发证据：旧 T3 retries exhausted；恢复验证实测 161 passed / 4 failed，其中 1 个失败位于未被允许修改的 `tests/test_sentiment_limit_up_pool.py:283`——新 mandatory `trade_date` 签名使该遗留测试 TypeError，表明测试 allowlist 漏项）。§8.3 升级为「P3-C V0.24/V0.31 closure-only T3 allowlist」并逐项列出恰好 8 个路径；第 8 项唯一职责：更新既有 fake refresh / missing-writer regression 显式提供 canonical `trade_date` + 验证 mandatory-date 契约与 ProviderUnavailable/error behavior，不得引入任何 Provider/registry/router/writer/Mongo/cache/client/network/refresh activation/scheduling 文件；`test_sentiment_service.py` 继续负责 mandatory-date、稳定错误码和零副作用 spies；新增第 8 项不得成为扩大生产范围的依据。保留全部冻结项：offline stub/defer；AKShare sentiment 未注册、live-read 不重跑；`total_turnover=None`；OQ-10/OQ-11；F6 TTL/key；真实 refresh 仍禁止。不动 P0/§P1 各节既有内容、不动 DDL/Gate 授权、不动 F6 canonical freshness key 与 TTL=3600、不动所有 ❌ 状态。 | YQuant-Principal |
 | V0.32 | 2026-08-03 | **OQ-11 生产 `CompletedSessionPolicy` 详细设计（Design-only，对应 RFC/SPEC-03-014 V0.25 EOD-7 系列；本 Design 为权威详细设计）**。新增 §OQ-11：① **date_utils 最小严格查询 seam**——`CalendarDayStatus`（TRADING/NOT_TRADING/UNAVAILABLE/OUT_OF_RANGE/ERROR 五态，禁 bool|None 折叠）+ `query_trading_day_status(d)` + `session_close_strict(d)` + `parse_date_strict(d)`（timezone-aware close instant，禁硬编码裸 15:00）；现有 6 个 public API（`is_trading_day` 等）签名与语义保持兼容；② **新增 infra adapter 文件 `skills/infra/session_policy.py`**——`SessionStatus` 迁移为 infra 唯一定义（service re-export 保持模块级兼容）、`Clock` Protocol（`now() -> datetime` 必须 tz-aware，naive 在构造期 fail-fast `NaiveClockError`）、`SessionPolicyError` 错误层次（`CalendarUnavailableError`/`DateOutOfRangeError`/`NaiveClockError`，携带安全 audit metadata：date/clock_source_class/reason，不含日历全量或凭证）、`AShareCompletedSessionPolicy`（仅依赖 date_utils strict seam + `ZoneInfo('Asia/Shanghai')`，无 unified_data 反向依赖；`cutoff_grace=timedelta(0)` 默认，为独立可配置可审计 policy 参数，本阶段不创建配置文件）；③ **EOD-7.5 优先级 1-7 严格一致的判定算法**——invalid / calendar unavailable / out-of-range / calendar error 全部 fail-closed（禁 fallback `TRADING_DAYS_2026`/周末/latest，禁误判 `NOT_A_TRADING_DAY`），NaiveClock 构造期 fail-fast，not-trading / future / current pre-close / historical & current post-close 判定表与 service 映射（internal error → service 层 `ProviderUnavailableError` 依赖不可用语义，不新增 public token）；④ **composition root 为未来 integration seam（本阶段不创建）**——唯一允许 real clock 位置；即使 T3 完成，默认仍 `completed_session_policy=None` 不注入 real policy，直到 Pascal 按 Gate 授权；⑤ **最小 audit record**——calendar identity/version、timezone、cutoff policy id、输入 date、clock 来源类别（real/fake）、最终 `SessionStatus`、降级/错误原因；AuditLogger 默认关闭，本任务不新增写入；⑥ **OQ-11 T3 精确 7 文件 allowlist + fake calendar + fake timezone-aware clock 测试矩阵**（全优先级路径 + 每个不可判定路径不落 hardcoded fallback + 全路径 `0 provider / 0 writer upsert / 0 cache put / 0 Mongo / 0 网络` 断言）+ 纯代码 rollback（移除 production composition injection，保留 `None` 离线 seam，禁止「回滚数据库」）。不动 §3.3 EOD-1~EOD-6、不动 §5.3 既有 EOD seam、不动 §8.3 P3-C closure-only allowlist、不动 P0/§P1/§15/§17、不动 DDL/Gate 授权、不动所有 ❌ 状态。 | YQuant-Principal |
+| V0.33 | 2026-08-04 | **OQ-11 生产注入 Gate 详细设计（Design-only，对应 RFC/SPEC-03-014 V0.26 EOD-8 系列；本 Design 为权威详细设计）**。新增 §OQ-11B：① **唯一 production composition root = 新增 `skills/data/unified_data/services/composition.py`**（最小纯装配模块，`build_production_sentiment_service(clock=None)` 默认保持离线宽松路径；候选 b `services/__init__.py` 扩展、c `client.py` 构造、d `scripts/unified_data/` CLI 均以仓库事实排除——services/__init__ 为导出面不宜混装配、client facade 必须保持未修改、scripts/unified_data 无 sentiment 生产进程入口）；② **`SystemClock` 追加于 `skills/infra/session_policy.py`**（实现 infra `Clock` Protocol，`now()` 返回 `datetime.now(tz=ZoneInfo("Asia/Shanghai"))` tz-aware，构造期 fail-fast 复用 `NaiveClockError`，audit `clock_source_class="SystemClock"`）；③ **本地 preflight CLI = 新增 `scripts/unified_data/preflight_sentiment_policy.py`**（默认 `--dry-run`，零工作树写入/零 secrets/零网络/Mongo，输出仅含 calendar identity / `exchange_calendars.__version__` 现场读取 / timezone / coverage 范围摘要 / 各一 trading-not_trading-session_close 判定 / 零 I/O 计数；样例日期运行时由 calendar 输出推导——trading 样例 = `first_session`（经 `query_trading_day_status` 复核），not_trading 样例 = 从 `first_session` 向前扫描首个非交易日，session_close 样例 = `session_close_strict(first_session)`，禁硬编码与 `TRADING_DAYS_2026`/weekend/`is_trading_day()`）；④ **T6 裁定 fail-stop**——仓库事实复核：无 in-repo systemd unit、HEARTBEAT.md host 级 cron/systemd 条目（全球市场日报 08:00 / SmartMoney 20:30 / Argus 20:35 / 酒店抓取 06:10 / auto-push 03:30）均非 OQ-11 目标、`TradingAgents-CN/start_all.sh`/`stop_all.sh` 管理无关 Web 应用（backend:8000 + frontend:3000，含 Mongo/Tushare/scheduler/smoke 副作用，不消费 `MarketSentimentService`）→ **无可安全重启 target，禁臆造/增设 unit**；T6 仅执行只读 preflight 后 fail-stop，注入不执行，`completed_session_policy=None` 全路径保持；⑤ E2E 六类断言（completed / current pre-close / non-trading / future / unavailable-or-out-of-range / naive clock）+ 每路径零写入（0 Provider/0 Mongo/0 cache/0 refresh/0 网络/0 文件写）；⑥ 最小无秘密审计字段（默认不持久化、不启用 AuditLogger）；⑦ 纯代码回滚（撤销 composition injection 恢复 None，禁 DB 回滚/删除/自动回滚）。不动 §OQ-11 V0.32 离线内容、不动 §3.3 EOD-1~EOD-6、不动 §5.3 既有 EOD seam、不动 §8.3 P3-C closure-only allowlist、不动 P0/§P1/§15/§17、不动 DDL/Gate 授权、不动所有 ❌ 状态。 | YQuant-Principal |
+| V0.34 | 2026-08-04 | **R2 Design Sync（Design-only，对应 RFC/SPEC-03-014 V0.30 的 §R2 生产验证 Re-baseline；本 Design 为权威详细设计）**。新增 §R2 生产验证 Re-baseline 同步章节（R2.0 元数据与 §R2 标题语义 / R2.1 范畴裁定与执行边界 / R2.2 旧 PR-2 语义 superseded / R2.3 三子阶段冻结语义 / R2.4 生产结论词汇 / R2.5 后续生产 Gate 授权骨架 / R2.6 双向引用与一致性声明）：① 元数据来源 RFC/SPEC 指针同步至 **V0.30**，版本号升至 V0.34，最后更新追加本轮条目；② §R2 标题版本语义消歧——RFC-03-014 V0.30 §R2 =「V0.27 引入；V0.29 同步」、SPEC-03-014 V0.30 §R2 =「V0.28 引入；V0.29 同步」，本 Design 仅引用其当前冻结版本 V0.30，不自行改变其解释；③ 范畴裁定与执行边界——`name_em` 实时板块排行及 `cons_em` 相关实时路径均**不属于 Phase 3**，禁 live-retry / 替代 endpoint / Provider recovery / 重排恢复该目标，`name_em`/`cons_em` 禁止重新进入任何执行计划；④ 旧 PR-2 执行/预算/并行触发语义 **superseded / out-of-scope（R2）**，仅保留历史证据，不得作为后续生产行动依据；⑤ 三子阶段冻结语义——P3-A 仅保留盘后/历史 read-path、P3-B `northbound_daily` 维持 fail-stop/`None`、P3-C 维持 offline stub/defer 与 `total_turnover=None`，冻结项不得表述为 production-validated；⑥ 生产结论词汇仅允许 `production-validated` / `provider-unavailable-frozen` / `intentionally-unavailable`，本同步自身**不产生任何生产结论**；⑦ 后续 Gate（G-R2-1 P3-A Mongo 只读 census / G-R2-2 P3-B 受控 provider smoke-canary / G-R2-3 P3-C provider route / G-R2-4 consumer restart）均仍需**逐项独立 Pascal 授权**，不由本 Design 同步放行；⑧ 交叉引用 P3-A readonly-gate DESIGN-03-014-p3a-readonly-gate §2.7（RFC §2.6 / SPEC §0.2 同文一致）作为 R2 scope-scission 详细落点，不复制不一致裁定正文。保留 V0.33 OQ-11B 历史事实与全部旧 changelog；不动 §OQ-11/§OQ-11B 既有内容、不动 P0/§P1 各节、不动 DDL/Gate 授权、不动 F6 canonical freshness key 与 TTL=3600、不动所有 ❌ 状态、不产生任何生产结论。 | YQuant-Principal |
+| V0.35 | 2026-08-04 | **P3-A read-path 结果词汇三态统一仲裁（P0 Contract Arbitration，对应 RFC/SPEC-03-014 V0.31）**。Orchestrator 2026-08-04 定位公开契约冲突：本 Design §R2.4 规定生产结论词汇仅允许 `production-validated` / `provider-unavailable-frozen` / `intentionally-unavailable`，而 RFC/SPEC §R2.2 P3-A read-path 行仍使用旧双态 `production-read-path-validated` / `read-path-unavailable-by-design`。本卡仲裁并同步三层 master：① **P3-A read-path census 结果 → 三态唯一映射（§R2.4 追加）**——census **成功**（Pascal 授权 G-R2-1 实际执行 + 独立 Verify 静态验收：集合存在且唯一键 canonical、按 trade_date 可复现、行数 ≥ 1、零写入、无 schema drift）→ **唯一** `production-validated`（scope 仅限盘后/历史 read-path，**≠ 实时 Provider 验证**；仅能由未来获授权且实际执行、独立验证的 Gate 产生，本文档不产生任何生产结论）；census **不可用**（集合不存在 / by-design 无安全消费进程说明）→ **唯一** `provider-unavailable-frozen`（证据冻结 + fail-stop，不自动重试）；**非结论 fail-stop（不落三态）**：schema drift（先修设计 Full Flow）、认证失败（无法区分不可用与未授权）、空集合无解释、越界写入、独立 Verify 未通过；`intentionally-unavailable` 对 P3-A read-path **不适用**（无 Pascal C 决策，该态仅保留给 P3-B northbound）；**禁止杜撰第四/第五状态**；② §R2.0 来源指针同步至 RFC/SPEC-03-014 **V0.31**、§R2 标题补注「V0.31 三态统一仲裁」；③ 不动 §R2.1~R2.3/R2.5/R2.6 其余冻结边界、不动 §OQ-11/§OQ-11B、不动 P0/§P1 各节、不动 DDL/Gate 授权、不动 F6 canonical freshness key 与 TTL=3600、不动所有 ❌ 状态、不修改 P3-A readonly-gate 三件套、不产生任何生产结论。 | YQuant-Principal |
 
 ---
 
@@ -2134,7 +2137,7 @@ P3-C 阶段（**V0.31 Scope Reconcile 注**：本轮 T3 仅执行 §8.3 closure-
 | OQ-6 | AKShare `flow.northbound_daily` 返回的北向资金是个股级还是市场级？ | 影响 CapitalFlowRecord 的 `northbound_*` 字段填充 | 假设为个股级（FV-4）。T3 阶段验证，与 SPEC §3.2 northbound_daily scope 一致 |
 | OQ-7 | `sector.snapshot` 的 Step 1 是否可通过 TA-CN `index_daily_quotes` 部分推导？ | 影响 P3-A 的 internal-first 读路径效率 | ❌ **已关闭**。§2.1 已冻结 `sector.snapshot` 在 `_TA_CN_NOT_COVERED` 中——不可走 TA-CN adapter 推导，必须走明确的 external fallback 路径 |
 | OQ-10 | 实时市场情绪路径（盘中实时 snapshot）是否立项？ | `snapshot_time` 扩展为 intraday 值、独立 Provider/字段契约/freshness/时间边界 | **已裁定属未来独立 capability（2026-08-03）**——需独立 Provider/字段契约/freshness/时间边界与新的用户授权，本 Phase 3 / P3-C T3 不放行，不得实现。另：`stock_market_fund_flow` 在 2026-08-03 live-read 中单次 `ConnectionError`，若未来需要大盘资金流侧数据，须 Pascal 独立授权新的交易日 live-read（预算已耗尽，见 §4.2.1 PR-4 冻结） |
-| OQ-11 | 生产环境 `CompletedSessionPolicy`（真实 A 股交易日历 + 系统时钟）由哪个 Gate/Provider 注入？ | 生产实现需真实交易日历来源；T3 仅离线 fake 注入 seam | **V0.29 Design Gate REVISE closure 冻结协议与离线 seam**（`session_status(date: str) -> SessionStatus`；T3 禁止读真实日历/系统日期/网络）；**V0.32 OQ-11 Design Amendment 已裁定生产 adapter 详细设计**（§OQ-11：date_utils 严格 seam + `skills/infra/session_policy.py` 的 `AShareCompletedSessionPolicy`；composition root 为未来 seam；默认 `completed_session_policy=None` 离线路径保持）；生产注入仍需真实交易日历来源与 Pascal 按 Gate 授权，本 Phase 3 不放行（对应 RFC/SPEC-03-014 V0.25 OQ-11 / EOD-7） |
+| OQ-11 | 生产环境 `CompletedSessionPolicy`（真实 A 股交易日历 + 系统时钟）由哪个 Gate/Provider 注入？ | 生产实现需真实交易日历来源；T3 仅离线 fake 注入 seam | **V0.29 Design Gate REVISE closure 冻结协议与离线 seam**（`session_status(date: str) -> SessionStatus`；T3 禁止读真实日历/系统日期/网络）；**V0.32 OQ-11 Design Amendment 已裁定生产 adapter 详细设计**（§OQ-11：date_utils 严格 seam + `skills/infra/session_policy.py` 的 `AShareCompletedSessionPolicy`；composition root 为未来 seam；默认 `completed_session_policy=None` 离线路径保持）；**V0.26 生产注入 Gate 已授权未执行（RFC/SPEC-03-014 V0.26 EOD-8）**；**V0.33 OQ-11B Design Amendment 已裁定生产注入详细设计**（§OQ-11B：唯一 production composition root = 新增 `services/composition.py`；`SystemClock` 追加于 infra `session_policy.py`；本地 preflight CLI = `scripts/unified_data/preflight_sentiment_policy.py`；**T6 裁定 fail-stop**——当前仓库无可安全重启目标服务，注入不执行，`completed_session_policy=None` 全路径保持） |
 
 ---
 
@@ -2798,7 +2801,7 @@ P1 离线 refresh happy-path 中 Step 4 **必须**调用 `CacheManager.put()`（
 | SectorService | `sector.ranking` | `"sector:ranking:{snapshot_date}"` | `"sector:ranking:2026-07-30"` |
 | FlowService | `flow.capital_flow_daily` | `"flow:capital_flow:{symbol}:{trade_date}"` | `"flow:capital_flow:600519:2026-07-30"` |
 | SentimentService | `sentiment.market_snapshot` | `"sentiment:market_snapshot:{snapshot_date}"` | `"sentiment:market_snapshot:2026-07-30"` |
-| SentimentService | `sentiment.limit_up_pool` | `"sentiment:limit_up_pool:{snapshot_date}"` | `"sentiment:limit_up_pool:2026-07-30"` |
+| SentimentService | `sentiment.limit_up_pool` | `"sentiment:limit_up_pool:{trade_date}"` | `"sentiment:limit_up_pool:2026-07-30"` |
 
 **失败行为**（与 §P1.5.2 Step 4 catch-and-log 一致）：
 - `CacheManager.put()` 抛异常时不阻断 refresh 主流程，refresh 仍返回 `PersistenceResult(status="ok", ...)`。
@@ -3385,6 +3388,263 @@ AuditRecord = {
 - **RFC/SPEC → DESIGN**：RFC §5.3.1 第 7 点「T2 Design 承接精确文件 allowlist」↔ 本 §OQ-11.5.1；SPEC EOD-7.5「名称以 T2 Design 为准」↔ 本 §OQ-11.3.4；SPEC EOD-7.8「T2 Design provisional 文件 allowlist」↔ 本 §OQ-11.2.1。
 - **不重写/不冲突**：既有 P3-C EOD-1~EOD-6（§3.3/§5.3）原样保留；本段仅新增 OQ-11 范围内容。
 - **验收标准（T2 Design）**：`git diff --check -- <DESIGN>` exit=0；OQ-11 改动只在 DESIGN 路径，无其他文件写入；本节精确性足以让 T3 无需猜测模块名/错误名/依赖方向/状态算法/测试范围。
+
+## OQ-11B 生产注入 Gate 详细设计（OQ-11B Design Amendment，V0.33）
+
+> **定位**：本 §OQ-11B 是 OQ-11 生产注入 Gate（RFC/SPEC-03-014 V0.26 EOD-8 系列，Pascal 已授权但**尚未执行**）的**权威详细设计**，Design-only。对应 RFC-03-014 V0.26 §5.3.1 第 8 点与 SPEC-03-014 V0.26 §3.3 EOD-8.1~8.9 / §7 A-038。本段**只新增、不重写** §OQ-11（V0.32 离线 adapter 设计）与既有 P3-C EOD-1~EOD-6（§3.3/§5.3 既有内容原样保留，仅被引用）；不实现任何代码、不读真实时钟/日历、不连 Mongo/Provider/网络、不启用注入/refresh/cache/canary、不创建配置文件、服务、systemd unit、cron 或 shell wrapper、不改 Gate-4 与 data-pipeline。**当前磁盘事实复核（2026-08-04）**：`skills/infra/session_policy.py` 已存在（含 `SessionStatus`/`CompletedSessionPolicy`/`Clock`/`SessionPolicyError` 层次/`AShareCompletedSessionPolicy`，V0.32 离线 adapter 已落地）；`date_utils.py` 已含 `CalendarDayStatus` 五态 + strict seam；`client.py` 的 `_get_sentiment_service()` 是库级装配点且**不注入** `completed_session_policy`；全仓**无 `SystemClock`**、无 `services/composition.py`、无 sentiment 生产进程入口；唯一运维入口候选为 `skills/apps/TradingAgents-CN/start_all.sh`/`stop_all.sh`（管理无关 Web 应用，不消费 `MarketSentimentService`）。
+
+### OQ-11B.1 精确 production composition root（契约 A，EOD-8.2 候选裁定）
+
+**裁定：新增 `skills/data/unified_data/services/composition.py` 为唯一 production composition root（候选 a 胜出）。**
+
+候选排除理由（以仓库事实为准，不得扩大候选集）：
+
+| 候选 | 裁决 | 证据 |
+|---|---|---|
+| a) `services/composition.py`（新增） | ✅ **选中** | 最小纯装配模块；当前不存在，新建零副作用；与 RFC/SPEC 候选一致且为任务推荐项 |
+| b) `services/__init__.py` 扩展 | ❌ 排除 | `services/__init__.py` 当前为纯导出面（153 行，`MarketSentimentService` 等 re-export）；混入装配逻辑会污染导入面、制造隐式真实 clock 构造、破坏既有 `from .services import MarketSentimentService` 语义 |
+| c) `client.py` 构造 | ❌ 排除 | `UnifiedDataClient._get_sentiment_service()`（client.py:252-259）是**库级懒装配点**，RFC/SPEC EOD-8.2 明确「本契约不把该 facade 自动视为 production root」；且 client facade 属 P3-C closure-only blocklist（§8.3 显式禁止 client facade），不得修改 |
+| d) `scripts/unified_data/` 新增 production CLI | ❌ 排除 | RFC/SPEC EOD-8.2(d)：**「若 T2 以仓库事实裁定不存在真实服务进程则排除该项」**。当前 `scripts/unified_data/` 仅含 audit_rollout/audit_smoke/quote_metadata_governance/sector_ranking_rollout（批量工具，非 sentiment 生产进程），且无任何既有 consumer 进程可挂接 |
+
+**composition.py 精确契约（T3 实现，纯装配、零 I/O）**：
+
+```python
+# skills/data/unified_data/services/composition.py —— 新增（T3）
+"""OQ-11 production composition root (SPEC-03-014 V0.26 EOD-8.2).
+
+Minimal pure assembly module. No provider / Mongo / cache / network /
+refresh / file-write side effects. Default keeps the offline path:
+``completed_session_policy=None``.
+"""
+from __future__ import annotations
+
+from datetime import timedelta
+from typing import Optional
+
+from skills.infra.session_policy import (
+    AShareCompletedSessionPolicy,
+    Clock,
+    SystemClock,
+)
+from skills.data.unified_data.services.sentiment_service import MarketSentimentService
+
+
+def build_production_sentiment_service(
+    clock: Clock | None = None,
+    *,
+    cutoff_grace: timedelta = timedelta(0),
+) -> MarketSentimentService:
+    """Build a ``MarketSentimentService`` for production use.
+
+    - ``clock=None`` (default): returns a service with
+      ``completed_session_policy=None`` — identical to the offline
+      path. **No real policy is injected by default** (EOD-8.8).
+    - ``clock`` provided: builds ``AShareCompletedSessionPolicy``
+      with that clock and injects it via the existing constructor
+      seam. ``SystemClock()`` is the intended production value but
+      may be swapped for a fake in tests.
+    """
+    policy = None
+    if clock is not None:
+        policy = AShareCompletedSessionPolicy(clock=clock, cutoff_grace=cutoff_grace)
+    return MarketSentimentService(completed_session_policy=policy)
+```
+
+- **依赖方向唯一**：`composition.py → session_policy.AShareCompletedSessionPolicy(clock=SystemClock) → date_utils strict seam → exchange_calendars`；`MarketSentimentService(..., completed_session_policy=policy)` 经既有注入 seam 接收。
+- **禁止**：`composition.py` import Provider/Mongo/cache/router/writer；`session_policy.py`/`date_utils.py` import unified_data（反向依赖）；把 cutoff/业务语义/clock 倒灌 `date_utils`。
+- **`MarketSentimentService` 仍只通过 Protocol 接受 policy**：`__init__(..., completed_session_policy: CompletedSessionPolicy | None = None)` 默认 `None` 不变；`client.py` facade **保持未修改**（不新增参数、不改 `_get_sentiment_service`）。
+
+### OQ-11B.2 SystemClock 精确契约（契约 B，EOD-8.3）
+
+```python
+# skills/infra/session_policy.py —— 追加（T3；仅新增，不动既有符号）
+class SystemClock:
+    """OQ-11 production real clock (SPEC-03-014 V0.26 EOD-8.3).
+
+    Implements ``Clock`` Protocol. ``now()`` always returns a
+    timezone-aware ``datetime`` normalised to ``Asia/Shanghai``
+    (``datetime.now(tz=ZoneInfo("Asia/Shanghai"))``). Construction
+    takes no arguments; audit ``clock_source_class`` = "SystemClock".
+    """
+
+    def __init__(self, timezone: ZoneInfo = ZoneInfo("Asia/Shanghai")) -> None:
+        self._timezone = timezone
+
+    def now(self) -> datetime:
+        return datetime.now(tz=self._timezone)
+```
+
+- **位置**：`skills/infra/session_policy.py`（`Clock` Protocol 同文件，infra 层，无 unified_data 依赖；避免 composition.py 内实现 real clock 造成 business 层持有时间读取）。
+- **契约**：实现 `Clock` Protocol；`now()` 恒 tz-aware；构造期 fail-fast 复用 `AShareCompletedSessionPolicy.__init__` 的 probe（`tzinfo is None`/`utcoffset() is None` → `NaiveClockError`）——`SystemClock` 自身恒 aware，probe 通过；**adapter 内部禁止 `datetime.now()`/`date.today()` 隐式读取**，只读注入 clock。
+- **错误与 audit-safe metadata**：`SessionPolicyError` 层次不变；错误实例携带 `date`（输入）/`clock_source_class`（=`type(clock).__name__`，real/fake 判别）/`reason`；**不携带**日历全量、凭证、用户数据。
+- **导出**：`skills/infra/__init__.py` 追加导出 `SystemClock`（既有导出不动）。
+
+### OQ-11B.3 本地 preflight 精确契约（契约 B，EOD-8.4）
+
+**裁定：新增 `scripts/unified_data/preflight_sentiment_policy.py` 为唯一 local preflight CLI（默认 dry-run，只读）**。
+
+**命令（T4 受控 dry-run / T6 真实执行共用同一命令）**：
+
+```bash
+.venv/bin/python -m scripts.unified_data.preflight_sentiment_policy --dry-run
+```
+
+**硬约束（脚本内断言 + T4 断言）**：
+- 默认 `--dry-run`：**不写工作树任何文件、不读 secrets、不连网络/Mongo/Provider/cache/refresh**；输出仅到 stdout。
+- 输出**只可包含**以下字段（JSON 一行）：`calendar_identity`、`calendar_version`（现场读取 `exchange_calendars.__version__` 对照，不假设 4.13.2）、`timezone`、`coverage`（bool + first/last session 范围摘要）、各一个 `trading_sample`/`not_trading_sample`/`session_close_sample` 判定、`zero_io` 计数（`provider=0,mongo=0,cache=0,network=0,file_write=0`）。
+- **样例日期推导规则（运行时由 calendar 输出推导，禁止硬编码具体日期）**：
+  1. `trading_sample` = `calendar.first_session`（XSHG 首个 session，必为交易日）→ 用 `query_trading_day_status(first_session)` 复核 == `TRADING`；
+  2. `not_trading_sample` = 从 `first_session` 向前扫描首个 `query_trading_day_status(d) == NOT_TRADING` 的日期（**禁 weekend/`TRADING_DAYS_2026`/`is_trading_day()`**）；
+  3. `session_close_sample` = `session_close_strict(first_session)`（tz-aware close instant，输出归一 Asia/Shanghai）。
+- 禁止 fallback/宽松解析；任一验证项 FAIL → 退出码 `2`（fail-closed），脚本不注入、不写盘。
+
+### OQ-11B.4 T3 精确文件 allowlist（契约 D，EOD-8.8）
+
+**T3 允许修改/新增集合（恰好 7 个路径，逐项职责与测试归属；独立于 §8.3 P3-C closure-only allowlist）**：
+
+| # | 路径 | 操作 | 职责 | 预估行数 | 测试归属 |
+|---|---|---|---|---|---|
+| 1 | `skills/data/unified_data/services/composition.py` | 新增 | production composition root（OQ-11B.1） | ~40 | `test_composition.py` |
+| 2 | `skills/infra/session_policy.py` | 追加 | `SystemClock`（OQ-11B.2） | ~15 | `test_session_policy.py` |
+| 3 | `skills/infra/__init__.py` | 追加 | 导出 `SystemClock` | ~2 | `test_session_policy.py`（import smoke） |
+| 4 | `scripts/unified_data/preflight_sentiment_policy.py` | 新增 | local preflight CLI（OQ-11B.3） | ~120 | `tests/scripts/test_preflight_sentiment_policy.py` |
+| 5 | `skills/data/unified_data/tests/test_composition.py` | 新增 | composition 单测：`clock=None` → policy None；`clock=SystemClock()` → 注入 policy；四态判定 + 零 I/O | ~100 | — |
+| 6 | `skills/infra/tests/test_session_policy.py` | 追加 | `SystemClock` 单测：tz-aware、上海归一、构造通过、`NaiveClockError` 不变 | ~40 | — |
+| 7 | `tests/scripts/test_preflight_sentiment_policy.py` | 新增 | preflight CLI 测试：默认 dry-run、输出字段契约、样例推导、零写入断言（monkeypatch fake calendar） | ~110 | — |
+
+**Blocklist（显式禁止，否定语义）**：`providers/akshare.py`、provider registry/fallback、router、writer、Mongo、cache、`client.py` facade、`models/domain/sentiment.py` 既有 canonical 字段、Gate-4（`binding_state.json`、Gate-4 CLI）、`skills/data/data-pipeline/**`、任何 config 文件、`skills/apps/TradingAgents-CN/start_all.sh`/`stop_all.sh`、任何新服务/systemd unit/cron/shell wrapper、真实日历/真实时钟/网络（T3 阶段）、`exchange_calendars` 升级、refresh activation、调度。本 allowlist 独立于 §8.3 P3-C closure-only allowlist（OQ-11B 是后续独立实现范围，不并入 P3-C 既有 T3）。
+
+### OQ-11B.5 T4 独立验证契约（契约 C，EOD-8.5 / EOD-8.8）
+
+**T4（独立 Verify，assignee=yquanttester）项目锁定命令**（从仓库根目录执行，解释器锁定 `.venv/bin/python`）：
+
+```bash
+# 1) fake 测试全断言（fake calendar + fake timezone-aware clock，零 I/O）
+.venv/bin/python -m pytest \
+  skills/infra/tests/test_session_policy.py \
+  skills/infra/tests/test_date_utils.py \
+  skills/data/unified_data/tests/test_composition.py \
+  skills/data/unified_data/tests/test_sentiment_service.py \
+  tests/scripts/test_preflight_sentiment_policy.py \
+  -q --tb=short
+
+# 2) 受控 real-calendar 本地库 dry-run（仅本地库调用，无网络/注入/重启）
+.venv/bin/python -m scripts.unified_data.preflight_sentiment_policy --dry-run
+
+# 3) 零写入证明：dry-run 前后 `git status --porcelain` 完全一致
+```
+
+**输入/输出断言**：命令 2 输入 = 无（脚本自足读取本地 `exchange_calendars` 库）；输出 = OQ-11B.3 字段集 + `zero_io` 全 0；命令 3 必须 pass（无工作树写入）。六类 E2E 断言冻结（对应 EOD-8.5）：
+
+| # | 场景 | 可复现注入 | 预期 |
+|---|---|---|---|
+| 1 | 已收盘交易日 | 历史交易日 + clock 晚于 close | `SessionStatus.COMPLETED` |
+| 2 | 未收盘交易日 | 当前交易日 + clock 早于 close | `SessionStatus.SESSION_NOT_COMPLETED` |
+| 3 | 非交易日 | 明确非交易日 | `SessionStatus.NOT_A_TRADING_DAY` |
+| 4 | 未来日期 | 未来交易日 | `SessionStatus.FUTURE_TRADING_DAY` |
+| 5 | calendar unavailable / out-of-range | fake → UNAVAILABLE / OUT_OF_RANGE / ERROR | fail-closed：`CalendarUnavailableError`/`DateOutOfRangeError`；service 映射 `ProviderUnavailableError`；**不误判** `NOT_A_TRADING_DAY` |
+| 6 | naive clock | clock 返回 naive datetime | 构造期 `NaiveClockError`（fail-fast） |
+| + | 零写入 | spy/import 审计 | 每条判定路径 `0 provider / 0 writer upsert / 0 cache put / 0 Mongo / 0 网络 / 0 文件写` |
+
+### OQ-11B.6 T5 独立 Review 检查单（契约 C，EOD-8.8）
+
+T5（独立 Review，assignee=yquantreviewer）逐项核对：
+1. **三层文档一致**：RFC/SPEC-03-014 V0.26 ↔ DESIGN-03-014 V0.33（§OQ-11B）；metadata/来源指针、版本历史、§11 OQ-11 行同步；`git diff --check` exit 0。
+2. **allowlist**：T3 实际 diff 路径 == OQ-11B.4 恰好 7 项；无 blocklist 命中。
+3. **公开错误兼容**：四态 `SessionStatus` 与五稳定 public error code（`INVALID_DATE_FORMAT`/`INVALID_SNAPSHOT_TIME`/`NOT_TRADING_DAY`/`FUTURE_TRADING_DAY`/`SESSION_NOT_COMPLETED`）不变；policy internal error → service `ProviderUnavailableError` 映射保持可测。
+4. **实际 root/clock/preflight**：`composition.py` 存在且纯装配；`SystemClock` 在 infra；preflight CLI 默认 dry-run 零写入。
+5. **禁止对象**：无新服务/systemd/cron/shell wrapper；未触碰 Provider/Mongo/cache/refresh/Gate-4/configs/`client.py`/TradingAgents-CN 脚本。
+
+### OQ-11B.7 T6 Production Activation 契约（契约 C，EOD-8.1/8.6/8.7/8.8/8.9）
+
+**T6 裁定：FAIL-STOP —— 当前仓库不存在可安全重启的 OQ-11 目标服务。**
+
+**判定依据（仓库事实，非推断）**：
+- 无 in-repo systemd unit（`find . -name "*.service"` 空）；
+- HEARTBEAT.md host 级 cron/systemd 条目（全球市场日报 08:00、SmartMoney 20:30、Argus 20:35、酒店抓取 06:10、auto-push 03:30）均非 OQ-11 目标服务依据；
+- 唯一运维入口候选 `skills/apps/TradingAgents-CN/start_all.sh`/`stop_all.sh`：管理 **TradingAgents-CN Web 应用**（backend:8000 + frontend:3000），含 Mongo/Tushare/scheduler/smoke 副作用（settings 校验、`/api/sync/stock_basics/run`、`/openapi.json` 健康检查等），**不消费 `MarketSentimentService`**；重启它会触发未授权副作用且无法验证 OQ-11 行为 → **不可作为安全重启目标**。
+
+**因此 T6 顺序契约**：
+1. `preflight`（只读）：`.venv/bin/python -m scripts.unified_data.preflight_sentiment_policy --dry-run` → 若任一验证项 FAIL → **stop condition A：不注入，保持 disabled**（EOD-8.7 失败分类 ①），回退 T5 状态。
+2. `enable`（注入）：**不可执行** —— 无既有 consumer 进程可注入；**禁止臆造命令、禁止增设 unit/服务**（EOD-8.6）。
+3. `restart`（既有服务重启前后同一 health/behavior check）：**不可执行** —— 无安全 target。
+4. `only-read proof`：记录 preflight 输出 + `git status --porcelain` 无变化 + 无 Mongo/cache/refresh/网络调用日志，作为 fail-stop 证据。
+5. **停止条件汇总**（EOD-8.7）：preflight 任一 FAIL / real clock 校验失败 / E2E 零写入断言 FAIL → 不注入；preflight 脚本缺陷/样例选取错误/环境路径问题 → 可本地修复后重跑 T4/T6 preflight，不改变契约。
+6. **手工 rollback**：仅撤销 production composition injection 恢复 `completed_session_policy=None`；**禁止 DB 回滚/删除、禁止自动回滚**；回滚动作由 Pascal 明确指令或 T6 失败后人工执行；注入后异常 → 撤销注入恢复 None，重跑 T4 验证 + T5 review。
+
+**副作用矩阵（EOD-8.9）**：T1~T5 全 0 运行时动作；T6 实际可执行动作仅 `preflight`（真实 clock 读取 `datetime.now(tz=...)` + 真实 calendar 本地库读取，均无网络/无 Mongo/无写入）；`restart` 因无 target 而 fail-stop，**本卡不得虚构成任何可执行重启命令**。
+
+### OQ-11B.8 审计与可观测性（契约 D，EOD-7.6 / EOD-8）
+
+- **最小无秘密 audit record**（`AShareCompletedSessionPolicy` 判定时携带，默认**不持久化**、不启用 AuditLogger）：`calendar_identity` / `calendar_version`（现场读取）/ `timezone` / `cutoff_policy_id`（`OQ11-default-grace0`）/ `date` / `clock_source_class`（`SystemClock|FakeClock`）/ `status` / `error_reason`。
+- 测试可注入 fake audit_logger 断言字段存在（无写盘）；生产路径不新增日志侧写、不新增 audit 集合/文件。
+- preflight 输出不含 secrets、不含日历全量数据。
+
+### OQ-11B.9 双向引用与验收映射
+
+- **DESIGN → RFC**：本 §OQ-11B 承接 RFC-03-014 V0.26 §5.3.1 第 8 点 EOD-8（授权边界 / composition root 候选与依赖方向 / real clock fail-closed / calendar preflight 五项 / E2E 六类断言 + 零写入 / 服务重启边界与 fail-stop / 纯代码回滚三分类 / T2-T6 阶段分层 / 副作用矩阵）。
+- **DESIGN → SPEC**：本 §OQ-11B 落地 SPEC-03-014 V0.26 §3.3 EOD-8.1~8.9 与 §7 A-038（精确模块名、SystemClock、preflight 命令、T6 fail-stop、回滚语义、阶段命令）。
+- **RFC/SPEC → DESIGN**：RFC §5.3.1 第 8 点「T2 Design 承接精确文件 allowlist / 重启目标 / 健康 check」↔ 本 §OQ-11B.4 / OQ-11B.7；SPEC EOD-8.6「服务名/命令由 T2 以仓库事实裁定」↔ 本 §OQ-11B.7。
+- **不重写/不冲突**：既有 P3-C EOD-1~EOD-6（§3.3/§5.3）与 §OQ-11（V0.32 离线设计）原样保留；本段仅新增生产注入范围内容。
+- **验收标准（T2 Design）**：`git diff --check -- <DESIGN>` exit=0；OQ-11B 改动只在 DESIGN 路径，无其他文件写入；本节精确性足以让 T3/T4/T5/T6 无需猜测 root 位置、SystemClock、preflight 命令、重启目标与 fail-stop 结论。
+
+---
+
+## R2 生产验证 Re-baseline 同步（R2 Design Sync，V0.34；V0.35 三态统一仲裁）
+
+> **定位**：本节为 master DESIGN-03-014 对 **RFC/SPEC-03-014 V0.31** §R2 生产验证 Re-baseline 的 Design 同步章节（Design-only，对应 RFC-03-014 V0.31 §R2 / SPEC-03-014 V0.31 §R2）。本同步**不产生任何生产结论**、不放行任何生产 Gate、不授权任何真实调用；仅将 master Design 的元数据来源指针、§R2 标题语义与执行/冻结边界对齐 RFC/SPEC V0.31。与 P3-A readonly-gate 三层文档 R2（RFC-03-014-p3a-readonly-gate §2.6 / SPEC-03-014-p3a-readonly-gate §0.2 / DESIGN-03-014-p3a-readonly-gate §2.7）**逐项一致**。本同步**不重写**既有 §OQ-11（V0.32 离线设计）与 §OQ-11B（V0.33 生产注入 Gate 设计）边界与正文。
+
+### R2.0 元数据与 §R2 标题语义（V0.31 冻结）
+
+- 本 Design 的元数据来源指针已同步至 **RFC-03-014 V0.31 / SPEC-03-014 V0.31**；版本号升至 V0.35（版本历史追加本条）。
+- RFC-03-014 V0.31 §R2 标题 =「R2 生产验证完成矩阵与后续生产 Gate 授权骨架（**V0.27 引入；V0.29 同步；V0.31 三态统一仲裁**）」：标题内嵌来源版本 V0.27 为 §R2 首次引入版本，V0.29 为内容同步版本，V0.31 为 P3-A read-path 结果词汇三态统一仲裁版本；当前文档版本为 V0.31。
+- SPEC-03-014 V0.31 §R2 标题 =「R2 生产验证完成矩阵与后续生产 Gate 授权骨架（**V0.28 引入；V0.29 同步；V0.31 三态统一仲裁**）」：标题内嵌来源版本 V0.28 为 SPEC §R2 首次引入版本，V0.29 为内容同步版本，V0.31 为三态统一仲裁版本；当前文档版本为 V0.31。
+- 本 Design **只引用** RFC/SPEC §R2 的当前冻结版本 **V0.31**，不自行改变其标题解释或正文内容。
+
+### R2.1 范畴裁定与执行边界（name_em / cons_em 不属于 Phase 3）
+
+> 详细裁定正文以 P3-A readonly-gate 三层文档为权威落点（**DESIGN-03-014-p3a-readonly-gate §2.7**，RFC-03-014-p3a-readonly-gate §2.6 / SPEC-03-014-p3a-readonly-gate §0.2 同文一致）；本节仅同步执行边界，不复制裁定正文，避免裁断文本不一致。
+
+- `stock_board_industry_name_em()` / 行业板块 `name_em`（**实时板块排行**）**不属于 Phase 3** 的实现/生产验证目标。
+- `cons_em`（`stock_board_industry_cons_em`）保持既有禁止；与 `cons_em` 相关的实时路径同样**不属于 Phase 3**。
+- **不得**通过 live-retry、替代 endpoint、Provider recovery、重排或任何其他手段恢复该目标；`name_em` / `cons_em` **禁止重新进入任何执行计划**（含后续 Gate、smoke、canary、census 与 T3/T4/T5/T6 任何阶段）。
+
+### R2.2 旧 PR-2 语义 superseded / out-of-scope（R2）
+
+- 旧 PR-2 的执行/预算/并行触发语义（name_em 单次 live-read 预算、`t_55d44505` / `t_81432128`、与 PR-3/PR-4 的并行触发表述）已 **superseded / out-of-scope（R2）**，**仅保留历史证据**，**不得作为后续生产行动依据**（不得 unblock / retry / 创建 replacement probe / 改用其他 AKShare endpoint）。
+- 主文档历史章节（§4.2.x / §6.4 / §13 / §15 / §17 / §P0 / §P1 等）中所有 PR-2/实时 sector 表述保留为历史事实，统一以「superseded / out-of-scope（R2）」语义理解；不删除、不重写冻结事实。
+
+### R2.3 三子阶段冻结语义（不得表述为 production-validated）
+
+- **P3-A**：仅保留**盘后/历史、按 trade_date 可复现**的 sector read-path（消费既有历史集合/物化数据，**不发起任何实时 Provider 调用**）；实时板块排行不验证。
+- **P3-B**：`northbound_daily` 维持 **fail-stop / `None`**（Pascal C：`northbound_net_inflow` 恒 None；持股历史不得伪装为净流入，不引入 A/B endpoint skeleton）。
+- **P3-C**：维持 **offline stub / defer**（AKShare sentiment 未注册、live-read 预算耗尽不重跑），`total_turnover=None`，close-only / completed-session 语义不变；盘中实时路径不在本阶段。
+- 冻结项（designated historical baseline；`P3PersistenceWriter._assert_fake_db` 拒绝真实 pymongo；OQ-11 T6 fail-stop；`completed_session_policy=None` 默认路径；F6 canonical keys / TTL=3600；既有 OQ-11/OQ-11B 设计边界）均不得被本同步改变，也不得被表述为 production-validated。
+
+### R2.4 生产结论词汇
+
+- 本 Design 同步章节允许引用的生产结论词汇仅限：`production-validated` / `provider-unavailable-frozen` / `intentionally-unavailable`（状态语义见 RFC/SPEC-03-014 V0.31 §R2.2）。
+- **P3-A read-path census 结果 → 三态唯一映射（V0.35 仲裁，禁止杜撰第四/第五状态）**：census **成功**（Pascal 授权 G-R2-1 实际执行 bounded read + 独立 Verify 静态验收：集合存在且唯一键 canonical、按 trade_date 可复现、行数 ≥ 1、零写入、无 schema drift）→ **唯一** `production-validated`（scope 仅限盘后/历史 read-path，**≠ 实时 Provider 验证**；仅能由未来获授权且实际执行、独立验证的 Gate 产生，不得以 census 成功证明 sector.snapshot/sector.ranking 实时可用）；census **不可用**（集合不存在 / by-design 无安全消费进程说明）→ **唯一** `provider-unavailable-frozen`（不可用证据冻结 + fail-stop，不自动重试）；**非结论 fail-stop（不落任何三态）**：schema drift（先修设计 Full Flow，不得就地改库）、认证失败（无法区分不可用与未授权）、空集合（0 行且无 by-design 解释）、越界写入（G-R2-1 无 write/DDL）、独立 Verify 未通过（Gate 不关闭）；`intentionally-unavailable` 对 P3-A read-path **不适用**（无 Pascal C 决策，该态仅保留给 P3-B `flow.northbound_daily`）。
+- **本同步自身不产生任何生产结论**；本节明确区分：本卡是**设计同步**，不是生产授权或生产验证。三态映射仅定义未来获授权 Gate 的收尾判据，不授予任何 Gate 执行权。
+
+### R2.5 后续生产 Gate 授权骨架（需逐项独立 Pascal 授权）
+
+| Gate | 目标 | 授权要求 |
+|---|---|---|
+| G-R2-1 | P3-A Mongo 只读 census（designated historical baseline） | 逐项独立 Pascal 授权 |
+| G-R2-2 | P3-B 受控 provider smoke / canary | 逐项独立 Pascal 授权 |
+| G-R2-3 | P3-C provider route（close-only 可重放） | 逐项独立 Pascal 授权 |
+| G-R2-4 | consumer / restart（OQ-11，无可安全重启目标则 fail-stop） | 逐项独立 Pascal 授权 |
+
+- 每个 Gate **均仍需逐项独立 Pascal 授权**，**不能由本 Design 同步放行**；授权边界以 RFC/SPEC-03-014 V0.31 §R2.4 六维骨架为准（目标 namespace/数据源、read/write/DDL 命令 allowlist、最大调用/写入/输出限制、fail-stop 停止条件、回滚/禁用语义、输出脱敏规则、独立 Verify 身份边界）。
+- P3-A 实时（name_em）与 `cons_em` 在全部四个 Gate 中均为 **0 调用**；Gate 成功 ≠ 生产激活或可交易信号。
+
+### R2.6 双向引用与一致性声明
+
+- **DESIGN → RFC/SPEC**：本 §R2 承接 RFC-03-014 V0.31 §R2 与 SPEC-03-014 V0.31 §R2（R2.1 范畴裁定 / R2.2 六 capability 生产验证完成矩阵 / R2.3 关键冻结语义 / R2.4 后续生产 Gate 授权骨架 / R2.5 一致性声明）。
+- **DESIGN → P3-A readonly-gate**：R2 scope-scission 的详细落点 = DESIGN-03-014-p3a-readonly-gate **§2.7**（RFC §2.6 / SPEC §0.2 同文一致）；本 §R2 只做执行边界同步，不复制裁定正文。
+- **不重写/不冲突**：既有 §OQ-11（V0.32 离线设计）与 §OQ-11B（V0.33 生产注入 Gate 设计）原样保留；OQ-11 T6 fail-stop 与 `completed_session_policy=None` 默认路径不变。
+- **验收标准（Design 同步）**：仅 master DESIGN-03-014 一个文件变更；`git diff --check` exit=0；无任何可执行 name_em / PR-2 恢复路径；无网络/Provider/Mongo/.env/真实 I/O；无 git stage/commit/push。（**V0.35 仲裁卡例外**：同步修订 RFC/SPEC-03-014 V0.31 与 DESIGN-03-014 V0.35 三份 master 文档；P3-A readonly-gate 三件套不修改；仍零真实 I/O、无 git 写操作。）
 
 ---
 
@@ -4726,6 +4986,8 @@ records = p3_writer.get("03_data_ud_market_sector_snapshot", {"sector_code": "BK
 ---
 
 ## 16. 版本历史
+
+> **superseded（已废弃）**：本表为早期阶段并列版本历史，记录截至 **V0.23**，已停止同步并 superseded。**权威版本历史以本文档元数据「### 版本历史」表（当前 V0.35）为唯一来源**；本表仅保留历史事实，不再更新、不作为版本历史引用依据。
 
 | 版本号 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|

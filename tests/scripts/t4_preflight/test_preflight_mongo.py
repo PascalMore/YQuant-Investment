@@ -50,7 +50,12 @@ from scripts.t4_preflight.mongo_client import (
     reset_client_factory,
     set_client_factory,
 )
-from scripts.t4_preflight.models import MongoPreflightResult
+from scripts.t4_preflight.models import (
+    BaselineCollectionPresence,
+    MongoPreflightAggregate,
+    MongoPreflightResult,
+)
+from scripts.t4_preflight.reporter import mongo_preflight_aggregate_to_yaml
 
 from tests.scripts.t4_preflight.fixtures.t4_mongo_fixtures import (
     isolated_skills_env,
@@ -333,6 +338,21 @@ class _FakeResolved:
 
 
 def test_cli_dry_run_exits_pass() -> None:
+    """Dry-run must exit 0 (PASS) and emit the R1 aggregate shape.
+
+    Per RFC-03-014-p3a-readonly-gate V0.2 §2.4 裁定 1 / SPEC §0 R1
+    锚定 1 / DESIGN §5.5, the dry-run YAML exposes only:
+
+    * ``preflight_mongo`` root with ``generated_at`` /
+      ``connectivity`` / ``latency_ms`` / ``baseline_collections`` /
+      ``unexpected_presence`` / ``warnings``
+    * ``overall.verdict`` = ``pass``
+
+    The legacy ``live_read`` / ``collections`` / ``p3_collections_found``
+    fields are intentionally absent from the external wire (the
+    pre-existing test asserted on the legacy ``live_read: false``
+    literal — that field is no longer emitted).
+    """
     proc = _run_cli(
         "preflight-mongo",
         "--output-dir",
@@ -340,7 +360,13 @@ def test_cli_dry_run_exits_pass() -> None:
     )
     assert proc.returncode == EXIT_PASS
     assert "preflight_mongo:" in proc.stdout
-    assert "live_read: false" in proc.stdout
+    assert "connectivity: dry_run" in proc.stdout
+    assert "baseline_collections:" in proc.stdout
+    assert "unexpected_presence:" in proc.stdout
+    assert "verdict: pass" in proc.stdout
+    # R1 contract: no full collections enumeration; no per-key field.
+    assert "live_read" not in proc.stdout
+    assert "p3_collections_found" not in proc.stdout
 
 
 def test_cli_dry_run_does_not_leak_secret_strings() -> None:
@@ -531,6 +557,173 @@ def test_resolved_config_dataclass_shape() -> None:
     # No raw value fields.
     for forbidden in ("host", "port", "username", "password",
                       "database", "auth_source", "value", "raw_value"):
-        assert forbidden not in fields, (
-            f"ResolvedConfig must not carry {forbidden!r}"
+        assert forbidden not in fields
+
+
+# ---------------------------------------------------------------------------
+# R1 aggregate projector (RFC-03-014-p3a-readonly-gate V0.2 §2.4 裁定 1;
+# SPEC §0 R1 锚定 1; DESIGN §5.5)
+# ---------------------------------------------------------------------------
+
+
+def test_to_mongo_preflight_aggregate_r1_dry_run_pass() -> None:
+    """R1: dry-run projects to ``connectivity=dry_run``,
+    ``overall_verdict=pass``, and three designated baseline
+    presence booleans. No live I/O; synthetic result only."""
+    result = MongoPreflightResult(
+        connectivity="dry_run",
+        collections=None,
+        p3_collections_found=(),
+        warnings=("dry-run preflight, no live mongo calls",),
+    )
+    agg = preflight_mongo._to_mongo_preflight_aggregate(
+        result, live_read=False
+    )
+    assert isinstance(agg, MongoPreflightAggregate)
+    assert agg.connectivity == "dry_run"
+    assert agg.overall_verdict == "pass"
+    # The baseline list is exactly the three designated names, all
+    # marked present=False because dry-run never observed the live
+    # list_collection_names() output.
+    assert tuple(b.name for b in agg.baseline_collections) == P3_BUSINESS_COLLECTIONS
+    assert all(b.present is False for b in agg.baseline_collections)
+    assert agg.unexpected_presence is False
+    # Warnings are mapped to generic labels only.
+    assert all(isinstance(w, str) for w in agg.warnings)
+    for w in agg.warnings:
+        assert "skills/.env" not in w
+        assert "MONGODB_" not in w
+        assert "five keys" not in w
+
+
+def test_to_mongo_preflight_aggregate_r1_designated_baseline_observed_is_pass() -> None:
+    """R1: when the live list_collection_names() returns the three
+    designated baseline collections and nothing else, the aggregate
+    verdict is ``pass`` (presence of the designated baseline is NOT
+    a failure; this is the core R1 裁定 1 / F-PR1-009 contract)."""
+    observed = tuple(P3_BUSINESS_COLLECTIONS)
+    result = MongoPreflightResult(
+        connectivity="success",
+        latency_ms=12.3,
+        collections=observed,
+        p3_collections_found=(),
+        warnings=(),
+    )
+    agg = preflight_mongo._to_mongo_preflight_aggregate(
+        result, live_read=True
+    )
+    assert agg.connectivity == "success"
+    assert agg.overall_verdict == "pass"
+    assert tuple(b.name for b in agg.baseline_collections) == P3_BUSINESS_COLLECTIONS
+    assert all(b.present is True for b in agg.baseline_collections)
+    assert agg.unexpected_presence is False
+
+
+def test_to_mongo_preflight_aggregate_r1_unexpected_presence_is_fail() -> None:
+    """R1: a non-designated collection triggers a generic
+    ``unexpected_presence=True`` signal and fail-stop verdict. No
+    collection name is exposed by aggregate serialization.
+    """
+
+    unknown_collection = "03_data_ud_unrelated_legacy"
+    result = MongoPreflightResult(
+        connectivity="success",
+        latency_ms=15.0,
+        collections=(
+            P3_BUSINESS_COLLECTIONS[0],
+            unknown_collection,
+        ),
+        p3_collections_found=(unknown_collection,),
+        warnings=(f"UNEXPECTED_EXISTENCE: {unknown_collection}",),
+    )
+    agg = preflight_mongo._to_mongo_preflight_aggregate(
+        result, live_read=True
+    )
+    assert agg.overall_verdict == "fail"
+    assert agg.unexpected_presence is True
+    # No raw ``collections`` tuple or legacy raw-name field reaches the
+    # aggregate.  The serializer has a second defensive allowlist for a
+    # malformed aggregate constructed by another caller.
+    agg_fields = {f.name for f in dataclasses.fields(agg)}
+    assert "collections" not in agg_fields
+    assert "baseline_unexpected" not in agg_fields
+    # The unexpected warning is mapped to a generic label only.
+    assert "unexpected_collection_presence" in agg.warnings
+    for w in agg.warnings:
+        assert "UNEXPECTED_EXISTENCE" not in w
+        assert unknown_collection not in w
+
+    yaml_text = mongo_preflight_aggregate_to_yaml(agg)
+    assert "unexpected_presence: true" in yaml_text
+    assert unknown_collection not in yaml_text
+    assert "baseline_unexpected" not in yaml_text
+
+
+def test_to_mongo_preflight_aggregate_r1_env_missing_is_unauthorized() -> None:
+    """R1: env_missing maps to ``overall_verdict=unauthorized``."""
+    result = MongoPreflightResult(
+        connectivity="env_missing",
+        warnings=("skills/.env missing or no five keys",),
+    )
+    agg = preflight_mongo._to_mongo_preflight_aggregate(
+        result, live_read=True
+    )
+    assert agg.overall_verdict == "unauthorized"
+    # Warning is mapped to a generic label only.
+    for w in agg.warnings:
+        assert "skills/.env" not in w
+        assert "five keys" not in w
+        assert "MONGODB_" not in w
+
+
+def test_to_mongo_preflight_aggregate_r1_list_collections_unauthorized() -> None:
+    """R1: ping OK but listCollections not authorized maps to
+    ``overall_verdict=conditional_pass``."""
+    result = MongoPreflightResult(
+        connectivity="success",
+        collections=None,
+        warnings=("list_collections_unauthorized: not authorized on tradingagents",),
+    )
+    agg = preflight_mongo._to_mongo_preflight_aggregate(
+        result, live_read=True
+    )
+    assert agg.overall_verdict == "conditional_pass"
+    assert "list_collections_unauthorized" in agg.warnings
+
+
+def test_to_mongo_preflight_aggregate_r1_dns_timeout_auth_is_fail() -> None:
+    """R1: connectivity failure maps to ``overall_verdict=fail``."""
+    for connectivity in ("dns_failure", "timeout", "auth_failure"):
+        result = MongoPreflightResult(
+            connectivity=connectivity,
+            warnings=(),
+        )
+        agg = preflight_mongo._to_mongo_preflight_aggregate(
+            result, live_read=True
+        )
+        assert agg.overall_verdict == "fail", (
+            f"{connectivity} should map to fail; got {agg.overall_verdict!r}"
+        )
+
+
+def test_to_mongo_preflight_aggregate_r1_carries_no_legacy_warning_tokens() -> None:
+    """R1: the external surface never carries ``live_read`` /
+    ``collections`` / ``p3_collections_found`` / ``detail`` —
+    even when the input carrier has them populated."""
+    result = MongoPreflightResult(
+        connectivity="success",
+        collections=("something",),
+        p3_collections_found=("something",),
+        detail="legacy detail string with forbidden marker",
+        warnings=("legacy warning",),
+    )
+    agg = preflight_mongo._to_mongo_preflight_aggregate(
+        result, live_read=True
+    )
+    # Aggregate carrier must NOT carry the legacy fields.
+    agg_fields = {f.name for f in dataclasses.fields(agg)}
+    for forbidden in ("collections", "p3_collections_found",
+                      "detail", "live_read"):
+        assert forbidden not in agg_fields, (
+            f"MongoPreflightAggregate must not carry {forbidden!r}"
         )

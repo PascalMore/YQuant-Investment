@@ -48,10 +48,15 @@ from .config import (
     EXIT_FAIL,
     EXIT_PASS,
     EXIT_UNAUTHORIZED,
+    P3_BUSINESS_COLLECTIONS,
 )
 from .mongo_client import PreflightRunner
-from .models import MongoPreflightResult
-from .reporter import to_yaml
+from .models import (
+    BaselineCollectionPresence,
+    MongoPreflightAggregate,
+    MongoPreflightResult,
+)
+from .reporter import mongo_preflight_aggregate_to_yaml
 
 __all__ = ["build_arg_parser", "run_preflight", "main"]
 
@@ -106,12 +111,100 @@ def _verdict_for(
         return EXIT_PASS, "pass"
     if result.connectivity in ("dns_failure", "timeout", "auth_failure"):
         return EXIT_FAIL, "fail"
-    if result.p3_collections_found:
+    if result.collections is not None and any(
+        collection not in P3_BUSINESS_COLLECTIONS
+        for collection in result.collections
+    ):
+        # Designated historical baseline presence is expected. Only a
+        # non-designated collection causes the fail-stop gate outcome.
         return EXIT_FAIL, "fail"
     if result.collections is None:
         # ping succeeded but listCollections failed
         return EXIT_CONDITIONAL, "conditional_pass"
     return EXIT_PASS, "pass"
+
+
+def _to_mongo_preflight_aggregate(
+    result: MongoPreflightResult,
+    *,
+    live_read: bool,
+) -> MongoPreflightAggregate:
+    """Project a :class:`MongoPreflightResult` to the R1 aggregate.
+
+    Per RFC-03-014-p3a-readonly-gate V0.2 §2.4 裁定 1 / SPEC §0 R1
+    锚定 1 / DESIGN §5.5, the external YAML MUST NOT enumerate the
+    full collection list returned by ``list_collection_names()``;
+    only the 3 designated baseline presence booleans are exposed.
+    Any non-designated collection (if observed) is reduced to the
+    generic ``unexpected_presence`` signal and triggers Pascal review
+    per SPEC F-PR1-010. Collection names never cross this boundary.
+    """
+    designated = P3_BUSINESS_COLLECTIONS
+    observed: tuple[str, ...] = result.collections or ()
+    designated_set = set(designated)
+    observed_set = set(observed)
+
+    baseline_collections: list[BaselineCollectionPresence] = []
+    for name in designated:
+        baseline_collections.append(
+            BaselineCollectionPresence(
+                name=name, present=name in observed_set
+            )
+        )
+
+    # Reduce every non-designated collection to a generic boolean. The
+    # internal result retains ``collections`` for gate decisions, but no
+    # observed collection name may reach the aggregate or serializer.
+    unexpected_presence = any(c not in designated_set for c in observed)
+
+    # Verdict mapping mirrors the legacy ``_verdict_for`` semantics
+    # for backward compatibility, but the verdict is computed off
+    # the baseline observation only (R1).
+    if not live_read:
+        overall_verdict = "pass"
+    elif result.connectivity == "env_missing":
+        overall_verdict = "unauthorized"
+    elif result.connectivity == "dry_run":
+        overall_verdict = "pass"
+    elif result.connectivity in ("dns_failure", "timeout", "auth_failure"):
+        overall_verdict = "fail"
+    elif unexpected_presence:
+        # Non-designated collection(s) present — Pascal review
+        # (SPEC F-PR1-010), without exposing their names.
+        overall_verdict = "fail"
+    elif result.collections is None:
+        overall_verdict = "conditional_pass"
+    else:
+        overall_verdict = "pass"
+
+    # Warnings: keep generic redacted warning labels only.
+    # Strip any per-source/per-collection detail from the carrier.
+    safe_warnings: list[str] = []
+    for w in result.warnings:
+        wl = w.lower()
+        if "unauthorized" in wl and "list" in wl:
+            safe_warnings.append("list_collections_unauthorized")
+        elif "unexpected_existence" in wl or unexpected_presence:
+            safe_warnings.append("unexpected_collection_presence")
+        elif "dry-run" in wl:
+            safe_warnings.append("dry_run")
+        elif "skills/.env" in wl or "five keys" in wl:
+            # Coarse generic label. We must NEVER echo the actual
+            # key names or the path verbatim.
+            safe_warnings.append("env_missing")
+        else:
+            # Coarse generic label only.
+            safe_warnings.append("preflight_warning")
+
+    return MongoPreflightAggregate(
+        connectivity=result.connectivity,
+        latency_ms=result.latency_ms,
+        baseline_collections=tuple(baseline_collections),
+        unexpected_presence=unexpected_presence,
+        warnings=tuple(safe_warnings),
+        overall_verdict=overall_verdict,
+        generated_at=_now_iso(),
+    )
 
 
 def run_preflight(args: argparse.Namespace) -> int:
@@ -120,8 +213,15 @@ def run_preflight(args: argparse.Namespace) -> int:
     The CLI does NOT expose ``--uri`` (DESIGN §15.3.1 / §15.5.2):
     callers cannot pass a URI string on the command line. The
     internal ``MongoClientFactory.run_preflight(uri=...)`` seam is
-    kept for the unit-test path (``tests/scripts/t4_preflight/test_preflight_mongo.py``)
-    only; production callers must go through the resolver.
+    kept for the unit-test path
+    (``tests/scripts/t4_preflight/test_preflight_mongo.py``) only;
+    production callers must go through the resolver.
+
+    Per RFC-03-014-p3a-readonly-gate V0.2 §2.4 裁定 1 / SPEC §0 R1
+    锚定 1, the externally emitted YAML uses
+    :func:`mongo_preflight_aggregate_to_yaml` — only the 3
+    designated baseline presence booleans are exposed, never the
+    full ``list_collection_names()`` enumeration.
     """
     runner = PreflightRunner()
 
@@ -133,24 +233,9 @@ def run_preflight(args: argparse.Namespace) -> int:
         # returns connectivity="dry_run" without touching the file.
         result = runner.run_preflight(live=False, timeout=args.timeout)
 
-    exit_code, verdict_str = _verdict_for(args.live_read, result)
-
-    payload = {
-        "preflight_mongo": {
-            "generated_at": _now_iso(),
-            "live_read": bool(args.live_read),
-            "connectivity": result.connectivity,
-            "latency_ms": result.latency_ms,
-            "collections": list(result.collections) if result.collections else None,
-            "p3_collections_found": list(result.p3_collections_found),
-            "warnings": list(result.warnings),
-            "detail": result.detail,
-        },
-        "overall": {
-            "verdict": verdict_str,
-        },
-    }
-    yaml_text = to_yaml(payload)
+    exit_code, _ = _verdict_for(args.live_read, result)
+    aggregate = _to_mongo_preflight_aggregate(result, live_read=bool(args.live_read))
+    yaml_text = mongo_preflight_aggregate_to_yaml(aggregate)
 
     out_dir = Path(args.output_dir).expanduser()
     try:

@@ -454,6 +454,38 @@ class AShareCompletedSessionPolicy:
             return
 
 
+class SystemClock:
+    """OQ-11 production real clock (SPEC-03-014 V0.26 EOD-8.3).
+
+    Implements the :class:`Clock` Protocol by reading the host
+    system clock. ``now()`` always returns a timezone-aware
+    :class:`datetime.datetime` normalised to ``Asia/Shanghai``
+    via ``datetime.now(tz=self._timezone)`` so the
+    :class:`AShareCompletedSessionPolicy` comparator sees the
+    expected Shanghai wall clock.
+
+    The clock performs no network call, file write, or cache
+    access. Construction accepts an optional ``timezone``; the
+    default is the canonical ``ZoneInfo("Asia/Shanghai")``.
+    Construction never raises — the ``NaiveClockError``
+    fail-fast probe is owned by
+    :class:`AShareCompletedSessionPolicy.__init__`, which is
+    the only place the contract for ``tzinfo is not None``
+    gets enforced (an ``AShareCompletedSessionPolicy``
+    constructed with this clock always passes the probe).
+
+    Audit metadata records ``clock_source_class =
+    type(clock).__name__`` (= ``"SystemClock"``) so reviewers
+    can distinguish real production reads from test fakes.
+    """
+
+    def __init__(self, timezone: ZoneInfo = ZoneInfo("Asia/Shanghai")) -> None:
+        self._timezone = timezone
+
+    def now(self) -> datetime:
+        return datetime.now(tz=self._timezone)
+
+
 __all__ = [
     "SessionStatus",
     "CompletedSessionPolicy",
@@ -464,4 +496,5 @@ __all__ = [
     "NaiveClockError",
     "InvalidDateFormatError",
     "AShareCompletedSessionPolicy",
-]
+    "SystemClock",
+]  # noqa: E501

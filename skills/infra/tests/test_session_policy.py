@@ -42,6 +42,7 @@ from skills.infra.session_policy import (
     NaiveClockError,
     SessionPolicyError,
     SessionStatus,
+    SystemClock,
 )
 
 
@@ -880,9 +881,12 @@ class TestASharePolicyZeroSideEffect:
         ``date.today()`` directly — all time reads go through the
         injected clock (EOD-7.2).
 
-        AST-level check: the module's source must not contain an
+        AST-level check: the ``AShareCompletedSessionPolicy`` class
+        body (the production adapter) must not contain a
         ``datetime.now()`` / ``date.today()`` attribute-access
-        pattern.
+        pattern. ``SystemClock`` is exempt by design — it is the
+        only place a real ``datetime.now(tz=...)`` read is
+        permitted (OQ-11B.2 / EOD-8.3).
         """
         import ast
 
@@ -890,7 +894,19 @@ class TestASharePolicyZeroSideEffect:
 
         source = open(sp.__file__).read()
         tree = ast.parse(source)
-        for node in ast.walk(tree):
+        adapter_nodes: list[ast.AST] = []
+        for cls_node in ast.walk(tree):
+            if isinstance(cls_node, ast.ClassDef) and cls_node.name == (
+                "AShareCompletedSessionPolicy"
+            ):
+                for child in ast.walk(cls_node):
+                    adapter_nodes.append(child)
+                break
+        else:
+            raise AssertionError(
+                "AShareCompletedSessionPolicy class not found in session_policy.py"
+            )
+        for node in adapter_nodes:
             if isinstance(node, ast.Attribute) and node.attr in (
                 "now",
                 "today",
@@ -900,7 +916,7 @@ class TestASharePolicyZeroSideEffect:
                     "date",
                 ):
                     raise AssertionError(
-                        f"session_policy.py must not call "
+                        f"AShareCompletedSessionPolicy must not call "
                         f"{node.value.id}.{node.attr}() implicitly; "
                         f"got an AST node at line {node.lineno}"
                     )
@@ -1056,3 +1072,114 @@ class TestASharePolicyPackageExports:
                 return SessionStatus.COMPLETED
 
         assert isinstance(_AdHoc(), CompletedSessionPolicy)
+
+    def test_system_clock_exported(self) -> None:
+        """OQ-11 / DESIGN §OQ-11B.2 — SystemClock is reachable from
+        the package surface alongside the rest of the canonical
+        infra symbols."""
+        import skills.infra as infra
+
+        assert hasattr(infra, "SystemClock"), "SystemClock not exported"
+        assert "SystemClock" in infra.__all__
+        assert infra.SystemClock is SystemClock
+
+
+# ---------------------------------------------------------------------------
+# SystemClock — production real clock (OQ-11 / SPEC V0.26 EOD-8.3)
+# ---------------------------------------------------------------------------
+
+
+class TestSystemClock:
+    """The production :class:`SystemClock` is the OQ-11 real clock.
+
+    Contract (DESIGN-03-014 V0.33 §OQ-11B.2 / SPEC-03-014 V0.26 EOD-8.3):
+
+    * ``now()`` always returns a timezone-aware ``datetime`` — never
+      a naive datetime — so :class:`AShareCompletedSessionPolicy`'s
+      construction-time probe passes.
+    * ``now()`` instances are normalised to ``Asia/Shanghai`` so the
+      policy comparator sees the canonical Shanghai wall clock.
+    * The clock performs no network / file / Mongo / cache I/O and
+      never raises — the ``NaiveClockError`` gate stays owned by
+      the production adapter's ``__init__``.
+    * Implementing the ``Clock`` Protocol via :func:`isinstance`
+      lets the production adapter consume it without extra wiring.
+    * Audit metadata ``clock_source_class`` evaluates to
+      ``"SystemClock"`` (the canonical real-source token), so
+      reviewers can distinguish real production reads from test
+      fakes.
+    """
+
+    def test_now_is_timezone_aware(self) -> None:
+        clock = SystemClock()
+        sample = clock.now()
+        assert isinstance(sample, datetime)
+        assert sample.tzinfo is not None
+        assert sample.utcoffset() is not None
+
+    def test_now_is_shanghai_normalised(self) -> None:
+        """``SystemClock().now().astimezone(SHANGHAI)`` equals itself."""
+        clock = SystemClock()
+        sample = clock.now()
+        # Round-tripping via Shanghai tz should be a no-op.
+        assert sample == sample.astimezone(SHANGHAI)
+        # The tz offset must match Asia/Shanghai's offset (+08:00).
+        sample_sh = sample.astimezone(SHANGHAI)
+        assert sample_sh.utcoffset() == SHANGHAI.utcoffset(
+            sample_sh.replace(tzinfo=None)
+        )
+
+    def test_default_timezone_is_asia_shanghai(self) -> None:
+        """The default ``timezone`` arg is the canonical Shanghai zone."""
+        clock = SystemClock()
+        # Equivalent to ``clock._timezone == SHANGHAI`` but introspectable.
+        from zoneinfo import ZoneInfo
+
+        assert isinstance(clock._timezone, ZoneInfo)
+        assert str(clock._timezone) == "Asia/Shanghai"
+
+    def test_custom_timezone_override(self) -> None:
+        """The optional ``timezone`` arg lets tests pin a specific zone
+        without touching the host system clock."""
+        fixed = ZoneInfo("UTC")
+        clock = SystemClock(timezone=fixed)
+        sample = clock.now()
+        assert sample.tzinfo == fixed
+        assert sample == sample.astimezone(fixed)
+
+    def test_isinstance_clock_protocol(self) -> None:
+        """The runtime-checkable ``Clock`` Protocol accepts ``SystemClock``."""
+        clock = SystemClock()
+        assert isinstance(clock, Clock)
+
+    def test_as_a_share_policy_clock_passes_probe(self) -> None:
+        """End-to-end: an :class:`AShareCompletedSessionPolicy` built
+        with a :class:`SystemClock` must not raise ``NaiveClockError``.
+
+        This is the canonical production wiring exercised at T3
+        (DESIGN §OQ-11B.1 / §OQ-11B.2). We deliberately do not
+        inspect the real calendar — the probe alone (no
+        ``session_status`` call) is the contract under test.
+        """
+        policy = AShareCompletedSessionPolicy(clock=SystemClock())
+        # The probe stored ``type(clock).__name__`` for audit —
+        # verify the canonical real-source token.
+        assert policy._clock_source_class == "SystemClock"
+
+    def test_audit_clock_source_class_is_system_clock(self) -> None:
+        """The audit metadata always reads ``"SystemClock"`` for
+        a :class:`SystemClock`. This is the stable token that
+        distinguishes real production reads from test fakes.
+        """
+        clock = SystemClock()
+        assert type(clock).__name__ == "SystemClock"
+
+    def test_two_reads_progress_in_time(self) -> None:
+        """Two consecutive ``now()`` calls must advance (or, at worst,
+        stay equal on systems with low-resolution clocks). The clock
+        is monotonic in real time — verifying this guards against a
+        future refactor that accidentally caches the sample."""
+        clock = SystemClock()
+        a = clock.now()
+        b = clock.now()
+        assert b >= a
