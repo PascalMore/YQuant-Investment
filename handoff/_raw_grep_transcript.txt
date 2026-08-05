@@ -1,0 +1,293 @@
+scripts/t4_preflight/reporter.py-607-    * ``preflight_mongo.warnings`` — generic warning labels.
+scripts/t4_preflight/reporter.py:608:    * ``overall.verdict`` — pass / conditional_pass / fail /
+scripts/t4_preflight/reporter.py-609-      unauthorized.
+--
+scripts/t4_preflight/config.py-224-EXIT_PASS: int = 0
+scripts/t4_preflight/config.py:225:EXIT_CONDITIONAL: int = 1
+scripts/t4_preflight/config.py-226-EXIT_FAIL: int = 2
+--
+scripts/t4_preflight/smoke_flow.py-90-    preflight_metadata,
+scripts/t4_preflight/smoke_flow.py:91:    verdict_for_mapping,
+scripts/t4_preflight/smoke_flow.py-92-)
+--
+scripts/t4_preflight/smoke_flow.py-246-    else:
+scripts/t4_preflight/smoke_flow.py:247:        verdict = verdict_for_mapping(
+scripts/t4_preflight/smoke_flow.py-248-            field_mapping.matched_ratio,
+--
+scripts/t4_preflight/provider_client.py-58-    "FieldMapper",
+scripts/t4_preflight/provider_client.py:59:    "verdict_for_mapping",
+scripts/t4_preflight/provider_client.py-60-]
+--
+scripts/t4_preflight/provider_client.py-106-
+scripts/t4_preflight/provider_client.py:107:def verdict_for_mapping(
+scripts/t4_preflight/provider_client.py-108-    matched_ratio: float,
+--
+scripts/t4_preflight/provider_client.py-121-    if matched_ratio >= MATCH_RATIO_CONDITIONAL:
+scripts/t4_preflight/provider_client.py:122:        return "conditional_pass"
+scripts/t4_preflight/provider_client.py-123-    return "fail"
+--
+scripts/t4_preflight/audit_secret.py-35-    DEFAULT_TIMEOUT_SECONDS,
+scripts/t4_preflight/audit_secret.py:36:    EXIT_CONDITIONAL,
+scripts/t4_preflight/audit_secret.py-37-    EXIT_PASS,
+--
+scripts/t4_preflight/audit_secret.py-195-            status = "conditional_authorized"
+scripts/t4_preflight/audit_secret.py:196:            exit_code = EXIT_CONDITIONAL
+scripts/t4_preflight/audit_secret.py-197-        else:
+--
+scripts/t4_preflight/audit_secret.py-202-            status = "conditional_authorized"
+scripts/t4_preflight/audit_secret.py:203:            exit_code = EXIT_CONDITIONAL
+scripts/t4_preflight/audit_secret.py-204-        else:
+--
+scripts/t4_preflight/smoke_sentiment.py-41-    DRY_RUN_DATE_RANGE,
+scripts/t4_preflight/smoke_sentiment.py:42:    EXIT_CONDITIONAL,
+scripts/t4_preflight/smoke_sentiment.py-43-    EXIT_FAIL,
+--
+scripts/t4_preflight/smoke_sentiment.py-60-    preflight_metadata,
+scripts/t4_preflight/smoke_sentiment.py:61:    verdict_for_mapping,
+scripts/t4_preflight/smoke_sentiment.py-62-)
+--
+scripts/t4_preflight/smoke_sentiment.py-228-    else:
+scripts/t4_preflight/smoke_sentiment.py:229:        verdict = verdict_for_mapping(field_mapping.matched_ratio)
+scripts/t4_preflight/smoke_sentiment.py-230-        memo = (
+--
+scripts/t4_preflight/smoke_sentiment.py-241-        # schema drift for a real upstream defect.
+scripts/t4_preflight/smoke_sentiment.py:242:        if verdict in {"conditional_pass", "fail"} and field_mapping.missing_fields:
+scripts/t4_preflight/smoke_sentiment.py-243-            memo += (
+--
+scripts/t4_preflight/smoke_sentiment.py-252-            if verdict == "pass"
+scripts/t4_preflight/smoke_sentiment.py:253:            else EXIT_CONDITIONAL
+scripts/t4_preflight/smoke_sentiment.py:254:            if verdict == "conditional_pass"
+scripts/t4_preflight/smoke_sentiment.py-255-            else EXIT_FAIL
+--
+scripts/t4_preflight/preflight_mongo.py-46-    DEFAULT_TIMEOUT_SECONDS,
+scripts/t4_preflight/preflight_mongo.py:47:    EXIT_CONDITIONAL,
+scripts/t4_preflight/preflight_mongo.py-48-    EXIT_FAIL,
+--
+scripts/t4_preflight/preflight_mongo.py-122-        # ping succeeded but listCollections failed
+scripts/t4_preflight/preflight_mongo.py:123:        return EXIT_CONDITIONAL, "conditional_pass"
+scripts/t4_preflight/preflight_mongo.py-124-    return EXIT_PASS, "pass"
+--
+scripts/t4_preflight/preflight_mongo.py-175-    elif result.collections is None:
+scripts/t4_preflight/preflight_mongo.py:176:        overall_verdict = "conditional_pass"
+scripts/t4_preflight/preflight_mongo.py-177-    else:
+--
+scripts/t4_preflight/models.py-198-    warnings: tuple[str, ...] = ()
+scripts/t4_preflight/models.py:199:    overall_verdict: str = "skipped"  # pass / conditional_pass / fail / unauthorized
+scripts/t4_preflight/models.py-200-    # ISO 8601 timestamp generated at preflight time (Asia/Shanghai).
+--
+scripts/t4_preflight/models.py-290-class OverallVerdict:
+scripts/t4_preflight/models.py:291:    # "pass" / "conditional_pass" / "fail" / "unauthorized"
+scripts/t4_preflight/models.py-292-    verdict: str
+--
+scripts/t4_preflight/smoke_sector.py-27-    DRY_RUN_DATE_RANGE,
+scripts/t4_preflight/smoke_sector.py:28:    EXIT_CONDITIONAL,
+scripts/t4_preflight/smoke_sector.py-29-    EXIT_FAIL,
+--
+scripts/t4_preflight/smoke_sector.py-47-    preflight_metadata,
+scripts/t4_preflight/smoke_sector.py:48:    verdict_for_mapping,
+scripts/t4_preflight/smoke_sector.py-49-)
+--
+scripts/t4_preflight/smoke_sector.py-237-    else:
+scripts/t4_preflight/smoke_sector.py:238:        verdict = verdict_for_mapping(field_mapping.matched_ratio)
+scripts/t4_preflight/smoke_sector.py-239-        overall = OverallVerdict(
+--
+scripts/t4_preflight/smoke_sector.py-249-            if verdict == "pass"
+scripts/t4_preflight/smoke_sector.py:250:            else EXIT_CONDITIONAL
+scripts/t4_preflight/smoke_sector.py:251:            if verdict == "conditional_pass"
+scripts/t4_preflight/smoke_sector.py-252-            else EXIT_FAIL
+--
+tests/scripts/t4_preflight/test_smoke_flow.py-343-    """G-CF-LIVE is binary at the 0.70 boundary."""
+tests/scripts/t4_preflight/test_smoke_flow.py:344:    from scripts.t4_preflight.provider_client import verdict_for_mapping
+tests/scripts/t4_preflight/test_smoke_flow.py-345-
+tests/scripts/t4_preflight/test_smoke_flow.py:346:    assert verdict_for_mapping(0.69, capability="flow.capital_flow_daily") == "fail"
+tests/scripts/t4_preflight/test_smoke_flow.py:347:    assert verdict_for_mapping(0.70, capability="flow.capital_flow_daily") == "pass"
+tests/scripts/t4_preflight/test_smoke_flow.py:348:    assert verdict_for_mapping(0.89, capability="flow.capital_flow_daily") == "pass"
+tests/scripts/t4_preflight/test_smoke_flow.py:349:    assert verdict_for_mapping(0.90, capability="flow.capital_flow_daily") == "pass"
+tests/scripts/t4_preflight/test_smoke_flow.py:350:    assert "conditional_pass" not in {
+tests/scripts/t4_preflight/test_smoke_flow.py:351:        verdict_for_mapping(ratio, capability="flow.capital_flow_daily")
+tests/scripts/t4_preflight/test_smoke_flow.py-352-        for ratio in (0.69, 0.70, 0.89, 0.90)
+--
+tests/scripts/t4_preflight/test_smoke_flow.py-357-    """Unscoped legacy callers retain their prior three-state contract."""
+tests/scripts/t4_preflight/test_smoke_flow.py:358:    from scripts.t4_preflight.provider_client import verdict_for_mapping
+tests/scripts/t4_preflight/test_smoke_flow.py-359-
+tests/scripts/t4_preflight/test_smoke_flow.py:360:    assert verdict_for_mapping(0.70) == "conditional_pass"
+tests/scripts/t4_preflight/test_smoke_flow.py:361:    assert verdict_for_mapping(0.89) == "conditional_pass"
+tests/scripts/t4_preflight/test_smoke_flow.py:362:    assert verdict_for_mapping(0.90) == "pass"
+--
+tests/scripts/t4_preflight/test_smoke_sector.py-20-    DEFAULT_TEST_TARGETS,
+tests/scripts/t4_preflight/test_smoke_sector.py:21:    EXIT_CONDITIONAL,
+tests/scripts/t4_preflight/test_smoke_sector.py-22-    EXIT_FAIL,
+--
+tests/scripts/t4_preflight/test_smoke_sector.py-29-    reset_call_dispatcher,
+tests/scripts/t4_preflight/test_smoke_sector.py:30:    verdict_for_mapping,
+tests/scripts/t4_preflight/test_smoke_sector.py-31-)
+--
+tests/scripts/t4_preflight/test_smoke_sector.py-61-        (0.90, "pass"),
+tests/scripts/t4_preflight/test_smoke_sector.py:62:        (0.89, "conditional_pass"),
+tests/scripts/t4_preflight/test_smoke_sector.py:63:        (0.70, "conditional_pass"),
+tests/scripts/t4_preflight/test_smoke_sector.py-64-        (0.50, "fail"),
+--
+tests/scripts/t4_preflight/test_smoke_sector.py-67-)
+tests/scripts/t4_preflight/test_smoke_sector.py:68:def test_verdict_for_mapping(ratio: float, expected: str) -> None:
+tests/scripts/t4_preflight/test_smoke_sector.py:69:    assert verdict_for_mapping(ratio) == expected
+tests/scripts/t4_preflight/test_smoke_sector.py-70-
+--
+docs/design/03_data/DESIGN-03-015-historical-sector-ranking.md-716-| G-015-1 | TA-CN SW 历史数据真实可达性 smoke（只读 Mongo） | Pascal | T3 离线实现通过 | 验证 `index_daily_quotes` 中 SW L1 sector_code 覆盖率、历史完整性、source 字段分布；**权威校验 expected universe** |
+docs/design/03_data/DESIGN-03-015-historical-sector-ranking.md:717:| G-015-2 | 新 collection 创建 + 索引（DDL） | Pascal | Gate-1 verdict ≥ conditional_pass | 执行附录 A.4 的 createCollection + createIndex |
+docs/design/03_data/DESIGN-03-015-historical-sector-ranking.md-718-| G-015-3 | 历史 backfill（真实 TA-CN → 新 collection） | Pascal | Gate-2 完成 | 注入真实 TA-CN client（附录 A.1），运行 backfill（附录 A.2） |
+--
+docs/design/03_data/DESIGN-03-014-p3a-sector-provider-activation.md-739-|---|---|---|
+docs/design/03_data/DESIGN-03-014-p3a-sector-provider-activation.md:740:| 真实 name_em 返回字段与 introspection 不一致（版本漂移） | 后续 smoke 验证；字段匹配阈值 ≥90% pass / 70-90% conditional_pass / <70% fail | 回退到 schema-level stub（`stub_dataframe_for`） |
+docs/design/03_data/DESIGN-03-014-p3a-sector-provider-activation.md-741-| 真实 name_em SSL 失败（同 B2 cons_em） | 后续 Pascal 授权网络诊断 | 回退到 stub；不自动重试 |
+--
+docs/design/03_data/DESIGN-03-014-p3a-readonly-gate.md-226-      → list_collection_names
+docs/design/03_data/DESIGN-03-014-p3a-readonly-gate.md:227:          ├─ ping 成功但 list 未授权（collections=None） → exit 1 (conditional_pass) → 暂停待 Pascal 审阅
+docs/design/03_data/DESIGN-03-014-p3a-readonly-gate.md-228-      → baseline 三集合 presence 观测（R1：存在即预期基线，非 FAIL）
+--
+docs/design/03_data/DESIGN-03-014-p3a-readonly-gate.md-266-overall:
+docs/design/03_data/DESIGN-03-014-p3a-readonly-gate.md:267:  verdict: pass                 # pass / conditional_pass / fail / unauthorized
+docs/design/03_data/DESIGN-03-014-p3a-readonly-gate.md-268-ledger_audit:                   # 外层命令级审计补充（本链定义，非现行 CLI 输出）
+--
+docs/design/03_data/DESIGN-03-014-p3a-readonly-gate.md-315-      → get_sector_ranking(sector_type="industry") 单次调用
+docs/design/03_data/DESIGN-03-014-p3a-readonly-gate.md:316:          ├─ 成功 → 非空校验 → 字段匹配 → verdict: pass(0) / conditional_pass(1) / fail(2)
+docs/design/03_data/DESIGN-03-014-p3a-readonly-gate.md-317-          ├─ ProviderUnavailableError → error_class=ProviderUnavailableError → fail(2) → 链停止（不重试）
+--
+docs/design/03_data/DESIGN-03-014-p3a-readonly-gate.md-362-overall:
+docs/design/03_data/DESIGN-03-014-p3a-readonly-gate.md:363:  verdict: pass                     # pass / conditional_pass / fail
+docs/design/03_data/DESIGN-03-014-p3a-readonly-gate.md-364-```
+--
+tests/scripts/t4_preflight/test_audit_secret.py-32-    CANDIDATE_SECRET_KEYS,
+tests/scripts/t4_preflight/test_audit_secret.py:33:    EXIT_CONDITIONAL,
+tests/scripts/t4_preflight/test_audit_secret.py-34-    EXIT_PASS,
+--
+tests/scripts/t4_preflight/test_audit_secret.py-262-    # Env-only is at least conditional; the design accepts it.
+tests/scripts/t4_preflight/test_audit_secret.py:263:    assert proc.returncode in (EXIT_PASS, EXIT_CONDITIONAL)
+tests/scripts/t4_preflight/test_audit_secret.py-264-
+--
+tests/scripts/t4_preflight/test_preflight_mongo.py-38-    P3_BUSINESS_COLLECTIONS,
+tests/scripts/t4_preflight/test_preflight_mongo.py:39:    EXIT_CONDITIONAL,
+tests/scripts/t4_preflight/test_preflight_mongo.py-40-    EXIT_FAIL,
+--
+tests/scripts/t4_preflight/test_preflight_mongo.py-680-    """R1: ping OK but listCollections not authorized maps to
+tests/scripts/t4_preflight/test_preflight_mongo.py:681:    ``overall_verdict=conditional_pass``."""
+tests/scripts/t4_preflight/test_preflight_mongo.py-682-    result = MongoPreflightResult(
+--
+tests/scripts/t4_preflight/test_preflight_mongo.py-689-    )
+tests/scripts/t4_preflight/test_preflight_mongo.py:690:    assert agg.overall_verdict == "conditional_pass"
+tests/scripts/t4_preflight/test_preflight_mongo.py-691-    assert "list_collections_unauthorized" in agg.warnings
+--
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md-3702-- **报告模板**：capability 标注 `flow.capital_flow_daily`（不再含 `flow.northbound_daily`）；字段 `metadata`（capability / provider / smoke_at / test_target=`600519/CN` / date_range=≤3 completed dates）、`connectivity`、`auth`、`permissions`、`field_mapping`（total_expected / matched / missing / extra / type_mismatches）、`data_sample`（row_count / 脱敏样例）、`vs_fixture`、`overall`（verdict pass/fail）、`ledger`（provider_attempts ≤3 / actual_calls / retry_count=0 / fallback_count=0 / mongo_calls=0 / write_operations=0）。dry-run 路径 `provider_attempts=0 / actual_calls=0`，`overall.verdict="pass"`（`memo="dry-run — no real calls made"`，沿用现有语义）。
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md:3703:- **阈值实现约束**：`MATCH_RATIO_CONDITIONAL=0.70` 为唯一公开阈值输入（config.py 常量位；SPEC §R3.10 item6 禁止替代阈值），`verdict_for_mapping` 对 G-CF-LIVE 的判定必须满足 `<70% fail-stop / ≥70% 才可通过`；**本 Design 不冻结任何与 0.70 冲突的次级阈值**，§15.6.2 的历史分级（≥90% pass / 70-90% conditional / <70% fail）仅保留为旧 PR 工具链历史，G-CF-LIVE 场景以本节为准。
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md-3704-
+--
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md-3988-
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md:3989:**不强制执行**：以上门槛由 CLI 输出 check 手动确认（非自动阻断——审查人通过查看报告链确认顺序合规）。但 `audit-secret --live-read` 未通过时（任一五键缺失或 MONGODB_DATABASE 值不等于 `"tradingagents"`），MongoDB preflight 命令应输出 `WARN: PR-0 not confirmed — skills/.env five keys(MONGODB_HOST/PORT/USERNAME/PASSWORD/DATABASE) not all authorized or MONGODB_DATABASE != "tradingagents"` 并将 `overall.verdict` 降为 `conditional_pass`。AKShare smoke 不受此警告影响。
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md-3990-
+--
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md-4475-- ≥90% → `pass`
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md:4476:- 70%-90% → `conditional_pass`
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md-4477-- <70% → `fail`
+--
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md-4504-    vs_fixture: FixtureDeviationResult  # deviations list
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md:4505:    overall: OverallVerdict          # verdict (pass/conditional_pass/fail), memo
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md-4506-```
+--
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md-4527-| 0 | PASS — 所有检查通过 | `pass` | 可进入下一 Gate |
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md:4528:| 1 | CONDITIONAL PASS — 部分差异/警告 | `conditional_pass` | 需 Pascal 审阅后决定是否继续 |
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md-4529-| 2 | FAIL — 阻断性错误 | `fail` | 停止该 Gate 序列，不自动重试 |
+--
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md-4646-1. **Reviewer 在 Review 报告中标记所有 RC 检查为 PASS**（RC-1 ~ RC-8）
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md:4647:2. **Pascal 审阅 Review 报告**，确认接受 RC 中发现的任何 `conditional_pass` 项
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md-4648-3. **Pascal 或授权 DevOps 执行 §15.10.3 的 live-read 命令**，按 PR-0 → PR-1 → PR-2/3/4（可并行）顺序
+--
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md-4650-5. **Pascal 审阅报告**，根据 SPEC §14.4.4 判定 verdict：
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md:4651:   - `pass` / `conditional_pass` → 可进入 PR-DDL-* Gate
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md-4652-   - `fail` / `unauthorized` → 停止序列，排查问题后重做
+--
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md-4882-| R-1 | ~~Pascal 尚未选择 PR-3 三选一（A/B/C），T3 Implement 无法继续~~ **已解决**：Pascal 2026-07-26 已选 C，northbound_net_inflow 恒 None，fetch 路径不指向真实 endpoint | 无阻塞 | C 已选：T3 实施 `flow.northbound_daily` 的 fetch 路径返回恒 None 的 stub；持股历史作为辅助参考字段标注但不映射入 canonical |
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md:4883:| R-2 | PR-2 SSL 网络诊断持续受阻（基础设施限制），sector 推断字段集一直无法 live-read 验证 | sector 映射停留在推断状态 | T3 按推断字段集实现，标注「未 live-read 验证」；验收时接受 conditional_pass |
+docs/design/03_data/DESIGN-03-014-unified-data-phase-3-persistent-data-expansion.md-4884-| R-3 | ~~PR-4 的 `empty_semantics=undetermined` 在后续交易日 live-read 后收敛为 `no_trading_data`~~ **X2 已移除 empty_semantics**：空返回 verdict=fail（保守），reporter 不再区分空返回语义 | 无影响 | X2 收敛后 reporter 不输出 empty_semantics；后续 live-read 返回非空数据时按正常字段匹配流程判定 |
+--
+tests/scripts/t4_preflight/test_smoke_sentiment.py-19-from scripts.t4_preflight.config import (
+tests/scripts/t4_preflight/test_smoke_sentiment.py:20:    EXIT_CONDITIONAL,
+tests/scripts/t4_preflight/test_smoke_sentiment.py-21-    EXIT_FAIL,
+--
+docs/spec/03_data/SPEC-03-014-p3a-readonly-gate.md-136-| F-PR1-010 | 非基线异常校验 | 基线清单之外的 P3 命名集合 | exit 2（fail）+ `UNEXPECTED_EXISTENCE` warning | **仅当发现非 designated 的陌生 P3 命名集合时**停止，需 Pascal 判断遗留 vs 意外；三张基线集合存在本身不触发（R1） |
+docs/spec/03_data/SPEC-03-014-p3a-readonly-gate.md:137:| F-PR1-011 | listCollections 未授权 | — | exit 1（conditional_pass） | ping 成功但 listCollections 失败 → 记录 warning（`list_collections_unauthorized`） |
+docs/spec/03_data/SPEC-03-014-p3a-readonly-gate.md-138-| F-PR1-012 | 连接失败 | — | exit 2（fail） | DNS / 超时 / 认证拒绝 → 立即停在 PR-1；不 fallback 到新连接串 / shell client / 服务重启 |
+--
+docs/spec/03_data/SPEC-03-014-p3a-readonly-gate.md-155-| F-PR2-006 | 响应 schema 校验 | 返回列名 | 字段匹配比例 | 与离线源码验证的 12 列 expected（`排名/板块名称/板块代码/最新价/涨跌额/涨跌幅/总市值/换手率/上涨家数/下跌家数/领涨股票/领涨股票-涨跌幅`）比对 |
+docs/spec/03_data/SPEC-03-014-p3a-readonly-gate.md:156:| F-PR2-007 | 字段匹配阈值 | 匹配比例 | verdict | ≥90% → pass（exit 0）；70-90% → conditional_pass（exit 1）；<70% → fail（exit 2，主 SPEC A-DRIFT-5） |
+docs/spec/03_data/SPEC-03-014-p3a-readonly-gate.md-157-| F-PR2-008 | 字段合理性停止 | 返回列 | — | 核心列缺失（板块代码/板块名称/涨跌幅）→ fail；类型不匹配（如涨跌幅非数值）→ fail |
+--
+docs/spec/03_data/SPEC-03-014-p3a-sector-provider-activation.md-269-| A-DRIFT-4 | 字段类型漂移 | 数值字段返回字符串时 `_safe_float` 容错转换 |
+docs/spec/03_data/SPEC-03-014-p3a-sector-provider-activation.md:270:| A-DRIFT-5 | 真实 smoke 字段匹配阈值 | ≥90% pass；70-90% conditional_pass；<70% fail（主 RFC §13.4.4） |
+docs/spec/03_data/SPEC-03-014-p3a-sector-provider-activation.md-271-
+--
+docs/spec/03_data/SPEC-03-014-p3a-sector-provider-activation.md-294-| F-060 | G-A-2 | refresh 生产激活 | Pascal | T3 离线实现通过 |
+docs/spec/03_data/SPEC-03-014-p3a-sector-provider-activation.md:295:| F-061 | PR-DDL-P3A | MongoDB 集合创建（已冻结） | Pascal | PR-2 smoke ≥ conditional_pass |
+docs/spec/03_data/SPEC-03-014-p3a-sector-provider-activation.md-296-| F-062 | PR-CANARY-P3A | 手动 canary 写入 | Pascal | PR-DDL-P3A 完成 |
+--
+docs/spec/03_data/SPEC-03-015-historical-sector-ranking.md-299-| G-015-1 | Gate-1 | TA-CN SW 历史数据真实可达性 smoke（只读 Mongo，验证覆盖率和完整性） | Pascal | T3 离线实现通过 |
+docs/spec/03_data/SPEC-03-015-historical-sector-ranking.md:300:| G-015-2 | Gate-2 | 新 collection `03_data_ud_sector_ranking_daily` 创建 + 索引（DDL） | Pascal | Gate-1 verdict ≥ conditional_pass |
+docs/spec/03_data/SPEC-03-015-historical-sector-ranking.md-301-| G-015-3 | Gate-3 | 历史 backfill（真实 TA-CN → 新 collection 批量写入） | Pascal | Gate-2 完成 |
+--
+docs/rfc/03_data/RFC-03-015-historical-sector-ranking.md-512-| Gate-1 | TA-CN SW 历史数据真实可达性 smoke（只读 Mongo，验证覆盖率和完整性） | Pascal | T3 离线实现通过 |
+docs/rfc/03_data/RFC-03-015-historical-sector-ranking.md:513:| Gate-2 | 新 collection `03_data_ud_sector_ranking_daily` 创建 + 索引（DDL） | Pascal | Gate-1 verdict ≥ conditional_pass |
+docs/rfc/03_data/RFC-03-015-historical-sector-ranking.md-514-| Gate-3 | 历史 backfill（真实 TA-CN → 新 collection 批量写入） | Pascal | Gate-2 完成 |
+--
+docs/rfc/03_data/RFC-03-014-p3a-readonly-gate.md-204-**成功含义**：ping 成功 + listCollections 成功 + **三张 designated baseline 集合 presence 可观测（存在即预期基线，不因存在而 FAIL；R1）** → `pass`（exit 0）。**失败含义**：
+docs/rfc/03_data/RFC-03-014-p3a-readonly-gate.md:205:- ping 成功但 listCollections 未授权 → `conditional_pass`（exit 1）；
+docs/rfc/03_data/RFC-03-014-p3a-readonly-gate.md-206-- 连接失败 / 认证拒绝 / DNS / 超时 → `fail`（exit 2），**立即停在 PR-1**；
+--
+docs/rfc/03_data/RFC-03-014-p3a-readonly-gate.md-225-
+docs/rfc/03_data/RFC-03-014-p3a-readonly-gate.md:226:**成功含义**：单次 `name_em()` 调用返回非空 DataFrame，字段匹配比例 ≥ 90% → `pass`（exit 0）；70%–90% → `conditional_pass`（exit 1）。**失败含义**：
+docs/rfc/03_data/RFC-03-014-p3a-readonly-gate.md-227-- 连接失败 / SSL / TLS / 超时 / DNS / 认证拒绝 → `fail`（exit 2），记录错误类别（`ProviderUnavailableError` 类）后 fail-stop，不重试；
+--
+docs/rfc/03_data/RFC-03-014-unified-data-phase-3-persistent-data-expansion.md-713-overall:
+docs/rfc/03_data/RFC-03-014-unified-data-phase-3-persistent-data-expansion.md:714:  verdict: pass | conditional_pass | fail  # 总体评估
+docs/rfc/03_data/RFC-03-014-unified-data-phase-3-persistent-data-expansion.md-715-  memo: |                               # 自由文本备注
+--
+docs/rfc/03_data/RFC-03-014-unified-data-phase-3-persistent-data-expansion.md-733-| 字段映射完全匹配（≥90% 字段名+类型匹配） | pass → 可直接进入 DDL Gate |
+docs/rfc/03_data/RFC-03-014-unified-data-phase-3-persistent-data-expansion.md:734:| 字段映射部分匹配（70%-90%） | conditional_pass → 需 Pascal 审阅偏差后决定是否授权 DDL |
+docs/rfc/03_data/RFC-03-014-unified-data-phase-3-persistent-data-expansion.md-735-| 字段映射匹配度低（<70%） | fail → 停止 → 需更新 domain object schema 后重做 smoke |
+--
+docs/rfc/03_data/RFC-03-014-unified-data-phase-3-persistent-data-expansion.md-1051-
+docs/rfc/03_data/RFC-03-014-unified-data-phase-3-persistent-data-expansion.md:1052:1. 该子阶段的 PR-smoke verdict 为 `pass` 或 `conditional_pass`（Pascal 已审阅偏差并确认可接受）
+docs/rfc/03_data/RFC-03-014-unified-data-phase-3-persistent-data-expansion.md-1053-2. Pascal 已确认 SPEC-03-014 中对应 schema 的最终版本（包含 smoke 发现的字段映射修正）
+--
+docs/rfc/03_data/RFC-03-014-unified-data-phase-3-persistent-data-expansion.md-1065-2. **PR-1 通过**：MongoDB 可连接、认证正常、目标集合不存在（或 Pascal 已确认意外存在的集合可接受）
+docs/rfc/03_data/RFC-03-014-unified-data-phase-3-persistent-data-expansion.md:1066:3. **PR-3/PR-4 至少通过一个子阶段**（**R2（2026-08-04）：PR-2 已 superseded / out-of-scope，不再作为成功标准；P3-A 收尾判据以 §R2.2 完成矩阵为准**）：对应的 Provider smoke 报告生成，verdict 为 pass 或 conditional_pass
+docs/rfc/03_data/RFC-03-014-unified-data-phase-3-persistent-data-expansion.md-1067-4. **字段映射差异表**：每个 capability 的字段映射对照表已生成，未映射字段已标注
+--
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md-1310-overall:
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md:1311:  verdict: pass | conditional_pass | fail  # 总体评估
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md-1312-  memo: |                               # 自由文本备注
+--
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md-1330-| 字段映射完全匹配（≥90% 字段名+类型匹配） | pass → 可直接进入 DDL Gate |
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md:1331:| 字段映射部分匹配（70%-90%） | conditional_pass → 需 Pascal 审阅偏差后决定是否授权 DDL |
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md-1332-| 字段映射匹配度低（<70%） | fail → 停止 → 需更新 domain object schema 后重做 smoke |
+--
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md-1700-**DDL Gate 授权要求**（全部满足）：
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md:1701:1. 该子阶段的 PR-smoke verdict 为 `pass` 或 `conditional_pass`（Pascal 已审阅偏差并确认可接受）
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md-1702-2. Pascal 已确认 SPEC-03-014 中对应 schema 的最终版本（包含 smoke 发现的字段映射修正）
+--
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md-1737-|---|---|
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md:1738:| 前置条件 | (a) ~~PR-2 verdict 为 `pass` 或 `conditional_pass`（Pascal 已审阅偏差）~~ — **R2（2026-08-04）：PR-2 已 superseded / out-of-scope（预算永久废弃），前置改为「仅当未来新 Provider Gate 完成（如 §R2.4 G-R2-1 read-path census 或新授权 smoke）+ Pascal 独立确认」**；(b) Pascal 已确认 SPEC-03-014 §3.1 schema 最终版；(c) §14.6 DDL Gate 授权要求 1-6 全部满足 |
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md-1739-| 集合 | 仅 `03_data_ud_market_sector_snapshot`（库 `tradingagents`，主仓 `main` 本地工作树） |
+--
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md-1761-|---|---|
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md:1762:| 前置条件 | (a) PR-3 verdict 为 `pass` 或 `conditional_pass`（Pascal 已审阅偏差）；(b) Pascal 已确认 SPEC-03-014 §3.2 schema 最终版；(c) §14.6 DDL Gate 授权要求 1-6 全部满足 |
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md-1763-| 集合 | 仅 `03_data_ud_stock_capital_flow`（库 `tradingagents`，主仓 `main` 本地工作树） |
+--
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md-1785-|---|---|
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md:1786:| 前置条件 | (a) PR-4 verdict 为 `pass` 或 `conditional_pass`（Pascal 已审阅偏差）；(b) Pascal 已确认 SPEC-03-014 §3.3 schema 最终版；(c) §14.6 DDL Gate 授权要求 1-6 全部满足 |
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md-1787-| 集合 | 仅 `03_data_ud_market_sentiment_snapshot`（库 `tradingagents`，主仓 `main` 本地工作树） |
+--
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md-1805-2. **PR-1 通过**：MongoDB 可连接、认证正常、目标集合不存在（或 Pascal 已确认意外存在的集合可接受）
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md:1806:3. **PR-3/PR-4 至少通过一个子阶段**（**R2（2026-08-04）：PR-2 已 superseded / out-of-scope，不再作为成功标准；P3-A 收尾判据以 §R2.2 完成矩阵为准**）：对应的 Provider smoke 报告生成，verdict 为 pass 或 conditional_pass
+docs/spec/03_data/SPEC-03-014-unified-data-phase-3-persistent-data-expansion.md-1807-4. **字段映射差异表**：每个 capability 的字段映射对照表已生成，未映射字段已标注
+--
+docs/rfc/03_data/RFC-03-014-p3a-sector-provider-activation.md-441-| G-A-2 | refresh 生产激活（`_is_refresh_authorized()` → True） | Pascal | T3 离线实现通过 |
+docs/rfc/03_data/RFC-03-014-p3a-sector-provider-activation.md:442:| PR-DDL-P3A | MongoDB 集合 `03_data_ud_market_sector_snapshot` 创建 + 索引（已冻结） | Pascal | PR-2 smoke verdict ≥ conditional_pass |
+docs/rfc/03_data/RFC-03-014-p3a-sector-provider-activation.md-443-| PR-CANARY-P3A | 手动 canary refresh 调用写入 | Pascal | PR-DDL-P3A 完成 |
