@@ -2,16 +2,27 @@
 
 DESIGN-03-014 §15.6 / SPEC-03-014 §14.4 / RFC-03-014 §13.4.
 
+P3-B S1 R3 P0 re-implementation (RFC-03-014 V0.33 §R3 /
+SPEC-03-014 V0.33 §R3 / DESIGN-03-014 V0.37 §R3.9):
+
 The :class:`AKShareSmokeClient` enforces the design's hard limits:
 
-* Single security / single date (or ≤3 trading-day window).
+* Single security / single market — P3-B S1 single fixed ``600519``
+  symbol, ``market='sh'`` (DESIGN §R3.3 / §R3.9 allowlist #1).
 * Hard cap on call count per capability
-  (``config.AKSHARE_MAX_CALLS``).
+  (``config.AKSHARE_MAX_CALLS`` — 3 for
+  ``flow.capital_flow_daily``).
 * Hard minimum interval between calls (≥1s).
 * No retries on failure.
 * No persistence — the only output is an in-memory
   :class:`SmokeCallResult` and the field-mapping step is a pure
   function over the in-memory result.
+
+The P3-B northbound path is **not** exposed by this client
+(``flow.northbound_daily`` is ``intentionally-unavailable`` per
+Pascal C / RFC §13.4.5.2 / DESIGN §R3.1). The previous northbound
+call path has been removed; the runner never queries the
+holding-history endpoint.
 
 The client does NOT import :mod:`akshare` at module load time. The
 import is deferred to the first live call. Tests can inject a fake
@@ -29,6 +40,8 @@ from typing import Any, Callable, Mapping, Protocol
 from .config import (
     AKSHARE_MAX_CALLS,
     DEFAULT_TEST_TARGETS,
+    DEFAULT_TIMEOUT_SECONDS,
+    MATCH_RATIO_CONDITIONAL,
     MIN_INTERVAL_SECONDS,
 )
 from .models import (
@@ -92,11 +105,21 @@ def reset_call_dispatcher() -> None:
 # ---------------------------------------------------------------------------
 
 
-def verdict_for_mapping(matched_ratio: float) -> str:
-    """Apply the §15.6.2 thresholds."""
+def verdict_for_mapping(
+    matched_ratio: float,
+    capability: str | None = None,
+) -> str:
+    """Apply field-mapping thresholds, scoped to the capability contract.
+
+    G-CF-LIVE uses the sole 0.70 threshold as a strict binary verdict.
+    Legacy callers retain the historical three-state behavior until their
+    own contracts are migrated.
+    """
+    if capability == "flow.capital_flow_daily":
+        return "pass" if matched_ratio >= MATCH_RATIO_CONDITIONAL else "fail"
     if matched_ratio >= 0.90:
         return "pass"
-    if matched_ratio >= 0.70:
+    if matched_ratio >= MATCH_RATIO_CONDITIONAL:
         return "conditional_pass"
     return "fail"
 
@@ -188,9 +211,13 @@ class AKShareSmokeClient:
     def __init__(
         self,
         *,
-        timeout_seconds: int = 30,
+        timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
         min_interval_seconds: float = MIN_INTERVAL_SECONDS,
     ) -> None:
+        # ``timeout_seconds`` defaults to ``config.DEFAULT_TIMEOUT_SECONDS``
+        # (= 3s per G-CF-LIVE ≤3s contract, DESIGN V0.37 §R3.3). The
+        # historical hardcoded 30s default is gone; no new magic number is
+        # introduced — the existing config constant is the single source.
         self._timeout = timeout_seconds
         self._min_interval = min_interval_seconds
         self._last_call_at: float | None = None
@@ -315,6 +342,23 @@ class AKShareSmokeClient:
     def fetch_capital_flow(
         self, symbol: str, market: str, *, live: bool = False
     ) -> SmokeCallResult:
+        """Fetch per-symbol capital flow (DESIGN V0.37 §R3.3 / §R3.9).
+
+        The P3-B S1 G-CF-LIVE freeze is a single ``600519/sh``
+        symbol (DESIGN §R3.9 allowlist #1 / #2). The runner still
+        accepts the ``symbol`` / ``market`` kwargs so unit tests
+        can probe the budget enforcement path, but the production
+        ``smoke-flow`` CLI only ever calls
+        ``fetch_capital_flow("600519", "sh", live=...)``. The
+        upstream endpoint is
+        ``akshare.stock_individual_fund_flow(stock=..., market=...)``
+        and the caller-side :func:`FieldMapper.compare` aligns the
+        P3-B canonical expected subset (9 zh fields: 日期、股票代码、
+        收盘价、涨跌幅 + 主力/超大单/大单/中单/小单净流入-净额)
+        against the columns AKShare returns. The 9 fields are the
+        smoke contract subset, not the complete upstream schema
+        (13 columns, no 股票代码 column).
+        """
         if not live:
             return SmokeCallResult(
                 capability="flow.capital_flow_daily",
@@ -326,26 +370,6 @@ class AKShareSmokeClient:
             call_index=1,
             fn_name="stock_individual_fund_flow",
             params={"stock": symbol, "market": market},
-        )
-
-    def fetch_northbound_flow(
-        self, symbol: str, *, live: bool = False
-    ) -> SmokeCallResult:
-        if not live:
-            return SmokeCallResult(
-                capability="flow.northbound_daily",
-                call_index=1,
-                connectivity="skipped",
-            )
-        # AKShare 1.17.54: stock_hsgt_individual_em(symbol='002008') uses a
-        # single ``symbol`` kwarg (the legacy ``stock=`` kwarg is no longer
-        # accepted). Pass ``symbol`` explicitly so the call resolves against
-        # the correct upstream endpoint.
-        return self._one_call(
-            capability="flow.northbound_daily",
-            call_index=1,
-            fn_name="stock_hsgt_individual_em",
-            params={"symbol": symbol},
         )
 
     def fetch_market_sentiment(

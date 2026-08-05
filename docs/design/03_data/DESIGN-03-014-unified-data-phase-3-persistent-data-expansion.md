@@ -7,10 +7,10 @@
 | 状态 | Draft |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-21 |
-| 最后更新 | 2026-08-04（V0.35 **P3-A read-path 结果词汇三态统一仲裁**（P0 Contract Arbitration，对应 RFC/SPEC-03-014 V0.31）：§R2.0 来源指针同步至 V0.31、§R2 标题补注「V0.31 三态统一仲裁」、§R2.4 追加 P3-A read-path census → 三态唯一映射——成功态唯一映射 `production-validated`（仅 read-path scope，≠ 实时 Provider 验证，仅能由未来获授权且实际执行、独立验证的 G-R2-1 census 产生）；不可用态唯一映射 `provider-unavailable-frozen`；schema drift / 认证失败 / 越界写入 / Verify 未通过 = 非结论 fail-stop（不落三态）；`intentionally-unavailable` 不适用于 P3-A read-path；禁止杜撰第四/第五状态；本同步自身不产生任何生产结论。**V0.34** **R2 Design Sync**（Design-only，对应 RFC/SPEC-03-014 V0.30 的 §R2 生产验证 Re-baseline；本同步**不产生任何生产结论**）：新增 §R2 生产验证 Re-baseline 同步章节（R2.0 元数据与 §R2 标题语义 / R2.1 范畴裁定与执行边界 / R2.2 旧 PR-2 语义 superseded / R2.3 三子阶段冻结语义 / R2.4 生产结论词汇 / R2.5 后续生产 Gate 授权骨架 / R2.6 双向引用与一致性声明）；来源 RFC/SPEC 指针同步至 **V0.30**；§R2 标题语义消歧（RFC=V0.27 引入/V0.29 同步、SPEC=V0.28 引入/V0.29 同步，本 Design 仅引用其冻结版 V0.30）；`name_em`/`cons_em` 禁入任何执行计划、旧 PR-2 仅历史证据、后续 Gate G-R2-1~G-R2-4 均需逐项独立 Pascal 授权。**V0.33** **OQ-11 生产注入 Gate 详细设计**（Design-only，对应 RFC/SPEC-03-014 V0.26 EOD-8 系列；Pascal 已授权但**尚未执行**）：新增 §OQ-11B——唯一 production composition root = 新增 `skills/data/unified_data/services/composition.py`（候选 b `services/__init__.py` 扩展 / c `client.py` 构造 / d `scripts/unified_data/` CLI 均以仓库事实排除）；`SystemClock` 追加于 `skills/infra/session_policy.py`（实现 infra `Clock` Protocol）；本地 preflight CLI = 新增 `scripts/unified_data/preflight_sentiment_policy.py`（默认 `--dry-run`、零工作树写入/零 secrets/零网络/Mongo）；T3 精确 7 文件 allowlist；T4 `.venv/bin/python` 锁定；**T6 裁定 fail-stop**（仓库事实：无 in-repo systemd unit、HEARTBEAT.md host 级条目均非 OQ-11 目标、TradingAgents-CN start/stop_all.sh 管理无关 Web 应用且重启含 Mongo/Tushare 副作用、无 MarketSentimentService 生产 consumer → 无可安全重启 target，禁臆造/增设 unit；T6 仅执行只读 preflight 后 fail-stop，注入不执行，`completed_session_policy=None` 全路径保持）；回滚仅撤销注入恢复 None、禁 DB 删除/自动回滚。**V0.32** OQ-11 生产 `CompletedSessionPolicy` 详细设计（Design-only，对应 RFC/SPEC-03-014 V0.25 EOD-7 系列）：新增 §OQ-11——date_utils 最小严格查询 seam（`CalendarDayStatus` 五态 + `query_trading_day_status`/`session_close_strict`/`parse_date_strict`，现有 6 个 public API 兼容）、新增 infra adapter `skills/infra/session_policy.py`（`SessionStatus` 迁移为 infra 唯一定义 + `Clock` Protocol（naive → 构造期 fail-fast）+ `SessionPolicyError` 层次 + `AShareCompletedSessionPolicy`，无 unified_data 反向依赖）、EOD-7.5 优先级 1-7 判定算法（invalid/unavailable/out_of_range/calendar error 全部 fail-closed，禁 fallback `TRADING_DAYS_2026`/周末/latest）、composition root 为未来 seam（本阶段不创建）、production injection 不放行（默认 `completed_session_policy=None` 离线路径保持）、最小 audit record（AuditLogger 默认关闭，本任务不新增写入）、OQ-11 T3 精确 7 文件 allowlist 与 fake calendar + fake clock 测试矩阵（零 I/O 断言）与纯代码 rollback。**V0.31** P3-C Scope Reconcile（用户授权，仅文档；对应 RFC/SPEC-03-014 V0.24）：唯一 T3 allowlist 从 7 项最小扩展至 8 项（唯一新增 `skills/data/unified_data/tests/test_sentiment_limit_up_pool.py`），§8.3 升级为「P3-C V0.24/V0.31 closure-only T3 allowlist」（恰好 8 个路径，优先于所有旧 Phase-3 总体迁移表，显式禁止 akshare/registry/router/writer/Mongo/cache/client/refresh activation/网络/调度，不得含第 9 项）。保留全部冻结项：offline stub/defer；AKShare sentiment 未注册、live-read 不重跑；`total_turnover=None`；OQ-10/OQ-11；F6 TTL/key；真实 refresh 仍禁止。不动 P0/§P1 各节既有内容、不动 DDL/Gate 授权、不动 F6 canonical freshness key 与 TTL=3600、不动所有 ❌ 状态。） |
-| 版本号 | V0.35 |
-| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.31） |
-| 来源 SPEC | SPEC-03-014（Phase 3 持久化扩展契约，V0.31） |
+| 最后更新 | 2026-08-04（V0.35 **P3-A read-path 结果词汇三态统一仲裁**（P0 Contract Arbitration，对应 RFC/SPEC-03-014 V0.31）：§R2.0 来源指针同步至 V0.31、§R2 标题补注「V0.31 三态统一仲裁」、§R2.4 追加 P3-A read-path census → 三态唯一映射——成功态唯一映射 `production-validated`（仅 read-path scope，≠ 实时 Provider 验证，仅能由未来获授权且实际执行、独立验证的 G-R2-1 census 产生）；不可用态唯一映射 `provider-unavailable-frozen`；schema drift / 认证失败 / 越界写入 / Verify 未通过 = 非结论 fail-stop（不落三态）；`intentionally-unavailable` 不适用于 P3-A read-path；禁止杜撰第四/第五状态；本同步自身不产生任何生产结论。**V0.34** **R2 Design Sync**（Design-only，对应 RFC/SPEC-03-014 V0.30 的 §R2 生产验证 Re-baseline；本同步**不产生任何生产结论**）：新增 §R2 生产验证 Re-baseline 同步章节（R2.0 元数据与 §R2 标题语义 / R2.1 范畴裁定与执行边界 / R2.2 旧 PR-2 语义 superseded / R2.3 三子阶段冻结语义 / R2.4 生产结论词汇 / R2.5 后续生产 Gate 授权骨架 / R2.6 双向引用与一致性声明）；来源 RFC/SPEC 指针同步至 **V0.30**；§R2 标题语义消歧（RFC=V0.27 引入/V0.29 同步、SPEC=V0.28 引入/V0.29 同步，本 Design 仅引用其冻结版 V0.30）；`name_em`/`cons_em` 禁入任何执行计划、旧 PR-2 仅历史证据、后续 Gate G-R2-1~G-R2-4 均需逐项独立 Pascal 授权。**V0.33** **OQ-11 生产注入 Gate 详细设计**（Design-only，对应 RFC/SPEC-03-014 V0.26 EOD-8 系列；Pascal 已授权但**尚未执行**）：新增 §OQ-11B——唯一 production composition root = 新增 `skills/data/unified_data/services/composition.py`（候选 b `services/__init__.py` 扩展 / c `client.py` 构造 / d `scripts/unified_data/` CLI 均以仓库事实排除）；`SystemClock` 追加于 `skills/infra/session_policy.py`（实现 infra `Clock` Protocol）；本地 preflight CLI = 新增 `scripts/unified_data/preflight_sentiment_policy.py`（默认 `--dry-run`、零工作树写入/零 secrets/零网络/Mongo）；T3 精确 7 文件 allowlist；T4 `.venv/bin/python` 锁定；**T6 裁定 fail-stop**（仓库事实：无 in-repo systemd unit、HEARTBEAT.md host 级条目均非 OQ-11 目标、TradingAgents-CN start/stop_all.sh 管理无关 Web 应用且重启含 Mongo/Tushare 副作用、无 MarketSentimentService 生产 consumer → 无可安全重启 target，禁臆造/增设 unit；T6 仅执行只读 preflight 后 fail-stop，注入不执行，`completed_session_policy=None` 全路径保持）；回滚仅撤销注入恢复 None、禁 DB 删除/自动回滚。**V0.32** OQ-11 生产 `CompletedSessionPolicy` 详细设计（Design-only，对应 RFC/SPEC-03-014 V0.25 EOD-7 系列）：新增 §OQ-11——date_utils 最小严格查询 seam（`CalendarDayStatus` 五态 + `query_trading_day_status`/`session_close_strict`/`parse_date_strict`，现有 6 个 public API 兼容）、新增 infra adapter `skills/infra/session_policy.py`（`SessionStatus` 迁移为 infra 唯一定义 + `Clock` Protocol（naive → 构造期 fail-fast）+ `SessionPolicyError` 层次 + `AShareCompletedSessionPolicy`，无 unified_data 反向依赖）、EOD-7.5 优先级 1-7 判定算法（invalid/unavailable/out_of_range/calendar error 全部 fail-closed，禁 fallback `TRADING_DAYS_2026`/周末/latest）、composition root 为未来 seam（本阶段不创建）、production injection 不放行（默认 `completed_session_policy=None` 离线路径保持）、最小 audit record（AuditLogger 默认关闭，本任务不新增写入）、OQ-11 T3 精确 7 文件 allowlist 与 fake calendar + fake clock 测试矩阵（零 I/O 断言）与纯代码 rollback。**V0.31** P3-C Scope Reconcile（用户授权，仅文档；对应 RFC/SPEC-03-014 V0.24）：唯一 T3 allowlist 从 7 项最小扩展至 8 项（唯一新增 `skills/data/unified_data/tests/test_sentiment_limit_up_pool.py`），§8.3 升级为「P3-C V0.24/V0.31 closure-only T3 allowlist」（恰好 8 个路径，优先于所有旧 Phase-3 总体迁移表，显式禁止 akshare/registry/router/writer/Mongo/cache/client/refresh activation/网络/调度，不得含第 9 项）。保留全部冻结项：offline stub/defer；AKShare sentiment 未注册、live-read 不重跑；`total_turnover=None`；OQ-10/OQ-11；F6 TTL/key；真实 refresh 仍禁止。不动 P0/§P1 各节既有内容、不动 DDL/Gate 授权、不动 F6 canonical freshness key 与 TTL=3600、不动所有 ❌ 状态。**V0.37（2026-08-05，P3-B S1 T3 Design 恢复重建；对应 RFC/SPEC-03-014 V0.33 §R3；V0.36 为失效未提交历史，不复用其声称）**：新增独立 §R3「P3-B S1 真实资金流生产验证与受控物化契约（Design 详细设计）」——四 Gate G-CF-LIVE → G-CF-DDL → G-CF-CANARY → G-CF-POST 严格串行且逐项 Pascal 授权（禁止第四路径/自动推进/fallback/隐式重试）；G-CF-LIVE 唯一 `stock_individual_fund_flow` + 唯一 600519 + ≤3 completed dates + ≤3 calls + ≥1s 间隔 + 3s 超时 + 零 Mongo/cache/refresh/upsert/DDL/DML/Git 写 + 显式 dry-run 默认 + 字段映射匹配率 `<70% fail-stop / ≥70% 才可通过`（唯一阈值 `MATCH_RATIO_CONDITIONAL=0.70`）+ 失败冻结；northbound 永久排除（`northbound_daily` 仅 None/intentionally-unavailable，禁 `stock_hsgt_individual_em`/endpoint skeleton/DDL/canary/验收，删除现有 smoke 流 `fetch_northbound_flow` 生产调用路径）；G-CF-DDL 引用 §6.4.bis 权威契约（唯一 `tradingagents.03_data_ud_stock_capital_flow` + 两索引 `symbol_trade_date`/`trade_date`，Pascal 手动 DDL，future 工具仅设计）；G-CF-CANARY 600519 × 一个 completed date × ≤1 doc（幂等键 `{market:"CN", symbol:"600519", trade_date}`，delete_by_filter 手动清理）；G-CF-POST 独立只读验收（read 仅 `ping`/`list_collection_names`/`find`/`count_documents`）；completed-date 复用 `skills.infra.date_utils`/`CompletedSessionPolicy`，OQ-11 仅链接为独立子链不实现 composition；生产结论仅四 Gate 全部实际执行 + 独立 Verify 产生（三态词汇沿用 §R2.4）；**P0 scope 裁定**：逐文件 allowlist（modify/new/delete）+ 最小测试集 + 禁止清单，明确 `providers/flow_client.py` 不得创建、不得新建平行 flow client/provider 抽象；`config.py`/`provider_client.py` 两份 dirty 标注为「需由下一 Implement 在 allowlist 内重新实现/替换并独立验证」，不得认定为已完成，不得扩大到 router/client/.env/profile/global config；不改 P3-A/P3-C/name_em/cons_em 语义。本卡仅改 Design 一份，零真实动作、零 Git 写。） |
+| 版本号 | V0.37 |
+| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.33） |
+| 来源 SPEC | SPEC-03-014（Phase 3 持久化扩展契约，V0.33） |
 | 关联 Design | DESIGN-03-007（Unified Data Layer 总体设计，V3.4） |
 | 关联 RFC | RFC-03-012（Phase 1D CN 日线真实外部 Provider 激活）、RFC-03-011（Phase 2 质量与审计治理）、RFC-03-013（Phase 1E 情绪最小切片） |
 | 关联 SPEC | SPEC-03-007（Unified Data Layer 契约基线）、SPEC-03-008（Phase 1B-A 查询平面）、SPEC-03-013（Phase 1E 情绪最小切片） |
@@ -42,6 +42,7 @@
 | V0.33 | 2026-08-04 | **OQ-11 生产注入 Gate 详细设计（Design-only，对应 RFC/SPEC-03-014 V0.26 EOD-8 系列；本 Design 为权威详细设计）**。新增 §OQ-11B：① **唯一 production composition root = 新增 `skills/data/unified_data/services/composition.py`**（最小纯装配模块，`build_production_sentiment_service(clock=None)` 默认保持离线宽松路径；候选 b `services/__init__.py` 扩展、c `client.py` 构造、d `scripts/unified_data/` CLI 均以仓库事实排除——services/__init__ 为导出面不宜混装配、client facade 必须保持未修改、scripts/unified_data 无 sentiment 生产进程入口）；② **`SystemClock` 追加于 `skills/infra/session_policy.py`**（实现 infra `Clock` Protocol，`now()` 返回 `datetime.now(tz=ZoneInfo("Asia/Shanghai"))` tz-aware，构造期 fail-fast 复用 `NaiveClockError`，audit `clock_source_class="SystemClock"`）；③ **本地 preflight CLI = 新增 `scripts/unified_data/preflight_sentiment_policy.py`**（默认 `--dry-run`，零工作树写入/零 secrets/零网络/Mongo，输出仅含 calendar identity / `exchange_calendars.__version__` 现场读取 / timezone / coverage 范围摘要 / 各一 trading-not_trading-session_close 判定 / 零 I/O 计数；样例日期运行时由 calendar 输出推导——trading 样例 = `first_session`（经 `query_trading_day_status` 复核），not_trading 样例 = 从 `first_session` 向前扫描首个非交易日，session_close 样例 = `session_close_strict(first_session)`，禁硬编码与 `TRADING_DAYS_2026`/weekend/`is_trading_day()`）；④ **T6 裁定 fail-stop**——仓库事实复核：无 in-repo systemd unit、HEARTBEAT.md host 级 cron/systemd 条目（全球市场日报 08:00 / SmartMoney 20:30 / Argus 20:35 / 酒店抓取 06:10 / auto-push 03:30）均非 OQ-11 目标、`TradingAgents-CN/start_all.sh`/`stop_all.sh` 管理无关 Web 应用（backend:8000 + frontend:3000，含 Mongo/Tushare/scheduler/smoke 副作用，不消费 `MarketSentimentService`）→ **无可安全重启 target，禁臆造/增设 unit**；T6 仅执行只读 preflight 后 fail-stop，注入不执行，`completed_session_policy=None` 全路径保持；⑤ E2E 六类断言（completed / current pre-close / non-trading / future / unavailable-or-out-of-range / naive clock）+ 每路径零写入（0 Provider/0 Mongo/0 cache/0 refresh/0 网络/0 文件写）；⑥ 最小无秘密审计字段（默认不持久化、不启用 AuditLogger）；⑦ 纯代码回滚（撤销 composition injection 恢复 None，禁 DB 回滚/删除/自动回滚）。不动 §OQ-11 V0.32 离线内容、不动 §3.3 EOD-1~EOD-6、不动 §5.3 既有 EOD seam、不动 §8.3 P3-C closure-only allowlist、不动 P0/§P1/§15/§17、不动 DDL/Gate 授权、不动所有 ❌ 状态。 | YQuant-Principal |
 | V0.34 | 2026-08-04 | **R2 Design Sync（Design-only，对应 RFC/SPEC-03-014 V0.30 的 §R2 生产验证 Re-baseline；本 Design 为权威详细设计）**。新增 §R2 生产验证 Re-baseline 同步章节（R2.0 元数据与 §R2 标题语义 / R2.1 范畴裁定与执行边界 / R2.2 旧 PR-2 语义 superseded / R2.3 三子阶段冻结语义 / R2.4 生产结论词汇 / R2.5 后续生产 Gate 授权骨架 / R2.6 双向引用与一致性声明）：① 元数据来源 RFC/SPEC 指针同步至 **V0.30**，版本号升至 V0.34，最后更新追加本轮条目；② §R2 标题版本语义消歧——RFC-03-014 V0.30 §R2 =「V0.27 引入；V0.29 同步」、SPEC-03-014 V0.30 §R2 =「V0.28 引入；V0.29 同步」，本 Design 仅引用其当前冻结版本 V0.30，不自行改变其解释；③ 范畴裁定与执行边界——`name_em` 实时板块排行及 `cons_em` 相关实时路径均**不属于 Phase 3**，禁 live-retry / 替代 endpoint / Provider recovery / 重排恢复该目标，`name_em`/`cons_em` 禁止重新进入任何执行计划；④ 旧 PR-2 执行/预算/并行触发语义 **superseded / out-of-scope（R2）**，仅保留历史证据，不得作为后续生产行动依据；⑤ 三子阶段冻结语义——P3-A 仅保留盘后/历史 read-path、P3-B `northbound_daily` 维持 fail-stop/`None`、P3-C 维持 offline stub/defer 与 `total_turnover=None`，冻结项不得表述为 production-validated；⑥ 生产结论词汇仅允许 `production-validated` / `provider-unavailable-frozen` / `intentionally-unavailable`，本同步自身**不产生任何生产结论**；⑦ 后续 Gate（G-R2-1 P3-A Mongo 只读 census / G-R2-2 P3-B 受控 provider smoke-canary / G-R2-3 P3-C provider route / G-R2-4 consumer restart）均仍需**逐项独立 Pascal 授权**，不由本 Design 同步放行；⑧ 交叉引用 P3-A readonly-gate DESIGN-03-014-p3a-readonly-gate §2.7（RFC §2.6 / SPEC §0.2 同文一致）作为 R2 scope-scission 详细落点，不复制不一致裁定正文。保留 V0.33 OQ-11B 历史事实与全部旧 changelog；不动 §OQ-11/§OQ-11B 既有内容、不动 P0/§P1 各节、不动 DDL/Gate 授权、不动 F6 canonical freshness key 与 TTL=3600、不动所有 ❌ 状态、不产生任何生产结论。 | YQuant-Principal |
 | V0.35 | 2026-08-04 | **P3-A read-path 结果词汇三态统一仲裁（P0 Contract Arbitration，对应 RFC/SPEC-03-014 V0.31）**。Orchestrator 2026-08-04 定位公开契约冲突：本 Design §R2.4 规定生产结论词汇仅允许 `production-validated` / `provider-unavailable-frozen` / `intentionally-unavailable`，而 RFC/SPEC §R2.2 P3-A read-path 行仍使用旧双态 `production-read-path-validated` / `read-path-unavailable-by-design`。本卡仲裁并同步三层 master：① **P3-A read-path census 结果 → 三态唯一映射（§R2.4 追加）**——census **成功**（Pascal 授权 G-R2-1 实际执行 + 独立 Verify 静态验收：集合存在且唯一键 canonical、按 trade_date 可复现、行数 ≥ 1、零写入、无 schema drift）→ **唯一** `production-validated`（scope 仅限盘后/历史 read-path，**≠ 实时 Provider 验证**；仅能由未来获授权且实际执行、独立验证的 Gate 产生，本文档不产生任何生产结论）；census **不可用**（集合不存在 / by-design 无安全消费进程说明）→ **唯一** `provider-unavailable-frozen`（证据冻结 + fail-stop，不自动重试）；**非结论 fail-stop（不落三态）**：schema drift（先修设计 Full Flow）、认证失败（无法区分不可用与未授权）、空集合无解释、越界写入、独立 Verify 未通过；`intentionally-unavailable` 对 P3-A read-path **不适用**（无 Pascal C 决策，该态仅保留给 P3-B northbound）；**禁止杜撰第四/第五状态**；② §R2.0 来源指针同步至 RFC/SPEC-03-014 **V0.31**、§R2 标题补注「V0.31 三态统一仲裁」；③ 不动 §R2.1~R2.3/R2.5/R2.6 其余冻结边界、不动 §OQ-11/§OQ-11B、不动 P0/§P1 各节、不动 DDL/Gate 授权、不动 F6 canonical freshness key 与 TTL=3600、不动所有 ❌ 状态、不修改 P3-A readonly-gate 三件套、不产生任何生产结论。 | YQuant-Principal |
+| V0.37 | 2026-08-05 | **P3-B S1 T3 Design 恢复重建（对应 RFC-03-014 V0.33 §R3 / SPEC-03-014 V0.33 §R3）**。触发事实：此前未提交的 DESIGN V0.36 已被工作树 `git restore`/checkout 类动作整体回退（恢复核验卡 `t_eb2ed46e` 记录的 R3 文件内容已不在磁盘），**V0.36 为失效未提交历史，不复用其声称**；本卡从当前 V0.35 基线独立重建 §R3（零真实动作）。新增独立 §R3「P3-B S1 真实资金流生产验证与受控物化契约（Design 详细设计）」：① **四 Gate 严格串行链**——G-CF-LIVE → G-CF-DDL → G-CF-CANARY → G-CF-POST，逐项 Pascal 授权、前 Gate pass + 独立 Verify 通过为后 Gate 触发前置、**禁止自动推进/第四路径/fallback/隐式重试**；② **G-CF-LIVE（零 Mongo live-read）**——唯一 `flow.capital_flow_daily` → `stock_individual_fund_flow`、唯一 600519、≤3 completed dates、≤3 calls、≥1s 间隔、3s 超时、零 Mongo/cache/refresh/upsert/DDL/DML/Git 写（含 Mongo 连接/ping/list/find/count 一律禁止）、显式 dry-run 默认 + live 仅在授权 Gate、字段映射匹配率 `<70% fail-stop / ≥70% 才可通过`（唯一阈值输入 `MATCH_RATIO_CONDITIONAL=0.70`，与 SPEC §R3.10 item6 / RFC §R3.9 item1 逐字一致）、失败冻结；③ **northbound 永久排除**——`northbound_daily` 恒 `intentionally-unavailable`/None fail-stop（Pascal C），禁 `stock_hsgt_individual_em`/endpoint skeleton/DDL/canary/验收，**删除现有 smoke 流 `smoke_flow.py` 中 `fetch_northbound_flow` 生产调用路径**；④ **G-CF-DDL**——引用 §6.4.bis 权威契约（唯一 `tradingagents.03_data_ud_stock_capital_flow` + 两索引 `symbol_trade_date`/`trade_date`，background: true），Pascal 手动 DDL，future 工具仅设计不实现；⑤ **G-CF-CANARY**——600519 × 一个 completed date × ≤1 doc，幂等键 `{market:"CN", symbol:"600519", trade_date}`，单次显式 refresh → upsert，delete_by_filter 手动清理，不自动重复；⑥ **G-CF-POST**——独立只读验收，read 仅 `ping`/`list_collection_names`/`find`/`count_documents`，write/DDL 无；⑦ **completed-date 契约**——复用 `skills.infra.date_utils`/`CompletedSessionPolicy`（fail-closed，禁硬编码日历/fallback），OQ-11 仅链接为独立子链、**不实现 composition**；⑧ **生产结论产生条件**——仅四 Gate 全部实际执行 + 独立 Verify 通过产生（三态词汇沿用 §R2.4：`production-validated`/`provider-unavailable-frozen`/`intentionally-unavailable`），本卡不产生任何生产结论；⑨ **P0 scope 裁定（§R3.9）**——逐文件 allowlist（modify/new/delete）+ 最小测试集 + 禁止清单；明确 `providers/flow_client.py` 不得创建、不得新建平行 flow client/provider 抽象；`config.py`/`provider_client.py` 两份 dirty 标注为「需由下一 Implement 在 allowlist 内重新实现/替换并独立验证」，不得认定为已完成、不得扩大 router/client/.env/profile/global config；⑩ **不扩展边界**——不改 P3-A/P3-C/name_em/cons_em 既有语义。仅改 Design 一份；未动 RFC/SPEC/Python/tests/config/scripts/data；无 git reset/stash/clean/commit；未读 .env/secret；无网络/Provider/Mongo/DDL/DML/service/cron/Gateway；`git diff --check` rc=0；新增内容无 secret 形态。 | YQuant-Principal |
 
 ---
 
@@ -3645,6 +3646,205 @@ T5（独立 Review，assignee=yquantreviewer）逐项核对：
 - **DESIGN → P3-A readonly-gate**：R2 scope-scission 的详细落点 = DESIGN-03-014-p3a-readonly-gate **§2.7**（RFC §2.6 / SPEC §0.2 同文一致）；本 §R2 只做执行边界同步，不复制裁定正文。
 - **不重写/不冲突**：既有 §OQ-11（V0.32 离线设计）与 §OQ-11B（V0.33 生产注入 Gate 设计）原样保留；OQ-11 T6 fail-stop 与 `completed_session_policy=None` 默认路径不变。
 - **验收标准（Design 同步）**：仅 master DESIGN-03-014 一个文件变更；`git diff --check` exit=0；无任何可执行 name_em / PR-2 恢复路径；无网络/Provider/Mongo/.env/真实 I/O；无 git stage/commit/push。（**V0.35 仲裁卡例外**：同步修订 RFC/SPEC-03-014 V0.31 与 DESIGN-03-014 V0.35 三份 master 文档；P3-A readonly-gate 三件套不修改；仍零真实 I/O、无 git 写操作。）
+
+---
+
+## R3 P3-B S1 真实资金流生产验证与受控物化契约（Design 详细设计，V0.37 恢复重建）
+
+> **定位**：本节为 **P3-B S1 `flow.capital_flow_daily` 真实资金流生产验证与受控物化链**（capital-flow chain）的 **Design 详细设计章节**（Design-only，对应 **RFC-03-014 V0.33 §R3**（L1539-1649）/ **SPEC-03-014 V0.33 §R3**（L2375-2473））。触发事实：此前未提交的 DESIGN V0.36 已被工作树 `git restore`/checkout 类动作整体回退（恢复核验卡 `t_eb2ed46e` 记录的 R3 文件内容已不在磁盘），**V0.36 为失效未提交历史，不复用其声称**；本卡从当前 V0.35 基线**独立重建** §R3，使其成为新的可验证文件事实。本节是后续每个 P3-B S1 生产 Gate 的**权威 Design 基线**；主文档其余章节的 PR-3 / PR-DDL-P3B / PR-CANARY 表述（§4.2.2 / §6.4.bis / §15.6 / §15.14）与本节的差异**以本节为准**。**本卡零真实动作**：离线/mock/文档表述不构成生产验证，任何生产结论只能由本节四 Gate 全部实际执行及独立 Verify 产生（§R3.8）。
+
+> **与 §R2.4 G-R2-2 的关系**：§R2.4 G-R2-2 定义了「P3-B capital-flow chain」六维授权骨架；本节在其基础上将 P3-B S1 `flow.capital_flow_daily` 的**四 Gate 精确化为 Design 可执行设计**（G-CF-LIVE → G-CF-DDL → G-CF-CANARY → G-CF-POST），逐一冻结参数、命令 allowlist、停止条件、回滚/清理语义、输出脱敏与 Verify 身份边界，并完成 **P0 最小实施归属裁定（§R3.9）**。G-R2-2 骨架中与本节的差异以本节为准。
+
+### R3.0 元数据与标题语义（V0.33 冻结）
+
+- 本 Design 元数据来源指针已同步至 **RFC-03-014 V0.33 / SPEC-03-014 V0.33**；版本号升至 **V0.37**（V0.36 为失效未提交历史，不在 changelog 中作为有效版本复用）。
+- RFC-03-014 V0.33 §R3 标题 =「R3 P3-B 真实资金流生产验证与受控物化契约（**V0.32 引入；独立重建；V0.33 P0 阈值纠正**）」；SPEC-03-014 V0.33 §R3 标题 =「R3 P3-B 真实资金流生产验证与受控物化契约（**V0.32 引入；独立重建；V0.33 P0 阈值纠正同步**）」。本 Design 仅引用其当前冻结版本 **V0.33**，不自行改变其解释。
+- **V0.33 P0 阈值纠正**：字段映射停止条件全文统一为「匹配率 **<70% fail-stop / ≥70% 才可通过**」，唯一阈值输入 = `MATCH_RATIO_CONDITIONAL=0.70`（RFC V0.33 §R3.3 L1573 / SPEC V0.33 §R3.3 L2385 / §R3.9 item1 L2448 / §R3.10 item6 L2466；旧 `>50%` 表述已废弃）。本 Design §R3 必须与该阈值表述逐字一致，**不得回退旧阈值、不得引入替代阈值**。
+
+### R3.1 唯一真实目标与 northbound 永久排除
+
+1. **唯一真实 Provider 目标**：`flow.capital_flow_daily` → AKShare `stock_individual_fund_flow`（B2 冻结证据 real-mappable，见 §4.2.2 / §13.4.5.2 / SPEC §14.4.5.2）。本节四 Gate 的调用、DDL、canary、验收对象**仅限**该 capability 与其目标集合 `03_data_ud_stock_capital_flow`。
+2. **`flow.northbound_daily` 恒 `intentionally-unavailable` / None fail-stop**（Pascal C 裁定，§4.2.1 / §13.4.5.2 / SPEC §14.4.5.2；§R2.3 冻结语义）：`northbound_net_inflow` / `northbound_hold_shares` / `northbound_hold_ratio` 恒 None；**禁止** `stock_hsgt_individual_em`、**禁止** northbound endpoint skeleton、**禁止** northbound 的 DDL/canary/验收路径。本节的任何 Gate 不得将 northbound 作为调用对象、写入对象或验收对象。
+3. **现有 smoke 流 northbound 生产调用路径删除指令（P0 义务）**：`scripts/t4_preflight/smoke_flow.py`（PR-3 时代遗留，非 dirty）当前含 `fetch_northbound_flow` 生产调用路径——docstring L9 提及 `stock_hsgt_individual_em`、L144-160 `_EXPECTED_NORTHBOUND_FIELDS`、L168 `nb = client.fetch_northbound_flow(args.symbol_sh, live=args.live_read)`、L181-190 northbound 字段映射分支、L200 `all_calls = [flow_sh, flow_sz, nb]`、L283-291 northbound memo 分支——**P0 必须删除**这些生产调用路径，不得保留任何指向 `stock_hsgt_individual_em` / northbound 的 live 调用（详见 §R3.9 allowlist）。`provider_client.py`（dirty）中 `fetch_northbound_flow` 方法与 `stock_hsgt_individual_em` 调用封装、`config.py`（dirty）中 northbound 相关常量与 `AKSHARE_MAX_CALLS["flow.northbound_daily"]` **必须由下一 Implement 在 §R3.9 allowlist 内重新实现/替换并独立验证**，不得以当前 dirty 状态认定为已完成（§R3.9.5）。
+4. **保留既有禁令**：`name_em` / `cons_em` 禁令与 §R2.1 范畴裁定原样保留（0 调用）；P3-A 实时板块排行与本链无关。
+
+### R3.2 四 Gate 严格串行链总览
+
+**严格串行且逐个明确 Pascal 授权**，顺序不可调换、不可并行、不可跳过：
+
+```
+G-CF-LIVE（零 Mongo live-read） → G-CF-DDL（唯一集合 + 两索引） → G-CF-CANARY（600519 × 一个 completed date × ≤1 doc） → G-CF-POST（独立只读验收）
+```
+
+- 每个 Gate 均为**独立 Pascal 授权**；前一个 Gate 的 pass + 独立 Verify 通过是后一个 Gate 的触发前置；**禁止自动推进**（任何 Gate 不得自动触发下一个 Gate）。
+- **禁止第四路径**（任何不在四 Gate allowlist 内的命令/动作 = 越界 fail-stop）、**禁止 fallback**（不得以替代 endpoint / 替代标的 / 替代日期 / 替代集合完成目标）、**禁止隐式重试**（失败即冻结，不自动重试，不换标的/日期/endpoint）。
+- 每个 Gate 的授权边界以本节六维为准，不得扩大到禁止对象（Provider 非授权 endpoint / Mongo 非授权命令 / DDL 非授权集合 / cache / refresh / canary 越界 / cron-systemd / 网关 / webhook / Git / 秘密）。
+
+### R3.3 G-CF-LIVE：零 Mongo live-read（真实 Provider 只读 Smoke）
+
+| 维度 | 冻结值 |
+|---|---|
+| 目标 capability | `flow.capital_flow_daily` → AKShare `stock_individual_fund_flow` |
+| 标的 | 唯一 `600519`（CN） |
+| 日期 | 最多 **3 个 completed trading dates**（completed-date 判定契约见 §R3.7） |
+| 调用预算 | **≤ 3 calls**（AKShare 匿名只读调用）；**≥ 1 秒间隔**；**3 秒超时** |
+| 写入 | **零 Mongo / 零 cache / 零 refresh / 零 upsert / 零 DDL / 零 DML / 零 Git 写**（含 Mongo 连接、ping、list、find、count 一律禁止——本节 G-CF-LIVE 是**零 Mongo live-read**） |
+| 执行模式 | **显式 dry-run 为默认**：无授权时仅输出报告模板与零调用计数，不执行任何真实 Provider 调用；`--live-read` 仅在 Pascal 已授权该 Gate 时由授权执行人显式传入，**未来 live 仅在授权 Gate** |
+| 输出 | 映射摘要（字段名/类型）、行数、前 N 行脱敏样例、source_trace 摘要；不输出 secret/URI/全量 payload（脱敏规则沿用 §15.7.2） |
+| 停止条件（fail-stop） | API 失败 / 空返回 / 字段映射匹配率 **<70%**（**≥70% 才可通过**；唯一阈值 `MATCH_RATIO_CONDITIONAL=0.70`，对齐 SPEC §R3.3 L2385 / §R3.10 item6 L2466 / §15.6.2 的历史分级在本节以 0.70 为准） / 任何写入尝试 / 超时 / Verify 未通过 → **立即停止并冻结**；**不换标的、不换日期、不换 endpoint、不自动重试** |
+| 触发前置 | Pascal 明确授权（本卡未授权、未执行；历史 PR-3 预算已耗尽，B2 证据不重跑，见 §13.4.5.5） |
+| Verify 身份边界 | Verify worker 仅对照 live 报告 + 冻结契约静态验收，**不重复任何真实调用** |
+
+**Design 层细化（future 工具落点，P0 不实现 live 执行）**：
+
+- **G-CF-LIVE 工具落点 = 既有 `scripts/t4_preflight/smoke_flow.py` 改造**：调用封装 `fetch_capital_flow(symbol, market, *, live)` 保留在既有 `provider_client.py`（`AKShareSmokeClient`），**不得新建平行 flow client / provider 抽象，不得创建 `providers/flow_client.py`**（§R3.9.4）。
+- **单标的收敛**：G-CF-LIVE 只允许 `600519`（sh）一个标的；`--symbol-sz` / `000001`（sz）第二条调用路径在 P0 删除，调用预算 `AKSHARE_MAX_CALLS["flow.capital_flow_daily"]` 从旧 PR-3 双标的 2 收敛为 **≤3 且全部为 `stock_individual_fund_flow`**；`AKSHARE_MAX_CALLS["flow.northbound_daily"]` 条目删除。
+- **报告模板**：capability 标注 `flow.capital_flow_daily`（不再含 `flow.northbound_daily`）；字段 `metadata`（capability / provider / smoke_at / test_target=`600519/CN` / date_range=≤3 completed dates）、`connectivity`、`auth`、`permissions`、`field_mapping`（total_expected / matched / missing / extra / type_mismatches）、`data_sample`（row_count / 脱敏样例）、`vs_fixture`、`overall`（verdict pass/fail）、`ledger`（provider_attempts ≤3 / actual_calls / retry_count=0 / fallback_count=0 / mongo_calls=0 / write_operations=0）。dry-run 路径 `provider_attempts=0 / actual_calls=0`，`overall.verdict="pass"`（`memo="dry-run — no real calls made"`，沿用现有语义）。
+- **阈值实现约束**：`MATCH_RATIO_CONDITIONAL=0.70` 为唯一公开阈值输入（config.py 常量位；SPEC §R3.10 item6 禁止替代阈值），`verdict_for_mapping` 对 G-CF-LIVE 的判定必须满足 `<70% fail-stop / ≥70% 才可通过`；**本 Design 不冻结任何与 0.70 冲突的次级阈值**，§15.6.2 的历史分级（≥90% pass / 70-90% conditional / <70% fail）仅保留为旧 PR 工具链历史，G-CF-LIVE 场景以本节为准。
+
+### R3.4 G-CF-DDL：唯一集合 + 两索引
+
+| 维度 | 冻结值 |
+|---|---|
+| 目标 | **唯一** MongoDB 集合 `tradingagents.03_data_ud_stock_capital_flow`（库 `tradingagents`） |
+| 唯一键 | `{market, symbol, trade_date}`（SPEC-03-014 §5.3 集合表） |
+| 索引 | 恰好两索引——`symbol_trade_date`（`{symbol:1, trade_date:-1}`）与 `trade_date`（`{trade_date:-1}`），全部 `background: true`（定义见 §6.2 / §6.4.bis，本节引用不重述） |
+| 权威契约 | **SPEC-03-014 §14.6.bis PR-DDL-P3B（B1-P3B 冻结）** + **本 Design §6.4.bis**（V0.14）；如本节与权威契约出现差异，以权威契约为准 |
+| 命令 allowlist | read-only preflight probe（`list_collections` / `list_indexes`）→ `createCollection` → `createIndexes`（两索引） |
+| 写入原子性 | **失败即停，不自动回滚**；preflight probe 命中目标集合 fail-stop（exit 2）；`createCollection`/`createIndex` 目标已存在 fail-stop（exit 4），由操作员手动评估 |
+| 退出码 | `0`=PASS；`2`=preflight target already exists；`3`=collection create fail；`4`=index create fail（退出码 1 不使用） |
+| rollback 脚本 | `/tmp/yquant-p3-ddl-p3b-20260725/rollback-p3b.js`（dropIndex 反向顺序 + dropCollection；不提交仓库；`node --check` 必过） |
+| audit 工件 | stdout + `/tmp/yquant-p3-ddl-p3b-20260725/audit-p3b.json`；字段 `{operation, collection, index, ts, exit_code, error, rollback_script_path}`；**不引入**新 audit 集合 |
+| DDL 执行人 | **Pascal 手动执行**（或 Pascal 授权的 DevOps）；Agent 不直接执行 DDL |
+| 不授权范围 | 不 refresh、不 upsert 业务数据、不写 Cache、不写 AuditLogger（`03_data_ud_query_audit`）、不写 QualitySummary、不动 cron/systemd、不动 `.env`、不建新角色、不动生产代码树；P3-A / P3-C 集合不在本 Gate 范围 |
+| 触发前置 | G-CF-LIVE pass + Pascal 独立确认 schema（SPEC-03-014 §3.2 最终版） |
+| 停止条件（fail-stop） | 任一非 0 退出码即 fail-stop；**不自动回滚**、**不自动重试**；是否运行 rollback-p3b.js 由操作员按 §6.4.bis.3 失败矩阵的「operator action」列判断 |
+| Verify 身份边界 | Verify 仅核对 audit 工件、退出码、rollback 脚本语法与零越界声明，不执行 DDL |
+
+**Design 层细化（future 工具，P0 不实现）**：
+
+- 本 Design 仅设计 G-CF-DDL 的 future 工具边界（命令序列、退出码映射、rollback/audit 工件路径），**不实现任何 DDL 脚本/工具文件**；具体工具由 Pascal 授权 G-CF-DDL 时由后续独立 Implement 卡按 §6.4.bis 执行语义落地。
+- 工具若实现，连接身份复用既有 `scripts/t4_preflight/mongo_client.py` 组件式构造（§6.4.bis 写入身份：`MONGODB_USERNAME` 组件式连接，非 URI），**不得新建平行 Mongo client / provider 抽象**。
+
+### R3.5 G-CF-CANARY：600519 × 一个 completed date × ≤1 doc
+
+| 维度 | 冻结值 |
+|---|---|
+| 标的 | 唯一 `600519`（CN） |
+| 日期 | **一个 completed trading date**（completed-date 判定契约见 §R3.7；不得 latest/None 语义） |
+| 写入上限 | **≤ 1 doc**（幂等键 `{market: "CN", symbol: "600519", trade_date}` 唯一） |
+| 执行方式 | **单次显式 refresh**（手动触发，非 cron）→ `flow.capital_flow_daily` provider fetch → canonical mapping → upsert 至 `03_data_ud_stock_capital_flow`（写入身份/路径须满足 §R2.3「P3PersistenceWriter 拒绝真实 pymongo」约束下的授权设计，由未来独立 Full Flow 精确规定，本卡不臆造） |
+| 清理 | 提供 `delete_by_filter` 清理脚本（`{market:"CN", symbol:"600519", trade_date}` filter）；canary 后按 Pascal 决定清理或保留 ≤1 doc 证据 |
+| 停止条件（fail-stop） | 写入失败 / 数据质量异常（字段缺失、类型错误、唯一键冲突） / 写入 > 1 doc / Verify 未通过 → 停止，不升级到定时采集，不自动重试 |
+| 触发前置 | G-CF-DDL pass（集合 + 两索引在位）+ Pascal 明确授权 |
+| 不授权范围 | 不自动重复、不 cron/systemd 长期调度、不扩大标的集、不扩大日期窗口、不触发 northbound、不写 cache |
+| Verify 身份边界 | Verify 对照 canary 报告 + 冻结契约逐项静态验收（含 ≤1 doc、唯一键、字段映射、清理脚本），不重复真实调用 |
+
+**Design 层细化（future 工具，P0 不实现）**：
+
+- 真实 upsert 路径受 §R2.3 冻结约束（`P3PersistenceWriter._assert_fake_db` 拒绝真实 pymongo）——**本 Design 只设计 future 工具的边界**（命令序列：completed-date 判定 → provider fetch → canonical mapping → upsert；幂等键；delete_by_filter 清理；写入身份复用 §6.4.bis 组件式构造），具体生产 writer 身份与权限设计属未来独立 Full Flow（RFC/SPEC/Design → Implement → Verify → Review，不得绕过），在 Pascal 授权 G-CF-CANARY 时落地，**本卡不创建任何生产 writer 文件、不臆造实现细节**。
+- 清理脚本 `delete_by_filter` 同样为 future 工具设计项（手动触发、不自动执行）。
+
+### R3.6 G-CF-POST：独立只读验收
+
+| 维度 | 冻结值 |
+|---|---|
+| 目的 | 对 G-CF-CANARY 的写入做**独立只读验收**，形成 P3-B S1 `flow.capital_flow_daily` 的生产结论（§R3.8） |
+| 命令 allowlist | read 仅限：`ping` + `list_collection_names` + `find`（`{market, symbol, trade_date}` filter）+ `count_documents`；write：无；DDL：无 |
+| 输出 | 集合存在性、唯一键 canonical、行数（≤1）、日期窗口、字段名清单（不含值）、零写入证明 |
+| 停止条件（fail-stop） | 认证失败 / 集合不存在 / schema drift（先修设计 Full Flow，不就地改库）/ 任何写入尝试 / 计数 ≠ 预期 / Verify 未通过 → fail-stop，不落生产结论 |
+| Verify 身份边界 | Verify worker 只做静态/报告验收，**不连接 Mongo、不重复任何真实调用**；G-CF-POST 本身可由独立执行人完成，最终结论需独立 Verify 复核 |
+
+**Design 层细化（future 工具，P0 不实现）**：
+
+- read-only allowlist 与输出模板属 future 工具设计；**凭证隔离**——G-CF-POST 执行身份凭据来自 Pascal 授权的执行环境，Verify 不接触凭据、不连接 Mongo，仅对执行人产出的只读报告做静态验收。
+
+### R3.7 completed-date 契约与 OQ-11 边界
+
+1. **completed-date 必复用 `skills.infra.date_utils` / `CompletedSessionPolicy` 契约**（V0.25 EOD-7 / V0.26 EOD-8 冻结语义）：本链 G-CF-LIVE 与 G-CF-CANARY 选择的「completed trading dates」必须经 canonical `YYYY-MM-DD` → XSHG 交易日 → 已到达 session close 的判定链（`calendar.session_close(date)`，禁止硬编码裸 `15:00` 为唯一真相）；**禁止** `TRADING_DAYS_2026`、周末规则或 latest fallback 作为生产真相；fail-closed（calendar 不可用 / 越界 / clock 无时区 → 明确不可判定，不悄悄降级）。
+2. **OQ-11 保持独立子链**：production composition root（`AShareCompletedSessionPolicy(clock=SystemClock)` 注入等，V0.26 EOD-8）属 OQ-11 / OQ-11B 子链，**不在 P3-B 实现 composition**；本链只消费 completed-date 判定契约，不新增/不扩展 OQ-11 的授权对象。
+3. 本卡（Design 重建）**不执行**任何 completed-date 判定真实调用；相关判定仅作为后续 Gate 的执行前置契约。
+
+### R3.8 生产结论产生条件
+
+- **生产结论（`production-validated` / `provider-unavailable-frozen`）只能由四 Gate 全部实际执行及独立 Verify 通过产生**（§R2.4 三态词汇；P3-B `flow.capital_flow_daily` 行允许的最终状态 = `production-validated` 或 `provider-unavailable-frozen`）；`flow.northbound_daily` 恒 `intentionally-unavailable`（Pascal C）。
+- **本卡零真实动作**：离线/mock/文档表述**不构成**生产验证；本文档不产生任何生产结论。
+- 非结论 fail-stop（不落三态，沿用 §R2.4）：schema drift → 先修设计；认证失败 → 不自动重试；空返回/空集合 → 无数据可验证；任何越界写入 → fail-stop；独立 Verify 未通过 → Gate 不关闭。
+
+### R3.9 P0 最小实施归属裁定（逐文件 allowlist）
+
+> **定位**：本节把 P3-B S1 R3 的**最小实施归属**（下一 Implement 卡唯一允许的代码/测试改动）裁定为逐文件清单，防止 scope 漂移。P0 仅覆盖「northbound 生产调用路径删除 + G-CF-LIVE 单标的收敛 + 阈值对齐」所需的**最小代码重构与测试同步**；**真实 Gate 执行（G-CF-LIVE live / DDL / canary / POST）不在 P0**，仍需 Pascal 逐项授权。P0 的 Python 改动全部落在 `scripts/t4_preflight/`（既有 T4 工具链），**不触碰 `skills/data/unified_data/` 任何生产文件**（P3-A/P3-B 离线/P3-C 语义全部冻结）。
+
+#### R3.9.1 P0 modify allowlist（下一 Implement 唯一允许修改的文件）
+
+| # | 路径 | 修改内容 | 性质 |
+|---|---|---|---|
+| 1 | `scripts/t4_preflight/smoke_flow.py` | 删除 northbound 生产调用路径（docstring L9 / `_EXPECTED_NORTHBOUND_FIELDS` L144-160 / L168 `fetch_northbound_flow` 调用 / L181-190 northbound 映射分支 / L200 `all_calls` 含 nb / L283-291 northbound memo）；G-CF-LIVE 单标的收敛（删除 `--symbol-sz`/`000001` 第二条调用路径，调用预算收敛为 ≤3 且全部 `stock_individual_fund_flow`）；报告 capability 标注 `flow.capital_flow_daily`、test_target `600519/CN`；显式 dry-run 默认语义保持 | modify |
+| 2 | `scripts/t4_preflight/config.py` | **dirty（未验收）——须重新实现/替换并独立验证**：`MATCH_RATIO_CONDITIONAL=0.70` 保持为唯一阈值输入；`AKSHARE_MAX_CALLS` 收敛为 `flow.capital_flow_daily` ≤3（唯一 600519）；删除 `flow.northbound_daily` 相关常量与 `stock_hsgt_individual_em` 相关配置路径 | modify（重新实现） |
+| 3 | `scripts/t4_preflight/provider_client.py` | **dirty（未验收）——须重新实现/替换并独立验证**：`fetch_capital_flow` 保留为唯一真实调用封装（`stock_individual_fund_flow`）；删除 `fetch_northbound_flow` 方法与 `stock_hsgt_individual_em` 调用封装；测试 seam（`set_call_dispatcher` / `reset_call_dispatcher`）保留 | modify（重新实现） |
+| 4 | `tests/scripts/t4_preflight/test_smoke_flow.py` | 删除 northbound 相关断言（L91/L98/L111/L189/L226 中 `stock_hsgt_individual_em` 相关、`test_smoke_flow_caps_match_design` 的 `AKSHARE_MAX_CALLS["flow.northbound_daily"]==1` 断言）；调用序列断言改为仅 `stock_individual_fund_flow` ≤3 次；新增「G-CF-LIVE 唯一 600519 / 阈值 0.70 / dry-run 零调用」断言 | modify |
+| 5 | `tests/scripts/t4_preflight/fixtures/t4_akshare_fixtures.py` | 移除 `stock_hsgt_individual_em` 注册（`_FIXTURE_BY_FN` L83）与 `northbound_fixture`（L61-64），除非其它既有测试仍引用（当前仅 `test_smoke_flow.py` 使用） | modify |
+
+#### R3.9.2 P0 new / delete allowlist
+
+| 类型 | 路径 | 裁定 |
+|---|---|---|
+| new | **无** | P0 不新增任何文件；G-CF-LIVE/DDL/CANARY/POST 的 future 工具文件由各自授权 Gate 的后续 Implement 卡按 §R3.3-§R3.6 边界创建 |
+| delete | **无** | P0 无整文件删除；删除的是文件内 northbound 路径（§R3.9.1） |
+
+#### R3.9.3 P0 最小测试集（下一 Implement 必须通过）
+
+| 测试 | 断言要点 |
+|---|---|
+| `tests/scripts/t4_preflight/test_smoke_flow.py`（更新后全量） | dry-run 零调用、≤3 calls 上限、唯一 `stock_individual_fund_flow`、无 northbound 路径、字段映射阈值 `<70% fail-stop / ≥70% 才可通过`、report/ledger 六字段、all-failure 时 exit=EXIT_FAIL 与 verdict=fail 同步 |
+| `tests/scripts/t4_preflight/` 其余测试（test_reporter / test_preflight_mongo / test_audit_secret / test_smoke_sector / test_smoke_sentiment / test_fixd_endpoint_status） | 回归：T4 既有工具链不破坏 |
+| `skills/data/unified_data/tests/` 全量 | 回归：P3-A/P3-B 离线/P3-C 语义不破坏（`test_capital_flow.py` / `test_flow_service.py` / `test_mapping_flow.py` / `test_provider_phase3.py` 等） |
+| 验收命令 | `.venv/bin/python -m pytest tests/scripts/ skills/data/unified_data/tests -q --tb=short` 无新增失败 |
+
+#### R3.9.4 P0 禁止清单（硬边界）
+
+- ❌ **不得创建 `skills/data/unified_data/providers/flow_client.py`**；不得新建任何平行 flow client / provider 抽象（包括 `scripts/t4_preflight/` 下新建 flow client 类）——必要的 smoke 与 runner 接口置于既有模块（`smoke_flow.py` / `provider_client.py` / `config.py`）。
+- ❌ **不得修改 `skills/data/unified_data/` 生产文件**：`router.py` / `client.py` / `services/flow_service.py` / `models/domain/flow.py` / `adapters/p3_persistence_writer.py` / `freshness.py` / `cache_manager.py` / `providers/*.py` 一律不动；不改写 P3-A / P3-C / `name_em` / `cons_em` 语义。
+- ❌ 不得扩大到 `.env` / profile / global config / cron / systemd / 网关 / webhook / Git 写；不 reset/stash/clean/commit。
+- ❌ 不得执行任何真实 Gate：G-CF-LIVE live 调用、DDL、canary、POST 全部禁止（P0 只是工具代码重构，真实执行仍需 Pascal 逐项授权）。
+- ❌ 不读 `.env`/secret；无网络 / Provider / Mongo / DDL / DML；禁第四路径 / fallback / 隐式重试 / `stock_hsgt_individual_em` / `name_em` / `cons_em` / OQ-11 composition。
+
+#### R3.9.5 两份 dirty 的裁定（不得认定为已完成）
+
+- `scripts/t4_preflight/config.py` 与 `scripts/t4_preflight/provider_client.py` 为被停止开发 run 遗留的**未验收 dirty**。本 Design **未读取其 diff、未采纳其具体实现为契约证据**（SPEC §R3.10 同旨：Design 不得以其为事实来源）。
+- **裁定**：这两份必须由下一 Implement 在 §R3.9.1 allowlist 内**重新实现/替换并独立验证**，不得以当前 dirty 状态认定为已完成；不得以当前 dirty 内容作为后续 Gate 的输入或契约锚点（唯一例外：`MATCH_RATIO_CONDITIONAL=0.70` 常量名与取值来自 RFC/SPEC V0.33 冻结契约，非 dirty 内容派生）。
+
+### R3.10 一致性声明与未验证风险
+
+**逐项与 RFC/SPEC V0.33 对齐清单**：
+
+| 契约项 | RFC V0.33 锚点 | SPEC V0.33 锚点 | 本 Design 落点 | 一致性 |
+|---|---|---|---|---|
+| 四 Gate 链与串行授权 | §R3.2 L1551-1561 | §R3.2 L2368-2373 | §R3.2 | ✅ 逐字一致 |
+| G-CF-LIVE 唯一目标/预算/零写 | §R3.3 L1563-1575 | §R3.3 L2375-2387 | §R3.3 | ✅ 逐字一致 |
+| 字段映射阈值 `<70% fail-stop / ≥70% 才可通过`（唯一 `MATCH_RATIO_CONDITIONAL=0.70`） | §R3.3 L1573 / §R3.9 item1 L1636 / §R3.10 L1648 | §R3.3 L2385 / §R3.9 item1 L2448 / §R3.10 item6 L2466 | §R3.3 / §R3.9.3 | ✅ 唯一阈值、无替代阈值 |
+| G-CF-DDL 唯一集合/两索引/退出码/rollback/audit | §R3.4 L1577-1594 | §R3.4 L2389-2406 | §R3.4 + §6.4.bis | ✅ 以权威契约为准 |
+| G-CF-CANARY ≤1 doc/幂等键/清理 | §R3.5 L1596-1608 | §R3.5 L2408-2420 | §R3.5 | ✅ |
+| G-CF-POST read-only allowlist | §R3.6 L1610-1618 | §R3.6 L2422-2430 | §R3.6 | ✅ |
+| completed-date 复用 + OQ-11 独立子链 | §R3.7 L1620-1624 | §R3.7 L2432-2436 | §R3.7 | ✅ 不实现 composition |
+| 生产结论三态与不落态 | §R3.8 L1626-1630 | §R3.8 L2438-2442 | §R3.8 + §R2.4 | ✅ |
+| 禁止事项（第四路径/自动推进/fallback/northbound/name_em/cons_em） | §R3.9 item6 L1641 | §R3.9 item6 L2453 | §R3.1 / §R3.2 / §R3.9.4 | ✅ |
+| Verify 身份边界（不重复真实调用） | §R3.9 item8 L1643 | §R3.9 item8 L2455 | §R3.3-§R3.6 | ✅ |
+| 下游 Design 仅文档层需求（阈值一致性/不扩展边界） | §R3.10 L1645-1648 | §R3.10 L2457-2467 | 本节 §R3.9 | ✅ |
+
+**与既有 Design 章节的关系**：
+
+- 本 §R3 与 §R2.4 G-R2-2（P3-B capital-flow chain 骨架）、§R2.3 冻结语义（P3PersistenceWriter 拒绝真实 pymongo / `northbound_daily` None fail-stop）、§6.4.bis（PR-DDL-P3B 冻结契约）逐项一致；如有差异，以本节 + 权威冻结契约为准。
+- §15.6.1 / §15.6.2 的历史 PR-3 工具链设计（双标的调用上限、≥90% pass 分级、`fetch_northbound_flow` 封装）保留为**历史冻结事实**，不在本卡改写；G-CF-LIVE 场景以本节 §R3.3 为准（单标的 ≤3、唯一阈值 0.70、northbound 删除）。
+- **不扩展边界**：不改 P3-A / P3-C / OQ-11 / OQ-11B / name_em / cons_em 既有语义与状态；不动 DDL/Gate 授权；不动 F6 canonical freshness key 与 TTL=3600；不动所有 ❌ 状态。
+
+**未验证风险（交接给下一 Implement / Verify）**：
+
+1. `config.py` / `provider_client.py` 为 dirty 未验收——P0 重新实现/替换后其行为未验证；Verify 必须独立执行（§R3.9.5），不得沿用本卡或历史 claim。
+2. 现有 `smoke_flow.py` 调用序列从「sh+sz+nb 三调用」收敛为「唯一 600519 ≤3 calls」后，`test_smoke_flow.py` 既有断言（`caps_match_design` 的 2/1、all-failure 的 called_fns 三序列）**必然变化**——P0 必须同步更新测试，旧断言不可保留（§R3.9.1 item4）。
+3. G-CF-CANARY 真实 upsert 路径受 §R2.3 约束，未来需独立 Full Flow 设计生产 writer 身份与权限（本 Design 只给边界，§R3.5）；在 Pascal 授权并独立 Verify 通过前，P3-B `flow.capital_flow_daily` **不产生任何生产结论**。
+4. G-CF-LIVE 阈值锚点与 §15.6.2 历史分级的差异已在 §R3.3 澄清（本节为准），但 §15.6.2 历史文本保留未改写——Review 需注意二者并存属预期，非冲突遗漏。
+5. 本 Design 零真实动作，**不产生任何生产结论**；任何「已通过 Gate」的表述需四 Gate 实际执行 + 独立 Verify 证据。
 
 ---
 

@@ -17,7 +17,6 @@ __all__ = [
     "sector_snapshot_fixture",
     "sector_ranking_fixture",
     "flow_daily_fixture",
-    "northbound_fixture",
     "market_sentiment_fixture",
     "limit_up_pool_fixture",
 ]
@@ -44,9 +43,22 @@ def sector_ranking_fixture() -> list[dict[str, Any]]:
 
 
 def flow_daily_fixture() -> list[dict[str, Any]]:
+    """P3-B S1 ``flow.capital_flow_daily`` fixture.
+
+    The 9 zh fields here (日期、股票代码、收盘价、涨跌幅 + 主力/
+    超大单/大单/中单/小单净流入-净额) are the P3-B canonical
+    G-CF-LIVE expected subset (see SPEC §3.2 footnote / DESIGN
+    §R3.9) — a contract subset for this fixture, not the complete
+    upstream ``stock_individual_fund_flow`` schema (13 columns, no
+    股票代码 column). The historical PR-3 fixture used a fabricated
+    ``stock`` / ``code`` / ``northbound`` shape — that was the
+    schema-mismatch source for PR-3, and the shape is no longer
+    registered.
+    """
     return [
         {
             "日期": "2026-07-22",
+            "股票代码": "600519",
             "收盘价": 1680.5,
             "涨跌幅": 0.85,
             "主力净流入-净额": 1.2e8,
@@ -55,12 +67,6 @@ def flow_daily_fixture() -> list[dict[str, Any]]:
             "中单净流入-净额": -3.0e7,
             "小单净流入-净额": -9.0e7,
         },
-    ]
-
-
-def northbound_fixture() -> list[dict[str, Any]]:
-    return [
-        {"日期": "2026-07-22", "代码": "600519", "名称": "贵州茅台", "持股数": 1.0e8, "持股市值": 1.6e11, "持股变化": 1.5e5},
     ]
 
 
@@ -80,7 +86,6 @@ _FIXTURE_BY_FN: dict[str, Callable[[], list[dict[str, Any]]]] = {
     "stock_board_industry_cons_em": sector_snapshot_fixture,
     "stock_board_industry_name_em": sector_ranking_fixture,
     "stock_individual_fund_flow": flow_daily_fixture,
-    "stock_hsgt_individual_em": northbound_fixture,
     "stock_market_fund_flow": market_sentiment_fixture,
     "stock_zt_pool_em": limit_up_pool_fixture,
 }
