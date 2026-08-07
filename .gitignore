@@ -80,3 +80,6 @@ skills/data/source/
 .last_sent
 /data/
 skills/common/hotel_price_scraper/output/
+
+# Kanban worktree artifacts (mis-committed once on 2026-08-07; keep out of repo)
+.worktrees/
