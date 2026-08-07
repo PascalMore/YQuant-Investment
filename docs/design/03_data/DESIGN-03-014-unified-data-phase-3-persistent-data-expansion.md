@@ -8,9 +8,9 @@
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-21 |
 | 最后更新 | 2026-08-07（**V0.38（2026-08-07，事实归档：§R3 一致性表追加 2026-08-07 受控直连诊断 fail-stop 事实归档条目）**：本卡为 V0.37 / RFC V0.34 / SPEC V0.34 §R3.3.bis 冻结契约下的"已发生事实"事实归档，**不改 §R3 任何冻结契约/工具链/边界**；在 §R3.9 一致性表追加本轮事实归档条目（与 RFC V0.35 §R3.3.bis.1 / SPEC V0.35 §R3.3.bis.1 镜像）：2026-08-07 受控直连诊断 fail-stop（一次性、不动 Design/代码/服务/网关；诊断脚本 `/tmp/r3_diag_minimal.py` + 报告 `/tmp/yquant-g-cf-live-r3-diag-79f89ae8/` sha256=d087fadcf25a8e7ba9ecc8b9c46133be3da2ee4580db98f18de1a169d633f862 2417B；connectivity=error / error_class=ConnectionError / exception_chain 三层 RemoteDisconnected；`effective_http_timeout_seconds=null` 未注入 10s；零 retry/fallback/Mongo/DDL/DML/Git/服务）；不主张 R3 通过、四 Gate 全过、R1/R2 翻案、扩展 P3-A/name_em/cons_em/OQ-11/OQ-11B 既有语义；关联 Kanban 卡 `t_73e26ca7` `t_55ebd64b` 已挂 evidence comment 并显式 frozen-per-Pascal-2026-08-05-scope-narrowing；V0.34 §R3.3.bis R1/R2 历史事实保持准确不改写；本卡不重写整段历史，仅在版本历史追加 V0.38 条目 + §R3.9 一致性表追加 1 行）。**V0.37（2026-08-05，P3-B S1 T3 Design 恢复重建；对应 RFC/SPEC-03-014 V0.33 §R3；V0.36 为失效未提交历史，不复用其声称）**新增 §R2 生产验证 Re-baseline 同步章节（R2.0 元数据与 §R2 标题语义 / R2.1 范畴裁定与执行边界 / R2.2 旧 PR-2 语义 superseded / R2.3 三子阶段冻结语义 / R2.4 生产结论词汇 / R2.5 后续生产 Gate 授权骨架 / R2.6 双向引用与一致性声明）；来源 RFC/SPEC 指针同步至 **V0.30**；§R2 标题语义消歧（RFC=V0.27 引入/V0.29 同步、SPEC=V0.28 引入/V0.29 同步，本 Design 仅引用其冻结版 V0.30）；`name_em`/`cons_em` 禁入任何执行计划、旧 PR-2 仅历史证据、后续 Gate G-R2-1~G-R2-4 均需逐项独立 Pascal 授权。**V0.33** **OQ-11 生产注入 Gate 详细设计**（Design-only，对应 RFC/SPEC-03-014 V0.26 EOD-8 系列；Pascal 已授权但**尚未执行**）：新增 §OQ-11B——唯一 production composition root = 新增 `skills/data/unified_data/services/composition.py`（候选 b `services/__init__.py` 扩展 / c `client.py` 构造 / d `scripts/unified_data/` CLI 均以仓库事实排除）；`SystemClock` 追加于 `skills/infra/session_policy.py`（实现 infra `Clock` Protocol）；本地 preflight CLI = 新增 `scripts/unified_data/preflight_sentiment_policy.py`（默认 `--dry-run`、零工作树写入/零 secrets/零网络/Mongo）；T3 精确 7 文件 allowlist；T4 `.venv/bin/python` 锁定；**T6 裁定 fail-stop**（仓库事实：无 in-repo systemd unit、HEARTBEAT.md host 级条目均非 OQ-11 目标、TradingAgents-CN start/stop_all.sh 管理无关 Web 应用且重启含 Mongo/Tushare 副作用、无 MarketSentimentService 生产 consumer → 无可安全重启 target，禁臆造/增设 unit；T6 仅执行只读 preflight 后 fail-stop，注入不执行，`completed_session_policy=None` 全路径保持）；回滚仅撤销注入恢复 None、禁 DB 删除/自动回滚。**V0.32** OQ-11 生产 `CompletedSessionPolicy` 详细设计（Design-only，对应 RFC/SPEC-03-014 V0.25 EOD-7 系列）：新增 §OQ-11——date_utils 最小严格查询 seam（`CalendarDayStatus` 五态 + `query_trading_day_status`/`session_close_strict`/`parse_date_strict`，现有 6 个 public API 兼容）、新增 infra adapter `skills/infra/session_policy.py`（`SessionStatus` 迁移为 infra 唯一定义 + `Clock` Protocol（naive → 构造期 fail-fast）+ `SessionPolicyError` 层次 + `AShareCompletedSessionPolicy`，无 unified_data 反向依赖）、EOD-7.5 优先级 1-7 判定算法（invalid/unavailable/out_of_range/calendar error 全部 fail-closed，禁 fallback `TRADING_DAYS_2026`/周末/latest）、composition root 为未来 seam（本阶段不创建）、production injection 不放行（默认 `completed_session_policy=None` 离线路径保持）、最小 audit record（AuditLogger 默认关闭，本任务不新增写入）、OQ-11 T3 精确 7 文件 allowlist 与 fake calendar + fake clock 测试矩阵（零 I/O 断言）与纯代码 rollback。**V0.31** P3-C Scope Reconcile（用户授权，仅文档；对应 RFC/SPEC-03-014 V0.24）：唯一 T3 allowlist 从 7 项最小扩展至 8 项（唯一新增 `skills/data/unified_data/tests/test_sentiment_limit_up_pool.py`），§8.3 升级为「P3-C V0.24/V0.31 closure-only T3 allowlist」（恰好 8 个路径，优先于所有旧 Phase-3 总体迁移表，显式禁止 akshare/registry/router/writer/Mongo/cache/client/refresh activation/网络/调度，不得含第 9 项）。保留全部冻结项：offline stub/defer；AKShare sentiment 未注册、live-read 不重跑；`total_turnover=None`；OQ-10/OQ-11；F6 TTL/key；真实 refresh 仍禁止。不动 P0/§P1 各节既有内容、不动 DDL/Gate 授权、不动 F6 canonical freshness key 与 TTL=3600、不动所有 ❌ 状态。**V0.37（2026-08-05，P3-B S1 T3 Design 恢复重建；对应 RFC/SPEC-03-014 V0.33 §R3；V0.36 为失效未提交历史，不复用其声称）**：新增独立 §R3「P3-B S1 真实资金流生产验证与受控物化契约（Design 详细设计）」——四 Gate G-CF-LIVE → G-CF-DDL → G-CF-CANARY → G-CF-POST 严格串行且逐项 Pascal 授权（禁止第四路径/自动推进/fallback/隐式重试）；G-CF-LIVE 唯一 `stock_individual_fund_flow` + 唯一 600519 + ≤3 completed dates + ≤3 calls + ≥1s 间隔 + 3s 超时 + 零 Mongo/cache/refresh/upsert/DDL/DML/Git 写 + 显式 dry-run 默认 + 字段映射匹配率 `<70% fail-stop / ≥70% 才可通过`（唯一阈值 `MATCH_RATIO_CONDITIONAL=0.70`）+ 失败冻结；northbound 永久排除（`northbound_daily` 仅 None/intentionally-unavailable，禁 `stock_hsgt_individual_em`/endpoint skeleton/DDL/canary/验收，删除现有 smoke 流 `fetch_northbound_flow` 生产调用路径）；G-CF-DDL 引用 §6.4.bis 权威契约（唯一 `tradingagents.03_data_ud_stock_capital_flow` + 两索引 `symbol_trade_date`/`trade_date`，Pascal 手动 DDL，future 工具仅设计）；G-CF-CANARY 600519 × 一个 completed date × ≤1 doc（幂等键 `{market:"CN", symbol:"600519", trade_date}`，delete_by_filter 手动清理）；G-CF-POST 独立只读验收（read 仅 `ping`/`list_collection_names`/`find`/`count_documents`）；completed-date 复用 `skills.infra.date_utils`/`CompletedSessionPolicy`，OQ-11 仅链接为独立子链不实现 composition；生产结论仅四 Gate 全部实际执行 + 独立 Verify 产生（三态词汇沿用 §R2.4）；**P0 scope 裁定**：逐文件 allowlist（modify/new/delete）+ 最小测试集 + 禁止清单，明确 `providers/flow_client.py` 不得创建、不得新建平行 flow client/provider 抽象；`config.py`/`provider_client.py` 两份 dirty 标注为「需由下一 Implement 在 allowlist 内重新实现/替换并独立验证」，不得认定为已完成，不得扩大到 router/client/.env/profile/global config；不改 P3-A/P3-C/name_em/cons_em 语义。本卡仅改 Design 一份，零真实动作、零 Git 写。） |
-| 版本号 | V0.38 |
-| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.35） |
-| 来源 SPEC | SPEC-03-014（Phase 3 持久化扩展契约，V0.35） |
+| 版本号 | V0.39 |
+| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.36） |
+| 来源 SPEC | SPEC-03-014（Phase 3 持久化扩展契约，V0.36） |
 | 关联 Design | DESIGN-03-007（Unified Data Layer 总体设计，V3.4） |
 | 关联 RFC | RFC-03-012（Phase 1D CN 日线真实外部 Provider 激活）、RFC-03-011（Phase 2 质量与审计治理）、RFC-03-013（Phase 1E 情绪最小切片） |
 | 关联 SPEC | SPEC-03-007（Unified Data Layer 契约基线）、SPEC-03-008（Phase 1B-A 查询平面）、SPEC-03-013（Phase 1E 情绪最小切片） |
@@ -3849,6 +3849,47 @@ G-CF-LIVE（零 Mongo live-read） → G-CF-DDL（唯一集合 + 两索引） �
 5. 本 Design 零真实动作，**不产生任何生产结论**；任何「已通过 Gate」的表述需四 Gate 实际执行 + 独立 Verify 证据。
 
 ---
+
+### R3.12 Phase 3 收口事实归档（V0.39，2026-08-07）
+
+本子节为**事实归档**（不改任何冻结契约条款），与 RFC-03-014 V0.36 §R3.12 / SPEC-03-014 V0.36 §R3.12 镜像，记录 2026-08-07 Phase 3 全部任务链收口的历史事实，供审计与追溯。关联 Kanban 卡均已在看板保留完整 evidence comment。
+
+#### 一、P0 三链完整闭环（0 blocker / 0 major / 0 minor）
+
+| 链 | Implement | Verify | Review | 关键契约 |
+|---|---|---|---|---|
+| T6 Fix（600519+3s）| `t_bd702b21` done | `t_8138a09b` PASS 8/8 | `t_6fcb4cf3` APPROVE | 600519 固定 target 不可绕过；`DEFAULT_TIMEOUT_SECONDS=3` |
+| T6RR Fix（9 项口径）| `t_f3cf3465` done | `t_645be03e` PASS 34+144 | `t_0aa4580c` APPROVE | 4 处 docstring 统一"P3-B canonical expected subset (9 项)"；akshare 1.17.54 静态事实 13 列无股票代码 |
+| T4R（smoke P0 收敛）| `t_3bc54206` done | `t_1bb2a989` PASS 144 | `t_83495656` REVISE→Minor-1 Fix `t_5626e1b7`→Verify `t_d8ff8da1` PASS→Review `t_ce772dfc` APPROVE | 5 files allowlist；`MATCH_RATIO_CONDITIONAL=0.70`；phantom anchor 清除（注释锚点改指 §4.2.2/§15.14.1） |
+
+#### 二、微型 Verify replacement 三链（原卡 iteration budget timeout 冻结）
+
+| replacement | 内容 | 结果 | superseded 原卡 |
+|---|---|---|---|
+| `t_2e885585` | OQ-11 严格交易日 policy | PASS（96 passed）| `t_2bd68372` |
+| `t_e6efa5e3` | Step-4 脱敏投影与历史基线 | PASS（144 passed ≥119）| `t_eeea25d9` |
+| `t_81d7c7ad` | V0.2 r0 E-005/W-001 契约 | PASS（19 passed，产物在 llm-wiki 仓库）| `t_6f646f4b` |
+
+#### 三、真实生产证据
+
+| 项 | 结果 | 证据 |
+|---|---|---|
+| PR-2 name_em 单次 smoke（08-04）| ProviderUnavailableError fail-stop | `t_55d44505` blocked evidence |
+| PR-2 name_em 轻量重试（08-07，Pascal 重新授权）| ProviderUnavailableError（SSL/连接级），预算=1 耗尽 | `t_91ffe99e` done，verdict=`provider-unavailable-frozen` |
+| Step-4 T3 三 Gate | PR-0 CONDITIONAL_AUTHORIZED / PR-1 Mongo 只读可达 + 3 集合在场（designated baseline）/ PR-2 由并行卡 frozen 覆盖 | `t_81432128` done |
+| 结论 | name_em 按 R2 永久废弃语义不变；三集合=designated historical baseline（RFC V0.27 §R2.3），presence 非 PR-1 FAIL | Pascal 2026-08-07 确认 |
+
+#### 四、仓库卫生事实归档
+
+- commit `09fdffa`（2026-08-07）：`.worktrees/t_997a95a3/` 4 个误提交文件（investigate.py / precheck.py / precheck_report.json / write_report.py，含生产 MongoDB 计数快照）从 git 索引移除（本地保留作审计证据），`.gitignore` L85 追加 `.worktrees/`
+- 链：Fix `t_8602c56e` done → Verify `t_1003d459` PASS 7/7 → Review `t_9fd250be` APPROVE
+
+#### 五、测试与验证总账
+
+- t4_preflight：144 passed（多轮独立复跑一致）
+- unified_data：1426 passed（全量）+ 165（6 文件回归）
+- infra session_policy：96 passed
+- 全程零真实 I/O（除已授权的 PR-2 单次 smoke + git push 09fdffa）；git diff --check 全绿
 
 ## 15. T4 生产就绪 Preflight & Smoke 工具链设计
 

@@ -8,8 +8,8 @@
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-07-20 |
 | 最后更新 | 2026-08-07（**V0.35（2026-08-07，事实归档：§R3.3.bis.1 2026-08-07 受控直连诊断 fail-stop 事实归档）**：本卡为 V0.34 §R3.3.bis 冻结契约下的"已发生事实"事实归档，**不改 §R3.3.bis 任何冻结契约条款**；新增 §R3.3.bis.1 子节记录 2026-08-07 受控直连诊断 fail-stop（一次性、不动 Design/代码/服务/网关；诊断脚本 `/tmp/r3_diag_minimal.py` + 报告 `/tmp/yquant-g-cf-live-r3-diag-79f89ae8/` sha256=d087fadcf25a8e7ba9ecc8b9c46133be3da2ee4580db98f18de1a169d633f862 2417B；connectivity=error / error_class=ConnectionError / exception_chain 三层 RemoteDisconnected；`effective_http_timeout_seconds=null` 未注入 10s；零 retry/fallback/Mongo/DDL/DML/Git/服务；不主张 R3 通过、四 Gate 全过、R1/R2 翻案、扩展 P3-A/name_em/cons_em/OQ-11/OQ-11B 既有语义；关联 Kanban 卡 `t_73e26ca7` `t_55ebd64b` 已挂 evidence comment 并显式 frozen-per-Pascal-2026-08-05-scope-narrowing，重启 R3 完整版需显式 unblock + 新建 replacement 链）；V0.34 §R3.3.bis R1/R2 历史事实保持准确不改写；RFC/DESIGN 同步升级 RFC-03-014 V0.34→V0.35 / DESIGN-03-014 V0.37→V0.38 镜像同一子节。V0.34（2026-08-05，G-CF-LIVE-R3 受控诊断契约新增）**：Pascal 明确授权 R3 最终单次 live-read（本卡仅写入契约、未执行）——新增 §R3.3.bis「G-CF-LIVE-R3：AKShare 直连与真实 HTTP timeout 受控诊断」：唯一 endpoint `stock_individual_fund_flow(stock='600519', market='sh')`、唯一 600519/CN、candidate date 2026-08-04（仅报告元数据）；direct transport 仅子进程临时清空 `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY`、`NO_PROXY` 仅本机最小默认值，不改 shell profile/.env/系统/服务/网关；调用预算至多 1 次逻辑 Provider 调用、真实 HTTP request timeout=10s、零 retry/零 fallback/零替代 endpoint；零 Mongo/cache/refresh/upsert/DDL/DML/Git 写/服务变更；DNS/TCP/TLS/HTTP/timeout/schema 异常立即 fail-stop 并保留脱敏异常层级（异常类、message 摘要、cause/urllib3 子类）、不得重放本 Gate；临时报告 `/tmp/yquant-g-cf-live-r3-20260804-<run-id>/`（目录 0700、YAML 0600，账本字段 provider_attempts/actual_calls/retry/fallback/mongo/write=0/direct_transport/effective_http_timeout_seconds）；不产生生产结论、不替代四 Gate 链；rollback 仅撤销未来 R3 代码路径、不回滚历史报告/数据；R1/R2 历史事实保持准确（均为 `ConnectionError`、经继承代理环境、`DEFAULT_TIMEOUT_SECONDS=3` 未传至 AKShare 1.17.54 内部 `requests.get`）。V0.31 P3-A read-path 结果词汇三态统一仲裁（P0 Contract Arbitration，对应 RFC-03-014 V0.31 / DESIGN-03-014 V0.35）：§R2.2 P3-A 盘后/历史 read-path 允许的最终状态由旧双态 `production-read-path-validated` / `read-path-unavailable-by-design` 并入 R2 唯一三态——成功态唯一映射 `production-validated`（仅 read-path scope，≠ 实时 Provider 验证，仅能由未来获授权且实际执行、独立验证的 G-R2-1 census 产生，本文档裁定不产生任何生产结论）；不可用态唯一映射 `provider-unavailable-frozen`；schema drift / 认证失败 / 越界写入 / Verify 未通过 = 非结论 fail-stop（不落三态）；`intentionally-unavailable` 对 P3-A read-path 不适用；禁止杜撰第四/第五状态。**V0.32（2026-08-05，P3-B S1 独立重建）**：新增 §R3「P3-B 真实资金流生产验证与受控物化契约」——从 V0.31 基线独立重建（此前未提交的 SPEC V0.32 草稿已被工作树 `git restore`/checkout 类动作整体回退，本卡不依赖历史 worker summary 宣称恢复成功）；唯一真实目标 `flow.capital_flow_daily` → `stock_individual_fund_flow`；`flow.northbound_daily` 恒 `intentionally-unavailable`/None fail-stop（禁 `stock_hsgt_individual_em`/endpoint skeleton/DDL/canary/验收）；四 Gate 严格串行且逐个 Pascal 授权——G-CF-LIVE（零 Mongo live-read，600519、≤3 completed dates、≤3 calls、≥1s 间隔、3s 超时、零写、失败冻结）→ G-CF-DDL（唯一 `tradingagents.03_data_ud_stock_capital_flow` + 两索引，权威契约 §14.6.bis / DESIGN §6.4.bis）→ G-CF-CANARY（600519 × 一个 completed date × ≤1 doc）→ G-CF-POST（独立只读验收）；completed-date 复用 `skills.infra.date_utils` / `CompletedSessionPolicy` 契约，OQ-11 保持独立子链；生产结论仅能由四 Gate 全部实际执行 + 独立 Verify 产生，本卡零真实动作。**V0.33（2026-08-05，P0 阈值纠正同步）**：RFC-03-014 V0.33 P0 阈值纠正后同步——G-CF-LIVE 字段映射停止条件由旧 `>50% 字段名不匹配` 同步为 `字段映射匹配率 <70% fail-stop / ≥70% 才可通过`（对齐 `MATCH_RATIO_CONDITIONAL=0.70`，唯一阈值输入，见 RFC V0.33 §R3.10 / DESIGN §15.6.2 / §R2.4 G-R2-2）；§R3.3 / §R3.9 / §R3.10 与 §14.8 停止条件表字段映射行、§11 OQ-9 同源表述一并同步（旧 >50% 表述废弃）。详见版本历史 V0.32 / V0.33 条目；保留 V0.31 及更早全部条目。） |
-| 版本号 | V0.35 |
-| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.35） |
+| 版本号 | V0.36 |
+| 来源 RFC | RFC-03-014（Phase 3 持久化扩展，V0.36） |
 | 关联 RFC | RFC-03-007（Unified Data Layer 总纲）、RFC-03-011（Phase 2 质量与审计治理）、RFC-03-013（Phase 1E 情绪最小切片） |
 | 关联 SPEC | SPEC-03-007（Unified Data Layer 契约基线）、SPEC-03-008（Phase 1B-A 查询平面）、SPEC-03-013（Phase 1E 情绪最小切片） |
 | 关联 Design | DESIGN-03-014（Phase 3 持久化扩展详细设计，V0.38） |
@@ -2545,3 +2545,44 @@ RFC-03-014 V0.34 §R3.9 指定后续 SPEC 必须**逐项镜像**以下可执行�
 - **DESIGN-03-014（当前 V0.37；基线本轮时 V0.33 → Design V0.37）**：Design §R3（P3-B S1 重建）已在 V0.37 独立重建（恢复核验卡 `t_eb2ed46e` 之外、由 Design V0.37 卡产出）；本 SPEC V0.34 卡**不修改、未宣称** Design 已同步——Design §R3.3.bis「G-CF-LIVE-R3」是否纳入属后续 Design 卡范畴。基线对齐：本轮 §R3 重建 + V0.33 P0 阈值纠正 + V0.34 G-CF-LIVE-R3 直连诊断均以 **RFC V0.34** 为唯一 RFC 上游；本 SPEC V0.34 镜像 + 与 Design V0.37 §R3 一致性由后续 Design 增量同步卡保证，本卡不动 Design。
 - **V0.34（2026-08-05，G-CF-LIVE-R3）**：本节新增 §R3.3.bis「G-CF-LIVE-R3」独立授权契约（唯一 endpoint `stock_individual_fund_flow(stock='600519', market='sh')`、600519/CN、candidate date 2026-08-04、direct transport、1 call/10s timeout、零 retry/fallback、零写、fail-stop 脱敏异常、临时报告 `/tmp/yquant-g-cf-live-r3-20260804-<run-id>/`、rollback 仅撤销未来 R3 代码路径）；R3 是**新一次独立授权 Gate**，不是 R1/R2 自动重试；R1/R2 历史事实（均 `ConnectionError`、经继承代理环境；`DEFAULT_TIMEOUT_SECONDS=3` 未传至 AKShare 1.17.54 内部 `requests.get`）不改写；不产生生产结论、不替代四 Gate 链；不扩展 P3-A/P3-C/OQ-11/OQ-11B/name_em/cons_em 既有语义。RFC-03-014 V0.34 §R3.3.bis/§R3.9 第 9 项同步镜像。
 - 本卡未扩展 P3-A / P3-C / OQ-11 / OQ-11B / name_em / cons_em 的既有语义；未修改任何代码/测试/配置/脚本/数据；未执行 DDL/DML/Provider/Mongo/Git 写入；未读取 `.env`/secret；未调用网络/AKShare/Mongo/Provider。
+
+### R3.12 Phase 3 收口事实归档（V0.36，2026-08-07）
+
+本子节为**事实归档**（不改任何冻结契约条款），与 RFC-03-014 V0.36 §R3.12 / DESIGN-03-014 V0.39 §R3.12 镜像，记录 2026-08-07 Phase 3 全部任务链收口的历史事实，供审计与追溯。关联 Kanban 卡均已在看板保留完整 evidence comment。
+
+#### 一、P0 三链完整闭环（0 blocker / 0 major / 0 minor）
+
+| 链 | Implement | Verify | Review | 关键契约 |
+|---|---|---|---|---|
+| T6 Fix（600519+3s）| `t_bd702b21` done | `t_8138a09b` PASS 8/8 | `t_6fcb4cf3` APPROVE | 600519 固定 target 不可绕过；`DEFAULT_TIMEOUT_SECONDS=3` |
+| T6RR Fix（9 项口径）| `t_f3cf3465` done | `t_645be03e` PASS 34+144 | `t_0aa4580c` APPROVE | 4 处 docstring 统一"P3-B canonical expected subset (9 项)"；akshare 1.17.54 静态事实 13 列无股票代码 |
+| T4R（smoke P0 收敛）| `t_3bc54206` done | `t_1bb2a989` PASS 144 | `t_83495656` REVISE→Minor-1 Fix `t_5626e1b7`→Verify `t_d8ff8da1` PASS→Review `t_ce772dfc` APPROVE | 5 files allowlist；`MATCH_RATIO_CONDITIONAL=0.70`；phantom anchor 清除（注释锚点改指 DESIGN §4.2.2/§15.14.1） |
+
+#### 二、微型 Verify replacement 三链（原卡 iteration budget timeout 冻结）
+
+| replacement | 内容 | 结果 | superseded 原卡 |
+|---|---|---|---|
+| `t_2e885585` | OQ-11 严格交易日 policy | PASS（96 passed）| `t_2bd68372` |
+| `t_e6efa5e3` | Step-4 脱敏投影与历史基线 | PASS（144 passed ≥119）| `t_eeea25d9` |
+| `t_81d7c7ad` | V0.2 r0 E-005/W-001 契约 | PASS（19 passed，产物在 llm-wiki 仓库）| `t_6f646f4b` |
+
+#### 三、真实生产证据
+
+| 项 | 结果 | 证据 |
+|---|---|---|
+| PR-2 name_em 单次 smoke（08-04）| ProviderUnavailableError fail-stop | `t_55d44505` blocked evidence |
+| PR-2 name_em 轻量重试（08-07，Pascal 重新授权）| ProviderUnavailableError（SSL/连接级），预算=1 耗尽 | `t_91ffe99e` done，verdict=`provider-unavailable-frozen` |
+| Step-4 T3 三 Gate | PR-0 CONDITIONAL_AUTHORIZED / PR-1 Mongo 只读可达 + 3 集合在场（designated baseline）/ PR-2 由并行卡 frozen 覆盖 | `t_81432128` done |
+| 结论 | name_em 按 R2 永久废弃语义不变；三集合=designated historical baseline（RFC V0.27 §R2.3），presence 非 PR-1 FAIL | Pascal 2026-08-07 确认 |
+
+#### 四、仓库卫生事实归档
+
+- commit `09fdffa`（2026-08-07）：`.worktrees/t_997a95a3/` 4 个误提交文件（investigate.py / precheck.py / precheck_report.json / write_report.py，含生产 MongoDB 计数快照）从 git 索引移除（本地保留作审计证据），`.gitignore` L85 追加 `.worktrees/`
+- 链：Fix `t_8602c56e` done → Verify `t_1003d459` PASS 7/7 → Review `t_9fd250be` APPROVE
+
+#### 五、测试与验证总账
+
+- t4_preflight：144 passed（多轮独立复跑一致）
+- unified_data：1426 passed（全量）+ 165（6 文件回归）
+- infra session_policy：96 passed
+- 全程零真实 I/O（除已授权的 PR-2 单次 smoke + git push 09fdffa）；git diff --check 全绿
