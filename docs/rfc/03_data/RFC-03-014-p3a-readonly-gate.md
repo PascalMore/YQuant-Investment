@@ -7,12 +7,12 @@
 | 状态 | 草稿（Draft） |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-08-04 |
-| 最后更新 | 2026-08-04 |
-| 版本号 | V0.4 |
+| 最后更新 | 2026-08-07 |
+| 版本号 | V0.5 |
 | 所属模块 | 03_data（数据层） |
 | 依赖 RFC | RFC-03-014（Unified Data Phase 3 主 RFC，V0.26）、RFC-03-014-p3a-sector-provider-activation（V0.2）、RFC-03-007（Unified Data Layer 总纲）、RFC-03-012（Phase 1D 外部 Provider 激活模式参考） |
-| 依赖 SPEC | SPEC-03-014-p3a-readonly-gate（本 RFC 对应之 SPEC，V0.3） |
-| 关联 Design | DESIGN-03-014（Phase 3 主设计 V0.33，§15.x T4 preflight 工具链）；历史 DESIGN-03-014-p3a-sector-provider-activation（fake-only，**不得重新激活**）；关联 DESIGN-03-014-p3a-readonly-gate（V0.3） |
+| 依赖 SPEC | SPEC-03-014-p3a-readonly-gate（本 RFC 对应之 SPEC，V0.4） |
+| 关联 Design | DESIGN-03-014（Phase 3 主设计 V0.33，§15.x T4 preflight 工具链）；历史 DESIGN-03-014-p3a-sector-provider-activation（fake-only，**不得重新激活**）；关联 DESIGN-03-014-p3a-readonly-gate（V0.4） |
 | 替代 RFC | 无（不替代主 RFC-03-014；为主 RFC 的 P3-A Step-4 只读 Gate 提供授权契约） |
 | AI 适配 | Hermes Kanban profile worker |
 | 标签 | #data #unified_data #phase3 #p3a #gate #readonly #mongo #akshare #credential |
@@ -66,6 +66,8 @@ Pascal 明确授权当前 Step-4 所需的全部只读动作：PR-0、PR-1、PR-
 3. 已生成的 gitignored evidence（`docs/rfc/03_data/smoke_reports/audit-secret-20260804.yaml`、`docs/rfc/03_data/smoke_reports/preflight-mongo-20260804.yaml`）视为 **不合规本地工件**：后续 developer Fix **必须仅**删除或替换为合规聚合版；审计事实保留在 Kanban，**不复制不合规内容到 repo/docs**。
 4. **PR-1 不可重放**：继续链只能审计既有只读 evidence；**PR-2 预算未消耗**（`actual_calls=0`），但只有 developer Fix → fresh Verify → Review 均通过后，才可新建**单独的 one-call continuation**（不得由本卡或 T3' 顺带执行）。
 5. PR-0「file-declared / runtime env absent」= `conditional_authorized`，**不等价于** secret 值有效性或生产授权。
+
+> **R1 复核确认（2026-08-07，本卡 `t_76db1800`，parent T3 `t_81432128` 完成后派发）**：上列 R1 五裁定已编码于本节，SPEC §0 / DESIGN §2.6 同步一致。stat 复核（仅路径存在性，未读内容）：两份不合规 evidence（`audit-secret-20260804.yaml`、`preflight-mongo-20260804.yaml`）**已删除**（developer Fix F1 删除分支满足，裁定 3），repo/docs 无遗留不合规副本。developer Fix 精确目标与 allowlist 锚定 SPEC §8.1 / DESIGN §7.1，**文档说明不替代实际脱敏修复**（F2 输出面审计 / F3 不重放仍由 developer Fix 卡执行）。补充历史事实：PR-2 `name_em` 唯一一次受控 smoke 已由并行卡 `t_91ffe99e`（Pascal 重新授权）执行为 `provider-unavailable-frozen`；该结果不改变 R2 永久废弃 PR-2 预算语义（§2.6），任何链不得重跑 PR-2。
 
 > **R2 注（2026-08-04）**：本节 R1 裁定 4 中「另立 one-call continuation」路径已被 §2.6 R2 裁定**取代**：PR-2 预算**永久废弃**，不再创建 continuation。其余 R1 裁定保留。
 
@@ -285,6 +287,7 @@ PR-2 有界 Sector Provider smoke（P3-A Design 已裁定 name_em 单次受控�
 - [ ] **R1：PR-1 不可重放；PR-2 预算未消耗，仅 Fix+Verify+Review 通过后另立 one-call continuation（§2.4 裁定 4）**（**R2：one-call continuation 永久废弃，见 §2.6**）
 - [ ] **R1：file-declared / runtime env absent = conditional，非 secret 值有效性或生产授权（§2.4 裁定 5）**
 - [ ] **R2（本卡 `t_f85382b3`）：P0 incident record 落档于 §2.5，包含事件事实（时间/脚本/三 host/TLS ok/EXIT=0）、裁定（越界成立；TLS 可达 ≠ Provider 可用，禁止以 TCP/TLS 直连结果为 Provider 可用性证据；Cold-skip PR-2=ProviderUnavailable 非 PASS）、actual_calls 字段语义（attempts=1 / success_calls=0）、t_e94a487a「119/119 零 .env read」表述修正（2 个 `--live-read` 测试真实 read_text skills/.env，非泄露）；落档完成即 P0 收口并解锁 Step-4 Closeout**
+- [ ] **R1 复核（本卡 `t_76db1800`，2026-08-07）**：R1 五裁定已编码（§2.4）且 SPEC/Design 同步；两份不合规 evidence 已删除（F1 删除分支，stat 复核）；developer Fix 精确目标/allowlist 见 SPEC §8.1 / DESIGN §7.1；PR-2 唯一一次重授权执行（`t_91ffe99e` = provider-unavailable-frozen）为历史事实，R2 永久废弃语义不变
 
 ### 7.2 非功能验收
 
@@ -331,6 +334,7 @@ PR-2 有界 Sector Provider smoke（P3-A Design 已裁定 name_em 单次受控�
 
 | 版本 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
+| V0.5 | 2026-08-07 | **R1 复核确认（本卡 `t_76db1800`，parent T3 `t_81432128` 完成后派发）**：确认 R1 五裁定已编码（§2.4）且 SPEC/Design 同步；stat 复核两份不合规 evidence（`audit-secret-20260804.yaml` / `preflight-mongo-20260804.yaml`）已删除（F1 删除分支满足），repo/docs 无不合规副本；developer Fix 精确目标/allowlist 锚定 SPEC §8.1 / DESIGN §7.1，拒绝以文档说明替代实际脱敏修复；补充历史事实——PR-2 `name_em` 唯一一次受控 smoke 由并行卡 `t_91ffe99e`（Pascal 重新授权）执行为 `provider-unavailable-frozen`（R2 永久废弃语义不变，§2.6） | YQuant-Principal |
 | V0.4 | 2026-08-04 | **R2 Scope-Scission（本卡 `t_51c36693`）**：Pascal 2026-08-04 范畴裁定 `name_em` 实时板块排行移出 Phase 3 目标（新增 §2.6）——PR-2 预算**永久废弃**、不得 retry / replacement probe / 替代 endpoint / 实时 refresh；`t_55d44505` / `t_81432128` 标记 superseded / historical evidence；P3-A 仅保留盘后/历史、按 trade_date 可复现的 sector read-path 验证（无实时 Provider 调用）；PR-2 历史结果（ProviderUnavailable + netprobe 越界）保留为历史事实、不作生产能力失败或 recovery 依据。§2.5 P0 incident record 保留（补一行指向 §2.6）；§3.1 / §4.1 / §5.3 / §6.2 / §7.1 / §7.3 中 PR-2 条目标记 superseded / out-of-scope（R2）；§8 OQ-GATE-1/2/3 标记 superseded、OQ-GATE-4 已闭合（指向 R1） | YQuant-Principal |
 | V0.3 | 2026-08-04 | **P0 Incident Record 落档（本卡 `t_f85382b3`，T5 Final Review `t_14f0590d` REVISE 闭环）**：新增 §2.5，固化 2026-08-04 12:19:56 netprobe 越界事件（`/tmp/yquant_pr2_netprobe.py`，`socket.create_connection` + `ssl.wrap_socket` 直连 `82.push2.eastmoney.com` / `push2.eastmoney.com` / `www.baidu.com` 三 host:443，全部 TLS ok、EXIT=0；超出 T3 single-call allowlist，含与 Provider 无关的 www.baidu.com）。裁定：① 越界事实成立（P0）；② TLS 可达 ≠ Provider 可用，禁止以 TCP/TLS 直连结果为 Provider 可用性证据；③ Cold-skip 业务结果 PR-2=ProviderUnavailable（非 PASS）可接受。附加记录项：① `actual_calls` 字段语义澄清（attempts=1 / success_calls=0，smoke 脚本成功路径置 1、异常路径打印初始 0）；② `t_e94a487a`「119/119 零 .env read」表述修正（2 个 `--live-read` CLI 测试真实 read_text skills/.env，非泄露）。**本 record 落档完成即 P0 收口，解锁 Step-4 Closeout**；SPEC/DESIGN 版本指针不变（本卡仅 RFC 审计固化） | YQuant-Principal |
 | V0.2 | 2026-08-04 | R1 契约修订：① 三集合明示为 designated historical baseline（presence 非 PR-1 FAIL，禁止枚举陌生集合名）；② PR-0 外部输出收敛为 single aggregate verdict + generic source-kind + generic error-class（禁止逐 key 名称/状态/password marker/路径）；③ 既有两份 gitignored evidence 定为不合规本地工件，developer Fix 仅删除/替换为合规聚合版；④ PR-1 不可重放，PR-2 预算未消耗（actual_calls=0），仅 Fix+Verify+Review 通过后另立 one-call continuation；⑤ file-declared / runtime env absent = conditional，非 secret 值有效性或生产授权 | YQuant-Principal |

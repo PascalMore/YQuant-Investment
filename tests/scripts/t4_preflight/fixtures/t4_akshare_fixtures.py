@@ -46,14 +46,21 @@ def flow_daily_fixture() -> list[dict[str, Any]]:
     """P3-B S1 ``flow.capital_flow_daily`` fixture.
 
     The 9 zh fields here (日期、股票代码、收盘价、涨跌幅 + 主力/
-    超大单/大单/中单/小单净流入-净额) are the P3-B canonical
-    G-CF-LIVE expected subset (see SPEC §3.2 footnote / DESIGN
-    §R3.9) — a contract subset for this fixture, not the complete
-    upstream ``stock_individual_fund_flow`` schema (13 columns, no
-    股票代码 column). The historical PR-3 fixture used a fabricated
-    ``stock`` / ``code`` / ``northbound`` shape — that was the
-    schema-mismatch source for PR-3, and the shape is no longer
-    registered.
+    超大单/大单/中单/小单净流入-净额) are this tool's G-CF-LIVE
+    *matching-input contract*: the exact names fed into
+    ``FieldMapper.compare`` / the ``MATCH_RATIO_CONDITIONAL=0.70``
+    decision — NOT a doc-frozen canonical field mapping. The
+    authoritative (inferred, NOT live-read verified) canonical
+    table is DESIGN §4.2.2 / §15.14.1 ``flow.capital_flow_daily``
+    (English names ``main_net_inflow`` etc., includes ratio/margin,
+    no 收盘价/涨跌幅, no ``-净额`` suffix). This 9-field set is a
+    matching-input subset, not the complete upstream
+    ``stock_individual_fund_flow`` schema (akshare 1.17.54 static:
+    13 columns, no 股票代码 column; the DESIGN table lists
+    股票代码 only as the inferred ``symbol`` source column). The
+    historical PR-3 fixture used a fabricated ``stock`` / ``code`` /
+    ``northbound`` shape — that was the schema-mismatch source for
+    PR-3, and the shape is no longer registered.
     """
     return [
         {

@@ -7,10 +7,10 @@
 | 状态 | Draft |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-08-04 |
-| 最后更新 | 2026-08-04 |
-| 版本号 | V0.3 |
-| 来源 RFC | RFC-03-014-p3a-readonly-gate（V0.4） |
-| 来源 SPEC | SPEC-03-014-p3a-readonly-gate（V0.3） |
+| 最后更新 | 2026-08-07 |
+| 版本号 | V0.4 |
+| 来源 RFC | RFC-03-014-p3a-readonly-gate（V0.5） |
+| 来源 SPEC | SPEC-03-014-p3a-readonly-gate（V0.4） |
 | 关联 Design | DESIGN-03-014（Phase 3 主设计 V0.33，§15.x T4 preflight 工具链）；历史 DESIGN-03-014-p3a-sector-provider-activation（fake-only，**不得重新激活**，本卡不继承其执行授权） |
 | 目标模块 | t4_preflight（`scripts/t4_preflight/`）+ unified_data providers（`skills/data/unified_data/providers/`） |
 | 适配 Agent | YQuant-Developer-Engineer（T3 controlled execution / R1 后 developer Fix 卡）、YQuant-Test-Engineer（T4 Verify） |
@@ -68,7 +68,7 @@
 | 事实 | 证据 |
 |---|---|
 | `PortfolioMongoLoader(config: Optional[dict] = None)`：五键组件语义参考；公开面 = `upsert_*`/`load_all`/`load_trade`/`close`（**写路径**）；`_get_client()` 私有构造 URI（authSource=admin）；**无公开 `ping`/`list_collection_names`** | `skills/data/data-pipeline/scripts/loaders/mongodb_loader.py` L17-62 |
-| `PreflightRunner(resolver: LegacyConfigResolver \| None = None)` → `run_preflight(*, live: bool = False, timeout: int = 3) -> MongoPreflightResult`；流程 = `resolve(live=True)` → `build_client(live=True, timeout=3)`（组件式 `MongoClient(host, port, username, password, authSource=MONGODB_DATABASE, serverSelectionTimeoutMS=3000)`）→ `admin.command("ping")` → `db.list_collection_names()` → P3 集合比对 → `close()` | `mongo_client.py` L607-718 |
+| `PreflightRunner(resolver: Optional[LegacyConfigResolver] = None)` → `run_preflight(*, live: bool = False, timeout: int = 3) -> MongoPreflightResult`；流程 = `resolve(live=True)` → `build_client(live=True, timeout=3)`（组件式 `MongoClient(host, port, username, password, authSource=MONGODB_DATABASE, serverSelectionTimeoutMS=3000)`）→ `admin.command("ping")` → `db.list_collection_names()` → P3 集合比对 → `close()` | `mongo_client.py` L607-718 |
 | `MongoPreflightResult.connectivity ∈ {success, dns_failure, timeout, auth_failure, env_missing, dry_run, skipped}`；`p3_collections_found` 为与 `P3_BUSINESS_COLLECTIONS` 交集（**现状代码字段；R1 契约要求 Fix 后外部 evidence 改为 `baseline_collections`/`baseline_unexpected` 语义，见 §2.6/§5.5**） | `models.py` L49-60、`mongo_client.py` |
 | exit 映射：env_missing→3、dns/timeout/auth→2、p3_collections_found 非空→2、collections=None（list 未授权）→1、success→0；dry-run→0（信息性）（**现状代码映射；R1 裁定三集合 presence 非 FAIL，developer Fix 需按 §2.6 调整 external evidence 与 verdict 语义**） | `preflight_mongo.py::_verdict_for` L92-114 |
 | 命令 allowlist（只读）：`admin.command("ping")` + `list_collection_names()`（+ 意外集合存在时 `options()` + `close()`）；禁止 find/aggregate/count/watch/DDL/DML | `mongo_client.py` 模块 docstring、`config.py::PREFLIGHT_MAX_OPERATIONS=4` |
@@ -106,6 +106,8 @@
 | PR-1 执行 | 仅 `ping + list_collection_names`；`mongo_calls=2`、`write_operations=0`；未读取业务文档；三张 P3 预期集合存在 | `t_81432128` handoff |
 | PR-2 执行 | **未执行**，`actual_calls=0` | `t_81432128` handoff |
 | 既有 evidence 文件 | `docs/rfc/03_data/smoke_reports/audit-secret-20260804.yaml`、`docs/rfc/03_data/smoke_reports/preflight-mongo-20260804.yaml`（gitignored，仅 stat 确认存在） | 本卡 stat |
+
+> **补充事实与复核（2026-08-07，本卡 `t_76db1800`）**：① stat 复核（仅路径存在性，未读内容）：上述两份不合规 evidence **已删除**（§7.1 F1 删除分支满足），repo/docs 无不合规副本；② 补充历史事实——PR-2 `name_em` 唯一一次受控 smoke 由并行卡 `t_91ffe99e`（Pascal 重新授权）执行为 `provider-unavailable-frozen`（历史事实，§2.7 R2 永久废弃语义不变，任何链不得重跑 PR-2）；③ 本卡确认 R1 五裁定编码与 RFC §2.4 / SPEC §0 一致。
 
 **Pascal 裁定（写死为契约）**：
 
@@ -387,6 +389,8 @@ overall:
 
 **Fix 卡完成判定**：F1 完成（两份 evidence 合规化）、F2 输出面审计通过、F3 遵守不重放。**Fix 卡不得顺带执行 PR-2。**
 
+> **R1 复核确认（`t_76db1800`，2026-08-07）**：stat 复核 F1 目标两份 evidence 已删除（删除分支满足），repo/docs 无不合规副本；F2（输出面审计）与 F3（不重放）仍由 developer Fix 卡执行。**文档说明不替代实际脱敏修复。**
+
 ### 7.2 fresh Verify（assignee=yquanttester）
 
 - 对照 §8 可复验项逐项核验 Fix 产物与 R1 契约（A-GATE-015~019 对应项）。
@@ -441,7 +445,7 @@ overall:
 
 ## 9. 一致性声明
 
-- 与 RFC-03-014-p3a-readonly-gate V0.4、SPEC-03-014-p3a-readonly-gate V0.3 语义自洽：Gate 编号、exit code（0/1/2/3）、预算、停止条件、零写入证据、evidence 字段全部对齐；**R1 五裁定在 §2.6 与 RFC §2.4 / SPEC §0 完全一致**；**R2 scope-scission 在 §2.7 与 RFC §2.6 / SPEC §0.2 完全一致（PR-2 superseded / out-of-scope、预算永久废弃、仅保留盘后/历史 trade_date 可复现的 sector read-path 验证）**。
+- 与 RFC-03-014-p3a-readonly-gate V0.5、SPEC-03-014-p3a-readonly-gate V0.4 语义自洽：Gate 编号、exit code（0/1/2/3）、预算、停止条件、零写入证据、evidence 字段全部对齐；**R1 五裁定在 §2.6 与 RFC §2.4 / SPEC §0 完全一致**；**R2 scope-scission 在 §2.7 与 RFC §2.6 / SPEC §0.2 完全一致（PR-2 superseded / out-of-scope、预算永久废弃、仅保留盘后/历史 trade_date 可复现的 sector read-path 验证）**。
 - 与主 RFC/SPEC-03-014（§6.2 / §13.1 / §14.4.5 / §15.8）一致：继承零持久化副作用原则与 B2 冻结证据（offline stub → 本链为 Pascal 授权的一次受控 live-read；`endpoint_unreachable` 时由 Pascal 决定单变量网络诊断）。**R2：受控 live-read 授权已随 PR-2 一并废弃（§2.7），B2 冻结证据仍为历史事实。**
 - 与 P3-A RFC/SPEC V0.2 一致：`name_em` 为唯一共享主 endpoint；`rank_em` 不存在；`cons_em` 非主数据源、本链禁止。**R2：endpoint 裁定保留为历史事实；PR-2 不得执行（§2.7）。**
 - 与主 DESIGN-03-014 §15.x 的关系：复用其 T4 工具链（audit-secret/preflight-mongo CLI、SecretVerifier、LegacyConfigResolver、PreflightRunner、LedgerBlock、Sanitizer）；主 DESIGN §15.14.2 endpoint 表（cons_em/rank_em）为 V0.2 前内容，本链以 P3-A V0.2 裁定覆盖（不修改主 DESIGN）。
@@ -489,6 +493,7 @@ overall:
 
 | 版本 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
+| V0.4 | 2026-08-07 | **R1 复核确认（本卡 `t_76db1800`）**：确认 R1 五裁定已编码（§2.6）并与 RFC §2.4 / SPEC §0 同步；stat 复核两份不合规 evidence 已删除（§7.1 F1 删除分支满足），repo/docs 无不合规副本；补充历史事实——PR-2 `name_em` 唯一一次受控 smoke 由并行卡 `t_91ffe99e`（Pascal 重新授权）执行为 `provider-unavailable-frozen`（§2.7 R2 永久废弃语义不变）；developer Fix 精确目标/allowlist 保持（§7.1 F1/F2/F3），拒绝以文档说明替代实际脱敏修复；另修 §2.3 表格 code span 裸竖线（`LegacyConfigResolver` 联合类型改为 `Optional[LegacyConfigResolver]`，P-2 门禁） | YQuant-Principal |
 | V0.3 | 2026-08-04 | **R2 Scope-Scission（本卡 `t_51c36693`）**：Pascal 2026-08-04 范畴裁定 `name_em` 实时板块排行移出 Phase 3 目标（新增 §2.7，与 RFC §2.6 / SPEC §0.2 逐项一致）——PR-2 预算**永久废弃**、不得 retry / replacement probe / 替代 endpoint / 实时 refresh；`t_55d44505` / `t_81432128` 标记 superseded / historical evidence；P3-A 仅保留盘后/历史、按 trade_date 可复现的 sector read-path 验证（无实时 Provider 调用）；PR-2 历史结果（ProviderUnavailable + netprobe 越界）保留为历史事实、不作生产能力失败或 recovery 依据。§1 / §2.6（补 R2 注）/ §3 / §6（整章）/ §7（§7.4 整节，§7 补 R2 注）/ §8（V-1/V-2/V-3/A-1）/ §9 / §10（D-3/D-7 标注，新增 D-9）/ §11（OQ-GATE-1/2/3 superseded、OQ-GATE-4 闭合）/ §12 声明 全部对齐 R2；PR-0/PR-1 契约未被动摇 | YQuant-Principal |
 | V0.2 | 2026-08-04 | R1 契约修订：① 三集合明示为 designated historical baseline（presence 非 PR-1 FAIL，禁止枚举陌生集合名）；② PR-0 外部输出收敛为 single aggregate verdict + generic source-kind + generic error-class（禁止逐 key 名称/状态/password marker/路径）；③ 既有两份 gitignored evidence 定为不合规本地工件，developer Fix 仅删除/替换为合规聚合版；④ PR-1 不可重放，PR-2 预算未消耗（actual_calls=0），仅 Fix+Verify+Review 通过后另立 one-call continuation；⑤ file-declared / runtime env absent = conditional，非 secret 值有效性或生产授权；⑥ §7 改写为 R1 后续编排，§8 增 V-9~V-12 | YQuant-Principal |
 | V0.1 | 2026-08-04 | 初始创建：P3-A Step-4 PR-0/PR-1/PR-2 受控只读 Gate 的执行编排、已核验入口、状态机、env 白名单、预算、脱敏 schema、fail-stop、T4 Verify 分工 | YQuant-Principal |

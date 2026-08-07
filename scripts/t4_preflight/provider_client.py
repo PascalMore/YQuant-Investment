@@ -353,11 +353,20 @@ class AKShareSmokeClient:
         upstream endpoint is
         ``akshare.stock_individual_fund_flow(stock=..., market=...)``
         and the caller-side :func:`FieldMapper.compare` aligns the
-        P3-B canonical expected subset (9 zh fields: 日期、股票代码、
+        G-CF-LIVE matching-input set (9 zh column names: 日期、股票代码、
         收盘价、涨跌幅 + 主力/超大单/大单/中单/小单净流入-净额)
-        against the columns AKShare returns. The 9 fields are the
-        smoke contract subset, not the complete upstream schema
-        (13 columns, no 股票代码 column).
+        against the columns AKShare returns. These names are the
+        local matching-input contract for the unique
+        ``MATCH_RATIO_CONDITIONAL=0.70`` decision — NOT a doc-frozen
+        canonical field mapping. The authoritative (inferred, NOT
+        live-read verified) canonical table is DESIGN §4.2.2 /
+        §15.14.1 ``flow.capital_flow_daily`` (English names
+        ``main_net_inflow`` etc., includes ratio/margin, no
+        收盘价/涨跌幅, no ``-净额`` suffix). The 9-field set is a
+        matching input subset, not the complete upstream schema
+        (akshare 1.17.54 static: 13 columns, no 股票代码 column;
+        the DESIGN table lists 股票代码 only as the inferred
+        ``symbol`` source column).
         """
         if not live:
             return SmokeCallResult(

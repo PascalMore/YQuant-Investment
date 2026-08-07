@@ -7,12 +7,12 @@
 | 状态 | Draft |
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-08-04 |
-| 最后更新 | 2026-08-04 |
-| 版本号 | V0.3 |
-| 来源 RFC | RFC-03-014-p3a-readonly-gate（V0.4） |
+| 最后更新 | 2026-08-07 |
+| 版本号 | V0.4 |
+| 来源 RFC | RFC-03-014-p3a-readonly-gate（V0.5） |
 | 关联 RFC | RFC-03-014（Phase 3 主 RFC，V0.26）、RFC-03-014-p3a-sector-provider-activation（V0.2）、RFC-03-007（Unified Data Layer 总纲）、RFC-03-012（Phase 1D Provider 激活模式参考） |
 | 关联 SPEC | SPEC-03-014（Phase 3 主 SPEC，V0.26） |
-| 关联 Design | DESIGN-03-014（Phase 3 设计 V0.33，§15.x T4 preflight 工具链）；历史 DESIGN-03-014-p3a-sector-provider-activation（fake-only，不得重新激活）；关联 DESIGN-03-014-p3a-readonly-gate（V0.3） |
+| 关联 Design | DESIGN-03-014（Phase 3 设计 V0.33，§15.x T4 preflight 工具链）；历史 DESIGN-03-014-p3a-sector-provider-activation（fake-only，不得重新激活）；关联 DESIGN-03-014-p3a-readonly-gate（V0.4） |
 | 目标模块 | unified_data（`skills/data/unified_data/`）+ t4_preflight（`scripts/t4_preflight/`） |
 | 适配 Agent | YQuant-Principal（T2 Design）、YQuant-Developer-Engineer（T3 controlled execution，仅授权后）、YQuant-Test-Engineer（Verify） |
 
@@ -34,6 +34,7 @@
   - **既有两份 gitignored evidence（`docs/rfc/03_data/smoke_reports/audit-secret-20260804.yaml`、`docs/rfc/03_data/smoke_reports/preflight-mongo-20260804.yaml`）为不合规本地工件**：developer Fix 仅删除或替换为合规聚合版；审计事实保留在 Kanban，不复制不合规内容到 repo/docs。
   - **PR-1 不可重放**（既有执行 `mongo_calls=2`、`write_operations=0` 已冻结）；**PR-2 预算未消耗**（`actual_calls=0`），仅 Fix + 独立 Verify + Review 通过后另立 one-call continuation。**R2：one-call continuation 永久废弃（§0.2），PR-2 预算不再消耗。**
   - **file-declared / runtime env absent = conditional**，不等价于 secret 值有效性或生产授权。
+  - **R1 复核确认（2026-08-07，本卡 `t_76db1800`）**：上述五裁定已编码并与 RFC §2.4 / DESIGN §2.6 同步；stat 复核两份不合规 evidence（`audit-secret-20260804.yaml` / `preflight-mongo-20260804.yaml`）已删除（Fix-1 删除分支满足，§8.1）；补充历史事实——PR-2 `name_em` 唯一一次受控 smoke 由并行卡 `t_91ffe99e`（Pascal 重新授权）执行为 `provider-unavailable-frozen`，R2 永久废弃语义不变（§0.2）。
 
 ### 0.1 本 SPEC 不重复定义的契约
 
@@ -256,6 +257,8 @@ T2 Design（由本卡后续阶段创建）必须交付：
 | Fix-2 | 审计 SecretVerifier / audit-secret CLI / PreflightRunner 的**输出与报告序列化路径**，确保外部输出不再出现逐 key 名称/状态/password marker/路径（对应 F-PR0-005/009/010、F-PR1-006/008/009/010 R1 契约） | 仅 `scripts/t4_preflight/` 只读 + `docs/rfc/03_data/smoke_reports/` 允许路径；无真实 I/O、无 Git 写 |
 | Fix-3 | **不重跑 PR-1**（`mongo_calls=2`、`write_operations=0` 已冻结）；不重跑 PR-0 live probe（纯本地 stat/probe 可重跑仅当 Pascal 批准，默认不做） | 禁止 Mongo/Provider/network；无 PR-2 执行 |
 
+> **R1 复核确认（`t_76db1800`，2026-08-07）**：本节 Fix-1/Fix-2/Fix-3 为 developer Fix 卡的精确目标与 allowlist。stat 复核：Fix-1 目标两份 evidence 已删除（删除分支满足），repo/docs 无不合规副本；F2 输出面审计、F3 不重放约束仍由 developer Fix 卡执行。**文档说明不替代实际脱敏修复。**
+
 **Fix 完成后流程**：fresh Verify（T4）→ Review（T5）→ 均通过后，才可新建**单独的 one-call PR-2 continuation**（预算 `provider_attempts=1`、`actual_calls≤1` 未消耗，见 §3.3）。**本卡与 Fix 卡均不得顺带执行 PR-2。** **R2：one-call PR-2 continuation 永久废弃（§0.2）——PR-2 预算不再消耗，本句为历史编排，不得执行。**
 
 ---
@@ -283,6 +286,7 @@ T2 Design（由本卡后续阶段创建）必须交付：
 
 | 版本 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
+| V0.4 | 2026-08-07 | **R1 复核确认（本卡 `t_76db1800`）**：确认 R1 五裁定已编码（§0）并与 RFC §2.4 / DESIGN §2.6 同步；stat 复核两份不合规 evidence 已删除（Fix-1 删除分支满足，§8.1）；补充历史事实——PR-2 `name_em` 唯一一次受控 smoke 由并行卡 `t_91ffe99e`（Pascal 重新授权）执行为 `provider-unavailable-frozen`（§0.2 R2 永久废弃语义不变）；Fix-1/2/3 精确目标与 allowlist 保持（§8.1），拒绝以文档说明替代实际脱敏修复 | YQuant-Principal |
 | V0.3 | 2026-08-04 | **R2 Scope-Scission（本卡 `t_51c36693`）**：Pascal 2026-08-04 范畴裁定 `name_em` 实时板块排行移出 Phase 3 目标（新增 §0.2，与 RFC §2.6 / DESIGN §2.7 逐项一致）——PR-2 预算**永久废弃**、不得 retry / replacement probe / 替代 endpoint / 实时 refresh；`t_55d44505` / `t_81432128` 标记 superseded / historical evidence；P3-A 仅保留盘后/历史、按 trade_date 可复现的 sector read-path 验证（无实时 Provider 调用）；PR-2 历史结果（ProviderUnavailable + netprobe 越界）保留为历史事实、不作生产能力失败或 recovery 依据。§0 术语 / §2.1 / §2.2 / §3.1 / §3.3 / §4.1 / §4.2 / §5 / §6 / §7 / §8（含 §8.1）中 PR-2 可执行契约均标记 superseded / out-of-scope（R2）；§9 OQ-GATE-1/2/3 标记 superseded、OQ-GATE-4 已闭合（指向 R1）；§10 声明更新 Gate pass 语义 | YQuant-Principal |
 | V0.2 | 2026-08-04 | R1 契约修订：① 三集合明示为 designated historical baseline（presence 非 PR-1 FAIL，禁止枚举陌生集合名）；② PR-0 外部输出收敛为 single aggregate verdict + generic source-kind + generic error-class（禁止逐 key 名称/状态/password marker/路径）；③ 既有两份 gitignored evidence 定为不合规本地工件，developer Fix 仅删除/替换为合规聚合版；④ PR-1 不可重放，PR-2 预算未消耗（actual_calls=0），仅 Fix+Verify+Review 通过后另立 one-call continuation；⑤ file-declared / runtime env absent = conditional，非 secret 值有效性或生产授权；⑥ §8.1 新增 R1 developer Fix 交接 | YQuant-Principal |
 | V0.1 | 2026-08-04 | 初始创建：P3-A Step-4 PR-0/PR-1/PR-2 受控只读 Gate 的可执行契约（allowlist、集合比对、预算、零写入、证据 schema、验收矩阵） | YQuant-Principal |

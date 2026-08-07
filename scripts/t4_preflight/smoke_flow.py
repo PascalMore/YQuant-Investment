@@ -156,17 +156,30 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return p
 
 
-# P3-B S1 R3 P0 canonical expected field set for
-# ``flow.capital_flow_daily`` — 9 items (日期、股票代码、收盘价、
-# 涨跌幅 + 主力/超大单/大单/中单/小单净流入-净额). This is the
-# smoke mapping / fixture contract subset (SPEC §3.2 footnote /
-# DESIGN §R3.9), NOT the complete ``stock_individual_fund_flow``
-# upstream schema, which returns 13 columns and exposes no
-# 股票代码 column. All 净额 columns are positive=net-inflow per
-# SPEC §3.2 footnote. The historical PR-3 expected set was 8
-# fabricated English names (date / close / pct_chg / *_net_inflow)
-# that the upstream never exposes — that was the schema-mismatch
-# source for PR-3.
+# P3-B S1 R3 P0 G-CF-LIVE matching-input field set for
+# ``flow.capital_flow_daily`` — 9 zh column names (日期、股票代码、
+# 收盘价、涨跌幅 + 主力/超大单/大单/中单/小单净流入-净额).
+#
+# (a) These 9 zh names are this tool's G-CF-LIVE *matching input
+#     contract*: the exact names fed into
+#     ``FieldMapper.compare`` / the ``MATCH_RATIO_CONDITIONAL=0.70``
+#     decision (config.py) — NOT a doc-frozen canonical field
+#     mapping.
+# (b) The authoritative doc anchor is the DESIGN §4.2.2 / §15.14.1
+#     ``flow.capital_flow_daily`` inferred mapping table: canonical
+#     English names (``main_net_inflow`` / ``super_large_net_inflow``
+#     etc.), includes ratio/margin rows, no 收盘价/涨跌幅, no
+#     ``-净额`` suffix, NOT live-read verified. The mapping input
+#     mirrors the zh column names AKShare actually returns; canonical
+#     materialization uses the DESIGN inferred table instead.
+# (c) "13 columns, no 股票代码 column" is an akshare 1.17.54 static
+#     source fact (stock_fund_em.py static check); the DESIGN table
+#     only treats 股票代码 as the inferred ``symbol`` source column.
+# All 净额 columns are positive=net-inflow (DESIGN §3
+# ``CapitalFlowRecord`` 正=净流入). The historical PR-3 expected set
+# was 8 fabricated English names (date / close / pct_chg /
+# *_net_inflow) that the upstream never exposes — that was the
+# schema-mismatch source for PR-3.
 _EXPECTED_FLOW_FIELDS: tuple[str, ...] = (
     "日期",
     "股票代码",

@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${YQUANT_WORKSPACE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 YINGLONG_DIR="${YQUANT_YINGLONG_DIR:-$HOME/workspace/yq-yinglong}"
+LLM_WIKI_DIR="${YQUANT_LLM_WIKI_DIR:-$HOME/workspace/llm-wiki_obsidian_hermes_r0b0tlabbra1n}"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M')
 
 # ─────────────────────────────────────────────────────
@@ -103,6 +104,15 @@ else
     YQ_LOG="$REPO_DIR/logs/system/auto-push"
     mkdir -p "$YQ_LOG"
     echo "[$TIMESTAMP] Yinglong not found at $YINGLONG_DIR, skipped" >> "$YQ_LOG/auto_push_$(date +%Y%m%d).log"
+fi
+
+# ── llm-wiki (skip silently if absent) ──
+if [ -d "$LLM_WIKI_DIR/.git" ]; then
+    push_repo "$LLM_WIKI_DIR" "llm-wiki"
+else
+    YQ_LOG="$REPO_DIR/logs/system/auto-push"
+    mkdir -p "$YQ_LOG"
+    echo "[$TIMESTAMP] llm-wiki not found at $LLM_WIKI_DIR, skipped" >> "$YQ_LOG/auto_push_$(date +%Y%m%d).log"
 fi
 
 echo "[$TIMESTAMP] All done" >> "$REPO_DIR/logs/system/auto-push/auto_push_$(date +%Y%m%d).log"
