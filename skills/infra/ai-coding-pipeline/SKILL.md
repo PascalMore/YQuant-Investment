@@ -220,6 +220,70 @@ AI Coding Pipeline 当前提供 **三种流程模式**，orchestrator 必须先�
 
 > **衔接机制同源度**：Full Flow（衔接 0 次进程层主动）→ **Quick Flow V1.2（衔接 0 次进程层主动，与 Full Flow 同源）** → Light Flow（衔接 1 次进程层主动，Intake 同步）。Quick Flow V1.2 之前是 3 次进程层主动，**2026-06-30 yinglong 5h44m 断链事故后已对齐 Full Flow**。根因分析 + 故障源可达性矩阵 + Q-LINK 契约详见 `references/quick-flow-handoff-mechanism.md`。
 
+## 生产部署/上线/模式切换类任务的状态精简准则（2026-08-19 Pascal 新增）
+
+**核心原则**：当任务涉及生产部署、上线切换、`_EXECUTION_MODE`/其他生产常量切换、capability install、binding 替换等场景时，**状态机精简到 1-2 个状态**，门禁精简到 ≤3 项，**不强制走 SPEC/RFC/DESIGN 三层文档 + P1-P6 阶段门禁**。
+
+### 反例：RFC-18-016 §3.1 的 4 状态机（已禁止照搬）
+
+```text
+contract-ready → artifact-ready → runtime-ready → execution-ready
+                  （4 状态机 + P1-P6 阶段门禁 = 实际 8-10 张卡才能完成单点切换）
+```
+
+这种结构对生产部署/上线/切换类任务是**过度流程化**，成本 8-10 张卡却只换一行常量值。
+
+### 精简准则（≤2 状态、≤3 门禁）
+
+| 任务类型 | 状态数 | 状态名 | 门禁 |
+|---|---|---|---|
+| **生产部署 / 模式切换 / capability install** | **1** | `preflight-ready` | ① fixture 桥完整 ② 真实 I/O 受 O_EXCL 等原子原语保护 ③ 文档同步 SPEC denylist 即可 |
+| **真实 execute_once / execute-write** | **2** | `preflight-ready` + `execution-ready` | `preflight-ready` + ① single-binding active ② Pascal fresh 一次性授权 |
+| **legacy retirement / observation phase** | **2** | `verify-clean` + `retired` | ① 健康证据只读 ② legacy invocation evidence = 0 |
+
+### 走法选择（替换 SPEC-18-016 §3.1 决策树）
+
+```
+生产部署/上线/模式切换任务到达
+   │
+   ├─ 仅修改常量（如 _EXECUTION_MODE=execute）？
+   │    └─ 是 → **Light Flow**（1-2 文档 + 1-2 卡）
+   │            （不再走 P1-P6 阶段，不创建 SPEC/DESIGN 三件套）
+   │
+   ├─ 真实 execute_once（涉及 capability install / 单次写入）？
+   │    └─ 是 → **Quick Flow**（RFC+SPEC 合并 1 卡 + Implement + Verify）
+   │            （简化独立 Tester/Reviewer 为 Verify 内嵌两个独立角色确认）
+   │
+   └─ 跨模块架构变更？
+        └─ 是 → **Full Flow**（保留原 6 卡）
+```
+
+### 何时仍需要完整三档
+
+- 跨 ≥2 个模块的架构变更
+- 涉及交易/风控/真实资金的真实写
+- 跨 ≥3 个 deny list 项的变更
+
+### 历史教训（2026-08-19 B1/T5 后卡链）
+
+- **症状**：B1 完成后用户要切换 `_EXECUTION_MODE=dry_run → execute`，orchestrator 默认按 SPEC-18-016 §3.1 的 4 状态机 + P1-P6 阶段门禁，估算需 RFC-18-019 + SPEC-18-019 + DESIGN-18-022（3 文档）+ T1-T5（5 卡）= **8 张卡才能切换一行常量**。
+- **根因**：状态机本身过度细化（4 状态 + 6 阶段门禁），把"切换常量"与"真实部署"混为一谈。
+- **修复**：本节准则将单点切换拆为 Light Flow（1-2 卡），保留独立 Tester/Reviewer 仅在真实 execute_once 时出现。
+
+### 配套规则
+
+- **状态名要少**：≤2 个，禁止 `contract-ready / artifact-ready / runtime-ready / execution-ready` 这类四段命名
+- **门禁要少**：每状态 ≤3 项检查，禁止 P1-P6 的 6 阶段累加
+- **单步落地**：常量切换 = 1 卡，不再拆 IMPLEMENT/VERIFY/REVIEW/CLOSEOUT 四卡
+- **denylist 同步**：每次简化必须在原 SPEC（如 SPEC-18-016）的 §10 显式同步新增豁免，避免下一次 orchestrator 又按旧规则展开
+
+### 与三流程定位（Full/Quick/Light）的关系
+
+本节**替换** §"三流程定位"中的"Full Flow 适用于高风险、跨模块、交易/风控"边界 ——
+**生产部署/上线/模式切换类任务**即使属于"高风险"，也按本节走 Light Flow 起步，**除非**额外触发"完整三档"条件。
+
+---
+
 ## 编排顺序：Quick Flow
 
 Quick Flow 5 阶段（4 个 Kanban task），衔接机制与 Full Flow 同源：Intake 阶段一次性预创建 T1-T4，由 Kanban DB parent links + dispatcher promote 自动衔接，**不依赖 orchestrator 串行调度**（避免 2026-06-30 yinglong 5h44m 断链事故，P-12）。
