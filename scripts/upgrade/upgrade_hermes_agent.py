@@ -1832,9 +1832,33 @@ def print_dry_run(config: UpgradeConfig, state: RepoState, *,
         print(f"    - {f}")
     if len(state.dirty_files) > 20:
         print(f"    ... ({len(state.dirty_files) - 20} more)")
+
+    # V2.2: compute HEAD..upstream/main gap up-front so we can both print it
+    # here and reuse it for the resolve-target classification below.
+    # Only meaningful when target is upstream/main (tags/branches aren't comparable).
+    # "behind upstream" = commits upstream/main has that HEAD doesn't = HEAD..upstream/main.
+    behind_upstream = -1
+    if config.version_ref == "upstream/main":
+        r_behind = git(["rev-list", "--count", "HEAD..upstream/main"],
+                       repo=config.repo, verbose=config.verbose)
+        if r_behind.exit_code == 0:
+            try:
+                behind_upstream = int(r_behind.stdout.strip())
+            except ValueError:
+                behind_upstream = -1
+
     print(f"  local-only commits: {len(state.local_only_commits)}")
     for c in state.local_only_commits[:10]:
         print(f"    - {c}")
+    # V2.2: surface the upstream gap (P-5 trap motivation: --version 'Up to date' is blind)
+    if config.version_ref == "upstream/main":
+        if behind_upstream == 0:
+            print(f"  behind upstream/main: 0  (HEAD 已追平 upstream)")
+        elif behind_upstream > 0:
+            print(f"  behind upstream/main: {behind_upstream} commit(s)  "
+                  f"(--version 自报 'Up to date' 不可信；本字段为 truth source)")
+        else:
+            print(f"  behind upstream/main: (无法读取，本地无 upstream/main 引用)")
     # V2 信息
     print(f"  preserve_features: {'enabled' if config.preserve_features else 'disabled'}")
     if config.preserve_features:
@@ -1886,10 +1910,14 @@ def print_dry_run(config: UpgradeConfig, state: RepoState, *,
     if target_sha:
         print(f"  5. resolve target   -> {target_sha}")
         head = state.pre_head
+        # Three-branch classification must mirror classify_git_relation() to avoid
+        # misleading dry-run output (target is ancestor of head => already-up-to-date).
         if head == target_sha:
             print(f"     => merge_mode: already-up-to-date")
         elif _is_ancestor(config.repo, head, target_sha, [], config.verbose):
             print(f"     => merge_mode: ff-only  (git merge --ff-only {target_sha})")
+        elif _is_ancestor(config.repo, target_sha, head, [], config.verbose):
+            print(f"     => merge_mode: already-up-to-date  (HEAD 已含 target)")
         else:
             print(f"     => merge_mode: merge    (本地有自有 commit，A+ 策略)")
     else:

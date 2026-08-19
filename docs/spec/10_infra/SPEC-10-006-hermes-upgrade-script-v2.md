@@ -7,10 +7,10 @@
 | 状态 | Accepted |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-08 |
-| 最后更新 | 2026-07-30 |
-| 版本号 | V2.1 |
+| 最后更新 | 2026-08-20 |
+| 版本号 | V2.2 |
 | 来源 RFC | RFC-10-006-hermes-upgrade-script-v2 |
-| 继承 SPEC | SPEC-10-005-hermes-auto-upgrade, SPEC-10-006 V2.0 |
+| 继承 SPEC | SPEC-10-005-hermes-auto-upgrade, SPEC-10-006 V2.0, V2.1 |
 | 关联 Design | DESIGN-10-006-hermes-upgrade-script-v2 |
 | 目标模块 | 10_infra / Hermes 运维自动化 |
 
@@ -325,6 +325,25 @@ def protect_local_commits(config, state, plan, manifest):
 - `fetch_remotes()` 必须在 entry 处检查 `config.dry_run` 并跳转到 `print_dry_run_fetch_plan()`。
 - `protect_local_commits()` 在 dry-run 中只打印计划，不执行 push。
 
+### 3.9 F2-016b Dry-run merge_mode 分类与 behind-upstream 显示（V2.2 增量）
+
+**背景**：2026-08-20 实战升级（v0.19.0 → v0.20.4，4277 commits）发现两个 dry-run 输出瑕疵：
+
+1. **`print_dry_run()` merge_mode 漏判"target 是 head 祖先"分支**——`head == target` 和 `head is ancestor of target` 两条分支覆盖了 `ff-only` 与"head 与 target 完全无关"，但当 `target is ancestor of head`（HEAD 已包含 target，例如手工 merge 之后）时，dry-run 错误显示 `merge_mode: merge`，与 `classify_git_relation()` 真实逻辑（返回 `already-up-to-date`）不一致。
+2. **dry-run 不显示 HEAD 与 upstream/main 的真实差距**——`hermes --version` 的 "Up to date" 对 fork 失明（只对比 origin/main，不看 upstream；P-5 陷阱），用户从脚本输出看不到真实 commit 距离。
+
+**新增契约（F2-016b）**：
+
+- **F2-016b-1**：`print_dry_run()` 在 resolve target 后必须做三分支判断，与 `classify_git_relation()` 逻辑对齐：
+  - `head == target_sha` → `already-up-to-date`
+  - `head is ancestor of target_sha` → `ff-only`
+  - `target_sha is ancestor of head` → `already-up-to-date  (HEAD 已含 target)` ← V2.2 新增
+  - 其他（diverged）→ `merge`
+- **F2-016b-2**：当 `config.version_ref == "upstream/main"` 时，dry-run 必须额外显示 `behind upstream/main: N commit(s)`（使用 `git rev-list --count HEAD..upstream/main`），其中 `N=0` 标注"HEAD 已追平 upstream"，`N>0` 时附带"truth source；--version 自报不可信"提示以对抗 P-5 陷阱。tag/branch target 不显示此字段（无对比意义）。
+- **F2-016b-3**：`behind_upstream` 计算必须 best-effort，rev-list 失败时降级为 `(无法读取，本地无 upstream/main 引用)`，不阻塞 dry-run。
+
+**不引入**：新增第三方依赖、git config 写入、auto retry、auto push。
+
 ## 4. 数据与接口契约
 
 ### 4.1 新增/修改常量
@@ -498,6 +517,17 @@ def fetch_remotes(config, manifest, target_ref):
 | V2.1-UT-015 | manifest fetch_attempts 结构 | 验证 manifest 产出 | 字段名、类型、必填符合 §3.6 表 |
 | V2.1-UT-016 | protect_local_commits: feature branch | temp repo feature-branch, mock head 不在 origin/<branch> | `push -u origin <feature-branch>` 被调用 |
 | V2.1-UT-017 | protect_local_commits: main branch | temp repo main, mock head 不在 origin/main | `push -u origin main` 被调用（等价 V2.0） |
+
+### 8.3 V2.2 新增测试（F2-016b）
+
+| 编号 | 类型 | 输入 | 断言 |
+|---|---|---|---|
+| V2.2-UT-001 | dry-run merge_mode: target is ancestor of head | HEAD 含 1 个本地 commit，target 是其祖先 | 输出含 `merge_mode: already-up-to-date  (HEAD 已含 target)`，**不含** `merge_mode: merge` |
+| V2.2-UT-002 | dry-run merge_mode: head is ancestor of target | upstream 5 commit 领先，HEAD 未拉取 | 输出 `merge_mode: ff-only` |
+| V2.2-UT-003 | dry-run merge_mode: diverged | local + upstream 各 1 commit 独立推进 | 输出 `merge_mode: merge` |
+| V2.2-UT-004 | behind upstream: 已追平 | HEAD 领先 upstream 3 commit | 输出 `behind upstream/main: 0  (HEAD 已追平 upstream)` |
+| V2.2-UT-005 | behind upstream: 落后 | upstream 5 commit 领先，HEAD 未拉取 | 输出 `behind upstream/main: 5 commit(s)`，含 `truth source` 提示 |
+| V2.2-UT-006 | behind upstream: tag target 不显示 | `version_ref=v2026.7.1` | 输出**不包含** `behind upstream/main` |
 | V2.1-UT-018 | protect_local_commits: HEAD 已在 origin | mock merge-base 返回 0 | skip push |
 | V2.1-UT-019 | fetch_remotes: target-aware 集成 | temp bare repo, 检查远程 fetch 命令参数 | `--no-tags upstream main` 出现在命令日志 |
 | V2.1-REG-001 | V1 regression | `pytest tests/scripts/test_upgrade_hermes_agent.py` | 全部通过 |

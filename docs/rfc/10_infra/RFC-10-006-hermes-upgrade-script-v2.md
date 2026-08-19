@@ -7,18 +7,19 @@
 | 状态 | Accepted |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-08 |
-| 最后更新 | 2026-07-30 |
-| 版本号 | V2.1 |
+| 最后更新 | 2026-08-20 |
+| 版本号 | V2.2 |
 | 所属模块 | 10_infra（基础设施 / Hermes 运维自动化） |
 | 继承 RFC | RFC-10-005-hermes-auto-upgrade |
 | 关联 SPEC | SPEC-10-006-hermes-upgrade-script-v2 |
 | 关联 Design | DESIGN-10-006-hermes-upgrade-script-v2 |
-| 标签 | #infra #hermes #upgrade #ops #transport-resilience |
+| 标签 | #infra #hermes #upgrade #ops #transport-resilience #dry-run-output |
 
 ## 版本历史（Changelog）
 
 | 版本号 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
+| V2.2 | 2026-08-20 | Dry-run 输出正确性增量：修复 merge_mode 三分支漏判（target is ancestor of head → already-up-to-date），新增 behind-upstream 真实差距显示（对抗 P-5 陷阱：hermes --version 在 fork 上失明） | YQuant-Principal |
 | V2.1 | 2026-07-30 | 增补 Git 传输韧性增强：target-aware fetch、分类瞬态错误有限重试、HTTP/1.1 命令级 fallback、manifest audit、feature-branch 保护修正、dry-run 零网络 | YQuant-Codex-Principal |
 | V2.0 | 2026-07-08 | 在 RFC-10-005 V1.0 基础上新增非 main 分支、feature commit 保护、Pascal fork 私有 patch manifest 核对 | YQuant-Codex-Principal |
 
@@ -72,6 +73,11 @@ V2.0（2026-07-08）在 V1.0 基础上解决了 3 个限制：
 5. **Feature branch 保护修正**：按当前分支验证可达性/protective push，不 force push；不在 feature branch 上仅 `push origin main` 后声称 HEAD 已保护。
 6. **Dry-run 零网络**：默认 dry-run 不发网络、不 sleep、不写 Git ref。
 
+**V2.2 增量契约**（延续 2.1 全部约束，dry-run 输出正确性）：
+
+7. **merge_mode 三分支分类**：dry-run 中 `merge_mode` 显示必须与 `classify_git_relation()` 真实逻辑对齐，含 `target is ancestor of head → already-up-to-date` 分支。
+8. **behind upstream 真实差距显示**：当 `version_ref=upstream/main` 时，dry-run 必须额外显示 `HEAD..upstream/main` 的 commit 距离，作为 `hermes --version` 在 fork 上失明时的 truth source。tag/branch target 不显示。
+
 ### 2.2 Non-Goals
 
 - 不修改 Hermes Agent upstream 源码。
@@ -81,6 +87,7 @@ V2.0（2026-07-08）在 V1.0 基础上解决了 3 个限制：
 - 不改变 V2.0 已有 `--branch`、`--preserve-features`、`--patches-manifest` 行为和默认值。
 - 不关闭用户代理或修改 `/etc/environ` / `/etc/profile`。
 - 不实现 `http.postBuffer`、`http.lowSpeedLimit` 等非传输错误相关配置的自动设置。
+- V2.2 不引入自动 fetch upstream 替用户检查（dry-run 仍不主动 fetch）；behind upstream 仅在本地 `upstream/main` ref 已存在时计算。
 
 ## 3. 总体方案
 

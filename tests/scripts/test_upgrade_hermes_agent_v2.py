@@ -1217,3 +1217,192 @@ def test_v21_fetch_remotes_target_aware_tag(ua, tmp_path):
     assert "refs/tags/v2026.7.1:refs/tags/v2026.7.1" in upstream_cmd, (
         f"V2.1 tag fetch must use precise refspec: {upstream_cmd}"
     )
+
+
+# ---------------------------------------------------------------------------
+# V2.2: dry-run output correctness fixes (post-upgrade-2026-08-20)
+#   - merge_mode three-branch classification (head == target / head is ancestor /
+#     target is ancestor / diverged); was missing the "target is ancestor of head"
+#     branch and displayed "merge" for already-up-to-date.
+#   - "behind upstream/main" gap surfaced in dry-run when version_ref=upstream/main
+#     so users see the real gap (Hermes --version is blind on a fork).
+# ---------------------------------------------------------------------------
+
+
+def _make_dryrun_repo(tmp_path):
+    """Create a repo with origin + upstream + upstream/main ref, ready for dry-run."""
+    upstream_bare = tmp_path / "upstream.git"
+    origin_bare = tmp_path / "origin.git"
+    work = tmp_path / "work"
+    _make_bare(upstream_bare)
+    _make_bare(origin_bare)
+    _make_repo(work, origin=origin_bare, upstream=upstream_bare)
+    _commit(work, "init")
+    _git(work, "push", "origin", "main")
+    _git(work, "push", "upstream", "main")
+    return work
+
+
+def test_v22_dry_run_target_is_ancestor_of_head_shows_already_up_to_date(ua, tmp_path, capsys):
+    """Regression: target already in HEAD (e.g. post-merge) must print
+    'already-up-to-date', not 'merge'. Confirmed during 2026-08-20 upgrade
+    where HEAD..upstream/main=0 but target_sha was an ancestor of HEAD."""
+    work = _make_dryrun_repo(tmp_path)
+    _commit(work, "feature commit", filename="feat.txt")
+    _git(work, "push", "origin", "main")
+    head = _git(work, "rev-parse", "HEAD").stdout.strip()
+
+    cfg = ua.UpgradeConfig(
+        repo=work, version_ref="upstream/main",
+        backup_dir=tmp_path, dry_run=True, restart=False,
+        push=False, rollback_manifest=None, yes=True, verbose=False,
+    )
+    state = ua.RepoState(
+        repo=work, branch="main", pre_head=head,
+        origin_url="", upstream_url="", install_method="git",
+        dirty_files=[], local_only_commits=[],
+        origin_main_sha=head,
+    )
+    rc = ua.print_dry_run(cfg, state)
+    captured = capsys.readouterr().out
+    assert rc == 0
+    assert "merge_mode: already-up-to-date  (HEAD 已含 target)" in captured, (
+        f"V2.2 dry-run must show 'already-up-to-date' when target is ancestor "
+        f"of HEAD. Got:\n{captured}"
+    )
+    assert "merge_mode: merge" not in captured
+
+
+def test_v22_dry_run_head_is_ancestor_shows_ff_only(ua, tmp_path, capsys):
+    """HEAD behind upstream => ff-only merge mode."""
+    work = _make_dryrun_repo(tmp_path)
+    head = _git(work, "rev-parse", "HEAD").stdout.strip()
+    # advance upstream
+    _commit(work, "upstream change")
+    _git(work, "push", "upstream", "main")
+    target = _git(work, "rev-parse", "HEAD").stdout.strip()
+    _git(work, "reset", "--hard", head)
+
+    cfg = ua.UpgradeConfig(
+        repo=work, version_ref="upstream/main",
+        backup_dir=tmp_path, dry_run=True, restart=False,
+        push=False, rollback_manifest=None, yes=True, verbose=False,
+    )
+    state = ua.RepoState(
+        repo=work, branch="main", pre_head=head,
+        origin_url="", upstream_url="", install_method="git",
+        dirty_files=[], local_only_commits=[], origin_main_sha=head,
+    )
+    ua.print_dry_run(cfg, state)
+    out = capsys.readouterr().out
+    assert "merge_mode: ff-only" in out
+
+
+def test_v22_dry_run_diverged_shows_merge(ua, tmp_path, capsys):
+    """Local + upstream both advanced => merge mode (diverged)."""
+    work = _make_dryrun_repo(tmp_path)
+    # local commits
+    _commit(work, "local change", filename="local.txt")
+    local_head = _git(work, "rev-parse", "HEAD").stdout.strip()
+    # upstream advances in a side clone
+    side = tmp_path / "side"
+    _make_repo(side, origin=tmp_path / "upstream.git")
+    _git(side, "pull", "origin", "main")
+    _commit(side, "upstream change", filename="up.txt")
+    _git(side, "push", "origin", "main")
+    _git(work, "fetch", "upstream", "main")
+
+    cfg = ua.UpgradeConfig(
+        repo=work, version_ref="upstream/main",
+        backup_dir=tmp_path, dry_run=True, restart=False,
+        push=False, rollback_manifest=None, yes=True, verbose=False,
+    )
+    state = ua.RepoState(
+        repo=work, branch="main", pre_head=local_head,
+        origin_url="", upstream_url="", install_method="git",
+        dirty_files=[], local_only_commits=["local change"], origin_main_sha=local_head,
+    )
+    ua.print_dry_run(cfg, state)
+    out = capsys.readouterr().out
+    assert "merge_mode: merge" in out
+
+
+def test_v22_dry_run_behind_upstream_shown_when_target_is_upstream_main(ua, tmp_path, capsys):
+    """V2.2: when version_ref=upstream/main, dry-run must print the real
+    HEAD..upstream/main gap (truth source for the P-5 'Up to date is blind' trap)."""
+    work = _make_dryrun_repo(tmp_path)
+    # local advanced 3 commits, upstream unchanged => HEAD has 3 ahead, 0 behind.
+    # This is the case where --version reports "Up to date" but HEAD isn't
+    # actually ahead of upstream main (it just contains it).
+    for i in range(3):
+        _commit(work, f"local {i}", filename=f"local{i}.txt")
+    head = _git(work, "rev-parse", "HEAD").stdout.strip()
+
+    cfg = ua.UpgradeConfig(
+        repo=work, version_ref="upstream/main",
+        backup_dir=tmp_path, dry_run=True, restart=False,
+        push=False, rollback_manifest=None, yes=True, verbose=False,
+    )
+    state = ua.RepoState(
+        repo=work, branch="main", pre_head=head,
+        origin_url="", upstream_url="", install_method="git",
+        dirty_files=[], local_only_commits=["local 0", "local 1", "local 2"],
+        origin_main_sha=head,
+    )
+    ua.print_dry_run(cfg, state)
+    out = capsys.readouterr().out
+    assert "behind upstream/main: 0" in out
+    assert "HEAD 已追平 upstream" in out
+
+
+def test_v22_dry_run_behind_upstream_shown_when_behind(ua, tmp_path, capsys):
+    """V2.2: when HEAD is behind upstream (upstream advanced 5 commits),
+    dry-run must show the gap with the P-5 disclaimer."""
+    work = _make_dryrun_repo(tmp_path)
+    head = _git(work, "rev-parse", "HEAD").stdout.strip()
+    # advance upstream via a side clone (cannot push + reset on work,
+    # because that would also roll back the local tracking of upstream/main)
+    side = tmp_path / "side"
+    _make_repo(side, origin=tmp_path / "upstream.git")
+    _git(side, "pull", "origin", "main")
+    for i in range(5):
+        _commit(side, f"upstream {i}", filename=f"up{i}.txt")
+        _git(side, "push", "origin", "main")
+    _git(work, "fetch", "upstream", "main")
+
+    cfg = ua.UpgradeConfig(
+        repo=work, version_ref="upstream/main",
+        backup_dir=tmp_path, dry_run=True, restart=False,
+        push=False, rollback_manifest=None, yes=True, verbose=False,
+    )
+    state = ua.RepoState(
+        repo=work, branch="main", pre_head=head,
+        origin_url="", upstream_url="", install_method="git",
+        dirty_files=[], local_only_commits=[], origin_main_sha=head,
+    )
+    ua.print_dry_run(cfg, state)
+    out = capsys.readouterr().out
+    assert "behind upstream/main: 5 commit(s)" in out
+    assert "truth source" in out
+
+
+def test_v22_dry_run_no_behind_upstream_for_tag_target(ua, tmp_path, capsys):
+    """V2.2: behind upstream/main is only shown for upstream/main target.
+    Tag targets shouldn't report the upstream-main gap (not comparable)."""
+    work = _make_dryrun_repo(tmp_path)
+    _git(work, "tag", "v2026.7.1")
+    head = _git(work, "rev-parse", "HEAD").stdout.strip()
+
+    cfg = ua.UpgradeConfig(
+        repo=work, version_ref="v2026.7.1",
+        backup_dir=tmp_path, dry_run=True, restart=False,
+        push=False, rollback_manifest=None, yes=True, verbose=False,
+    )
+    state = ua.RepoState(
+        repo=work, branch="main", pre_head=head,
+        origin_url="", upstream_url="", install_method="git",
+        dirty_files=[], local_only_commits=[], origin_main_sha=head,
+    )
+    ua.print_dry_run(cfg, state)
+    out = capsys.readouterr().out
+    assert "behind upstream/main" not in out

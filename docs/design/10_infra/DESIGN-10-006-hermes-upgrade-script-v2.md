@@ -7,11 +7,11 @@
 | 状态 | Accepted |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-08 |
-| 最后更新 | 2026-07-30 |
-| 版本号 | **V2.1** |
+| 最后更新 | 2026-08-20 |
+| 版本号 | **V2.2** |
 | 来源 RFC | RFC-10-006-hermes-upgrade-script-v2 |
 | 来源 SPEC | SPEC-10-006-hermes-upgrade-script-v2 |
-| 继承 Design | DESIGN-10-005-hermes-auto-upgrade, DESIGN-10-006 V2.0 |
+| 继承 Design | DESIGN-10-005-hermes-auto-upgrade, DESIGN-10-006 V2.0, V2.1 |
 | 目标脚本 | `scripts/upgrade/upgrade_hermes_agent.py` |
 | 流水线 | T1=t_8228a098, T2=t_ec0d709a, T3=t_cf586d51, T4=待创建, T5=待创建, T6=待创建 |
 
@@ -21,16 +21,20 @@
 |---|---|---|---|
 | V2.0 | 2026-07-08 | 基础 V2 设计：feature-branch、patch-manifest、branch override | YQuant-Codex-Principal |
 | V2.1 | 2026-07-30 | 增补 Git 传输韧性增强：target-aware fetch、classified retry、HTTP/1.1 fallback、manifest fetch_attempts audit、branch-aware protect push、dry-run 零网络 | YQuant-Codex-Principal |
+| V2.2 | 2026-08-20 | Dry-run 输出正确性增量（`print_dry_run()` 三分支 merge_mode + behind-upstream 真实差距显示），对抗 `hermes --version` 在 fork 上失明的 P-5 陷阱 | YQuant-Principal |
 
 ## 2. 设计摘要
 
 V2.1 在 V2.0 的安全升级主线之上做增量增强，不重写现有状态机。目标是让 Hermes 自动升级脚本在有代理/WSL 网络不稳定环境下仍能弹性完成 fetch。
+
+V2.2 是 V2.1 之后的 dry-run 输出正确性增量，**只动 `print_dry_run()` 函数内部**，不动 fetch/merge/install/restart/push 任何状态机。
 
 **核心设计理念**：
 1. **只动 fetch**：所有修改集中在 3 个函数 `fetch_remotes()` / `protect_local_commits()` / `print_dry_run()` 及 2 个新增函数 `classify_git_transport_failure()` / `run_fetch_with_transport_policy()`。
 2. **命令级隔离**：所有 HTTP/1.1 fallback 通过 `git -c http.version=HTTP/1.1` 实现，不写任何 git config。
 3. **有限脆弱**：最多 3 次 attempt，非瞬态错误立即 fail-stop，不掩盖真正问题。
 4. **可审计**：每次 attempt 的结构化元数据写入 manifest，不存原始 stderr 或 secret。
+5. **V2.2 新增：dry-run 显示与真实逻辑对齐**：merge_mode 三分支分类必须与 `classify_git_relation()` 输出一致；behind upstream/main 显示作为 `--version` 失明时的 truth source。
 
 ### 2.1 精确文件矩阵（T3 Implement 允许的修改范围）
 
@@ -425,6 +429,58 @@ dry-run 模式下 `run_fetch_with_transport_policy()` **不可被调用**。验�
 - `fetch_remotes()` 入口检查 `config.dry_run` → return（见 §8.1）
 - `protect_local_commits()` 在 `print_dry_run()` 内不执行（dry-run 在 S3 前已返回）
 - 任何 subprocess（git fetch / git push）不应在 `--dry-run` 中出现
+
+### 9.3 V2.2 增量：merge_mode 三分支分类 + behind-upstream 显示
+
+**位置**：`scripts/upgrade/upgrade_hermes_agent.py::print_dry_run()` 内，约 1835-1895 行。
+
+**9.3.1 merge_mode 三分支分类修复**
+
+V2.1 仅做了两分支（`head == target` / `head is ancestor of target`），漏了"target 是 head 祖先"。V2.2 补全：
+
+```python
+# V2.2 三分支（与 classify_git_relation() 对齐）
+if head == target_sha:
+    print(f"     => merge_mode: already-up-to-date")
+elif _is_ancestor(config.repo, head, target_sha, [], config.verbose):
+    print(f"     => merge_mode: ff-only  (git merge --ff-only {target_sha})")
+elif _is_ancestor(config.repo, target_sha, head, [], config.verbose):  # V2.2 新增
+    print(f"     => merge_mode: already-up-to-date  (HEAD 已含 target)")
+else:
+    print(f"     => merge_mode: merge    (本地有自有 commit，A+ 策略)")
+```
+
+**9.3.2 behind-upstream 显示**
+
+`hermes --version` 在 fork 上对 upstream 失明（P-5 陷阱）。在 dry-run 中显式输出 `HEAD..upstream/main` 的 commit 距离，作为 truth source：
+
+```python
+# V2.2: compute HEAD..upstream/main gap (only meaningful when target is upstream/main)
+behind_upstream = -1
+if config.version_ref == "upstream/main":
+    r_behind = git(["rev-list", "--count", "HEAD..upstream/main"],
+                   repo=config.repo, verbose=config.verbose)
+    if r_behind.exit_code == 0:
+        try:
+            behind_upstream = int(r_behind.stdout.strip())
+        except ValueError:
+            behind_upstream = -1
+
+# 紧跟 local-only commits 列表之后打印
+if config.version_ref == "upstream/main":
+    if behind_upstream == 0:
+        print(f"  behind upstream/main: 0  (HEAD 已追平 upstream)")
+    elif behind_upstream > 0:
+        print(f"  behind upstream/main: {behind_upstream} commit(s)  "
+              f"(--version 自报 'Up to date' 不可信；本字段为 truth source)")
+    else:
+        print(f"  behind upstream/main: (无法读取，本地无 upstream/main 引用)")
+```
+
+**约束**：
+- 不自动 fetch（dry-run 零网络）。若本地无 `upstream/main` ref，`behind_upstream=-1` 显示 `(无法读取)`。
+- 只在 `version_ref=upstream/main` 时计算（tag/branch target 不显示，对比无意义）。
+- 不引入 retry / 不引入 git config 写入。
 
 ## 10. Manifest fetch_attempts 增量写入
 
