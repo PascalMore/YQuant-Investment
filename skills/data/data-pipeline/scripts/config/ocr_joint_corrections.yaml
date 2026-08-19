@@ -18,3 +18,23 @@
   target_code: "688808.SH"
   target_name: "联讯仪器"
   reason: "ocr_code_name_joint_correction"
+
+# 2026-08-20 新增：用户确认的公司改名/OCR 误读（code 正确、name 旧名）
+# 触发条件：Wind 代码精确匹配 + 名称包含 source_name_pattern → 修正 target
+- source_code: "300223.SZ"
+  source_name_pattern: "北京君正"
+  target_code: "300223.SZ"
+  target_name: "君正股份"
+  reason: "company_rename_confirmed_20260820"
+
+- source_code: "688981.SH"
+  source_name_pattern: "中心国际"
+  target_code: "688981.SH"
+  target_name: "中芯国际"
+  reason: "ocr_name_misread_confirmed_20260820"
+
+- source_code: "688825.SH"
+  source_name_pattern: "长盈科技"
+  target_code: "688825.SH"
+  target_name: "长鑫科技"
+  reason: "one_char_ocr_error_confirmed_20260820"
