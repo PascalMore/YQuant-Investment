@@ -713,19 +713,18 @@ class ReportGenerator:
     }
 
     def __init__(self, config=None):
-        self.adapter = MarketDataAdapter()
-        # 加载配置(用于新闻数量等设置)
+        # 优先使用调用方传入的 config；否则使用共享 loader（src/config.py）
+        # 合并 config.json（运行时配置）+ 系统环境 / .env（敏感字段）。
         if config is None:
-            import json, os
-            config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'config.json')
-            if os.path.exists(config_path):
-                try:
-                    with open(config_path) as f:
-                        config = json.load(f)
-                except:
-                    config = {}
-        self.config = config or {}
-        self.adapter = MarketDataAdapter(self.config)
+            try:
+                from src.config import load_skill_config
+                config = load_skill_config()
+            except SystemExit:
+                # 邮件推送启用但缺少凭据时 load_skill_config 会 SystemExit；
+                # 复盘报告生成不需要 SMTP，仍可继续；用空 cfg 兜底。
+                config = {}
+        self.adapter = MarketDataAdapter(config)
+        self.config = config
         self._fetch_all_data()  # 一次性获取所有数据并缓存
 
     def _format_change_pct(self, pct: float) -> str:

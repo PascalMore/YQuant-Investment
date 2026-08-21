@@ -745,14 +745,8 @@ class MarketDataAdapter:
             if "proxy" in k.lower():
                 del os.environ[k]
 
-        # 优先从环境变量读取，其次从 config 读取
-        gnews_token = os.environ.get('GNEWS_API_KEY', '').strip()
-        if not gnews_token and self.config:
-            gnews_token = self.config.get('data_sources', {}).get('gnews', {}).get('api_key', '').strip()
-        if not gnews_token:
-            # 尝试从 .env 手动加载
-            self._load_env()
-            gnews_token = os.environ.get('GNEWS_API_KEY', '').strip()
+        # GNews token 仅从环境变量 / .env 读取（共享 loader 已合并）
+        gnews_token = os.getenv("GNEWS_API_KEY", "").strip()
 
         if not gnews_token:
             print("[Adapter] GNews: 无 API Key，跳过")
