@@ -13,7 +13,6 @@ Usage:
 
 import argparse
 import base64
-import json
 import os
 import smtplib
 import sys
@@ -35,52 +34,17 @@ sys.path.insert(0, str(WORKSPACE_ROOT))
 
 # 导入新的报告生成器
 from all_weather_market_report import AllWeatherMarketReport
+from src.config import load_skill_config
 from src.new_services.report_generator import ReportGenerator
 from skills.infra.paths import report_marker_path
 
 
 def load_config():
-    """加载配置文件"""
-    config_path = Path(__file__).parent.parent / "config.json"
-    if not config_path.exists():
-        print("⚠️ 配置文件不存在，使用默认配置")
-        return get_default_config()
-    
-    with open(config_path, "r", encoding='utf-8') as f:
-        return json.load(f)
-
-
-def get_default_config():
-    """默认配置"""
-    return {
-        "data_sources": {
-            "akshare": {"enabled": True},
-            "yfinance": {"enabled": True},
-            "binance": {"enabled": True},
-            "tavily": {"enabled": False, "api_key": ""}
-        },
-                "push": {
-            "email": {
-                "enabled": True,
-                "smtp_server": "smtp.qq.com",
-                "smtp_port": 587,
-                "username": "532484187@qq.com",
-                "password": "vyzfsxtfuqufcaed",
-                "recipients": ["532484187@qq.com"],
-                "sender_name": "YQuant智能投资助手",
-                "is_html": True
-            }
-        },
-        "schedule": {
-            "timezone": "Asia/Shanghai",
-            "time": "08:30",
-            "trading_days_only": True
-        },
-        "watchlist": {
-            "stocks": ["600519", "00700", "AAPL", "NVDA"],
-            "crypto": ["BTC", "ETH", "BNB", "SOL"]
-        }
-    }
+    """
+    加载配置文件：使用共享 loader（src/config.py::load_skill_config），
+    合并 config.json（运行时）与系统环境 / .env（敏感字段）。
+    """
+    return load_skill_config()
 
 
 def send_email(report: str, config: dict, report_date: str, is_html=None):

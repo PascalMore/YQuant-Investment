@@ -1,4 +1,6 @@
+import os
 import smtplib
+import sys
 from email.mime.text import MIMEText
 from email.header import Header
 
@@ -73,13 +75,33 @@ US equity markets delivered a powerful broad-based rally, with all three major i
 
 msg = MIMEText(report_content, 'plain', 'utf-8')
 msg['Subject'] = Header('【每日市场报告】2026-04-09', 'utf-8')
-msg['From'] = '532484187@qq.com'
-msg['To'] = '532484187@qq.com'
+
+# SMTP 凭据来自 .env（EMAIL_USERNAME / EMAIL_PASSWORD），不再硬编码
+username = os.environ.get('EMAIL_USERNAME', '').strip()
+password = os.environ.get('EMAIL_PASSWORD', '').strip()
+recipients_raw = os.environ.get('EMAIL_RECIPIENTS', '').strip()
+recipients = [r.strip() for r in recipients_raw.split(',') if r.strip()]
+
+missing = [name for name, val in (
+    ('EMAIL_USERNAME', username),
+    ('EMAIL_PASSWORD', password),
+    ('EMAIL_RECIPIENTS', recipients),
+) if not val]
+if missing:
+    sys.stderr.write(
+        'send_report_email: SMTP 凭据缺失 ('
+        + ', '.join(missing)
+        + ')。请在 .env 设置 EMAIL_USERNAME / EMAIL_PASSWORD / EMAIL_RECIPIENTS 后重试。\n'
+    )
+    sys.exit(1)
+
+msg['From'] = username
+msg['To'] = ', '.join(recipients)
 
 try:
     server = smtplib.SMTP_SSL('smtp.qq.com', 465)
-    server.login('532484187@qq.com', 'vyzfsxtfuqufcaed')
-    server.sendmail('532484187@qq.com', ['532484187@qq.com'], msg.as_string())
+    server.login(username, password)
+    server.sendmail(username, recipients, msg.as_string())
     server.quit()
     print('EMAIL_SENT_SUCCESS')
 except Exception as e:

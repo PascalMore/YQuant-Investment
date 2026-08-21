@@ -171,12 +171,32 @@ body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hir
 def do_send(html_content, subject):
     msg = MIMEMultipart('alternative')
     msg['Subject'] = subject
-    msg['From'] = formataddr(('YQuant智能投资助手', '532484187@qq.com'))
-    msg['To'] = '532484187@qq.com'
+
+    # SMTP 凭据来自 .env（EMAIL_USERNAME / EMAIL_PASSWORD），不再硬编码
+    username = os.environ.get('EMAIL_USERNAME', '').strip()
+    password = os.environ.get('EMAIL_PASSWORD', '').strip()
+    recipients_raw = os.environ.get('EMAIL_RECIPIENTS', '').strip()
+    recipients = [r.strip() for r in recipients_raw.split(',') if r.strip()]
+
+    missing = [name for name, val in (
+        ('EMAIL_USERNAME', username),
+        ('EMAIL_PASSWORD', password),
+        ('EMAIL_RECIPIENTS', recipients),
+    ) if not val]
+    if missing:
+        sys.stderr.write(
+            'send_review_styles: SMTP 凭据缺失 ('
+            + ', '.join(missing)
+            + ')。请在 .env 设置 EMAIL_USERNAME / EMAIL_PASSWORD / EMAIL_RECIPIENTS 后重试。\n'
+        )
+        sys.exit(1)
+
+    msg['From'] = formataddr(('YQuant智能投资助手', username))
+    msg['To'] = ', '.join(recipients)
     msg.attach(MIMEText(html_content, 'html', 'utf-8'))
     ctx = ssl.create_default_context()
     server = smtplib.SMTP_SSL('smtp.qq.com', 465, context=ctx)
-    server.login('532484187@qq.com', 'vyzfsxtfuqufcaed')
+    server.login(username, password)
     server.send_message(msg)
     server.quit()
     print(f"✅ {subject}")
