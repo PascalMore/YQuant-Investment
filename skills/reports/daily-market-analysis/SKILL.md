@@ -118,33 +118,35 @@ description: 生成每日全球市场研究报告，覆盖美股、A/H 股、数
 
 ## Configuration
 
-创建 `config.json`（基于 `config.example.json`）：
+配置采用**分区契约**：
 
-```json
-{
-  "data_sources": {
-    "akshare": { "enabled": true },
-    "yfinance": { "enabled": true },
-    "binance": { "enabled": true },
-    "tavily": { "api_key": "your-key" },
-    "tradingeconomics": { "api_key": "your-key" }
-  },
-  "push": {
-    "feishu": {
-      "enabled": true,
-      "webhook_url": "https://open.feishu.cn/..."
-    }
-  },
-  "schedule": {
-    "timezone": "Asia/Shanghai",
-    "time": "08:00",
-    "trading_days_only": true
-  },
-  "watchlist": {
-    "stocks": ["600519", "00700", "AAPL"],
-    "crypto": ["BTC", "ETH", "SOL"]
-  }
-}
+| 范围 | 文件 | 入库 | 内容 |
+|------|------|------|------|
+| 敏感 / 准敏感 | `.env`（基于 `.env.example` 复制） | 否（.gitignore） | API Key、SMTP 凭据、收件人列表 |
+| 非敏感运行时 | `config.json` | 是 | 数据源开关、SMTP 服务器 / 端口、推送策略、排程、自选股、AI 模型 |
+
+加载入口：`src/config.py::load_skill_config()`。
+- 系统环境变量优先于 `.env`（`load_dotenv(override=False)`）
+- 邮件推送启用时校验 `username` / `password` / `recipients` 三项必填，缺失立即 `SystemExit`，避免静默失败。
+
+字段映射（config.json key → .env 变量）：
+
+| config.json 路径 | .env 变量 |
+|------------------|-----------|
+| `data_sources.tavily.api_key` | `TAVILY_API_KEY` |
+| `data_sources.gnews.api_key` | `GNEWS_API_KEY` |
+| `data_sources.tradingeconomics.api_key` | `TRADING_ECONOMICS_API_KEY` |
+| `push.email.username` | `EMAIL_USERNAME` |
+| `push.email.password` | `EMAIL_PASSWORD` |
+| `push.email.recipients` | `EMAIL_RECIPIENTS`（英文逗号分隔） |
+
+`config.json` 中**不应**包含任何 `api_key` / `username` / `password` / `recipients` 字面量；这些字段运行时由 loader 从 `.env` 注入。
+
+首次部署：
+
+```bash
+cp .env.example .env
+# 编辑 .env 填入真实凭据（不入 git）
 ```
 
 ## Examples
