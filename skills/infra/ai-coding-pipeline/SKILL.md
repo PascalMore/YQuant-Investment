@@ -22,6 +22,16 @@ T2/T3 worker 在写以下代码时，应当额外加载 `sanity-check` skill（`
 
 sanity-check 关注的是「数据流入业务逻辑之前的最后一道闸门」。它与本文档的「P-1~P-13 Pitfalls」**正交**——P-* 描述的是流水线机制坑（worker crash、fallback 透明、parent link 断链等），不会被吸收或替代。两套指引并行生效，需要同时遵守。
 
+## 配套 skill：文档治理三件套（2026-08-21 迁移）
+
+以下三个 skill 是 AI Coding Pipeline 在 RFC / SPEC / Design 文档治理环节的**深度配套**——sanity-check 关注代码层 fail-fast，三件套关注文档层契约收敛。worker 可在对应阶段按需 `skill_view()` 加载，不强制注入：
+
+- `skills/infra/design-gate-audit` —— 在 T2 Design 完成、T3 Implement 创建**之前**使用：审计阶段边界、文件范围、可计算契约。适用于含评分、阈值、存储方案、公开 trace 或生产副作用门禁的设计。
+- `skills/infra/pipeline-doc-consistency` —— 在 RFC/SPEC/Design 三件套**已存在且用户提出后续决策变更**时使用：跨文档同步治理、统一审查、实现就绪度检查。
+- `skills/infra/design-baseline-reconciliation` —— 在已有实现、修复链或并行卡**之后**对 RFC/SPEC/Design 做修订或 Design Gate 审计时使用：把"已完成能力"和"待实现能力"边界画清，避免文档漂移。
+
+三件套与本 SKILL 的关系**正交**：本 SKILL 描述流水线机制（dispatcher / parent links / Pitfalls），三件套描述文档契约收敛方法论。任何一方都不能替代另一方；流水线中遇到文档治理难题时优先 `skill_view('design-gate-audit')` / `pipeline-doc-consistency` / `design-baseline-reconciliation` 按上下文选择加载。
+
 ## Hermes 执行模型
 
 本流水线在 Hermes 中使用 **Kanban profile worker** 执行。
