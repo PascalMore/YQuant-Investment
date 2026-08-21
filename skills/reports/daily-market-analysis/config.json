@@ -14,17 +14,14 @@
     },
     "tavily": {
       "enabled": true,
-      "api_key": "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",
       "description": "AI 新闻搜索（免费 1000 次/月）"
     },
     "gnews": {
       "enabled": true,
-      "api_key": "a757357930e74c009f26bd7d8bd023f1",
       "description": "GNews 全球新闻 API"
     },
     "tradingeconomics": {
       "enabled": false,
-      "api_key": "",
       "description": "全球经济日历（免费基础版）"
     }
   },
@@ -33,10 +30,8 @@
       "enabled": true,
       "smtp_server": "smtp.qq.com",
       "smtp_port": 587,
-      "username": "532484187@qq.com",
-      "password": "vyzfsxtfuqufcaed",
       "sender_name": "YQuant 智能投资助手",
-      "recipients": ["532484187@qq.com"],
+      "is_html": true,
       "description": "邮件推送配置"
     }
   },
