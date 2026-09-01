@@ -148,6 +148,47 @@ T1 Implement      assignee=yquantdeveloper
 T2 Verify         assignee=yquanttester      parents=[T1]
 ```
 
+### 实现期小问题：最小化修复与验证
+
+默认目标是以**完成当前工作所需的最少步骤**收束，而不是为小问题附加完整流程。
+
+- **小型代码或测试问题**：根因明确、范围局限、低风险且在当前 allowlist 内时，直接在同一张 Implement 卡修复，并运行受影响的定向测试或最小复现；不额外创建 RFC/SPEC/Design、独立 Review 或新的多层流水线。
+- **小型、可逆的本地写入或元数据修正**：对象、动作和范围已经明确时，在当前 Implement 卡完成写入并立即读回/定向核验；不因“发生写入”自动增加独立 Verify、Review 或复杂门禁。
+- **只有现有契约或用户明确要求时**，才增加独立 Verify、Review、额外设计阶段或专项卡；不得把 Agent 自行推导的“更安全”建议包装为必经步骤。
+
+仍须升级为独立卡或完整 Full Flow 的边界仅限于：范围或根因不明确、公共接口或状态模型变化、批量或不可逆数据迁移、敏感/隐私数据、外部发送、资金/账户安全、不可恢复的删除或覆盖，或任务自身已有 RFC/SPEC/Design 明确要求。
+
+**真实写入也默认最小化**：对对象、动作、范围已明确的小型本地写入或知识库元数据修正，采用“当前 Implement 卡执行 → 立即读回/定向核验”即可；不默认要求 fresh 零写 preflight、一次性 token、独立 Verify、Review 或额外 Activation 卡。只有删除/覆盖不可恢复数据、外部发送、资金或账户安全、敏感/隐私数据、批量影响，或现有契约明确要求时，才按该风险取得明确授权并增加对应的最少保护。写入结果不明或核验失败时 STOP，不自动重试。
+
+### 三层 scope 纪律（Pascal 2026-09-01 多次纠正）
+
+编辑 AI Coding Pipeline 或同级共享规则时，必须按以下三层审查每一行新增内容，**且前两层只能由现有契约或用户要求触发**：
+
+1. **现有契约明确要求**（可直接落地）：来自已冻结的 RFC / SPEC / Design / 已生效的 SPEC §13.x 闸门。
+2. **当前目标直接必要**（可作为必经门禁）：来自当前 task 的验收 / 风险 / 用户已声明需求。
+3. **Agent 自行推导的“更安全”建议**（**禁止包装为必经门禁**）：来自“万一出错/万一误用”等防御性假设。
+
+只把 1 + 2 列入正式条款；3 只能写入实现正文或边界说明，**不得进入升级门禁**。升级门禁历史经验上会被反复反转（Pascal 在 2026-09-01 同一会话内连续两次从升级清单中删除“跨模块行为变化”和“权限/授权模型变化”两项）——任何看似“必备”的升级条件都应先质疑是否属于第 3 类。
+
+### 共享规则改后必须去重（canonical 单一源守则）
+
+当修改任意**跨 session 共享**的规则条款（本 skill、长期偏好、escalation 列表等）时，必须立即 grep 全仓 profile + 项目 + session，确认无其它位置含有相同/冲突表述。常见位置：`~/.hermes/profiles/*/skills/**`、项目 `docs/**`、`~/.hermes/profiles/<self>/memories/MEMORY.md`、其它项目源的同名 SKILL.md。
+
+发现副本后按以下顺序处理：
+
+1. **删除运行态副本**（如 worker profile `skills/infra/yquant-ai-coding-pipeline/`），保留项目源目录为唯一 canonical。
+2. **合并长期偏好与 skill 正文**：偏好条目应迁移到 skill 正文；若两者仍同时存在，以 skill 为准、偏好标 deprecated。
+3. **跨项目源目录副本**（yinglong/yquant 各自一份 SKILL.md）：只在确认内容一致时保留多份；不一致则合并到 canonical 源 + 用 `rm` 清理。
+
+完成后用单一 grep 命令复查，例如：
+
+```bash
+grep -RIn "<规则短语>" /home/pascal/.hermes/profiles /home/pascal/workspace 2>/dev/null | \
+  grep -v sessions/ | grep -v logs/ | grep -v MEMORY.md.bak-
+```
+
+应只剩 canonical 源目录一处命中。**结论是“仍有多处命中”则不算完成。**
+
 每个 `kanban_create` 的 body 必须包含：
 
 - 用户目标和当前阶段。
