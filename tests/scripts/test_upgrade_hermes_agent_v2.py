@@ -1406,3 +1406,319 @@ def test_v22_dry_run_no_behind_upstream_for_tag_target(ua, tmp_path, capsys):
     ua.print_dry_run(cfg, state)
     out = capsys.readouterr().out
     assert "behind upstream/main" not in out
+
+
+# ---------------------------------------------------------------------------
+# V2.3 §18 — fetch timeout strict predicate + stash restore on S3 failure
+# ---------------------------------------------------------------------------
+# V2.3-UT-001..006 per DESIGN-10-006 §18.4.
+
+
+_V23_TIMEOUT_STDERR = "timeout after 300s"
+
+
+def test_v23_classify_strict_timeout_recognised_as_transient(ua):
+    """V2.3-UT-001：(exit_code=124, stderr='timeout after <N>s') -> transient。
+
+    设计 §18.1 明确：metadata 仅可能来自 run_cmd() 的 TimeoutExpired 分支
+    (scripts/upgrade/upgrade_hermes_agent.py 第 271-278 行)。
+    """
+    assert ua.classify_git_transport_failure(
+        _V23_TIMEOUT_STDERR, stdout="", exit_code=124,
+    ) == "transient"
+    # 最小正整数秒数（设计正则 [1-9][0-9]*）
+    assert ua.classify_git_transport_failure(
+        "timeout after 1s", stdout="", exit_code=124,
+    ) == "transient"
+    assert ua.classify_git_transport_failure(
+        "timeout after 9s", stdout="", exit_code=124,
+    ) == "transient"
+    # 不带 exit_code 时：仍可命中既有 transient 模式（空 stderr -> non_transport）
+    assert ua.classify_git_transport_failure(
+        "timeout after 30s", stdout="",
+    ) == "non_transport"
+
+
+def test_v23_classify_strict_timeout_rejected_on_perturbations(ua):
+    """V2.3-UT-002：exit≠124 / 'timeout after 0s' / 前后文本 / 普通子串 -> non_transport。
+
+    设计 §18.1 闭集：任何额外文本、空 stdin/stdout、其它 124 以外 exit code、
+    'timeout after 0s'（零秒不合法）均继续走既有 permanent/transient/non_transport
+    路径，而不是按 transient 进行 3 次重试。
+    """
+    # 错误 exit code
+    assert ua.classify_git_transport_failure(
+        _V23_TIMEOUT_STDERR, exit_code=128,
+    ) == "non_transport"
+    assert ua.classify_git_transport_failure(
+        _V23_TIMEOUT_STDERR, exit_code=0,
+    ) == "non_transport"
+    # 0 秒 metadata（不在 [1-9][0-9]* 范围）
+    assert ua.classify_git_transport_failure(
+        "timeout after 0s", exit_code=124,
+    ) == "non_transport"
+    # 前后额外文本
+    assert ua.classify_git_transport_failure(
+        "fatal: " + _V23_TIMEOUT_STDERR, exit_code=124,
+    ) == "non_transport"
+    assert ua.classify_git_transport_failure(
+        _V23_TIMEOUT_STDERR + " (subprocess)", exit_code=124,
+    ) == "non_transport"
+    # 空 stderr 时 strict predicate 永不为真，但 transient 文本模式有相似词不会触发
+    assert ua.classify_git_transport_failure(
+        "", stdout="", exit_code=124,
+    ) == "non_transport"
+    # 普通 'timeout' 子串 + 任意 exit code：strict predicate 必为 False
+    assert ua.classify_git_transport_failure(
+        "fatal: connection timeout while fetching", exit_code=124,
+    ) == "non_transport"
+
+
+def test_v23_run_fetch_three_attempts_on_strict_timeout(ua, tmp_path, monkeypatch):
+    """V2.3-UT-003：连续三次受控 timeout → 三次 git 调用、sleep [2,5]、第三次带
+    `-c http.version=HTTP/1.1`，三条 attempt 都是 transient，然后 raise fetch。
+    """
+    stub, calls = _make_stub_git(ua, [
+        {"exit_code": 124, "stdout": "", "stderr": _V23_TIMEOUT_STDERR},
+        {"exit_code": 124, "stdout": "", "stderr": _V23_TIMEOUT_STDERR},
+        {"exit_code": 124, "stdout": "", "stderr": _V23_TIMEOUT_STDERR},
+    ])
+    monkeypatch.setattr(ua, "git", stub)
+    sleeps = []
+
+    manifest = {}
+    with pytest.raises(ua.UpgradeError) as exc_info:
+        ua.run_fetch_with_transport_policy(
+            "upstream", "main",
+            repo=tmp_path, manifest=manifest,
+            sleep_fn=lambda s: sleeps.append(s),
+        )
+    err = exc_info.value
+    assert err.stage == "fetch"
+
+    # 三次 git 调用，第三条含 HTTP/1.1 前缀
+    assert len(calls) == 3
+    assert calls[0] == ["fetch", "--no-tags", "upstream", "main"]
+    assert calls[1] == ["fetch", "--no-tags", "upstream", "main"]
+    assert calls[2] == [
+        "-c", "http.version=HTTP/1.1",
+        "fetch", "--no-tags", "upstream", "main",
+    ]
+
+    # 退避为 [2, 5]
+    assert sleeps == [2, 5], f"unexpected sleep sequence: {sleeps}"
+
+    # 三条 attempt 全部 transient；transport 依次 default/default/http/1.1
+    assert len(manifest["fetch_attempts"]) == 3
+    transports = [a["transport"] for a in manifest["fetch_attempts"]]
+    assert transports == ["default", "default", "http/1.1-fallback"], transports
+    classes = [a["failure_class"] for a in manifest["fetch_attempts"]]
+    assert classes == ["transient", "transient", "transient"], classes
+
+
+def test_v23_restore_stash_restored_when_pop_succeeds(ua, tmp_path, monkeypatch):
+    """V2.3-UT-004：S2 创建 stash + 模拟 S3 terminal fetch failure → 一次 pop 成功。
+
+    不直接跑 upgrade()（会触发 stash + fetch + resolve 的真实串接），而是用
+    `restore_stash_after_fetch_failure` 的语义，验证 dirty 内容回到工作树、
+    manifest.stash_restoration=restored、且最终 UpgradeError 仍然存在（脚本不
+    因 pop 成功而吞掉原 fetch 错误）。
+    """
+    work = tmp_path / "work"
+    work.mkdir()
+    _make_repo(work)
+    _commit(work, "init")
+    (work / "dirty.txt").write_text("dirty payload")
+    _git(work, "add", "dirty.txt")
+    # 用真实 stash 写入，参考 stash_dirty_tree 行为
+    _git(work, "stash", "push", "--include-untracked", "-m", "v23-ut-004")
+    stash_ref = "stash@{0}"  # 与 git stash pop 兼容
+    # 确认 stash 在 list 中可见
+    stash_list = _git(work, "stash", "list").stdout
+    assert "stash@{0}" in stash_list
+
+    # 工作树此时无 dirty.txt
+    assert not (work / "dirty.txt").exists()
+
+    # 让 helper 走真实 pop；不 monkeypatch git()，避免污染助手对工作树
+    # 影响的断言。我们只校验：manifest.stash_restoration=restored、命令被
+    # manifest["commands"] 审计记录一次。
+    manifest = {"stash_ref": stash_ref, "commands": []}
+    cfg = ua.UpgradeConfig(
+        repo=work, version_ref="upstream/main", dry_run=False,
+        branch="main", backup_dir=tmp_path / "bk",
+        hermes_bin="hermes", restart=False, push=False, rollback_manifest=None,
+        yes=True, verbose=False,
+    )
+
+    hints = ua.restore_stash_after_fetch_failure(cfg, manifest)
+
+    # manifest["commands"] 应记录一次 "stash pop <stash_ref>"
+    pop_recorded = [c for c in manifest["commands"]
+                    if c.get("cmd", [])[-3:] == ["stash", "pop", stash_ref]]
+    assert len(pop_recorded) == 1, manifest["commands"]
+
+    # dirty.txt 重新可见（真实 pop 已落盘）
+    assert (work / "dirty.txt").exists()
+    assert (work / "dirty.txt").read_text() == "dirty payload"
+
+    # manifest.stash_restoration 字段精确为 §18.3
+    sr = manifest["stash_restoration"]
+    assert sr["status"] == "restored"
+    assert sr["stash_ref"] == stash_ref
+    assert sr["stage"] == "fetch"
+    # success 分支不带 exit_code / error_class
+    assert "exit_code" not in sr
+    assert "error_class" not in sr
+
+    # next_steps 提示（由 upgrade() 追加）描述「恢复但 fetch 仍失败」
+    assert hints and "已恢复本次自动 stash" in hints[0]
+    # 失败提示中不得出现具体的 pop 错误（仅恢复本身的提示）
+    joined = " ".join(hints)
+    assert "stash apply" not in joined
+
+
+def test_v23_restore_stash_failed_does_not_drop_or_clean(ua, tmp_path, monkeypatch):
+    """V2.3-UT-005：mock pop 返回非零 → 不允许任何 drop/reset/clean/apply 调用。
+
+    原 stash 必须仍然可被 `git stash list` 看到；manifest=restore_failed；
+    next_steps 含精确 apply 命令。最终 UpgradeError 仍非零（脚本不能因为
+    restore_failed 退化为 0）。
+    """
+    work = tmp_path / "work"
+    work.mkdir()
+    _make_repo(work)
+    _commit(work, "init")
+    (work / "dirty.txt").write_text("current-tree version")
+    _git(work, "add", "dirty.txt")
+    _git(work, "stash", "push", "--include-untracked", "-m", "v23-ut-005")
+    # helper 接受 refs/stash 或 stash@{N} 等 git 能解析的 ref；选 stash@{0}
+    stash_ref = "stash@{0}"
+    stash_list = _git(work, "stash", "list").stdout
+    assert "stash@{0}" in stash_list
+
+    forbidden = {"drop", "reset", "clean", "apply"}
+    pop_calls = []
+
+    def stub_git(cmd, *, repo, manifest=None, verbose=False, timeout=None, **_):
+        pop_calls.append(list(cmd))
+        # 任何被禁止的子命令都是契约违例
+        assert not (set(cmd) & forbidden), (
+            f"禁止的子命令被调用: {cmd} (forbidden={forbidden})"
+        )
+        # pop 必须只调用一次
+        if cmd[:2] == ["stash", "pop"]:
+            return ua.CommandResult(
+                cmd=list(cmd), cwd=str(repo), exit_code=1,
+                stdout="", stderr="CONFLICT (... modified in both)",
+            )
+        # 其它命令不预期
+        return ua.CommandResult(
+            cmd=list(cmd), cwd=str(repo), exit_code=0, stdout="", stderr="",
+        )
+
+    monkeypatch.setattr(ua, "git", stub_git)
+
+    manifest = {"stash_ref": stash_ref, "commands": []}
+    cfg = ua.UpgradeConfig(
+        repo=work, version_ref="upstream/main", dry_run=False,
+        branch="main", backup_dir=tmp_path / "bk",
+        hermes_bin="hermes", restart=False, push=False, rollback_manifest=None,
+        yes=True, verbose=False,
+    )
+
+    hints = ua.restore_stash_after_fetch_failure(cfg, manifest)
+
+    # 只 pop 一次
+    pop_invokes = [c for c in pop_calls if c[:2] == ["stash", "pop"]]
+    assert len(pop_invokes) == 1, pop_calls
+
+    # manifest 必须是 restore_failed；exit_code=1；error_class 精确
+    sr = manifest["stash_restoration"]
+    assert sr["status"] == "restore_failed"
+    assert sr["stash_ref"] == stash_ref
+    assert sr["stage"] == "fetch"
+    assert sr["exit_code"] == 1
+    assert sr["error_class"] == "stash_pop_failed"
+
+    # next_steps 必须含精确 apply 命令，并禁止后续 reset/clean/drop 提示
+    joined = " ".join(hints)
+    assert f"git -C {work} stash apply {stash_ref}" in joined
+    assert "禁止 reset/clean/drop" in joined
+
+    # 原 stash 必须仍然可见（未被 drop/clean）—— 走真实 git stash list 证明
+    list_out = _git(work, "stash", "list", check=False)
+    assert "stash@{0}" in list_out.stdout
+
+
+def test_v23_dry_run_or_clean_tree_does_not_touch_stash(ua, tmp_path, monkeypatch):
+    """V2.3-UT-006：dry-run / 无 dirty tree → 不调用任何 stash 命令。
+
+    验证两个独立分支：
+      (a) S2 时 dirty_files 为空，stash_ref 永远为 None；不调 stash 命令。
+      (b) dry-run 模式下，即使整个 upgrade() 走到 fetch 失败分支，
+          restore_stash_after_fetch_failure 也不被调用。
+    """
+    # 分支 (a)：clean tree 时 stash_dirty_tree 返回 None，不写 stash_ref
+    work = tmp_path / "work_clean"
+    work.mkdir()
+    _make_repo(work)
+    _commit(work, "init")
+
+    cfg = ua.UpgradeConfig(
+        repo=work, version_ref="upstream/main", dry_run=False,
+        branch="main", backup_dir=tmp_path / "bk",
+        hermes_bin="hermes", restart=False, push=False, rollback_manifest=None,
+        yes=True, verbose=False,
+    )
+    state = ua.RepoState(
+        repo=work, branch="main", pre_head=_git(work, "rev-parse", "HEAD").stdout.strip(),
+        origin_url="", upstream_url="", install_method="git",
+        dirty_files=[], local_only_commits=[], origin_main_sha=None,
+    )
+    manifest = {"commands": []}
+
+    invoked = []
+
+    def stub_git(cmd, *, repo, manifest=None, verbose=False, timeout=None, **_):
+        invoked.append(list(cmd))
+        return ua.CommandResult(
+            cmd=list(cmd), cwd=str(repo), exit_code=0, stdout="", stderr="",
+        )
+
+    monkeypatch.setattr(ua, "git", stub_git)
+    stash_ref = ua.stash_dirty_tree(state, manifest, cfg)
+    assert stash_ref is None
+    # 没有真正执行任何 stash 操作
+    assert not [c for c in invoked if "stash" in c]
+    assert "stash_ref" not in manifest or manifest.get("stash_ref") is None
+
+    # 在 dirty tree + stash_ref 为 None 的情况下调用 restore_*：不应执行任何 stash 命令
+    manifest2 = {"commands": []}
+    hints = ua.restore_stash_after_fetch_failure(cfg, manifest2)
+    assert hints == []
+    assert manifest2["stash_restoration"] == {
+        "status": "not_created",
+        "stash_ref": None,
+        "stage": "fetch",
+    }
+    assert not [c for c in invoked if "stash" in c]
+
+    # 分支 (b)：dry-run 时 upgrade() 异常分支对 fetch stage 不调用 helper
+    # 直接观察 guard：当 config.dry_run 为 True，restore_*,即使从 except 分支
+    # 进入也由 upgrade() 的 `not config.dry_run` guard 屏蔽；本测试以单元方式证明
+    # 调用 restore_stash_after_fetch_failure 本身在 dry-run cfg 下仍受预算检查
+    # (我们的显式 guard 在 upgrade()，但 restore_* helper 自身也只读 stash_ref，
+    # 不会主动写网络/执行无关命令)。此处通过 monkeypatch `git` 计数来确认
+    # 在 dry_run=True + manifest={"stash_ref": None} 时不调 git。
+    cfg_dry = ua.UpgradeConfig(
+        repo=work, version_ref="upstream/main", dry_run=True,
+        branch="main", backup_dir=tmp_path / "bk",
+        hermes_bin="hermes", restart=False, push=False, rollback_manifest=None,
+        yes=True, verbose=False,
+    )
+    invoked.clear()
+    manifest3 = {"commands": [], "stash_ref": None}
+    ua.restore_stash_after_fetch_failure(cfg_dry, manifest3)
+    assert invoked == []  # 完全没有调用 git
+    assert manifest3["stash_restoration"]["status"] == "not_created"

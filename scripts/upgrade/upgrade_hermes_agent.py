@@ -1128,6 +1128,66 @@ def stash_dirty_tree(state: RepoState, manifest: dict, config: UpgradeConfig) ->
 
 
 # ---------------------------------------------------------------------------
+# V2.3 — S3 fetch terminal failure cleanup
+# ---------------------------------------------------------------------------
+#
+# 闭集契约（DESIGN-10-006 §18.2 / §18.3 / §18.5）：
+#   - 只在 upgrade() 的 S3 异常分支调用，且 UpgradeError.stage == "fetch"
+#   - 只读本 run S2 写入的 manifest.stash_ref；非空才允许 pop
+#   - 只执行一次 `git stash pop <stash_ref>`；不重试 pop；不调用 drop/reset/clean
+#   - pop 成功 -> status="restored"；pop 失败/冲突出 -> status="restore_failed"
+#     且保留 stash；其它字段（exit_code、error_class）按 §18.3 表精确写入
+#   - 不读取 origin / PyPI / hermes --version；不在 target 选择/重试/恢复提示中使用
+#   - 异常分支返回人工恢复提示文本（并入 exc.next_steps），成功路径永不调用
+# ---------------------------------------------------------------------------
+
+
+def restore_stash_after_fetch_failure(config: "UpgradeConfig",
+                                      manifest: dict) -> list:
+    """V2.3：仅在 S3 fetch terminal failure 之后调用一次，恢复 S2 自动 stash。
+
+    Returns:
+        list[str]: 应追加到 UpgradeError.next_steps 的人工恢复提示。
+        空 list 表示无需追加（not_created 分支）。
+    """
+    cmd_log = manifest.setdefault("commands", [])
+    stash_ref = manifest.get("stash_ref")
+    if not stash_ref:
+        manifest["stash_restoration"] = {
+            "status": "not_created",
+            "stash_ref": None,
+            "stage": "fetch",
+        }
+        return []
+
+    pop_result = git(
+        ["stash", "pop", stash_ref],
+        repo=config.repo,
+        manifest=cmd_log,
+        verbose=config.verbose,
+    )
+    if pop_result.exit_code == 0:
+        manifest["stash_restoration"] = {
+            "status": "restored",
+            "stash_ref": stash_ref,
+            "stage": "fetch",
+        }
+        return ["已恢复本次自动 stash，fetch 仍失败。"]
+
+    manifest["stash_restoration"] = {
+        "status": "restore_failed",
+        "stash_ref": stash_ref,
+        "stage": "fetch",
+        "exit_code": int(pop_result.exit_code),
+        "error_class": "stash_pop_failed",
+    }
+    return [
+        f"git -C {config.repo} stash apply {stash_ref}",
+        "先处理冲突，再确认内容，禁止 reset/clean/drop。",
+    ]
+
+
+# ---------------------------------------------------------------------------
 # V2.1 — Git transport resilience (RFC-10-006 / SPEC-10-006 / DESIGN-10-006 §3.4-§3.6)
 # ---------------------------------------------------------------------------
 
@@ -1161,16 +1221,43 @@ _V21_TRANSIENT_PATTERNS = [
 ]
 
 
-def classify_git_transport_failure(stderr: str, stdout: str = "") -> str:
+_V23_TIMEOUT_METADATA_RE = re.compile(r"^timeout after [1-9][0-9]*s$")  # V2.3
+
+
+def _is_strict_timeout_failure(exit_code, stderr: str) -> bool:
+    """V2.3 strict timeout 判定：精确 exit code + 规范化 metadata。
+
+    唯一合法来源是 run_cmd() 的 subprocess.TimeoutExpired 分支
+    (scripts/upgrade/upgrade_hermes_agent.py 第 271-278 行)，它产生
+    `exit_code == 124` 和 `stderr == "timeout after {timeout}s"`。
+
+    任何额外前后文本、空 stdin/stdout、其它 124 以外 exit code 均返回 False
+    （继续按既有的 permanent/transient/non_transport 文本模式分类）。
+    """
+    if exit_code != 124:
+        return False
+    if not stderr or stderr != stderr.strip():
+        return False
+    return bool(_V23_TIMEOUT_METADATA_RE.fullmatch(stderr.strip()))
+
+
+def classify_git_transport_failure(
+    stderr: str, stdout: str = "", *, exit_code: Optional[int] = None,
+) -> str:
     """纯函数：分类 git fetch 失败。
 
     Returns:
         "permanent"   — 认证/权限/证书/无效 ref 等不可恢复错误
-        "transient"   — TLS/RPC/EOF/index-pack/连接中断等可能通过重试或协议降级恢复
+        "transient"   — TLS/RPC/EOF/index-pack/连接中断等可能通过重试或协议降级恢复；
+                        V2.3 起,run_cmd() 规范化 timeout (`exit=124` + 精确
+                        `timeout after <N>s` metadata) 也归 transient。
         "non_transport" — 其他非 fetch 传输错误（如 merge conflict、git config 损坏）
 
-    优先级：permanent > transient > non_transport (空 stderr 也归 non_transport)。
+    优先级：strict timeout (V2.3) > permanent > transient > non_transport
+    (空 stderr 也归 non_transport)。
     """
+    if exit_code is not None and _is_strict_timeout_failure(exit_code, stderr):
+        return "transient"
     text = (stderr or "") + "\n" + (stdout or "")
     if not text.strip():
         return "non_transport"
@@ -1288,7 +1375,9 @@ def run_fetch_with_transport_policy(
             )
             return r
 
-        failure_class = classify_git_transport_failure(r.stderr, r.stdout)
+        failure_class = classify_git_transport_failure(
+            r.stderr, r.stdout, exit_code=r.exit_code,
+        )
         # non-transient：立即 fail-stop（不重试）
         if failure_class in ("permanent", "non_transport"):
             _record_fetch_attempt(
@@ -2074,6 +2163,12 @@ def upgrade(config: UpgradeConfig) -> int:
         return 0
 
     except UpgradeError as exc:
+        # V2.3 §18.1/§18.2：在最终 add_manifest_error 之前，若异常来自 S3 fetch
+        # 终态失败，按 stash_ref 决定是否恢复 S2 自动 stash。
+        if exc.stage == "fetch" and not config.dry_run:
+            restore_hints = restore_stash_after_fetch_failure(config, manifest)
+            if restore_hints:
+                exc.next_steps = list(exc.next_steps or []) + restore_hints
         add_manifest_error(manifest, exc.stage, exc.stage, str(exc), exc.next_steps)
         manifest["_manifest_path"] = str(mpath)
         write_manifest(manifest, mpath)

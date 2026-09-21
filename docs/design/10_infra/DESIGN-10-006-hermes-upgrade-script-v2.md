@@ -7,13 +7,13 @@
 | 状态 | Accepted |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-08 |
-| 最后更新 | 2026-08-20 |
-| 版本号 | **V2.2** |
+| 最后更新 | 2026-09-21 |
+| 版本号 | **V2.3** |
 | 来源 RFC | RFC-10-006-hermes-upgrade-script-v2 |
 | 来源 SPEC | SPEC-10-006-hermes-upgrade-script-v2 |
 | 继承 Design | DESIGN-10-005-hermes-auto-upgrade, DESIGN-10-006 V2.0, V2.1 |
 | 目标脚本 | `scripts/upgrade/upgrade_hermes_agent.py` |
-| 流水线 | T1=t_8228a098, T2=t_ec0d709a, T3=t_cf586d51, T4=待创建, T5=待创建, T6=待创建 |
+| 流水线 | Full Flow：T1=t_fae0624b（RFC/SPEC），T2=t_08ef136f（本 Design）；后续 T3/T4/T5 由任务图创建 |
 
 ## 1. 版本历史
 
@@ -22,6 +22,7 @@
 | V2.0 | 2026-07-08 | 基础 V2 设计：feature-branch、patch-manifest、branch override | YQuant-Codex-Principal |
 | V2.1 | 2026-07-30 | 增补 Git 传输韧性增强：target-aware fetch、classified retry、HTTP/1.1 fallback、manifest fetch_attempts audit、branch-aware protect push、dry-run 零网络 | YQuant-Codex-Principal |
 | V2.2 | 2026-08-20 | Dry-run 输出正确性增量（`print_dry_run()` 三分支 merge_mode + behind-upstream 真实差距显示），对抗 `hermes --version` 在 fork 上失明的 P-5 陷阱 | YQuant-Principal |
+| V2.3 | 2026-09-21 | P0 韧性修订：仅将 `run_cmd()` 规范化的 upstream fetch timeout 纳入既有三次 HTTP/1.1 retry；补齐 S2 stash 在 S3 终止失败时的 fail-closed 恢复与审计 | YQuant-Codex-Principal |
 
 ## 2. 设计摘要
 
@@ -29,25 +30,28 @@ V2.1 在 V2.0 的安全升级主线之上做增量增强，不重写现有状态
 
 V2.2 是 V2.1 之后的 dry-run 输出正确性增量，**只动 `print_dry_run()` 函数内部**，不动 fetch/merge/install/restart/push 任何状态机。
 
+V2.3 是针对已复现 `(exit_code=124, stderr="timeout after 300s")` 的最小 P0 修订。升级对象始终是 `/home/pascal/workspace/hermes-agent` 本地 fork 相对官方 `upstream/main`（或用户指定的官方 upstream tag/SHA）的源码；`origin` 仅用于既有保护/push，PyPI/pip 与 `hermes --version` 不是 target truth source。V2.3 不扩展 retry 范围：只有 upstream target fetch 的受控 timeout 可进入既有三次路径；merge/install/restart/push 不重试。若 S3 在 S6 merge 前终止失败，脚本仅恢复本次 S2 自动 stash，绝不执行 reset/clean/drop 或扩大为后续阶段的自动回滚。
+
 **核心设计理念**：
-1. **只动 fetch**：所有修改集中在 3 个函数 `fetch_remotes()` / `protect_local_commits()` / `print_dry_run()` 及 2 个新增函数 `classify_git_transport_failure()` / `run_fetch_with_transport_policy()`。
+1. **只动 fetch 与其 S2 清理闭环**：V2.3 仅调整 `classify_git_transport_failure()`、`upgrade()` 的 S3 `UpgradeError` 处理，并新增单用途 `restore_stash_after_fetch_failure()`；既有 fetch/push/merge 主行为不重写。
 2. **命令级隔离**：所有 HTTP/1.1 fallback 通过 `git -c http.version=HTTP/1.1` 实现，不写任何 git config。
 3. **有限脆弱**：最多 3 次 attempt，非瞬态错误立即 fail-stop，不掩盖真正问题。
 4. **可审计**：每次 attempt 的结构化元数据写入 manifest，不存原始 stderr 或 secret。
 5. **V2.2 新增：dry-run 显示与真实逻辑对齐**：merge_mode 三分支分类必须与 `classify_git_relation()` 输出一致；behind upstream/main 显示作为 `--version` 失明时的 truth source。
+6. **V2.3 新增：闭集与 fail-closed**：timeout 分类必须同时满足 exit code 和规范化 metadata；stash pop 仅一次，成功才标记 restored，失败保留 stash 并给出人工 apply 命令。
 
 ### 2.1 精确文件矩阵（T3 Implement 允许的修改范围）
 
 | 文件 | 操作 | 说明 |
 |---|---|---|
-| `scripts/upgrade/upgrade_hermes_agent.py` | 修改 | 3 个现有函数替换 + 2 个新增函数 + 2 个新常量 |
+| `scripts/upgrade/upgrade_hermes_agent.py` | 修改 | 仅 V2.3 §18 所列函数签名/分类、stash 恢复 helper 与 `upgrade()` 的 S3 异常闭环；保留 V2.1/V2.2 既有实现 |
 | `tests/scripts/test_upgrade_hermes_agent.py` | 不改（全量回归） | V1.0 测试必须不因 signature 变化而失败 |
 | `tests/scripts/test_upgrade_hermes_agent_v2.py` | 修改 | 新增 V2.1 测试用例（见 §9） |
 | `docs/rfc/10_infra/RFC-10-006-hermes-upgrade-script-v2.md` | 不改（已由 T1 完成） | — |
 | `docs/spec/10_infra/SPEC-10-006-hermes-upgrade-script-v2.md` | 不改（已由 T1 完成） | — |
 | `docs/design/10_infra/DESIGN-10-006-hermes-upgrade-script-v2.md` | 修改 | 本文件 |
 
-**不可碰**的 P0 Unified Data dirty files（当前 `git status` 中的 dirty 文件，非本任务范围）。
+**不可碰**：当前共享工作树中本任务 allowlist 之外的所有 dirty 文件；尤其不得 reset、stash、clean 或归属到本任务。不得修改 `/home/pascal/workspace/hermes-agent/**`、profile/config/gateway/systemd/JMap。
 
 ### 2.2 V2.1 不修改 V2.0 内容
 
@@ -576,11 +580,12 @@ def _record_fetch_attempt(manifest, remote, target, attempt_num, transport_label
 4. **新增 `run_fetch_with_transport_policy()`**：三次 attempt 状态机。插入位置：`build_fetch_command()` 之后。
 5. **重写 `fetch_remotes()`**（:1129-1161）：替换为调用 `run_fetch_with_transport_policy()` + origin fetch 保留。
 6. **重写 `protect_local_commits()`**（:1231-1256）：branch-aware push。
-7. **增量修改 `print_dry_run()`**（:1544-1637）：修改 step 4 输出，增加 retry plan 说明。
+7. **增量修改 `print_dry_run()`**（:1808+）：保留 V2.2 输出契约；V2.3 不改此函数。
+8. **V2.3 修改 classifier/callsite 与异常清理**：按 §18 为 classifier 增加 `exit_code` keyword-only 输入，更新 policy callsite；新增 restore helper，并仅在 `upgrade()` 捕获 S3 fetch `UpgradeError` 时调用。
 
 ### 12.2 需要配合的测试修改（T3/T4）
 
-见 SPEC §8 测试表格（V2.1-UT-001~019, V2.1-REG-001~002, V2.1-SMOKE-001~003）。
+见 SPEC §8 测试表格（V2.1-UT-001~019、V2.2-UT-001~006、V2.3-UT-001~006、回归与 smoke）；V2.3 的断言细节以 §18.4 为准。
 
 ### 12.3 无需修改的现有代码
 
@@ -589,7 +594,7 @@ def _record_fetch_attempt(manifest, remote, target, attempt_num, transport_label
 - `UpgradeConfig`：不新增字段。
 - `RepoState`：不修改。
 - `GitPlan`：不修改。
-- `upgrade()` 主流程（:1650+）：不修改（S3 `fetch_remotes` 的内核被替换但接口不变）。
+- `upgrade()` 的成功路径和 S0–S9 顺序：不修改；仅 V2.3 允许在既有 `except UpgradeError` 中增加 S3 fetch stash cleanup（§18.1–§18.2）。
 
 ## 13. 验证策略
 
@@ -663,8 +668,8 @@ python3 scripts/upgrade/upgrade_hermes_agent.py --dry-run --no-restart --no-push
 
 | 文件 | 允许操作 | 说明 |
 |---|---|---|
-| `scripts/upgrade/upgrade_hermes_agent.py` | ✅ 修改 | 仅 §3.1 所列 3 个现有函数 + 2 个新增函数 + 2 个新增常量 |
-| `tests/scripts/test_upgrade_hermes_agent_v2.py` | ✅ 修改 | 新增 V2.1 测试用例，不破坏现有 V2.0 测试 |
+| `scripts/upgrade/upgrade_hermes_agent.py` | ✅ 修改 | V2.1/V2.2 既有范围加上 V2.3 §18.1 的 classifier/callsite、restore helper 与 `upgrade()` fetch-exception cleanup；不得扩展其他阶段 |
+| `tests/scripts/test_upgrade_hermes_agent_v2.py` | ✅ 修改 | 新增 V2.3-UT-001~006，不破坏既有 V2.0–V2.2 测试 |
 | `tests/scripts/test_upgrade_hermes_agent.py` | ❌ 不改 | 全量回归，V1.0 测试不能因为 V2.1 的 signature 变化而失败 |
 
 ### 15.2 T3 禁止操作
@@ -695,7 +700,7 @@ python3 scripts/upgrade/upgrade_hermes_agent.py --dry-run --no-restart --no-push
 
 ## 16. 自检检查表（Design Gate PASS）
 
-- [x] RFC、SPEC、Design 三层路径一致（`10_infra/` 前缀，`DESIGN-10-006` 版本 V2.1）
+- [x] RFC、SPEC、Design 三层路径一致（`10_infra/` 前缀，`DESIGN-10-006` / RFC / SPEC 均为 V2.3）
 - [x] Design 仅写入 `docs/design/10_infra/DESIGN-10-006-hermes-upgrade-script-v2.md`，未触碰其他文件
 - [x] 每种错误分类（transient / permanent / non_transport）均有可证伪的示例（边界输入 → 明确输出）
 - [x] 每个 fetch attempt 的 command 构造给出了精确的 `list[str]` 断言
@@ -709,3 +714,91 @@ python3 scripts/upgrade/upgrade_hermes_agent.py --dry-run --no-restart --no-push
 ## 17. 开放问题
 
 无。本设计所有实现决策已闭合至代码级精确度。
+
+## 18. V2.3 P0 实现设计：fetch timeout 与 stash 恢复闭环
+
+本节在与早期 V2.1/V2.2 文本冲突处拥有优先级；未在本节列出的函数、文件和副作用保持既有行为。实现仍位于 YQuant 受管脚本 `scripts/upgrade/upgrade_hermes_agent.py`，其运行时 `--repo` 指向 `/home/pascal/workspace/hermes-agent`；后者是被升级的本地 fork，不是本次可修改源码目录。
+
+### 18.1 精确函数级变更
+
+| 位置（当前锚点） | 变更 | 不变项 |
+|---|---|---|
+| `classify_git_transport_failure()`（约 1164 行） | 签名改为 `def classify_git_transport_failure(stderr: str, stdout: str = "", *, exit_code: Optional[int] = None) -> str`；永久模式匹配后、普通 transient 模式匹配前，加入严格 timeout 判定。 | 仍为纯函数、仍是 permanent 优先、既有文本模式和空输入 `non_transport` 不变。 |
+| `run_fetch_with_transport_policy()`（约 1254 行） | 以 `classify_git_transport_failure(r.stderr, r.stdout, exit_code=r.exit_code)` 替换当前两参数调用。 | attempt 上限 3、2s/5s 退避、第 3 次 HTTP/1.1、`fetch_attempts` schema 与所有非 timeout retry 行为不变。 |
+| `restore_stash_after_fetch_failure()`（新增，紧邻 `stash_dirty_tree()`） | 新增单用途 helper，接收 `config, manifest`，在本次 terminal fetch failure 后至多执行一次恢复。 | 不用于成功路径，不处理 merge/install/restart/push，也不调用网络。 |
+| `upgrade()`（约 1952 行） | 在既有 `except UpgradeError` 内、最终 `add_manifest_error()` / `write_manifest()` 前，若 `exc.stage == "fetch"`，调用上述 helper，并把 helper 生成的人工恢复提示并入 `exc.next_steps`。 | S0–S9 成功路径顺序、S6 merge 之后的异常处理、install/restart/push 语义均不变。 |
+
+严格 timeout 谓词为：`exit_code == 124 and re.fullmatch(r"timeout after [1-9][0-9]*s", (stderr or "").strip())`。不得以 `"timeout" in stderr`、`stdout`、任意 124 以外 exit code 或带前后额外文本的 stderr 触发；这些输入继续是 `non_transport`。该 metadata 只可能来自当前 `run_cmd()` 的 `subprocess.TimeoutExpired` 分支（约 271–278 行），不改 `run_cmd()` 本身。
+
+### 18.2 S3 状态与异常控制流
+
+```text
+S2 stash_dirty_tree -> manifest.stash_ref（可能为 null）
+  -> S3 fetch_remotes
+       origin 单次 fetch：失败仍 fail-stop、无 retry
+       upstream target fetch：每个 (124, exact timeout metadata) -> transient
+         Attempt 1 -> sleep(2) -> Attempt 2 -> sleep(5) -> Attempt 3 HTTP/1.1
+  -> 成功：继续 resolve / S4 / S5 / S6；不调用 stash 恢复
+  -> UpgradeError(stage="fetch")：
+       restore_stash_after_fetch_failure(config, manifest)
+       记录最终错误与 manifest -> exit 非零
+```
+
+`upgrade()` 的调用 guard 必须是：非 dry-run 且 `UpgradeError.stage == "fetch"`。helper 随后唯一读取本 run S2 写入的 `manifest.get("stash_ref")`：非空才允许 pop；为空必须走下述 `not_created` 分支且不执行命令。由于 `upgrade()` 在 S3 之后才到达 S6，stage 为 `fetch` 同时保证尚未 merge；实现不得用猜测性的 HEAD 比较替代该状态边界。
+
+动作固定如下：
+
+1. 无 `stash_ref`：不执行任何 stash 命令，写入 `manifest["stash_restoration"] = {"status": "not_created", "stash_ref": null, "stage": "fetch"}`，返回空提示。
+2. 有 `stash_ref`：仅执行一次 `git(["stash", "pop", stash_ref], repo=config.repo, manifest=manifest.setdefault("commands", []), verbose=config.verbose)`。
+3. pop `exit_code == 0`：写入 `{"status": "restored", "stash_ref": stash_ref, "stage": "fetch"}`；原 fetch error 仍是最终失败，脚本不得因此改为 exit 0。
+4. pop `exit_code != 0`（含冲突）：写入 `{"status": "restore_failed", "stash_ref": stash_ref, "stage": "fetch", "exit_code": <int>, "error_class": "stash_pop_failed"}`；保留 stash，返回两条追加 next step：`git -C <repo> stash apply <stash_ref>` 与“先处理冲突，再确认内容，禁止 reset/clean/drop”。不保存原始 stderr。
+
+helper 不得调用 `stash apply`、`stash drop`、`reset`、`clean` 或覆盖工作树；`pop` 失败后也不得重试 pop。`git stash pop <stash_ref>` 会经过既有 commands 脱敏审计，`stash_restoration` 仅保存结构化字段。
+
+### 18.3 Manifest 与错误输出契约
+
+| 字段 | 触发 | 值域/约束 |
+|---|---|---|
+| `fetch_attempts[*].failure_class` | 每一个 upstream target fetch attempt | 受控 timeout 一律记为 `"transient"`；success 为 `null`；不存 stderr。 |
+| `fetch_attempts[*].transport` | attempt 1–3 | `"default"`、`"default"`、`"http/1.1-fallback"`；timeout 不改变顺序。 |
+| `stash_restoration.status` | terminal S3 fetch failure | `"not_created"` / `"restored"` / `"restore_failed"`，仅在此 cleanup 写入。 |
+| `stash_restoration.stash_ref` | 同上 | 原 S2 ref 或 `null`；不写 diff、代理 URL、凭证、原始 stderr。 |
+| `stash_restoration.stage` | 同上 | 固定 `"fetch"`。 |
+| `stash_restoration.exit_code/error_class` | 仅 restore_failed | 非零 int / 固定 `"stash_pop_failed"`；成功和 not_created 不出现。 |
+
+最终错误始终保留 `UpgradeError.stage == "fetch"`。若 pop 成功，输出应说明“已恢复本次自动 stash，fetch 仍失败”；若 pop 失败，输出必须包含具体 `stash apply <stash_ref>` 命令。不得把 origin、PyPI/pip 或 `hermes --version` 写入 target 选择、retry 或恢复提示。
+
+### 18.4 V2.3 测试矩阵与验收映射
+
+| 用例 | 隔离方式 | 必须断言 |
+|---|---|---|
+| V2.3-UT-001 | 直接调用 classifier | `(124, "timeout after 300s")` 为 `transient`；最小正整数秒数覆盖。 |
+| V2.3-UT-002 | 直接调用 classifier | exit 非 124、`timeout after 0s`、多余前后文本、普通 timeout 子串均为 `non_transport`。 |
+| V2.3-UT-003 | mock `git()` + 可注入 `sleep_fn` | 连续三次受控 timeout：三 calls、sleep `[2, 5]`、第三命令含 `-c http.version=HTTP/1.1`，三条 attempt 都为 transient，随后 fetch `UpgradeError`。 |
+| V2.3-UT-004 | temporary bare repo 或受控 `git()` mock | S2 创建 stash、S3 terminal fetch failure：只 pop 一次；dirty 内容可读回工作树；manifest 为 `restored`；总 exit 非零。 |
+| V2.3-UT-005 | mock pop 返回非零 | 不出现 `stash drop/reset/clean/apply`；原 stash 仍可由 `git stash list`/mock 证明存在；manifest `restore_failed`，next steps 含精确 apply 命令，最终非零。 |
+| V2.3-UT-006 | dry-run 与无 dirty tree | 不调用任何 stash 命令；dry-run 不调用 fetch/retry/sleep/manifest 写入。 |
+| V2.3-REG-001 | 现有 V1/V2 suite | `pytest tests/scripts/test_upgrade_hermes_agent.py tests/scripts/test_upgrade_hermes_agent_v2.py -v` 全绿。 |
+
+T3 还须运行 `python3 -m py_compile scripts/upgrade/upgrade_hermes_agent.py`。真实 `/home/pascal/workspace/hermes-agent` fetch、merge、editable install、Gateway restart 与 origin push 全部不属于 T3/T4；特别是成功升级后不得重启 Gateway 或 push origin。真实网络验证仅可在 Review PASS 后由 Pascal 对精确命令另行授权。
+
+### 18.5 T3 精确 allowlist、禁止项与退回条件
+
+允许修改仅限：
+
+- `scripts/upgrade/upgrade_hermes_agent.py`：仅 §18.1 的 classifier signature/callsite、新 helper、`upgrade()` fetch-exception cleanup；
+- `tests/scripts/test_upgrade_hermes_agent_v2.py`：仅 V2.3-UT-001 至 UT-006 的新增/调整；
+- 本 Design 不再由 T3 修改。
+
+禁止修改：`tests/scripts/test_upgrade_hermes_agent.py`、所有 RFC/SPEC/Design、模板、依赖/lockfile、`data/hermes_patches.yaml`、`/home/pascal/workspace/hermes-agent/**`、任何 profile/auth/MCP/gateway/systemd/JMap，及所有 allowlist 外 dirty 文件。禁止真实 fetch、merge、install、restart、push；禁止任何 global/local/system git config 或代理环境变量写入。
+
+必须退回 Principal 而非由 T3 自行扩展的条件：需要对非 fetch 阶段重试；需要在 S6 之后恢复 stash 或改写 rollback；需要超出上述两份文件和 §18.1 函数范围的持久化或配置修改；或发现当前 `run_cmd()` 不再产生 `exit_code=124` 加精确 timeout metadata。上述任一项改变了 RFC/SPEC 的闭集或副作用边界。
+
+### 18.6 Design Gate 自检结论（T2）
+
+- [x] RFC/SPEC/DESIGN 均为 V2.3，target truth source、timeout 闭集与 stash 状态语义一致。
+- [x] 实现路径精确到现有函数锚点、调用参数、guard 与 manifest 字段；无待 Developer 裁决的 error/empty 或副作用语义。
+- [x] `restored`、`restore_failed`、`not_created` 各有唯一可证伪结果；pop conflict/failure 统一 fail-closed。
+- [x] retry 只覆盖 upstream target fetch；origin 和 merge/install/restart/push 无新增 retry。
+- [x] dry-run 的零网络、零 sleep、零写入及 Gateway/origin 禁令未被改变。
+- [x] T3 allowlist 仅两份代码/测试文件；本 T2 仅修改本 Design，未创建运行态 stub 或触碰外部 Hermes repo。

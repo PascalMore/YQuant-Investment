@@ -7,16 +7,18 @@
 | 状态 | Accepted |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-08 |
-| 最后更新 | 2026-08-20 |
-| 版本号 | V2.2 |
+| 最后更新 | 2026-09-21 |
+| 版本号 | V2.3 |
 | 来源 RFC | RFC-10-006-hermes-upgrade-script-v2 |
-| 继承 SPEC | SPEC-10-005-hermes-auto-upgrade, SPEC-10-006 V2.0, V2.1 |
+| 继承 SPEC | SPEC-10-005-hermes-auto-upgrade, SPEC-10-006 V2.0, V2.1, V2.2 |
 | 关联 Design | DESIGN-10-006-hermes-upgrade-script-v2 |
 | 目标模块 | 10_infra / Hermes 运维自动化 |
 
 ## 1. 需求摘要
 
 本 SPEC 将 RFC-10-006 V2.1 的传输韧性增量需求落为可执行、可测试的工程契约，并完整继承 SPEC-10-005（V1.0）的安全升级主线与 SPEC-10-006 V2.0 的 feature-branch/patch-manifest 能力。
+
+V2.3 是针对已复现 P0 的最小修订：仅令 `run_cmd()` 规范化产生的 upstream fetch timeout 进入既有 retry policy，并在该 fetch 的终止失败路径恢复本次自动 stash。升级 target 的唯一源码 truth source 是本地 fork 相对官方 `upstream/main`，或用户显式指定的官方 upstream tag/SHA；`origin` 仅是可选保护/push 端点，PyPI/pip 与 `hermes --version` 均不得决定 target。
 
 V2.1 不做主线重写，只在 3 个函数位置做增量替换：
 
@@ -37,6 +39,7 @@ V2.1 不做主线重写，只在 3 个函数位置做增量替换：
   - 修改 `protect_local_commits()` 分支感知 push。
 - manifest 新增 `fetch_attempts` 数组。
 - `--dry-run` 扩展输出 fetch plan（target-aware 命令 + 是否含 HTTP/1.1 fallback）。
+- 仅对 upstream target fetch：将 `(exit_code=124, stderr 完全匹配 run_cmd timeout metadata)` 识别为 `transient`，并在 S6 merge 前的 fetch 终止失败后恢复本次自动 stash。
 - 更新 `docs/rfc/10_infra/RFC-10-006-hermes-upgrade-script-v2.md`。
 - 更新 `docs/spec/10_infra/SPEC-10-006-hermes-upgrade-script-v2.md`。
 - 新增/更新测试覆盖错误分类、retry 状态机、branch-aware protect、dry-run 零网络。
@@ -48,6 +51,7 @@ V2.1 不做主线重写，只在 3 个函数位置做增量替换：
 - 不修改 `data/hermes_patches.yaml`。
 - 不新增第三方依赖。
 - 不实现任何 fetch 之外的自动重试（merge/install/restart/push）。
+- 不对 origin fetch、resolve/classify/protect/merge/install/restart/push 的 timeout 或任意非 fetch 命令重试；不通过 PyPI/pip、`hermes --version` 或 `origin/main` 选择源码 target。
 - 不写入 git config（`--global`/`--system`/`--local`）。
 - 不改变代理环境变量（`http_proxy`/`https_proxy`/`no_proxy`）。
 - 不引入 `http.postBuffer`、`http.lowSpeedLimit`、`http.lowSpeedTime` 配置。
@@ -64,6 +68,8 @@ V2.1 不做主线重写，只在 3 个函数位置做增量替换：
 | manifest `fetch_attempts` 写入 | 新增逻辑 | 同上 |
 | `FETCH_ATTEMPT_DELAYS` 常量 | 新增 | 同上级作用域 |
 | V2.1 新增测试用例 | 新增 | `tests/scripts/test_upgrade_hermes_agent_v2.py` |
+| V2.3 timeout/stash 测试用例 | 新增 | `tests/scripts/test_upgrade_hermes_agent_v2.py` |
+| `restore_stash_after_fetch_failure()`（命名可等价调整） | 新增 | `scripts/upgrade/upgrade_hermes_agent.py` |
 | 更新 RFC/SPEC | 修改 | `docs/rfc/10_infra/`, `docs/spec/10_infra/` |
 
 ## 3. 功能规格
@@ -122,7 +128,9 @@ V2.1 不做主线重写，只在 3 个函数位置做增量替换：
 函数签名：
 
 ```python
-def classify_git_transport_failure(stderr: str, stdout: str = "") -> str:
+def classify_git_transport_failure(
+    stderr: str, stdout: str = "", *, exit_code: Optional[int] = None
+) -> str:
     """Return 'transient' | 'permanent' | 'non_transport'."""
 ```
 
@@ -148,13 +156,15 @@ def classify_git_transport_failure(stderr: str, stdout: str = "") -> str:
 | 16 | `connection refused` | `transient` |
 | 17 | `could not resolve host` | `transient` |
 | 18 | `transfer closed` + `expected` | `transient` |
-| 19 | 其他非空 stderr | `non_transport` |
-| 20 | 空 stderr | `non_transport` |
+| 19 | `exit_code == 124` 且 stderr 全量匹配 `^timeout after [1-9][0-9]*s$` | `transient` |
+| 20 | 其他非空 stderr | `non_transport` |
+| 21 | 空 stderr | `non_transport` |
 
 实现约束：
 
 - 使用单一预编译 `re.compile(patterns, re.IGNORECASE)` 循环，不引入外部依赖。
 - `permanent` 模式优先级高于 `transient`，避免某条 stderr 同时命中两个分类时误判。
+- timeout 判定不是 stderr 子串匹配：仅 `exit_code == 124` 且 stderr 去除首尾空白后精确匹配 `timeout after <正整数>s` 才返回 `transient`。该字符串必须来自 `run_cmd()` 的 `subprocess.TimeoutExpired` 分支；任何其它 exit code 或含额外文本的 timeout 仍为 `non_transport`。
 - 不将 stdlib `http.client` / `urllib` 错误纳入；所有输入来自 git subprocess 输出。
 - 测试必须覆盖表内每条模式和 1 条不匹配的随机字符串。
 
@@ -236,6 +246,22 @@ fetch 已达上限 3 次 (场景: {'normal'|'backoff-retry'|'http/1.1-fallback'}
 | target 为空 | `not target` | `UpgradeError("fetch", "target 为空")` |
 | dry-run 模式 | `config.dry_run` | 只打印 fetch 命令（含 HTTP/1.1 计划），不执行任何 attempt |
 
+### 3.5a F2-013a：fetch timeout 与 S2 stash 恢复（V2.3）
+
+**触发范围（闭集）**：仅 `fetch_remotes()` 对 `upstream` 的 target-aware fetch，且每一 attempt 使用 `run_cmd()`/`git()` 的 `timeout=FETCH_TIMEOUT`。命令在 timeout 后形成 `CommandResult(exit_code=124, stderr="timeout after 300s")` 时，必须按 §3.4 的 metadata 规则分类为 `transient`，参与现有 attempt 1/2/3 及 HTTP/1.1 fallback。origin fetch 仍为单次 fail-stop，不适用本条。
+
+**stash 恢复前提**：当前 run 的 `manifest["stash_ref"]` 非空、终止 `UpgradeError.stage == "fetch"`、且尚未进入 S6 merge。只有此交集可调用恢复逻辑；不得把该逻辑扩展为 merge/install/restart/push 自动回滚。
+
+**动作与可验证结果**：
+
+1. 执行 `git stash pop <stash_ref>`，并把命令记录进既有 `commands[]`。
+2. pop exit=0：写入 `manifest["stash_restoration"]={"status":"restored","stash_ref":<ref>,"stage":"fetch"}`；`stash_ref` 不得再是唯一保存原始未提交修改的位置。
+3. pop exit!=0（含冲突）：不得执行 `stash drop`、reset、clean 或覆盖；写入同字段、`status="restore_failed"` 和已脱敏的错误类别/exit code，保留原 stash，并在最终 `UpgradeError.next_steps` 中输出 `git -C <repo> stash apply <stash_ref>` 与冲突处理提示。
+4. 无 `stash_ref`：不执行任何 stash 命令，写入 `status="not_created"` 或不写该字段（二选一，Design 必须冻结实现选择）。
+5. dry-run：不得调用此恢复函数，不执行 `stash pop`、`stash apply`、sleep、网络或磁盘写入。
+
+恢复失败不会把原 fetch failure 伪装成成功：最终 exit 仍为非零；其残余风险是用户修改与新源码可能冲突，且 stash 保留正是防丢失锚点。
+
 ### 3.6 F2-014 Manifest fetch attempt 审计
 
 **新增字段**：`manifest["fetch_attempts"]`（list，每个 attempt 一个 dict）。
@@ -247,10 +273,12 @@ fetch 已达上限 3 次 (场景: {'normal'|'backoff-retry'|'http/1.1-fallback'}
 | `remote` | string | 是 | `"upstream"` | git remote 名 |
 | `target` | string | 是 | `"main"` | fetch 目标（不含 remote 前缀） |
 | `attempt` | int | 是 | `1` | attempt 序号（1-based） |
-| `transport` | string | 是 | `"default"` 或 `"http/1.1-fallback"` |
+| `transport` | string | 是 | `"default"` 或 `"http/1.1-fallback"` | 传输层标识 |
 | `exit_code` | int | 是 | `0` / `128` | git 命令 exit code |
 | `failure_class` | string/null | 否 | `"transient"` | exit != 0 时的分类；exit=0 时为 `null` |
 | `retry_delay_seconds` | int/null | 否 | `2` | 下一次重试前 sleep 的秒数（仅为下次 attempt 的退避） |
+
+**V2.3 新增 manifest 字段**：`stash_restoration` 只允许在上述 fetch fail-stop cleanup 中出现，最小 schema 为 `status`（`restored` / `restore_failed` / `not_created`）、`stash_ref`（string/null）、`stage`（固定 `fetch`）；不得存储原始 diff、未脱敏 stderr、代理或凭据。
 
 **安全规则**：
 
@@ -530,6 +558,12 @@ def fetch_remotes(config, manifest, target_ref):
 | V2.2-UT-006 | behind upstream: tag target 不显示 | `version_ref=v2026.7.1` | 输出**不包含** `behind upstream/main` |
 | V2.1-UT-018 | protect_local_commits: HEAD 已在 origin | mock merge-base 返回 0 | skip push |
 | V2.1-UT-019 | fetch_remotes: target-aware 集成 | temp bare repo, 检查远程 fetch 命令参数 | `--no-tags upstream main` 出现在命令日志 |
+| V2.3-UT-001 | classify: 受控 timeout | `(stderr="timeout after 300s", exit_code=124)` | `transient` |
+| V2.3-UT-002 | classify: timeout 边界拒绝 | 非 124、额外 stderr 文本、任意 `timeout` 子串 | 均为 `non_transport` |
+| V2.3-UT-003 | fetch policy: timeout 三次路径 | mock 三次 `(124, timeout metadata)` | 3 次调用；第 3 次含 HTTP/1.1；2s/5s；manifest 三条均为 transient |
+| V2.3-UT-004 | fetch failure: stash pop 成功 | mock/temporary repo，已有本次 `stash_ref`，S6 前 fetch fail | 调用一次 `stash pop <ref>`；manifest `stash_restoration.status=restored`；原 dirty 内容回到工作树 |
+| V2.3-UT-005 | fetch failure: stash pop 冲突/失败 | mock pop 非零 | 不 drop/reset/clean；stash 保留；`restore_failed` + 人工 `stash apply` next step；最终非零 |
+| V2.3-UT-006 | no stash / dry-run | 空 `stash_ref` 或 dry-run | 不调用 stash 命令 |
 | V2.1-REG-001 | V1 regression | `pytest tests/scripts/test_upgrade_hermes_agent.py` | 全部通过 |
 | V2.1-REG-002 | V2.0 regression | `pytest tests/scripts/test_upgrade_hermes_agent_v2.py` | 全部通过（新测试不破坏旧测试） |
 | V2.1-SMOKE-001 | dry-run 默认不联网 | `--dry-run --no-restart --no-push` | exit 0，输出含 fetch plan + "不发网络" |
@@ -582,6 +616,11 @@ python3 -m pytest tests/scripts/test_upgrade_hermes_agent_v2.py -v -k "V2.1-UT-0
 | A2.1-015 | 不触碰禁止文件 | `git diff --name-only` | Review |
 | A2.1-016 | 无 git config 写入 | 代码审查 | Review |
 | A2.1-017 | 无代理环境变量修改 | 代码审查 | Review |
+| A2.3-001 | 仅受控 fetch timeout 可重试 | metadata 边界单测 | V2.3-UT-001, 002 |
+| A2.3-002 | timeout 仍严格最多 3 attempts，第三次 HTTP/1.1 | mocked policy test | V2.3-UT-003 |
+| A2.3-003 | fetch fail-stop 不遗留可正常恢复的初始 dirty 修改在 stash | temporary repo readback | V2.3-UT-004 |
+| A2.3-004 | stash 恢复冲突 fail-closed | mock/temporary repo | V2.3-UT-005 |
+| A2.3-005 | target truth source 为官方 upstream | code/dry-run review | 不出现 PyPI/pip/origin target fallback |
 
 ## 10. 错误契约
 
@@ -598,6 +637,7 @@ python3 -m pytest tests/scripts/test_upgrade_hermes_agent_v2.py -v -k "V2.1-UT-0
 | attempt 3 exit!=0 | 任意分类 | `UpgradeError`, fail-stop | 是 |
 | 3 次 attempt 全部 exit!=0 | 始终 | `UpgradeError` with next_steps | 是 |
 | `--dry-run` 模式 | `config.dry_run` | 打印计划，不执行 subprocess | 否 |
+| S2 创建 stash 后、S6 前 fetch 终止失败 | `stash_ref` + `UpgradeError.stage == fetch` | 尝试一次 `stash pop`；成功则 restored，失败则保留 stash + 人工命令 | 是 |
 
 ### 10.2 保护阶段错误
 

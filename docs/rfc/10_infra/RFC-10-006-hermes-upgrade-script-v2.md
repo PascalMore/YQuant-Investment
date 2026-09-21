@@ -7,8 +7,8 @@
 | 状态 | Accepted |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-08 |
-| 最后更新 | 2026-08-20 |
-| 版本号 | V2.2 |
+| 最后更新 | 2026-09-21 |
+| 版本号 | V2.3 |
 | 所属模块 | 10_infra（基础设施 / Hermes 运维自动化） |
 | 继承 RFC | RFC-10-005-hermes-auto-upgrade |
 | 关联 SPEC | SPEC-10-006-hermes-upgrade-script-v2 |
@@ -20,6 +20,7 @@
 | 版本号 | 日期 | 更新内容 | 负责人 |
 |---|---|---|---|
 | V2.2 | 2026-08-20 | Dry-run 输出正确性增量：修复 merge_mode 三分支漏判（target is ancestor of head → already-up-to-date），新增 behind-upstream 真实差距显示（对抗 P-5 陷阱：hermes --version 在 fork 上失明） | YQuant-Principal |
+| V2.3 | 2026-09-21 | P0 韧性修订：将由 `run_cmd()` 生成的 fetch subprocess timeout（exit=124 + `timeout after <seconds>s`）纳入 transient 三次策略；定义 fetch fail-stop 后本次自动 stash 的恢复契约，并冻结 target truth source 为官方 `upstream` | YQuant-Codex-Principal |
 | V2.1 | 2026-07-30 | 增补 Git 传输韧性增强：target-aware fetch、分类瞬态错误有限重试、HTTP/1.1 命令级 fallback、manifest audit、feature-branch 保护修正、dry-run 零网络 | YQuant-Codex-Principal |
 | V2.0 | 2026-07-08 | 在 RFC-10-005 V1.0 基础上新增非 main 分支、feature commit 保护、Pascal fork 私有 patch manifest 核对 | YQuant-Codex-Principal |
 
@@ -60,6 +61,14 @@ V2.0（2026-07-08）在 V1.0 基础上解决了 3 个限制：
 
 当前 `protect_local_commits()` (`scripts/upgrade/upgrade_hermes_agent.py:1231-1256`) 在 feature branch 上始终执行 `git push origin main`，无论当前 HEAD 是否被该 push 覆盖。在 feature branch 上，`push origin main` 成功并不保护 feature branch 的 commit。
 
+### 1.5 V2.3 P0：fetch timeout 被误判为非传输错误，且失败清理未闭合
+
+2026-09-21 的实际运行中，项目脚本对本地 Hermes fork 的官方源执行 `git fetch --no-tags upstream main` 时，`run_cmd()` 捕获 `subprocess.TimeoutExpired` 并规范化返回 `exit_code=124`、`stderr="timeout after 300s"`。现行 classifier 未识别该受控 metadata，结果为 `non_transport`，在第一次 fetch 便 fail-stop；但同一环境中 `git -c http.version=HTTP/1.1 ls-remote --heads upstream main` 已证明官方 upstream 可达。
+
+该失败发生在 S2 stash 之后、S6 merge 之前。现行 `upgrade()` 的 `UpgradeError` 处理仅写 manifest 并退出；它没有恢复本次 S2 自动创建的 stash。因此，原有未提交修改可能仍只保留在 stash 中，违背升级失败不改变用户工作树可见状态的预期。
+
+本 RFC 的升级对象始终是 `/home/pascal/workspace/hermes-agent` 本地 fork 相对**官方 `upstream/main`**（或用户显式指定的官方 upstream tag/SHA）的源码基线；不是升级此脚本本身的上游，也不采用 PyPI/pip 版本作为 target truth source。`origin` 仅可用于既有的本地 commit 保护或用户显式启用的 fork push，不能替代 upstream target。
+
 ## 2. 设计目标
 
 ### 2.1 Must-Have
@@ -78,6 +87,11 @@ V2.0（2026-07-08）在 V1.0 基础上解决了 3 个限制：
 7. **merge_mode 三分支分类**：dry-run 中 `merge_mode` 显示必须与 `classify_git_relation()` 真实逻辑对齐，含 `target is ancestor of head → already-up-to-date` 分支。
 8. **behind upstream 真实差距显示**：当 `version_ref=upstream/main` 时，dry-run 必须额外显示 `HEAD..upstream/main` 的 commit 距离，作为 `hermes --version` 在 fork 上失明时的 truth source。tag/branch target 不显示。
 
+**V2.3 P0 增量契约**（延续 2.1 与 V2.2 的全部约束）：
+
+9. **受控 fetch timeout 可重试**：仅当 fetch attempt 的 `CommandResult.exit_code == 124` 且 stderr 完全符合 `run_cmd()` 生成的 `timeout after <正整数>s` metadata 时，将其分类为 `transient`；因此它进入既有 normal → 2s retry → HTTP/1.1 fallback 的最多三次路径。仅出现自然语言 `timeout`、非 124 exit 或非 fetch 阶段均不得触发此规则。
+10. **fetch fail-stop 的 stash 恢复**：若本次升级 S2 创建了 `stash_ref`，且 fetch 在 S6 merge 前最终失败，脚本必须在写最终 manifest/返回前执行一次受控 `git stash pop <stash_ref>`。只有 pop exit=0 才可将 `stash_restoration.status` 标为 `restored`；冲突或执行失败必须保留 stash 作为唯一恢复锚点、记录 `restore_failed`，并以明确人工恢复命令 fail-stop，绝不静默 drop 或覆盖用户修改。
+
 ### 2.2 Non-Goals
 
 - 不修改 Hermes Agent upstream 源码。
@@ -88,6 +102,7 @@ V2.0（2026-07-08）在 V1.0 基础上解决了 3 个限制：
 - 不关闭用户代理或修改 `/etc/environ` / `/etc/profile`。
 - 不实现 `http.postBuffer`、`http.lowSpeedLimit` 等非传输错误相关配置的自动设置。
 - V2.2 不引入自动 fetch upstream 替用户检查（dry-run 仍不主动 fetch）；behind upstream 仅在本地 `upstream/main` ref 已存在时计算。
+- 不改变 target truth source：不允许通过 PyPI/pip、`hermes --version` 或 `origin/main` 决定官方升级目标；不新增 origin fetch 的 retry，也不改变 merge/install/restart/push 的 retry 语义。
 
 ## 3. 总体方案
 
@@ -119,6 +134,7 @@ V2.0 主状态机（不变）
 3. **命令级隔离**：所有 HTTP/1.1 fallback 通过 `git -c http.version=HTTP/1.1 fetch ...` 命令参数实现，不写持久配置。
 4. **仅 fetch 可自动恢复**：所有 Git 写操作（merge/push）和环境变更（install/restart）都必须由操作人工决定 retry。
 5. **可审计**：每次 fetch attempt 的远程、目标、次数、传输协议、exit code、错误分类都记录到 manifest，但不保存敏感信息。
+6. **失败前态可恢复**：本 P0 仅为 fetch fail-stop 补足 S2 自动 stash 的恢复；该恢复发生在 merge 前，不扩大为 merge/install/restart/push 的自动回滚或重试。
 
 ### 3.3 Retry 状态机
 
@@ -176,6 +192,7 @@ V2.0 主状态机（不变）
 ```
 
 - `classify(stderr)` 是纯函数：输入 git stderr，返回 `transient` / `permanent` / `non_transport`。
+- V2.3 classifier 同时接收 attempt metadata（至少 `exit_code`）；只有受控的 `(124, "timeout after <seconds>s")` 对可越过默认 `non_transport`，避免把任意错误文本中的 timeout 误放行。
 - Attempt 1→2 之间的退避：初次 2s，后续 5s（dry-run 不 sleep，只打印计划）。
 - Attempt 3 额外注入 `-c http.version=HTTP/1.1` 参数。
 - 任何 attempt 成功后立即返回，不等待剩余重试。
@@ -200,7 +217,8 @@ V2.0 主状态机（不变）
 | `transient` | `connection refused` | 连接被拒绝（可能 proxy 临时不可用） | 是 |
 | `transient` | `could not resolve host` | 临时 DNS 解析失败 | 是 |
 | `transient` | `fatal: the remote end hung up unexpectedly` | 远端意外断开 | 是 |
-| `transient` | `error: --stat` / `transfer closed` 伴随 `expected` | 传输字节数与预期不符 | 是 |
+| `transient` | `transfer closed` 伴随 `expected` | 传输字节数与预期不符 | 是 |
+| `transient` | `exit_code == 124` 且 `stderr` 完全为 `timeout after <正整数>s` | `run_cmd()` 捕获的 fetch subprocess timeout | 是 |
 | `permanent` | `authentication failed` | 认证/凭据错误 | 否 |
 | `permanent` | `access denied` / `permission denied` | 权限错误 | 否 |
 | `permanent` | `repository not found` | 仓库不存在或无访问权限 | 否 |
@@ -306,23 +324,27 @@ V2.1 修正后行为：
 - [x] Feature-branch 保护修正有分支感知的明确判定规则。
 - [x] Manifest fetch_attempts schema 不包含代理 URL、凭证或未脱敏 stderr。
 - [x] Dry-run 零网络、不 sleep、不写 Git ref 的声明明确。
+- [x] V2.3 以 `(exit_code=124, run_cmd timeout metadata)` 的闭集定义 timeout retry，不将任意 timeout 文本或非 fetch 阶段放行。
+- [x] V2.3 将 fetch fail-stop 的 S2 stash 恢复限制在 merge 前，并定义 restored / restore_failed 的 manifest 与 fail-closed 语义。
+- [x] 官方 target truth source 固定为 `upstream/main`（或官方 upstream tag/SHA）；origin/PyPI/pip 不可替代。
 
 ### 7.2 T2/T3 实体验收（后续阶段）
 
-- `classify_git_transport_failure(stderr)` 纯函数：单元测试覆盖分类表中所有 mode。
+- `classify_git_transport_failure(stderr, stdout, *, exit_code)` 纯函数：单元测试覆盖分类表中所有 mode 和 V2.3 timeout metadata 边界。
 - `--dry-run --no-restart --no-push --version upstream/main`：输出 fetch 计划（仅 `upstream main --no-tags`），不发网络，不 sleep。
 - `--dry-run --version upstream/v2026.7.1`：输出仅 fetch 该 tag 的计划。
 - fetch 正常时仅一次 attempt，不 attempt 2/3。
 - fetch 瞬态错误时，manifest 包含最多 3 次 `fetch_attempts`。
 - fetch `permanent` 错误（如 `repository not found`）立即 fail-stop，不重试。
 - `protect_local_commits()` 在 feature branch 上 push 当前 branch 而非 `main`。
+- fetch terminal failure 且存在本次 S2 `stash_ref` 时，temporary-repo 测试证明 dirty 内容恢复到工作树；pop 冲突测试证明不 drop/reset/clean 且保留明确人工恢复命令。
 - V1.0 和 V2.0 现有测试全量通过。
 
 ## 8. 开放问题
 
 - classifier 如果遇到未知错误模式，是否默认归为 `permanent` 还是 `non_transport`？本 RFC 默认归为 `non_transport`（fail-stop），后续可根据运行反馈放宽。
 - `fetch_attempts` 中的 `retry_delay_seconds` 是否需要在 finally 字段也写入 manifest？本 RFC 只在前一次 attempt 字段中记录，下游可组合计算总耗时。
-- 是否需要在 `UpgradeConfig` 中新增 `--max-fetch-attempts` 覆盖 3 的上限？本 RFC 不加，保持简单；后续如果发现需要调节，可通过 V2.2 增量添加。
+- 是否需要在 `UpgradeConfig` 中新增 `--max-fetch-attempts` 覆盖 3 的上限？本 RFC 不加，保持简单；后续如果发现需要调节，可通过 V2.4 增量添加。
 
 ## 9. 参考资料
 
