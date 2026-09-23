@@ -1030,6 +1030,37 @@ kanban_create(
 **预防**：任何"产出数据"的 Pipeline，验收标准必须包含"用真实用户输入跑一次 + 人工或脚本检查输出合理性"。特别是 travel/search/recommend 类任务，光看代码和单测不够。
 
 **真实证据**：`data/memory/16_travel_pipeline-smoke-2026-06-29.md`（yinglong 项目）
+
+### P-27b: T1 retry 残留 worker 持 host lock 导致 T2 spawn 失败
+
+**触发**：T1 完成 → dispatcher claim → T2 claim 后 0 秒 spawn → exit_code=1 立即崩溃。
+**真因**：T1 retry 进程没死透，worker pid 仍持 host lock "Pascal-Laptop:89124" 等 Kanban DB 互斥锁；T2 worker 启动时获取同一锁失败 → watchdog SIGKILL。
+**Fix**：`ps aux | grep <run_id>` 看僵尸 worker → `kill -9 <pid>` → `kanban_block(原 task, kind=capability)` → create T_redo parent=[原 t_teid]。
+
+### P-28: T3 final2 长 retry 残留进程 + judge 误判
+
+**触发**：`kanban_complete` 后 dispatcher 自动起 retry run，worker 进程不杀，run 跑 30+ 分钟超时报废，judger 错判为"需要更多 turns"。
+**真因**：`kanban_complete` 不清 retry queue 残留 worker；judger 自身 fallback 模型链也限流，无法稳定判定任务已完成。
+**Fix**：manual finalize 必先 `kill -9 <pid>` + `kanban_block(kind=capability)` 原卡 + create 续接卡 parent=[上一级 done]，不依赖 judge force close。
+
+### P-29: Reader/Writer 包级导入与 sys.path 注入不对称的 ImportError
+
+**触发**：新增文件用包级相对导入（`from .candidate_v2_contract import`），测试 `sys.path.insert(scripts)` 后顶层 `import` 直接崩。
+**真因**：顶层 import 时模块没有包上下文，`ImportError: attempted relative import with no known parent package`。
+**Fix**：加 3 个 `__init__.py`（skills/ + skills/knowledge/ + skills/knowledge/scripts/）让 scripts/ 成为正式 package；测试改 `from knowledge.scripts import`。
+
+### P-30: fallback glm 上大任务超时/低吞吐
+
+**触发**：Full Flow T3 6 task 在 fallback `zai/glm-5.3-flash` 上 60 turns 仅落盘 4/9 文件。
+**真因**：130K tokens 输入 + 长 prompt 上退化，300-400s/turn latency；fallback 链对大任务既慢又不稳。
+**Fix**：大任务拆 ≤4 交付物/卡；Pascal 拍板时优先 A3 路径（亲手写关键代码，worker 写测试）规避单 worker 超时。
+
+### P-31: judge RateLimitError 已产物 finalize
+
+**触发**：`kanban_complete` judge 连续 3 次 RateLimitError，但产物已 100% 落盘可独立验证。
+**真因**：judger 自己的模型链也限流，系统卡在"judge 不可用 → 不能 finalize"单点。
+**Fix**：不再依赖 judge force close，改用脱钩续接（新 task parent=[上一级 done]）+ 人工 mark done with real artifacts（grep 文件 + ls 落盘目录）。
+
 ## Quick Flow 5 阶段流程模式（2026-06-29 新增 —— 已被 2026-06-30 V1.2 改造取代）
 
 > ⚠️ **历史快照**：本节是 2026-06-29 首次落地 Quick Flow 时的实现日志，**当前流程规则已由 2026-06-30 V1.2 改造取代**：① Intake 必须一次性预创建 T1-T4 全部（不是串行）；② parent links 全链 `[T1]/[T1,T2]/[T1,T2,T3]`（不是简化版 `[T1]/[T2]/[T3]`）；③ Closeout 自审清单 13 → **15 项**（含 #1/#2 Intake 预创建核验）；④ 适用 pitfall P-1~P-11 → **P-1~P-12**（含 V1.2 新增的 P-12 orchestrator 串行调度风险）。本节保留作为历史参考，**不要**当当前规则使用。
