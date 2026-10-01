@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-__version__ = "1.0.0"
+__version__ = "2.3.0"
 
 DEFAULT_REPO = "/home/pascal/workspace/hermes-agent"
 DEFAULT_HERMES_BIN = "/home/pascal/.local/bin/hermes"
@@ -805,6 +805,9 @@ def init_manifest(config: UpgradeConfig) -> dict:
         "local_only_commits": [],
         "merge_mode": None,
         "post_head": None,
+        "effective_version": None,
+        "outcome": "pending",
+        "completed_at": None,
         "install_status": "pending",
         "verify_status": "pending",
         "restart_status": "pending",
@@ -845,6 +848,15 @@ def add_manifest_error(manifest: dict, stage: str, code: str, message: str,
         "message": message,
         "next_steps": next_steps or [],
     })
+
+
+def finalize_upgrade_success(manifest: dict, *, post_head: str,
+                             effective_version: str) -> None:
+    """Record the terminal state only after every enabled upgrade stage succeeds."""
+    manifest["post_head"] = post_head
+    manifest["effective_version"] = effective_version
+    manifest["outcome"] = "succeeded"
+    manifest["completed_at"] = _utc_now_iso()
 
 
 # ---------------------------------------------------------------------------
@@ -2152,10 +2164,17 @@ def upgrade(config: UpgradeConfig) -> int:
         push_origin_if_enabled(config, manifest)
         write_manifest(manifest, mpath)
 
+        # Persist a complete terminal record after all enabled stages succeed.
+        post_head = git_out(["rev-parse", "HEAD"], repo=config.repo,
+                            manifest=manifest.setdefault("commands", []),
+                            verbose=config.verbose)
+        finalize_upgrade_success(manifest, post_head=post_head, effective_version=version)
+        write_manifest(manifest, mpath)
+
         # summary
         log_ok("=" * 60)
         log_ok(f"升级完成。manifest: {mpath}")
-        log_ok(f"  pre_head={manifest['pre_head'][:12]} -> post_head={manifest.get('post_head','')[:12] or '(n/a)'}")
+        log_ok(f"  pre_head={manifest['pre_head'][:12]} -> post_head={post_head[:12]}")
         log_ok(f"  merge_mode={manifest['merge_mode']}, install={manifest['install_status']}, "
                f"verify={manifest['verify_status']}, restart={manifest['restart_status']}, "
                f"push={manifest['push_status']}")

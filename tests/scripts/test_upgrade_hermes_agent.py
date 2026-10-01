@@ -10,6 +10,7 @@ Covers:
 import importlib.util
 import json
 import os
+from datetime import datetime
 import shutil
 import subprocess
 import sys
@@ -637,6 +638,69 @@ def test_dry_run_no_mutation(ua, tmp_path):
     manifests = list(tmp_path.glob("hermes-upgrade-*.json"))
     assert zips == []
     assert manifests == []
+
+
+# ---------------------------------------------------------------------------
+# Regression: successful already-up-to-date upgrade must have a complete
+# manifest and must not crash while rendering its final summary.
+# ---------------------------------------------------------------------------
+
+
+def test_finalize_upgrade_success_records_complete_terminal_state(ua):
+    manifest = ua.init_manifest(
+        ua.UpgradeConfig(
+            repo=Path("/tmp/hermes-agent"), version_ref="upstream/main",
+            backup_dir=Path("/tmp"), dry_run=False, restart=False,
+            push=False, rollback_manifest=None, yes=True, verbose=False,
+        )
+    )
+
+    ua.finalize_upgrade_success(
+        manifest,
+        post_head="a" * 40,
+        effective_version="v0.21.4+test",
+    )
+
+    assert manifest["outcome"] == "succeeded"
+    completed_at = datetime.fromisoformat(manifest["completed_at"])
+    assert completed_at.tzinfo is not None
+    assert manifest["post_head"] == "a" * 40
+    assert manifest["effective_version"] == "v0.21.4+test"
+    assert ua.__version__ == "2.3.0"
+
+
+def test_upgrade_already_up_to_date_writes_success_manifest(ua, tmp_path, monkeypatch):
+    upstream_bare = tmp_path / "upstream.git"
+    origin_bare = tmp_path / "origin.git"
+    work = tmp_path / "work"
+    _make_bare(upstream_bare)
+    _make_bare(origin_bare)
+    _make_repo(work, origin=origin_bare, upstream=upstream_bare)
+    _commit(work, "init")
+    _git(work, "push", "origin", "main")
+    _git(work, "push", "upstream", "main")
+    (work / ".install_method").write_text("git")
+
+    monkeypatch.setattr(ua, "install_editable", lambda *_args: None)
+    monkeypatch.setattr(ua, "verify_cli", lambda *_args: "v0.21.4+test")
+    monkeypatch.setattr(ua, "verify_import", lambda *_args: None)
+    monkeypatch.setattr(ua, "verify_gateway_pre", lambda *_args: "healthy")
+
+    cfg = ua.UpgradeConfig(
+        repo=work, version_ref="upstream/main", backup_dir=tmp_path,
+        dry_run=False, restart=False, push=False, rollback_manifest=None,
+        yes=True, verbose=False,
+    )
+    assert ua.upgrade(cfg) == 0
+
+    manifests = list(tmp_path.glob("hermes-upgrade-*.json"))
+    assert len(manifests) == 1
+    manifest = json.loads(manifests[0].read_text(encoding="utf-8"))
+    assert manifest["merge_mode"] == "already-up-to-date"
+    assert manifest["outcome"] == "succeeded"
+    assert manifest["completed_at"] is not None
+    assert manifest["post_head"] == _git(work, "rev-parse", "HEAD").stdout.strip()
+    assert manifest["effective_version"] == "v0.21.4+test"
 
 
 # ---------------------------------------------------------------------------
