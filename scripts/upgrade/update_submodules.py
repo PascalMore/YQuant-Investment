@@ -29,7 +29,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 
 OPTIN_FILENAME = ".update_submodules.yaml"
 OPTIN_SCHEMA_VERSION = 1
@@ -118,6 +118,7 @@ class SubmoduleConfig:
     skip_push: bool
     notes: str
     config_source: str  # "heuristic" | "heuristic+opt-in" | "opt-in-only"
+    install_exclude: tuple[str, ...] = ()  # v2.2.0: opt-in pkg filter (PEP 503 normalized)
 
 
 @dataclass
@@ -562,6 +563,7 @@ def discover_submodule(name: str, path: Path, project_root: Path) -> SubmoduleCo
         skip_push=False,
         notes="",
         config_source="heuristic",
+        install_exclude=(),  # v2.2.0 default
     )
 
 
@@ -600,6 +602,13 @@ def validate_override(raw: dict) -> Optional[dict]:
             out["pre_merge_hooks"] = pmh
     if "skip_push" in raw:
         out["skip_push"] = bool(raw["skip_push"])
+    # v2.2.0: install_exclude (list[str] -> tuple)
+    if "install_exclude" in raw:
+        ie = raw["install_exclude"]
+        if isinstance(ie, list) and all(isinstance(x, str) and x for x in ie):
+            out["install_exclude"] = ie
+        else:
+            log_warn(f"install_exclude 非法 (需 list[str], 非空), 丢弃该字段: {ie!r}")
     return out
 
 
@@ -653,6 +662,10 @@ def merge_override(base: SubmoduleConfig, override: dict) -> SubmoduleConfig:
     if "skip_push" in override:
         changes["skip_push"] = bool(override["skip_push"])
 
+    if "install_exclude" in override:
+        # tuple-ize; PEP 503 normalization happens in phase_install / filter helpers
+        changes["install_exclude"] = tuple(override["install_exclude"])
+
     if changes:
         source = "heuristic+opt-in"
     else:
@@ -678,6 +691,7 @@ def _replace_config(base: SubmoduleConfig, changes: dict, source: str) -> Submod
         "skip_push": changes.get("skip_push", base.skip_push),
         "notes": changes.get("notes", base.notes),
         "config_source": source,
+        "install_exclude": changes.get("install_exclude", base.install_exclude),
     }
     return SubmoduleConfig(**kwargs)
 
@@ -728,6 +742,208 @@ def _make_fail(phase: str, detail: str, exit_code: Optional[int] = None,
                duration: float = 0.0) -> PhaseResult:
     return PhaseResult(phase=phase, status="fail", exit_code=exit_code,
                        duration_sec=duration, detail=detail)
+
+
+# -----------------------------------------------------------------------
+# P1 helpers: requirements 行过滤 (RFC-10-012 §5.1, SPEC §4.2 / Fix-2 §3.4)
+# -------------------------------------------------------------------------
+
+# 行首包名提取边界字符: 空白 / 关系运算符 / 注释 / 环境标记 / 选项分隔
+_PKG_NAME_END_CHARS = set(" \t<>=!~;#[]")
+
+# 行首包名 token: PEP 503 允许字符
+_PKG_NAME_HEAD_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)")
+
+# 行内 -r/-c 引用重写: 捕获 option + path 两组, 同时支持分离/等号形式
+# 形式: -r X | --requirement X | -r=X | --requirement=X | -c X | -c=X | 同长选项
+# path token 必须为非空白 token, 含等号形式时整个 token 形如 opt=path
+_REQ_OPT_INLINE_RE = re.compile(
+    r"^(\s*(?:-r|--requirement|-c|--constraint)(=|\s+))"
+    r"(\S+)(.*)$"
+)
+
+
+def _normalize_pkg_name(name: str) -> str:
+    """PEP 503 规范化: lower + `[-_.]+` -> `-`, strip 两侧空白."""
+    return re.sub(r"[-_.]+", "-", name.strip().lower())
+
+
+def _extract_leading_pkg_name(line: str) -> Optional[str]:
+    """从 requirements 行提取行首包名 (跳过注释行 / `-` 选项行 / 空行).
+
+    返回原始大小写包名 (未规范化), 用于 audit 回显. 不命中返回 None.
+    """
+    stripped = line.lstrip()
+    # 注释行 / 选项行 (如 -r, --index-url, -e .)
+    if not stripped or stripped.startswith("#") or stripped.startswith("-"):
+        return None
+    m = _PKG_NAME_HEAD_RE.match(stripped)
+    if not m:
+        return None
+    token = m.group(1)
+    # 防御: 行首 token 后若紧接非合法字符 (如 '!' 出现在包名位置), 仍按 token 截断
+    # PEP 503 包名不含 '!' / ';' 等, 这里依赖 _PKG_NAME_HEAD_RE 的字符集.
+    return token
+
+
+def _resolve_relative_ref(orig_req_dir: Path, path_str: str) -> str:
+    """将副本中相对 -r/-c 引用 path_str 解析为原文件目录下的绝对路径.
+
+    原文件是需求解析源; 副本仅是包级行的过滤, 嵌套引用 (relative)
+    必须仍由 pip 读取原目录的解析目标. 绝对路径原样保留 (已显式绝对,
+    包含 http URL/绝对 Unix 路径/绝对 Windows 路径). URL 与 VCS 引用
+    (git+https://...) 不视为相对路径, 不修改.
+    """
+    p = path_str.strip()
+    if not p:
+        return path_str
+    # 协议 / VCS / Windows 盘符等非相对引用原样保留
+    if "://" in p or p.startswith("git+") or re.match(r"^[A-Za-z]:[\\/]", p):
+        return path_str
+    # 已显式绝对 (POSIX) 直接保留
+    if p.startswith("/"):
+        return path_str
+    resolved = (orig_req_dir / p).resolve()
+    return str(resolved)
+
+
+def _rewrite_relative_refs(line: str, orig_req_dir: Path) -> str:
+    """对单行做引用重写: 相对 -r/-c -> 相对于 orig_req_dir 的绝对路径.
+
+    仅当行首匹配 `_REQ_OPT_INLINE_RE` 才重写, 其余内容原样保留 (含行尾
+    注释). 行尾 keepends (即行尾 `\\n`) 由调用方负责保留; 本函数只处理
+    单行内容, 但为安全起见仍把行尾 `\\n` 从 path 之后剥离并放回结果末尾,
+    保证 splitlines(keepends=True) 风格下换行不丢失.
+    """
+    # 把可能存在的单个尾部 \n 拆出
+    if line.endswith("\n"):
+        body = line[:-1]
+        nl = "\n"
+    else:
+        body = line
+        nl = ""
+    m = _REQ_OPT_INLINE_RE.match(body)
+    if not m:
+        return line  # 不动
+    # group(1) = opt + sep (e.g. "-r ", "--requirement=", "  -c ")
+    # group(2) = sep (仅识别 ' ' 与 '=' 两种)
+    # group(3) = path
+    # group(4) = 行尾 (含行尾注释)
+    opt_with_sep, sep, path, rest = m.group(1), m.group(2), m.group(3), m.group(4)
+    new_path = _resolve_relative_ref(orig_req_dir, path)
+    # 保留 option 名 + separator (空格 / '='); path 替换为 new_path
+    sep_idx = opt_with_sep.find(sep)
+    opt_name = opt_with_sep[:sep_idx]
+    new_prefix = f"{opt_name}{sep}{new_path}"
+    return new_prefix + rest + nl
+
+
+def _filter_requirements(req_path: Path, exclude: tuple[str, ...],
+                          tmpdir: Optional[Path] = None
+                          ) -> tuple[Path, list[str]]:
+    """过滤 requirements 文件, 整行删除锚定到 exclude 包名的行; 同时对
+    副本中保留的引用行做相对 -r/-c 路径重写, 指向原文件目录 (SPEC §4.2 /
+    DESIGN §3.4 Fix-2). 不递归复制或排除嵌套包.
+
+    语义:
+      - 一行至多被一个排除包命中 (首包名锚定).
+      - 行首包名提取后 PEP 503 规范化与 exclude 元素比对; 仅相等才删.
+      - 注释行 / 选项行 / 未命中行原样保留; 仅相对 -r/-c 引用重写.
+      - 不修改原文件; 返回副本路径 (调用方负责清理).
+      - 多根过滤场景: 副本按 req_path.name 命名, tmpdir 内独立位置, 不
+        因同名文件互相覆盖 (调用方传不同 tmpdir 或不同 name).
+
+    返回 (filtered_path, hit_pkg_names) -- hit_pkg_names 为去重保序的原始
+    大小写命中包名 (从 requirements 行首提取). 抛 OSError 由 phase_install 捕获.
+    """
+    import tempfile as _tempfile
+
+    norm_exclude = {_normalize_pkg_name(x) for x in exclude}
+    text = req_path.read_text(encoding="utf-8")
+    orig_req_dir = req_path.parent.resolve()
+
+    out_lines: list[str] = []
+    hit_names: list[str] = []
+    seen_hits: set[str] = set()
+    for line in text.splitlines(keepends=True):
+        # splitlines(keepends=True) 保留原始换行符
+        raw_name = _extract_leading_pkg_name(line)
+        if raw_name is not None and _normalize_pkg_name(raw_name) in norm_exclude:
+            if raw_name not in seen_hits:
+                hit_names.append(raw_name)
+                seen_hits.add(raw_name)
+            # 删除该整行 (不写入 out_lines)
+            continue
+        # Fix-2: 副本中相对 -r/-c 引用重写为原目录绝对路径,
+        # 保证嵌套原件仍由 pip 解析. 注释 / 未命中行 (含行内注释) 原样保留.
+        out_lines.append(_rewrite_relative_refs(line, orig_req_dir))
+
+    if tmpdir is None:
+        tmpdir = Path(_tempfile.mkdtemp(prefix="update_submodules_filter_"))
+    # Fix-3: 每个根 (req_path) 一个独立的临时子目录, 避免同父目录
+    # basename (serviceA/reqs/requirements.txt vs serviceB/reqs/
+    # requirements.txt) 的两份副本映射到同一路径互相覆盖, 导致 pip
+    # parser 只能读到第二份、第一根依赖丢失. 复用调用方传入 tmpdir
+    # (由 phase_install 的 finally 清理), 仅在它下面建一个 mkdtemp 唯一
+    # 子目录放本次的副本, 不引入自制哈希碰撞平台.
+    subdir = Path(_tempfile.mkdtemp(prefix="req_", dir=str(tmpdir)))
+    out_path = subdir / req_path.name
+    out_path.write_text("".join(out_lines), encoding="utf-8")
+    return out_path, hit_names
+
+
+def _parse_requirement_paths(pip_cmd: tuple[str, ...]) -> list[tuple[int, str]]:
+    """从 pip install 命令中提取 -r / --requirement 引用路径.
+
+    返回 [(cmd_index, path_str), ...]. 索引 cmd_index 指向 path_str 自身,
+    对于分离形式指向紧随选项的下一 token (path_str == pip_cmd[cmd_index]);
+    对于等号形式指向整个 token (path_str == pip_cmd[cmd_index].split("=",1)[1]).
+    不存在则返回 [].
+    """
+    out: list[tuple[int, str]] = []
+    i = 0
+    while i < len(pip_cmd):
+        tok = pip_cmd[i]
+        if tok in ("-r", "--requirement") and i + 1 < len(pip_cmd):
+            out.append((i + 1, pip_cmd[i + 1]))
+            i += 2
+            continue
+        if tok.startswith("-r=") or tok.startswith("--requirement="):
+            out.append((i, tok.split("=", 1)[1]))
+        i += 1
+    return out
+
+
+# -----------------------------------------------------------------------
+# P2 helper: classify_pip_failure sample 二次选择 (SPEC §4.3)
+# -----------------------------------------------------------------------
+
+# 探测正则: 包名形态 token + 紧接版本约束运算符 (单一字符串内)
+_PKG_CONSTRAINT_TOKEN_RE = re.compile(
+    r"[A-Za-z0-9][A-Za-z0-9._-]*\s*[<>=!~]"
+)
+# 探测: "Could not find a version that satisfies the requirement <pkg>"
+_COULD_NOT_SATISFY_RE = re.compile(
+    r"Could not find a version that satisfies the requirement\s+\S+"
+)
+
+
+def _prefer_constraint_sample(matched_lines: list[str]) -> str:
+    """在分类命中的行集合中按 SPEC §4.3 三级优先选 sample.
+
+    1. 同时含包名形态 token + 版本约束运算符的行;
+    2. 含 'Could not find a version that satisfies the requirement <pkg>' 的行;
+    3. 回落 matched_lines[0] (v2.1.0 行为).
+    """
+    if not matched_lines:
+        return ""
+    for ln in matched_lines:
+        if _PKG_CONSTRAINT_TOKEN_RE.search(ln):
+            return ln.strip()
+    for ln in matched_lines:
+        if _COULD_NOT_SATISFY_RE.search(ln):
+            return ln.strip()
+    return matched_lines[0].strip()
 
 
 def phase_fetch(state: SubmoduleState, *, dry_run: bool) -> PhaseResult:
@@ -861,6 +1077,13 @@ def phase_install(state: SubmoduleState, *, dry_run: bool) -> PhaseResult:
     resolution_conflict / source_build_error / other.  This is P-6 — the
     longbridge 4.x incident showed that a generic "pip install error" line
     gives no actionable hint.
+
+    v2.2.0 (RFC-10-012 P1): when ``cfg.install_exclude`` is non-empty,
+    pip_install_cmd 中 -r/--requirement 引用的 requirements 文件会被过滤
+    (整行锚定该包); pip 命令指向临时副本, 成功且发生排除 -> degraded detail.
+    Fix-2 最小修复: 等号形式 requirement 选项保留前缀 (-r=path / --requirement=path),
+    副本中相对 -r/-c 引用重写为原目录绝对路径, 临时目录从创建起就在 try/finally
+    作用域内 (源缺失/写失败/pip 失败/成功/dry-run 全路径清理).
     """
     cfg = state.config
     if cfg.venv is None or cfg.pip_install_cmd is None:
@@ -869,19 +1092,125 @@ def phase_install(state: SubmoduleState, *, dry_run: bool) -> PhaseResult:
     if not pip_bin.exists():
         return _make_skip("install", f"venv pip 不存在: {pip_bin}, skip")
     cmd = [str(pip_bin)] + list(cfg.pip_install_cmd)
-    if dry_run:
-        return _make_pass("install", f"[dry-run] {' '.join(cmd)}")
-    t0 = time.time()
-    r = run_cmd(cmd, cwd=str(state.abs_path))
-    dur = time.time() - t0
-    if r.exit_code == 0:
-        return _make_pass("install", "pip install OK", exit_code=0, duration=dur)
-    classification, sample = classify_pip_failure(r.stderr or r.stdout)
-    detail = (
-        f"pip install 失败 ({classification}): {redact(sample)[:240]}"
-        f"  | hint: {_PIP_HINTS.get(classification, '')}"
-    )
-    return _make_fail("install", detail, exit_code=r.exit_code, duration=dur)
+
+    # v2.2.0 P1: requirements 过滤 (opt-in)
+    # Fix-2: 临时目录一旦创建就在 try/finally 作用域内, 确保源缺失/写失败/
+    # pip 失败/成功/dry-run 所有退出路径都清理. 提前返回 fail 也走 finally.
+    tmpdir_to_clean: Optional[Path] = None
+    excluded_hit: list[str] = []
+    excluded_miss: list[str] = []
+    try:
+        if cfg.install_exclude:
+            ref_specs = _parse_requirement_paths(cfg.pip_install_cmd)
+            if not ref_specs:
+                log_warn(
+                    f'submodule "{cfg.name}" install_exclude={cfg.install_exclude} '
+                    "但 pip_install_cmd 无 -r/--requirement 引用, 排除 no-op"
+                )
+            else:
+                import tempfile
+                try:
+                    tmpdir_to_clean = Path(
+                        tempfile.mkdtemp(prefix="update_submodules_filter_")
+                    )
+                except OSError as exc:
+                    dur = 0.0
+                    return _make_fail(
+                        "install",
+                        f"install_exclude 创建临时目录失败: {exc}",
+                        exit_code=None, duration=dur,
+                    )
+                # 替换 cmd 中 -r 引用的路径 -> 副本路径
+                # 用 list 重组 (tuple 不可改)
+                # 注意: ref_specs 的索引相对 cfg.pip_install_cmd, 而 cmd 前置了
+                # pip_bin, 替换时须加该偏移 (Fix-1), 否则会误覆盖 -r 标志本身.
+                # Fix-2: 等号形式 (-r=X / --requirement=X) cmd_idx 指向整个
+                # token, 不能把整个 token 替换为裸副本路径 (会丢失选项前缀),
+                # 必须保留 '<opt>=' 部分. 分离形式 (-r X / --requirement X)
+                # cmd_idx 指向 path 所在 token, 直接替换为副本路径即可.
+                cmd_list = list(cmd)
+                pip_prefix_len = len(cmd) - len(cfg.pip_install_cmd)
+                try:
+                    for idx, path_str in ref_specs:
+                        cmd_idx = idx + pip_prefix_len
+                        src = state.abs_path / path_str
+                        if not src.exists():
+                            return _make_fail(
+                                "install",
+                                f"requirements 文件不存在: {src}",
+                                exit_code=None, duration=0.0,
+                            )
+                        filtered, hits = _filter_requirements(
+                            src, cfg.install_exclude, tmpdir=tmpdir_to_clean
+                        )
+                        excluded_hit.extend(h for h in hits
+                                            if h not in excluded_hit)
+                        orig_tok = cmd_list[cmd_idx]
+                        if "=" in orig_tok and (
+                            orig_tok.startswith("-r=")
+                            or orig_tok.startswith("--requirement=")
+                        ):
+                            # 等号形式: 保留 '<opt>=' 前缀, 只替换 path
+                            opt_name = orig_tok.split("=", 1)[0]
+                            cmd_list[cmd_idx] = f"{opt_name}={filtered}"
+                        else:
+                            cmd_list[cmd_idx] = str(filtered)
+                except OSError as exc:
+                    # 临时文件写失败 -> fail, 不静默回退为不过滤执行
+                    dur = 0.0
+                    return _make_fail(
+                        "install",
+                        f"install_exclude 写副本失败: {exc}",
+                        exit_code=None, duration=dur,
+                    )
+                cmd = cmd_list
+                # 记录声明中未命中的包 (A-106 audit 透明)
+                req_names: set[str] = set()
+                for _, path_str in ref_specs:
+                    src = state.abs_path / path_str
+                    try:
+                        text = src.read_text(encoding="utf-8")
+                    except OSError:
+                        continue
+                    for ln in text.splitlines():
+                        raw = _extract_leading_pkg_name(ln)
+                        if raw:
+                            req_names.add(_normalize_pkg_name(raw))
+                excluded_miss = [
+                    p for p in cfg.install_exclude
+                    if _normalize_pkg_name(p) not in req_names
+                    and _normalize_pkg_name(p) not in {
+                        _normalize_pkg_name(h) for h in excluded_hit
+                    }
+                ]
+
+        if dry_run:
+            return _make_pass("install", f"[dry-run] {' '.join(cmd)}")
+        t0 = time.time()
+        r = run_cmd(cmd, cwd=str(state.abs_path))
+        dur = time.time() - t0
+        if r.exit_code == 0:
+            if excluded_hit:
+                pkgs = ", ".join(excluded_hit)
+                detail = f"install (excluded: {pkgs}): OK (degraded)"
+            else:
+                detail = "pip install OK"
+                if excluded_miss:
+                    detail += f" | exclude miss: {', '.join(excluded_miss)}"
+            return _make_pass("install", detail, exit_code=0, duration=dur)
+        classification, sample = classify_pip_failure(r.stderr or r.stdout)
+        detail = (
+            f"pip install 失败 ({classification}): {redact(sample)[:240]}"
+            f"  | hint: {_PIP_HINTS.get(classification, '')}"
+        )
+        return _make_fail("install", detail, exit_code=r.exit_code, duration=dur)
+    finally:
+        if tmpdir_to_clean is not None:
+            import shutil
+            try:
+                shutil.rmtree(tmpdir_to_clean, ignore_errors=True)
+            except OSError:
+                pass
 
 
 # P-6: pip error classification ------------------------------------------------
@@ -933,6 +1262,12 @@ def classify_pip_failure(text: str) -> tuple[str, str]:
     Returns (classification, representative_sample_line).  The sample is the
     full last non-empty line that triggered the match — useful for putting
     concrete guidance into the audit log.
+
+    v2.2.0 (RFC-10-012 P2): classification pattern first-match unchanged,
+    but the sample line selection among the matched-set is upgraded by
+    :func:`_prefer_constraint_sample` to prefer the line that contains a
+    package name + version constraint token over a generic yanked-warning
+    line that happens to appear earlier in the stderr.
     """
     if not text:
         return ("other", "")
@@ -944,10 +1279,9 @@ def classify_pip_failure(text: str) -> tuple[str, str]:
         m = pat.search(head)
         if m:
             # pick the first matching sample line as the "smoking gun"
-            for ln in lines:
-                if pat.search(ln):
-                    return (name, ln.strip())
-            return (name, m.group(0))
+            matched = [ln for ln in lines if pat.search(ln)]
+            sample = _prefer_constraint_sample(matched)
+            return (name, sample)
     return ("other", lines[-1] if lines else "")
 
 
