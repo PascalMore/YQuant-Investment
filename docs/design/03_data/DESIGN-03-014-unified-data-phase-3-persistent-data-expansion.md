@@ -567,7 +567,7 @@ class MarketSentimentSnapshot:
 | `flat_count` | ✅（默认 0） | 待确认 | 同上 |
 | `total_listed_count` | ✅（可 None） | 待确认 | 全市场总数，日级别 |
 | `market_temperature` | ✅（可 None） | **合成字段**，无已确认公式 | **Pascal 确认允许 None**（OQ-2）。不得编造公式或硬编码。留待 future 合成层决策 |
-| `total_turnover` | ✅（可 None） | **无合规来源——`stock_market_fund_flow` 返回列无「成交额」（SDK 静态，见 RESEARCH-03-014 E15/E23），资金净流入不得映射** | **恒 None（2026-08-03 裁定，V0.29 冻结）**。`from_dict` 强制规范化为 `None`（与 `northbound_net_flow` 恒 None 同构 fail-stop）；任何输入的非 None 值不得进入输出。B2 推断已 superseded |
+| `total_turnover` | ✅（可 None） | **无合规来源——`stock_market_fund_flow` 返回列无「成交额」（SDK 静态，见 RFC-03-014 附录 A §A.1 E15/E23、§A.5 #4 权威契约行），资金净流入不得映射** | **恒 None（2026-08-03 裁定，V0.29 冻结）**。`from_dict` 强制规范化为 `None`（与 `northbound_net_flow` 恒 None 同构 fail-stop）；任何输入的非 None 值不得进入输出。B2 推断已 superseded |
 | `hot_concepts` | ✅（可 None） | 待确认 | 独立接口或合成，非核心字段 |
 | `continuous_limit_up` | ✅（可 None） | AKShare `stock_zt_pool_em` → 连板分组 | 每条含 `symbol`, `days`, `reason` |
 | `max_continuous_days` | ✅（可 None） | 基于 `continuous_limit_up` 取最大值 | 合成派生，避免重复计算 |
@@ -625,7 +625,7 @@ class MarketSentimentSnapshot:
 - `{snapshot_date: -1}` — 按日查询
 - `{snapshot_time: -1}` — 按时点查询
 
-**P3-C 时间语义冻结（2026-08-03 Pascal 裁定）**：`sentiment.market_snapshot` / `sentiment.limit_up_pool` 当前目标为**已完成交易日 / 收盘后 / 可重放**——不是盘中实时市场情绪。`snapshot_time` 当前实现/映射落地仅能使用 `close`（收盘后快照），禁止产生或宣称 intraday snapshot。实时情绪路径（盘中实时）属未来/out-of-scope：需独立 capability、独立 Provider、独立字段契约、freshness/时间边界与新的用户授权，不得由 P3-C T3 实现、不得以本卡放行。`total_turnover` 无合规来源时保持 `None`/unavailable——`stock_market_fund_flow()` 返回列无「成交额」（SDK 静态，见 RESEARCH-03-014 E15/E23），资金净流入不得映射为 `total_turnover`。
+**P3-C 时间语义冻结（2026-08-03 Pascal 裁定）**：`sentiment.market_snapshot` / `sentiment.limit_up_pool` 当前目标为**已完成交易日 / 收盘后 / 可重放**——不是盘中实时市场情绪。`snapshot_time` 当前实现/映射落地仅能使用 `close`（收盘后快照），禁止产生或宣称 intraday snapshot。实时情绪路径（盘中实时）属未来/out-of-scope：需独立 capability、独立 Provider、独立字段契约、freshness/时间边界与新的用户授权，不得由 P3-C T3 实现、不得以本卡放行。`total_turnover` 无合规来源时保持 `None`/unavailable——`stock_market_fund_flow()` 返回列无「成交额」（SDK 静态，见 RFC-03-014 附录 A §A.1 E15/E23、§A.5 #4 权威契约行），资金净流入不得映射为 `total_turnover`。
 
 **数据时态声明（Data State 契约）**：本 §3.3 全部 22 字段的当前合法数据时态仅为 **EOD / completed session / replayable**；`snapshot_date` 必须为已完成交易日，`snapshot_time` 当前唯一允许值为 `close`。任何离线 stub / fixture / 离线测试用例都不得构造非 `close` 的 `snapshot_time` 或未完成交易日数据。真实 Provider 映射（未来获授权时）必须只从已完成交易日序列取数（见 §4.2.1 PR-4、§15.14.2）。
 

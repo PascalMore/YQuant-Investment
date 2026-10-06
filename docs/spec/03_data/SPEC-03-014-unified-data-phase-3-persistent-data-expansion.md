@@ -434,7 +434,7 @@ class MarketSentimentSnapshot:
 
 **温度合成公式待定**：`market_temperature` 为派生字段，由 `sentiment_service` 在 Provider 原始数据上合成。Pascal 确认该字段可保持为 `None`（不强制合成，禁止编造）。T2 Design 阶段需定义合成公式或确认保留为 `None` 由消费方自行计算。
 
-**P3-C 时间语义冻结（2026-08-03 裁定）**：`sentiment.market_snapshot` / `sentiment.limit_up_pool` 当前目标为已完成交易日 / 收盘后 / 可重放；`snapshot_time` 当前仅 `close`。盘中实时情绪属未来独立 capability——需独立 Provider/字段契约/freshness/时间边界与新的用户授权，不得以本卡放行。`total_turnover` 无合规来源时保持 `None`/unavailable——`stock_market_fund_flow()` 返回列无「成交额」（SDK 静态，见 RESEARCH-03-014 E15/E23），资金净流入不得映射为 `total_turnover`。
+**P3-C 时间语义冻结（2026-08-03 裁定）**：`sentiment.market_snapshot` / `sentiment.limit_up_pool` 当前目标为已完成交易日 / 收盘后 / 可重放；`snapshot_time` 当前仅 `close`。盘中实时情绪属未来独立 capability——需独立 Provider/字段契约/freshness/时间边界与新的用户授权，不得以本卡放行。`total_turnover` 无合规来源时保持 `None`/unavailable——`stock_market_fund_flow()` 返回列无「成交额」（SDK 静态，见 RFC-03-014 附录 A §A.1 E15/E23、§A.5 #4 权威契约行），资金净流入不得映射为 `total_turnover`。
 
 **EOD 验证执行契约（V0.22 Design Gate REVISE closure 冻结；V0.23 Closure-2 修正 `refresh_limit_up_pool` 签名，本规范为权威可执行契约）**：
 
@@ -627,7 +627,7 @@ external_fallback_chains = {
 }
 ```
 
-**注册状态（2026-08-03 冻结）**：sentiment 两 capability（`sentiment.market_snapshot` / `sentiment.limit_up_pool`）在 AKShareProvider **未注册**（当前 9 项 capability，含 P3-A sector 2 项，见 §14.4.5.9）；保持 offline stub/defer。上方链为**计划态契约**，仅在 G-1 交易日 live-read 通过 + Pascal 授权后激活（§14.4.5.3 2026-08-03 冻结证据；RESEARCH-03-014 §6 门禁）。
+**注册状态（2026-08-03 冻结）**：sentiment 两 capability（`sentiment.market_snapshot` / `sentiment.limit_up_pool`）在 AKShareProvider **未注册**（当前 9 项 capability，含 P3-A sector 2 项，见 §14.4.5.9）；保持 offline stub/defer。上方链为**计划态契约**，仅在 G-1 交易日 live-read 通过 + Pascal 授权后激活（§14.4.5.3 2026-08-03 冻结证据；RFC-03-014 附录 A §A.6 历史 G-1..G-6 快照——非活跃契约，按 §A.6 边界声明）。
 
 **不改动**：现有所有 capability 的 fallback 链不变。
 
@@ -1503,7 +1503,7 @@ T2 Design 完成时须满足：
 
 **AKShareProvider 注册缺口**：当前 `AKShareProvider`（`akshare.py`）仅声明 9 项 capability（7 项 Phase 1D + 2 项 P3-A sector）。`flow.capital_flow_daily`、`flow.northbound_daily`、`sentiment.market_snapshot`、`sentiment.limit_up_pool` 四项**未注册**。T3 须按映射裁决逐项注册：real-mappable 的 `flow.capital_flow_daily` 须注册真实调用路径；offline stub 的 sentiment 和 fail-stop 的 northbound 可注册 stub 路径或暂不注册。
 
-> **2026-08-03 更新（本段 superseded 部分）**：sentiment 两 capability 保持 offline stub/未注册、**defer**——2026-08-03 live-read 总体 provider_evidence=fail（§14.4.5.3），局部池子端点非空不得夸大为可激活 Provider。本段 B2 时点「offline stub 的 sentiment 可注册 stub 路径」指引 superseded：注册前必须过 G-1 交易日 live-read + Pascal 授权（RFC-03-014 §13.4.5.11；RESEARCH-03-014 §6）。
+> **2026-08-03 更新（本段 superseded 部分）**：sentiment 两 capability 保持 offline stub/未注册、**defer**——2026-08-03 live-read 总体 provider_evidence=fail（§14.4.5.3），局部池子端点非空不得夸大为可激活 Provider。本段 B2 时点「offline stub 的 sentiment 可注册 stub 路径」指引 superseded：注册前必须过 G-1 交易日 live-read + Pascal 授权（RFC-03-014 §13.4.5.11；RFC-03-014 附录 A §A.6 历史快照——非活跃契约）。
 
 #### 14.4.5.10 Refresh 授权前状态机
 
