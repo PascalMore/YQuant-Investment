@@ -1,0 +1,14 @@
+# 脱敏运行模板，2026-10-13；不自动加载，不可覆盖现有运行 config.yaml。
+model:
+  default: "MiniMax-M3"
+  provider: "custom:minimax"
+terminal:
+  backend: "local"
+  cwd: "/home/pascal/workspace/yquant-investment"
+  timeout: 180
+skills:
+  external_dirs:
+    - "/home/pascal/workspace/yquant-investment/skills"
+    - "/home/pascal/workspace/yq-yinglong/skills"
+# 认证、custom provider endpoint、fallback、工具与辅助模型配置由本机另行设置。
+# 本次不改变实际运行配置或复制凭据；SOUL 通过链接读取仓库角色正文。

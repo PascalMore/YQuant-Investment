@@ -1,0 +1,14 @@
+# Agent 定义规范 V1：脱敏 Hermes 配置模板，2026-10-13。
+# 不自动加载；不要复制覆盖现有 profile/config.yaml。认证/渠道另行配置。
+model:
+  default: gpt-6.1-sol
+  provider: openai-codex
+terminal:
+  backend: local
+  cwd: /home/pascal/workspace/yquant-investment
+skills:
+  external_dirs:
+    - /home/pascal/workspace/yquant-investment/skills
+    - /home/pascal/workspace/yq-yinglong/skills
+# 实际工具、fallback与辅助模型以本机已验证配置为准；模板不声明已启用。
+# profile/SOUL.md -> 项目/SOUL.md；AGENTS 从业务目录加载。

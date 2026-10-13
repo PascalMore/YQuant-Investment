@@ -12,6 +12,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
 from generate_agent_profile import (
+    HERMES_REQUIRED_SOURCE_FILES,
+    load_profile_model,
     HERMES_JOB_SCRIPT_MAP,
     _validate_cron,
     parse_heartbeat_schedule,
@@ -79,7 +81,6 @@ def temp_project(tmp_path):
     (root / "AGENTS.md").write_text("# AGENTS", encoding="utf-8")
     (root / "USER.md").write_text("# USER", encoding="utf-8")
     (root / "MEMORY.md").write_text("# MEMORY", encoding="utf-8")
-    (root / "IDENTITY.md").write_text("# IDENTITY", encoding="utf-8")
     (root / "CLAUDE.md").write_text("# CLAUDE", encoding="utf-8")
     (root / "TOOLS.md").write_text("# TOOLS", encoding="utf-8")
     (root / "HEARTBEAT.md").write_text(HEARTBEAT_SAMPLE, encoding="utf-8")
@@ -418,6 +419,24 @@ def test_all_5_yquant_jobs_present():
     ]
     actual_names = [j.name for j in jobs]
     assert set(expected) == set(actual_names)
+
+
+def test_identity_definition_uses_soul_only(temp_project):
+    """The retired root IDENTITY.md is neither required nor read."""
+    import argparse
+
+    assert "SOUL.md" in HERMES_REQUIRED_SOURCE_FILES
+    assert "IDENTITY.md" not in HERMES_REQUIRED_SOURCE_FILES
+    assert not (temp_project / "IDENTITY.md").exists()
+    args = argparse.Namespace(
+        platform="hermes", profile="test", source_root=str(temp_project)
+    )
+    model = load_profile_model(args)
+    assert model.soul == "# SOUL"
+    assert "IDENTITY.md" not in model.source_files_read
+    assert model.identity_md is None
+    generated = generate_hermes_profile(model)
+    assert generated["SOUL.md"] == "# SOUL"
 
 
 if __name__ == "__main__":

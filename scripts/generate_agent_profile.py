@@ -40,7 +40,6 @@ HERMES_REQUIRED_SOURCE_FILES = [
     "AGENTS.md",
     "CLAUDE.md",
     "HEARTBEAT.md",
-    "IDENTITY.md",
     "SOUL.md",
     "TOOLS.md",
     "USER.md",
@@ -133,8 +132,6 @@ def load_profile_model(args: argparse.Namespace) -> AgentProfileModel:
                 model.agents_md = content
             elif fname == "CLAUDE.md":
                 model.claude_md = content
-            elif fname == "IDENTITY.md":
-                model.identity_md = content
             elif fname == "TOOLS.md":
                 model.tools_md = content
             elif fname == "HEARTBEAT.md":
