@@ -17,6 +17,8 @@
 | AI 适配 | Hermes Kanban profile worker |
 | 标签 | #data #unified_data #phase3 #persistence #sector #sentiment #capital_flow |
 
+**文档整理（2026-10-14）**：三份历史 Phase 3 计划的有效内容已由本 RFC 的 P0/P1/R2/R3、F1/F4/F6 裁定及 03-015/03-016 正式文档承接；本次仅补充 §4.2 归属引用、§P0.5 映射依据说明和 §R2.2 收尾证据说明，退休重复计划。不改变契约版本、冻结状态、调用预算或既有授权，不将旧任务交接记录改写为当前执行结果。
+
 ### 版本历史
 
 | 版本号 | 日期 | 更新内容 | 负责人 |
@@ -152,6 +154,8 @@ Phase 3 受控分期：每子阶段独立授权、独立验证、独立部署。
 | **P3-C** | `03_data_ud_market_sentiment_snapshot` | `sentiment.market_snapshot`, `sentiment.limit_up_pool` | AKShare | sentiment |
 
 **依赖关系**：P3-A → P3-B → P3-C 为**推荐执行顺序**（先完成板块/行业域，再资金流，最后情绪——风险递增），但不构成严格前置依赖。每子阶段可独立部署。若 Pascal 指定其他顺序，以 Pascal 确认为准。
+
+**历史排行归属**：`sector.ranking_history` 及 `03_data_ud_sector_ranking_daily` 的离线与生产 rollout 契约分别见 [RFC-03-015](RFC-03-015-historical-sector-ranking.md) 和 [RFC-03-016](RFC-03-016-historical-sector-ranking-production-rollout.md) 及其关联 SPEC/DESIGN；它们不等同于本 RFC P3-A 的 `03_data_ud_market_sector_snapshot` read-path，也不恢复实时 `name_em` 的授权（现行范围以 §R2.1 为准）。
 
 **禁止方案**：一次性部署所有三个集合为 **FAIL**——违反受控分期原则，退回。
 
@@ -1181,6 +1185,8 @@ Step 4: DataResult.source_trace
 - `flow.capital_flow_daily`：B2 成功，`stock_individual_fund_flow` 返回数据；`_EXPECTED_FLOW_FIELDS` 须基于真实返回字段更新。
 - `flow.northbound_daily`：B2 success 但语义不匹配（持股历史≠净流入）；Pascal C 确认：northbound 三字段恒 None，不指向真实 endpoint。
 
+**映射依据说明**：资金流源单位、canonical 单位、换算依据及正负方向的对应关系记录在既有字段映射表或验证报告中，避免静默换算；无合规来源的字段保持 None。本说明不新增记录级字段、测试阶段或真实调用，也不改变下表与 §R3 的验收边界。
+
 | # | 验收项 | 验证方式 | 约束 |
 |---|---|---|---|
 | PB-1 | `_EXPECTED_FLOW_FIELDS` 基于 B2 冻结证据 + `stock_individual_fund_flow` 公开文档定义，必须包含：`symbol`/`market`/`trade_date`/`main_net_inflow`/`super_large_net_inflow`/`large_net_inflow`/`medium_net_inflow`/`small_net_inflow`/`main_net_inflow_ratio`/`margin_balance` | 静态检查引用 B2 报告 | 不得臆定字段；不低于 10 个 expected 字段 |
@@ -1483,6 +1489,8 @@ PC-11（freshness `sentiment` vs `market_sentiment` 命名冲突）在 P1 中保
 ### R2.2 六 capability 生产验证完成矩阵（冻结）
 
 对以下六项分别冻结「允许的最终状态」「证据要求」「禁止表述」。**允许的最终状态**是 Phase 3 生产验证可接受的收尾状态；达到其一即视为该 capability 完成，其余状态一律不构成完成。
+
+**收尾证据说明**：按 capability 分别汇总适用范围、已有实际执行证据与未验证项；执行记录注明命令、时间窗口、预算消耗、写入及回滚/禁用状态。Provider、Mongo 物化与 consumer read-path 的证据不能互相替代；out-of-scope、intentionally-unavailable 和 fail-stop 不改写为生产成功。本说明仅整理现有 Gate 与事实记录，不新增阶段、不重放已耗尽预算，也不因退休旧计划产生任何生产结论或 JMap 动作。
 
 | 子域 | Capability | 允许的最终状态 | 证据要求 | 禁止表述 |
 |---|---|---|---|---|

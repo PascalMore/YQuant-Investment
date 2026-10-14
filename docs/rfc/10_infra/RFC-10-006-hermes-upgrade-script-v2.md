@@ -24,6 +24,8 @@
 | V2.1 | 2026-07-30 | 增补 Git 传输韧性增强：target-aware fetch、分类瞬态错误有限重试、HTTP/1.1 命令级 fallback、manifest audit、feature-branch 保护修正、dry-run 零网络 | YQuant-Codex-Principal |
 | V2.0 | 2026-07-08 | 在 RFC-10-005 V1.0 基础上新增非 main 分支、feature commit 保护、Pascal fork 私有 patch manifest 核对 | YQuant-Codex-Principal |
 
+**文档整理（2026-10-14）**：2026-07-30 传输韧性计划的有效决策已由 V2.1 及后续 V2.2/V2.3 正式契约承接；退休原临时计划，参考资料改指正式章节与关联 SPEC/DESIGN。旧计划中的宽泛错误分类、origin fetch 重试建议和操作示例不覆盖现行契约；本次不改变版本、实现状态或升级授权。
+
 ## 1. 问题陈述
 
 ### 1.1 V2.0 已解决的限制
@@ -353,5 +355,5 @@ V2.1 修正后行为：
 - `docs/rfc/10_infra/RFC-00-000-rfc-template.md`
 - `scripts/upgrade/upgrade_hermes_agent.py`（尤其是 `fetch_remotes()` 和 `protect_local_commits()`）
 - 2026-07-30 升级 manifest（`/tmp/hermes-upgrade-20260730-224109.json`）
-- `.hermes/plans/2026-07-30_225320-hermes-upgrade-transport-resilience.md`
+- 传输韧性决策：本 RFC §1.2、§2.1、§3.2–§4.3；可执行契约与实现设计分别见 `docs/spec/10_infra/SPEC-10-006-hermes-upgrade-script-v2.md`、`docs/design/10_infra/DESIGN-10-006-hermes-upgrade-script-v2.md`。
 - Hermes Agent docs: `https://hermes-agent.nousresearch.com/docs/`
