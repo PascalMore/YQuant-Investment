@@ -6,3 +6,7 @@
 	path = skills/apps/TradingAgents-CN
 	url = git@github.com:PascalMore/TradingAgents-CN.git
 	branch = main
+[submodule "skills/strategies/OctoBot"]
+	path = skills/strategies/OctoBot
+	url = git@github.com:PascalMore/OctoBot.git
+	branch = main
