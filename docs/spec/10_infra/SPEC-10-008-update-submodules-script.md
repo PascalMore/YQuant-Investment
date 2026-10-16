@@ -7,15 +7,29 @@
 | 状态 | Accepted |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-08 |
-| 最后更新 | 2026-07-09 |
-| 来源 RFC | RFC-10-008-update-submodules-script (V2.0) |
-| 关联 Design | DESIGN-10-008-update-submodules-script |
+| 最后更新 | 2026-10-16 |
+| 版本号 | V2.1（分支映射契约修订，非脚本发布号） |
+| 来源 RFC | [RFC-10-008 V2.1](../../rfc/10_infra/RFC-10-008-update-submodules-script.md) |
+| 关联 Design | [DESIGN-10-008](../../design/10_infra/DESIGN-10-008-update-submodules-script.md)（本次待 T2 修订） |
 | 目标模块 | 10_infra / git submodule 运维自动化 |
-| Full Flow | T1_redo=t_91ffdfe3（重写为 auto-discovery + opt-in） |
+| Full Flow | 本次 T1=t_5c700339 → T2=t_12bc9198；历史 T1_redo=t_91ffdfe3（auto-discovery + opt-in） |
+
+## 版本记录
+
+| 版本 | 日期 | 更新内容 | 负责人 |
+|---|---|---|---|
+| V2.0 | 2026-07-09 | auto-discovery + opt-in 基础契约；历史单分支模式 | YQuant-Codex-Principal |
+| V2.1 | 2026-10-16 | t_5c700339：双分支、legacy 优先级、ref 规范化、unknown/fail、目标校验、resume/skip 与 A-BM 验收；未实现，待 T2 Design | YQuant-Codex-Principal |
+
+## 0. 适用优先级与交付边界
+
+本次仅修订来源/目标分支契约。§3.4–§3.8、§8.1 优先于历史单分支算法/示例；非分支行为仍按本文和 SPEC-10-012 执行。关联 DESIGN-10-008 尚待独立 T2 同步，不能用其旧单 branch 模板覆盖本次契约。
+
+已完成的 OctoBot 源码接入与 v2.2.0 install_exclude/诊断不是待实现功能；只修复分支映射与来源计数假通过，不增加 CLI、中央 manifest、第三方依赖或发布步骤。本卡不写 Design/代码。历史 §2.1 的“新增脚本/测试”是原始交付记录，本轮是增量修订；不得据此重复创建升级器或扩大范围。
 
 ## 1. 需求摘要
 
-本 SPEC 将 RFC-10-008 V2.0 的 **auto-discovery + opt-in override** 多 submodule 升级器落为可执行、可测试的工程契约。脚本 `scripts/upgrade/update_submodules.py` 对 yquant-investment 下任意 git submodule 执行 5 阶段流水线（fetch → merge → install → restart → push），**默认无需任何中央配置文件**；submodule 列表从 `.gitmodules` 解析，其余字段由启发式自动推断；每个 submodule 仓库根目录的 `.update_submodules.yaml` 可覆盖默认（opt-in）。默认 dry-run 安全模式。
+本 SPEC 将 RFC-10-008 的 **auto-discovery + opt-in override** 多 submodule 升级器落为可执行、可测试的工程契约。脚本 `scripts/upgrade/update_submodules.py` 对 yquant-investment 下任意 git submodule 执行 5 阶段流水线（fetch → merge → install → restart → push），**默认无需任何中央配置文件**；submodule 列表从 `.gitmodules` 解析，其余字段由启发式自动推断；每个 submodule 仓库根目录的 `.update_submodules.yaml` 可覆盖默认（opt-in）。默认 dry-run 安全模式。V2.1 独立表达 upstream 来源与本地/origin 目标，保留旧 branch 配置语义，不将来源查询失败当作 0/0。
 
 ## 2. 范围
 
@@ -50,7 +64,8 @@ submodule 列表从项目根 `.gitmodules` 解析。每个 submodule 的字段�
 | `path` | `.gitmodules` `path = ...` | — | 不可覆盖 |
 | `origin` | `git -C <path> remote get-url origin` | `origin: <url>` | 字符串覆盖 |
 | `upstream` | `git -C <path> remote get-url upstream`（**缺失→报错退出**，不回落 origin） | `upstream: <url>` | 字符串覆盖 |
-| `branch` | 远端 HEAD（fallback `main`） | `branch: <name>` | 字符串覆盖 |
+| `branch` | `.gitmodules branch` → 当前子仓分支 → origin HEAD → `main` | `branch: <name>` | 本地/origin 目标；显式旧配置给来源同名兜底（§3.5） |
+| `upstream_branch` | 独立 upstream 默认发现（§3.5） | `upstream_branch: <name>` | 来源；不改变目标；优先于旧 branch 来源兜底 |
 | `venv` | `<path>/.venv` 存在 → `.venv`；否则 None（跳过 install） | `venv: <rel-path-or-null>` | 字符串覆盖；null 跳过 install |
 | `pip_install_cmd` | `<path>/requirements.txt` 存在 → `["install", "-r", "requirements.txt"]`；否则 None（跳过 install） | `pip_install: [...]` 或 null | list 覆盖；null 跳过 install |
 | `pre_merge_hooks` | `[]` | `pre_merge_hooks: [...]` | list 替换 |
@@ -69,7 +84,8 @@ submodule 列表从项目根 `.gitmodules` 解析。每个 submodule 的字段�
 schema_version: 1          # int，必填，当前 1
 origin: <string>           # 覆盖 origin remote URL
 upstream: <string>         # 覆盖 upstream remote URL（仅覆盖配置值，不触发自动 git remote add）
-branch: <string>           # 覆盖跟踪分支
+branch: <string>           # 本地/origin 目标；未设 upstream_branch 时保留旧同名来源
+upstream_branch: <string>  # 可选来源覆盖；例 branch: main + upstream_branch: master
 venv: <string|null>        # 覆盖 venv 相对路径；null 跳过 install
 pip_install:               # 覆盖 pip install 参数（不含 "install" 前缀）
   - "-r"
@@ -89,7 +105,8 @@ notes: <string>                 # Pascal 备注
 | `schema_version` | int/string | 可转为 int；接受 "1" 或 1 | warning 跳过整个 override |
 | `origin` | string | 合法 git URL | 保留启发式 |
 | `upstream` | string | 合法 git URL | 保留启发式（**不触发自动 git remote add**） |
-| `branch` | string | 合法 git ref | 保留启发式 |
+| `branch` | string | 非空合法分支名，允许 §3.6 的 origin/heads 表示 | 缺失按 §3.5；显式非法按 §3.6 失败 |
+| `upstream_branch` | string | 非空合法分支名，允许 §3.6 的 upstream/heads 表示 | 缺失按 §3.5；显式非法按 §3.6 失败 |
 | `venv` | string/null | 相对路径或 null | 保留启发式 |
 | `pip_install` | list/null | list 元素是字符串 | 保留启发式 |
 | `pre_merge_hooks` | list[string] | 可为空 | 保留启发式 |
@@ -102,6 +119,68 @@ notes: <string>                 # Pascal 备注
 > - `health_check`：V1.1 是 `{type, timeout, url?}` dict；V2.0 改为 **shell 命令字符串**（更灵活，不预设检查方式）。
 > - 移除 `systemd_scope`、`restart_cmd`（V1.1 字段）——systemd 固定 `--user`；如需自定义 restart，用 `pre_merge_hooks` 或后续增强。
 > - 新增 `skip_push`（opt-in 级别跳过 push，极少用）。
+
+### 3.4 分支实体与兼容语义（V2.1）
+
+| 项目 | 含义 | 不变量 |
+|---|---|---|
+| `branch` | 目标本地分支，也是 origin 目标分支 | fetch/merge 不再无条件读取它；push 只推该分支 |
+| `upstream_branch` | 来源分支，规范化后不含 remote 前缀 | fetch 来源为 upstream 的该分支；merge/比较绑定其对应来源提交 |
+| 当前 HEAD 分支 | 子仓实际检出的本地分支 | 必须是符号分支且精确等于 branch；不自动切换 |
+| 来源比较 | 来源相对当前 HEAD 的 behind/ahead | 两个非负整数且命令成功才可信；未知不是零 |
+
+旧 opt-in 文件无须迁移：仅显式 `branch: develop` 时，两端仍为 develop；仅显式 `branch: origin/main` 时，规范化为 main，两端仍为 main。这是 legacy 兼容，不会自动改为 upstream 默认。需要异名且显式设目标时，可额外写 `upstream_branch: master`（来源 master、目标 main）；新增字段仍在 schema_version 1 内，不新增配置文件或 schema 版本。未设 branch、只设 upstream_branch 时目标继续自动发现。配置声明须在发现/覆盖链路中保留“是否显式提供 branch”的语义，不能把自动算出的 branch 误作 legacy 显式来源。
+
+### 3.5 发现与覆盖优先级
+
+目标从高到低选择首个可用值：
+
+1. 有效 opt-in `branch`。
+2. 主仓 `.gitmodules` 中该 submodule section 的 `branch`（按 section 身份而非 basename 读取）；该值是 fork 更新目标，不是 upstream 来源。值为 `.` 时解析为主仓当前符号分支；主仓 detached/查询失败则该 submodule 失败，不 fallback。字段缺失才进入下一优先级；显式空值、非法 ref 或读取错误应诊断失败，不静默当作未配置。
+3. 子仓当前检出的本地符号分支；不把 detached 的 SHA 当分支名。
+4. cached origin HEAD 规范化后的分支。
+5. 历史目标兜底 main。此兜底只是候选，不能创建分支；仍须通过 §3.7。
+
+来源独立从高到低选择：
+
+1. 有效 opt-in `upstream_branch`。
+2. 若 opt-in 显式提供有效 `branch`，用规范化后的 legacy branch 值（同名兼容）。
+3. cached upstream HEAD 指向的分支。
+4. 只读查询 upstream 远端 HEAD 得到的分支（允许 remote show 或等价只读查询；不能 fetch/set-head）。
+5. 若上两项未得到可用名称，依次探测已有 upstream/main、upstream/develop、upstream/master 的 commit ref，取首个存在者；查询失败须有诊断，使用缓存时标明证据为缓存。
+6. 均不可用：来源 unresolved，该 submodule fail。不得盲猜 main，不回落 origin/目标；显式来源不存在时也不静默改选其他来源。
+
+“可用名称”须通过 §3.6；远端返回 `(unknown)`、HEAD、空值不算分支。cached HEAD 可解析到名称但其 commit 缓存缺失时不另选分支：apply 对该来源 fetch，dry-run 按 §3.8 报 unknown。来源选择不受 `.gitmodules branch` 或子仓当前分支影响（显式 legacy branch 兼容除外）。日志须能识别最终来源、目标及来源是显式/默认/缓存，不强制新增审计表或输出格式。
+
+### 3.6 输入规范化边界
+
+- 目标 branch 接受裸分支名（main、feature/x）、`refs/heads/<name>`、`origin/<name>`、`refs/remotes/origin/<name>`；只剥离完整且匹配角色的一个前缀。来源 upstream_branch 对应接受裸名、`refs/heads/<name>`、`upstream/<name>`、`refs/remotes/upstream/<name>`。
+- 旧 branch 的 origin 前缀先按目标角色规范化，再将裸名作为 legacy 来源兜底；不把 `origin/main` 原样传给 upstream fetch。自动发现得到的 ref 也须按所属 remote 规范化，不能把 upstream/master 用作目标。
+- 保留分支路径全部层级：origin/feature/x → feature/x；不按最后一个 `/` 截取。普通 feature/x 不作 remote 前缀处理。不支持把任意 remote 前缀当别名：目标中的 upstream/main、来源中的 origin/main、完整 refs/remotes 下其他 remote、refs/tags/... 均拒绝；origin/upstream 在本接口是保留 remote 命名空间。
+- 去除输入外层空白后必须非空且为合法本地分支名；HEAD、空 suffix、以 `-` 开头、非法 ref 表达式（如 main..x、main~1、通配符）失败。HEAD 不作为本地分支目标；禁止把 SHA 当来源提交覆盖。不得静默清洗内部字符或修复错误名称。
+- 可解析 opt-in 中显式给出 branch/upstream_branch 但值为 null、空串、非字符串、错误 remote 或非法 ref：该 submodule fail，指出字段/原因，不按“字段缺失”忽略。这是仅对两项分支选择输入的必要窄化；文件本身无法加载/schema 失败仍保留既有 warning+启发式回落，其他字段规则不变。无需安装依赖或写 Git config 即可校验。
+
+### 3.7 目标一致性、跳过与恢复
+
+- 所有模式在任何 fetch/merge/hook/install/restart/push 写操作前，确认目标本地分支存在且当前符号 HEAD 精确等于 branch。detached、HEAD 读取失败、目标缺失或不匹配：该 submodule fail/CLI exit 1，诊断含目标和当前状态；Git refs/HEAD/index/worktree/配置及远端均不变化。
+- 不 checkout/switch、reset、创建/重建本地分支、不建立 detached HEAD；`--force-dirty` 仅保留既有 dirty 许可，不能绕过本条。apply 的既有 dirty-worktree 检查仍保留。
+- `--skip-merge`：仍 fetch/检查来源比较，只跳过 merge；fetch/ref/计数失败仍停止后续阶段，不借 skip 规避错误。`--skip-install`/`--skip-restart` 保留原跳过行为，不改变两端映射。
+- `--resume-after-merge`：继续表示人为完成 merge 后跳过 fetch+merge，从 install 开始；不要求证明 upstream 已合入、不新增 checkpoint。仍核验目标一致性；无需为跳过的 fetch/merge 强制查询来源或要求缓存，不报告 behind=0/最新。若 push 启用，仍只推目标 branch。显式分支输入非法仍失败，resume 不能绕过输入错误。
+- push 仅在原有 `--push` 且未被前序失败中止、且非 skip_push 时启用；不 force，不推来源同名分支。执行 push 前须确保 HEAD 仍在目标（包括 hook 后）；执行 merge 前同样不得合入已被 hook 切换的错误分支。检查失败中止，不自动恢复外部/hook 已改变的状态。
+
+### 3.8 来源 ref、未知比较与只读 dry-run
+
+| 场景 | 必须行为 | 后续阶段/状态 |
+|---|---|---|
+| apply fetch 成功且本轮来源 commit、计数可用 | 来源为 upstream_branch，比较本轮实际取得的 commit 与 HEAD；不得把 fetch 前旧缓存当最新 | 已知 behind=0 才跳 merge；其余原 merge 策略不变 |
+| apply fetch 失败、来源不可解析、rev-list 非零或计数非法 | 明确 fail；不得将空输出/解析错误转成 0/0 | 停止该 submodule 后续阶段，CLI exit 1；不影响其他项，除非 fail-fast |
+| dry-run 来源 commit 缓存与计数均可用 | 不执行 fetch；显示 source/target、behind/ahead，注明 cached/not fetched | 可给出原有五阶段计划；仅为计划 PASS，不证明远端最新 |
+| dry-run 缺 commit 缓存、rev-list 失败、计数非法或来源未解析 | detail 明确 unknown/无法判定与原因；数值不伪造为 0 | fetch phase fail、overall fail、CLI exit 1；merge/install/restart/push 不作为可执行通过计划，停止该 submodule |
+| resume 跳过来源阶段 | fetch/merge 为 skip，比较未执行 | 不能声称 up-to-date，允许按 §3.7 继续 |
+
+有效计数必须恰为两个非负整数。cached ref 不是网络最新证据；远端 HEAD 查询成功也不等于本地已有该来源 commit。apply 获取来源后若默认 refspec 不更新 remote-tracking ref，仍必须比较/合入本轮实际 fetch 的来源提交，不能沿用陈旧引用；具体 Git ref 实现交 Design。
+
+dry-run 禁止 fetch/merge/push/checkout/reset、remote set-head/add、写 Git config/refs/index/FETCH_HEAD 或执行 pre_merge_hooks/pip/restart/health_check；只读远端查询可用，但查询失败必须可见且不得伪造新鲜状态。默认审计日志为既有例外（位于 repo 外），传 `--no-audit` 时本次 CLI 不产生审计文件。不能只靠 git status 断言零副作用，后续验证应比较 Git 状态与缓存/配置/远端 refs。
 
 ## 4. CLI 完整参数
 
@@ -148,11 +227,11 @@ python3 scripts/upgrade/update_submodules.py [OPTIONS]
 ### 5.1 Phase 1: FETCH
 
 ```text
-git fetch upstream <branch>
-git rev-list --left-right --count upstream/<branch>...HEAD
+git fetch upstream <upstream_branch>
+git rev-list --left-right --count upstream/<upstream_branch>...HEAD
 ```
 
-输出：behind count（upstream 领先）和 ahead count（fork 领先）。
+输出：behind count（upstream 领先）和 ahead count（fork 领先）。此处为逻辑命令模板；本轮 fetch 的实际来源绑定与失败/unknown 行为按 §3.8，不能因该模板读到旧缓存。
 
 决策：
 - behind == 0：跳过 Phase 2（merge），直接到 Phase 3（install）。原因：upstream 无新 commit，无需 merge。
@@ -165,8 +244,8 @@ git rev-list --left-right --count upstream/<branch>...HEAD
 ### 5.2 Phase 2: MERGE
 
 ```text
-ahead == 0: git merge --ff-only upstream/<branch>
-ahead > 0:  git merge upstream/<branch>
+ahead == 0: git merge --ff-only upstream/<upstream_branch>
+ahead > 0:  git merge upstream/<upstream_branch>
 ```
 
 决策与错误处理：
@@ -261,6 +340,8 @@ git push origin <branch>
 
 ### 6.2 启发式字段推断
 
+以下为 V2.0 历史非分支推断参考；其中 parse_origin_head 单字段分支行已被 §3.4–§3.6 取代，不是本次实现方案。函数级设计留给 T2。
+
 ```text
 def discover_submodule(name, path, project_root):
     config = SubmoduleConfig(name=name, path=path)
@@ -309,6 +390,8 @@ if merge_result.exit_code != 0:
 ```
 
 ### 6.5 behind/ahead 0/0 自动跳过 merge
+
+本规则仅用于 §3.8 定义的成功且合法的已知计数；解析失败/缓存缺失不得进入下方的 behind=0 分支。
 
 ```text
 behind, ahead = parse_rev_list_count(revlist_result.stdout)
@@ -415,6 +498,35 @@ if config.upstream is None:
 | A-021 | **upstream remote 缺失时报清晰错误退出该 submodule，不自动 add** | mock/temp repo |
 | A-022 | **health_check 默认 None（无 opt-in 时不执行）** | dry-run 输出 health_check=None |
 
+### 8.1 本次分支映射验收矩阵（A-BM）
+
+本矩阵是后续 Implement/独立 Verify 的验收输入，不表示本卡已运行功能测试。
+
+| 编号 | Given/When | Then（必要断言） |
+|---|---|---|
+| A-BM-001 | 无 opt-in，upstream main、本地 main、origin main | 来源 main、目标 main；原同名五阶段语义保留 |
+| A-BM-002 | 无 opt-in，upstream master、本地/origin main，upstream 增加提交 | 本地 main 前进；只更新 fixture origin/main，origin/master 不创建；HEAD 始终 main |
+| A-BM-003 | 无 opt-in，upstream develop、本地/origin main | fetch/merge develop，push main，origin/develop 不创建 |
+| A-BM-004 | 旧 opt-in 仅 branch: develop，当前 develop，upstream 默认 master | 两端均 develop；来源不擅改默认 master；旧文件无需迁移 |
+| A-BM-005 | 显式 branch: origin/main + upstream_branch: upstream/master | 最终目标 main、来源 master；新增字段贯穿加载/覆盖/运行结果，不被丢弃 |
+| A-BM-006 | 仅 upstream_branch: develop，.gitmodules branch main、当前 main | 来源 develop、目标 main；schema_version 1 无需变化 |
+| A-BM-007 | 无 opt-in 的真实 OctoBot（仅只读 dry-run，禁 apply） | source master、target main；有缓存比较也标 cached；push 计划仅 origin main；无任何子仓 yaml/refs/gitlink 改变 |
+| A-BM-008 | target override、.gitmodules branch、当前分支、origin HEAD 故意冲突 | 依 §3.5 优先级选目标；不匹配当前则 fail，不降级改选当前或 upstream |
+| A-BM-009 | .gitmodules 无 branch；当前 topic、origin HEAD main | 目标 topic；来源仍独立；移除当前符号 HEAD 后即 detached 拒绝，不自动跟随 origin |
+| A-BM-010 | .gitmodules branch=.；主仓当前 main 或 detached | 前者目标 main；后者 fail 且无副作用 |
+| A-BM-011 | 来源 cached HEAD、远端 HEAD、main/develop/master 缓存依次缺失 | 严格按 §3.5 次序；远端失败有诊断；全部缺失 unresolved/fail，不借目标 main 假通过 |
+| A-BM-012 | 裸 feature/x、匹配 remote 前缀及 refs/heads 表示 | 保留完整 feature/x；legacy origin/main 的来源兜底为 main；不生成 origin/origin/main 等命令 |
+| A-BM-013 | branch/upstream_branch 显式 null/空/非字符串/非法 ref/错误 remote | 字段错误可诊断、该项 fail；不静默忽略；其他 opt-in 非分支兼容不变 |
+| A-BM-014 | dry-run 已选 source，但缓存 ref 缺失，或 rev-list 非零/空/负值/多余 token | unknown，phase/overall fail、exit 1；绝非 behind=0 或 up-to-date；无 fetch/写 Git/后续执行 |
+| A-BM-015 | apply 显式来源远端不存在；或 fetch 成功但来源比较失败 | fail，后续 merge/install/restart/push 不执行；不存在来源不得 fallback；前者不改变本地 HEAD/目标远端 |
+| A-BM-016 | dry-run/apply 目标与当前分支不符、目标不存在或 detached；含 force-dirty | fetch/hook 等写操作前拒绝；HEAD/refs/index/worktree/config/远端不变 |
+| A-BM-017 | 正确目标下 skip-merge 或 resume-after-merge | 前者仍校验 fetch/比较且只跳 merge；后者不 fetch/merge、不要求来源缓存，继续原 install/restart/目标 push；错误目标仍拒绝 |
+| A-BM-018 | 有可信缓存的干净 dry-run --push --no-audit | 源/目标计划正确，明确未 fetch；HEAD/全部 refs/index/config/FETCH_HEAD/worktree/远端不变，不运行 hook/install/restart/health |
+| A-BM-019 | fetch 成功但 remote-tracking ref 不自动更新；hook 改变当前分支 | 前者只合入本轮来源提交、不用陈旧缓存；后者 merge/push 前发现不匹配并停止，不合错分支 |
+| A-BM-020 | 原安装排除/诊断、dirty、默认不 push、禁 force、冲突 abort、fail-fast、互斥与 only | 原行为测试无回归；只调整旧测试中错误单分支优先级/缺 ref 假 PASS 预期，不能删掉原覆盖 |
+
+功能证据至少包括隔离本地 bare Git 的 main→main、master→main、develop→main 真实 fetch/merge/push 链路（仅 fixture 允许），另有错误目标/缺 ref/零写 dry-run 覆盖；不能仅 mock 命令字符串或仅 normalize origin/main 作为完整兼容证据。所有 fixture 写操作在当前 profile TMPDIR/scratch，remote 不可指向 GitHub 或生产路径；不安装依赖、不运行机器人/交易/真实服务。
+
 ## 9. 测试要求
 
 | 编号 | 类型 | 命令/方法 | 断言 |
@@ -441,6 +553,8 @@ if config.upstream is None:
 
 T3 Verify 必须执行：
 
+以下为历史基础验证命令；本次实际安全命令集由 T2 Design 定义，真实 OctoBot 仅 `--dry-run --only OctoBot --skip-install --skip-restart --no-audit`（需要 push 计划时可附 --push）。不执行真实升级/fetch/merge/checkout/reset/push；不以此授权全仓 apply 或产生默认 /tmp 审计。保留原有测试全量覆盖，并增加 §8.1 验收。
+
 ```bash
 cd /home/pascal/workspace/yquant-investment
 python3 -m py_compile scripts/upgrade/update_submodules.py
@@ -458,7 +572,7 @@ python3 scripts/upgrade/update_submodules.py --dry-run --only nonexistent  # 期
 | merge 冲突频繁（daily-stock-analysis fork 领先 200+） | 自动 abort + 报告，不自动 resolve | Developer/Reviewer |
 | pip 破坏性变更导致 venv 损坏 | install 后 restart；opt-in health_check 可捕获 | Tester/Closeout |
 | 启发式 systemd 模糊匹配误中 | dry-run 输出推断结果供审查；opt-in override 可改 | Developer |
-| 启发式 branch 推断失败 | fallback `main`；opt-in override 可改 | Developer |
+| 来源/目标发现失败或目标不符 | 按 §3.5–§3.8 诊断并停手，不把目标 main 当来源 fallback | Developer |
 | PyYAML 不可用 | stdlib fallback（复用 V2 `_load_yaml_subset` 模式） | Developer |
 | health_check 默认 None 导致服务异常未被发现 | Pascal 按需通过 opt-in 配置 health_check cmd | Closeout 记录残余风险 |
 

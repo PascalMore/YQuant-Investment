@@ -20,6 +20,11 @@
 - 仅完成 OctoBot **源码仓库**接入（git submodule）。
 - 未执行依赖安装、未运行任何回测、未启动任何模拟 / 实盘机器人。
 - 原升级脚本兼容性的真实状态由主控独立评估，本目录不声明已支持或运行过它。
+- 2026-10-16 更新：升级脚本 `scripts/upgrade/update_submodules.py` 已完成
+  `upstream_branch`（来源）/`branch`（本地与 origin 目标）双字段契约 V2.1
+  （RFC/SPEC/DESIGN-10-008），OctoBot 场景 `upstream/master → 本地 main → origin/main`
+  已通过离线 fixture 与真实子仓只读 dry-run 独立验证（Verify-R2 PASS /
+  Review-R2 APPROVE，150 项回归通过）。**尚未执行真实 apply/远端 push**。
 
 ## 分支映射约定
 

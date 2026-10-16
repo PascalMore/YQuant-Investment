@@ -27,6 +27,8 @@
 
 ## 1. 执行摘要（Executive Summary）
 
+> 2026-10-16 分支映射交叉说明：本文“不配置时行为/输出不变”限于历史 install/diagnostic 增量；本次来源/目标分支、未知比较与对应必要输出以 RFC-10-008 V2.1 §0、SPEC-10-008 V2.1 §3.4–§3.8 为准。本文 install_exclude/diagnostic 原契约全部保留，P3 历史配置不构成本次对子仓写入授权。
+
 2026-10-06 daily_stock_analysis 升级实战暴露三个运维痛点：临时排除单个包需手改 requirements、pip 失败诊断被 yanked 警告行遮蔽、daily_stock_analysis 缺少 systemd/health_check opt-in 配置。本 RFC 以增量修订（脚本 v2.1.0 → v2.2.0）落地三项优化：opt-in `install_exclude` 包级排除、`classify_pip_failure` 诊断样本优先含包名+版本约束的行、新建 `skills/research/daily_stock_analysis/.update_submodules.yaml`。成功标准：SPEC-10-012 全部验收项 PASS，2026-10-06 真实 pip 报错文本的回归测试通过。
 
 ## 2. 背景与动机（Background & Motivation）

@@ -7,13 +7,13 @@
 | 状态 | Accepted |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-07-08 |
-| 最后更新 | 2026-07-09 |
-| 版本号 | V2.0 |
+| 最后更新 | 2026-10-16 |
+| 版本号 | V2.1（分支映射契约修订，非脚本发布号） |
 | 所属模块 | 10_infra（基础设施 / git submodule 运维自动化） |
 | 继承 RFC | 无（独立脚本；设计哲学参考 RFC-10-005 / RFC-10-006 V2） |
-| 关联 SPEC | SPEC-10-008-update-submodules-script |
-| 关联 Design | DESIGN-10-008-update-submodules-script |
-| Full Flow | T1_redo=t_91ffdfe3（重写为 auto-discovery + opt-in） |
+| 关联 SPEC | [SPEC-10-008 V2.1](../../spec/10_infra/SPEC-10-008-update-submodules-script.md) |
+| 关联 Design | [DESIGN-10-008](../../design/10_infra/DESIGN-10-008-update-submodules-script.md)（本次待 T2 修订） |
+| Full Flow | 本次 T1=t_5c700339 → T2=t_12bc9198；历史 T1_redo=t_91ffdfe3（auto-discovery + opt-in） |
 | 标签 | #infra #git #submodule #upgrade #ops #auto-discovery #opt-in-override |
 
 ## 版本历史（Changelog）
@@ -23,8 +23,29 @@
 | V1.0 | 2026-07-08 | 初始版本：manifest-driven（中央 `data/submodules.yaml` 注册表）5 阶段 submodule 升级器 | YQuant-Codex-Principal |
 | V1.1 | 2026-07-09 | 中途修订：尝试在 V1.0 文档上 patch auto-discovery，但 upstream 缺失处理、health_check 默认值、opt-in schema 仍残留 V1.0 思路 | YQuant-Codex-Principal |
 | **V2.0** | **2026-07-09** | **完整重写**（T1_redo）：取消中央 manifest；明确 upstream 缺失=报错退出不自动 add；health_check 默认 None；opt-in `.update_submodules.yaml` schema 简化为 shell 命令字符串；新增 `--only NAME` 显式过滤（缺名报错不静默 fallback）。与 `upgrade_hermes_agent.py` V2 的「无配置默认 + opt-in 增强」哲学对齐 | YQuant-Codex-Principal |
+| V2.1 | 2026-10-16 | t_5c700339：分离 upstream 来源分支与本地/origin 目标分支；保留显式 legacy branch 同名语义；冻结零配置发现、目标一致性与缺 ref 不假通过契约。仅 RFC/SPEC 阶段，尚未实现或发布 | YQuant-Codex-Principal |
 
 > **V1.0 已废弃说明**：V1.0 的中央 `data/submodules.yaml` manifest 模式已彻底取消。本 V2.0 文档不保留任何 manifest 章节；凡出现 `data/submodules.yaml` 的地方均为「已废弃」说明。
+
+## 0. 本次修订适用范围与优先级（2026-10-16）
+
+V2.1 仅修订分支选择、来源比较可信度和目标一致性；与历史单分支描述冲突时，以本节及 SPEC-10-008 §3.4–§3.8 为准。关联 Design 文件仍是历史设计，待独立 T2 更新后才能据此实现；本卡不宣称运行时已兼容。
+
+- 已完成基线：主仓 `main=042e55b2ce54af2186353f6f50aa3524ce39d5fe`；OctoBot 已作为源码 submodule 接入，gitlink 与子仓 HEAD 均为 `c45fdc2c95c5bd3d649251fa90c327e2e8f86b00`，子仓检出 `main`，`.gitmodules` 跟踪 `main`，origin HEAD 为 `origin/main`，本地已有 `upstream/master`，未放置 `.update_submodules.yaml`。这是源码接入事实，不是分支映射修复成果。
+- 现有脚本 v2.2.0 已有五阶段、upstream 默认分支探测、remote 前缀规范化、opt-in、install_exclude 与 pip 诊断。本次不是重做这些能力：待修的是一个 branch 同时供 fetch/merge/push 使用，以及 ref 查询失败被计作 0/0。
+- 新增可选 `upstream_branch` 表示来源；保留 `branch` 表示本地与 origin 目标。显式旧 `branch` 且未设 `upstream_branch` 时，来源沿用该 branch 的规范化值，保留旧同名行为。只有未显式配置 branch 时，两端默认独立发现。
+- 无 opt-in 的 OctoBot 必须自动得到 `upstream/master → 本地 main → origin/main`；也支持 `upstream/develop → main`。不改官方分支名、不向子仓新增配置、不自动 checkout 或重建分支。
+- 默认 dry-run、默认不 push、禁 force、五阶段/跳过/失败中止、install_exclude/诊断均保留；RFC/SPEC-10-012 中逐字节输出兼容要求仅适用于其历史 install/diagnostic 增量，不妨碍本次必要的分支/未知状态输出修订。
+- 本次交付只更新既有文档。实现/独立验证/独立 Review 在后续卡执行；不新增 CLI、中央 manifest、服务、依赖或激活阶段，不要求本次发布/打 tag/升级脚本版本号。具体函数、文件级改动与 G3 受控增长说明交 T2 Design。
+
+### 0.1 决策与边界
+
+1. 目标优先级：有效 opt-in `branch` > `.gitmodules` 对应 section 的 `branch` > 子仓当前检出分支 > origin HEAD > 历史兜底 `main`。`.gitmodules branch=.` 按主仓当前分支解析；无法解析即失败，不猜测。已选定目标后不因目标不存在/不匹配而降低优先级。
+2. 来源优先级：有效 opt-in `upstream_branch` > 显式 legacy `branch`（两端同名兼容）> 独立 upstream 默认发现。默认发现依次使用 cached upstream HEAD、只读远端 HEAD 查询、已有 upstream/main、upstream/develop、upstream/master；不得拿目标 branch 或 origin HEAD 冒充来源默认。
+3. 所有模式在任何 mutating phase/hook 前核验当前 HEAD 为目标本地分支。detached、目标分支不存在或不匹配均清晰失败，不 checkout、不 reset、不以 force-dirty 绕过；resume/skip 不绕过该核验。
+4. fetch/merge 只用来源，push 只用目标；apply 必须比较本轮实际取得的来源提交。缺 ref、查询失败或非法计数不等于 behind=0。dry-run 只比较已有缓存：无法比较时如实报告 unknown，标记该 submodule 失败并停止后续阶段，不执行 fetch 或写 Git 状态；有缓存也仅声称缓存比较结果，不声称已核验远端最新。
+5. legacy branch 的 origin 前缀与新 upstream_branch 的 upstream 前缀按字段角色处理；保留 feature/x 等完整分支路径，拒绝非法/错误 remote ref，而非无条件截断最后一段。详见 SPEC §3.6。
+6. 只读探测可以查询远端，不可隐式 fetch/set-head/add remote。真实子仓不执行 apply/fetch/merge/checkout/reset/push；测试写操作仅限当前 profile scratch 内隔离本地 bare fixture。全部 gitlink、legacy 归档、其他项目/profile/服务/数据库/交易配置保持不变。
 
 ## 1. 问题陈述
 
@@ -35,7 +56,7 @@ Pascal 维护 yquant-investment 项目下的多个 git submodule。每个 submod
 3. 重启对应 systemd 服务
 4. push 到 origin
 
-当前没有统一流程，完全靠手工记忆每个 submodule 的 upstream 地址、venv 路径、systemd 服务名、install 方式。容易遗漏步骤、误操作、服务中断后不知道是哪个 submodule 引起的。
+以下 §1.1–§1.3 保留 2026-07 的问题背景；统一升级器现已实现（v2.2.0），本轮新增问题是来源 master/develop 与目标 main 不能独立表达，不能把历史痛点重新列作待实现。
 
 ### 1.1 现状痛点
 
@@ -75,6 +96,7 @@ Pascal 维护 yquant-investment 项目下的多个 git submodule。每个 submod
 - **可观测**：每次运行生成审计日志，记录每个 submodule 每个阶段的命令、exit code、耗时。
 - **可恢复**：merge 冲突时自动 `git merge --abort` 并停手报告，不自动 resolve；install/restart 失败时 abort 后续阶段。
 - **5 阶段流水线**：fetch → merge → install → restart → push，每阶段可独立跳过（`--skip-merge` / `--skip-install` / `--skip-restart`）。
+- **双分支映射**：来源与目标独立，兼容旧 branch；无子仓配置即可支持 OctoBot master→main；未知来源比较不得假通过，错误检出分支不得 merge/push。
 
 ### 2.2 Should-Have
 
@@ -146,13 +168,13 @@ python3 update_submodules.py --only daily_stock_analysis --push --skip-restart
 │  对每个 submodule（串行处理）：                                    │
 │                                                                    │
 │  Phase 1: FETCH                                                    │
-│    git fetch upstream <branch>                                     │
+│    git fetch upstream <upstream_branch>                            │
 │    计算 behind/ahead                                               │
 │    behind==0 → 跳过 Phase 2，直接到 Phase 3                        │
 │                                                                    │
 │  Phase 2: MERGE                                                    │
-│    ahead==0 → git merge --ff-only upstream/<branch>                │
-│    ahead>0  → git merge upstream/<branch>（merge commit）           │
+│    ahead==0 → git merge --ff-only upstream/<upstream_branch>       │
+│    ahead>0  → git merge upstream/<upstream_branch>（merge commit）  │
 │    conflict → git merge --abort, ABORT, 报告                       │
 │                                                                    │
 │  Phase 3: INSTALL                                                  │
@@ -165,7 +187,7 @@ python3 update_submodules.py --only daily_stock_analysis --push --skip-restart
 │    health_check FAIL → ABORT, 不 push, 报告                        │
 │                                                                    │
 │  Phase 5: PUSH（仅当 --push 且前面全 PASS）                         │
-│    git push origin <branch>  （永远不 --force）                     │
+│    git push origin <branch>（目标本地分支；永远不 --force）          │
 │    exit!=0 → 报告但不 rollback（代码已 merge+install+restart）      │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -178,7 +200,7 @@ python3 update_submodules.py --only daily_stock_analysis --push --skip-restart
 4. **abort 不 rollback**：除 merge 冲突会 `git merge --abort` 外，其他阶段失败只 abort 后续阶段，不主动回滚已完成的操作（pip install 不回滚、restart 不回滚）。原因是回滚本身也有风险，应留给人类决策。
 5. **串行处理**：submodule 之间串行执行，不并行。一个 submodule 失败不影响后续 submodule 的处理（除非 `--fail-fast`）。
 6. **upstream 缺失=硬错误**：upstream remote 不存在时**报清晰错误退出该 submodule**，不自动 `git remote add`，不回落 origin。这是 V2.0 与 V1.1 的关键差异——自动 add remote 是隐性副作用，违背 dry-run 安全哲学。
-7. **opt-in override 不阻塞**：单个 submodule 的 `.update_submodules.yaml` 加载/校验失败只 warning 跳过该 override（不影响其他 submodule），回落到启发式默认。
+7. **opt-in override 不阻塞**：单个 submodule 的 `.update_submodules.yaml` 加载/schema 校验失败只 warning 跳过该 override（不影响其他 submodule），回落到启发式默认。已可解析配置中显式分支字段非法是本次窄例外：依 SPEC §3.6 失败，不静默改变所选分支；其他字段不变。
 
 ## 4. auto-discovery 字段来源
 
@@ -190,7 +212,8 @@ python3 update_submodules.py --only daily_stock_analysis --push --skip-restart
 | `path` | `.gitmodules` 的 `path = ...` | — | 不可覆盖（来自 .gitmodules） |
 | `origin` | `git -C <path> remote get-url origin` | `origin: <url>` | 字符串覆盖 |
 | `upstream` | `git -C <path> remote get-url upstream` | `upstream: <url>` | 字符串覆盖 |
-| `branch` | 远端 HEAD 指向分支（fallback `main`） | `branch: <name>` | 字符串覆盖 |
+| `branch` | `.gitmodules branch` → 当前子仓分支 → origin HEAD → `main` | `branch: <name>` | 本地/origin 目标；显式旧配置同时给来源兜底，见 §0.1 |
+| `upstream_branch` | 独立 upstream 默认发现，不从目标推导 | `upstream_branch: <name>` | 仅覆盖来源；优先于显式旧 branch 的来源兜底 |
 | `venv` | `<path>/.venv` 存在 → `.venv`；否则 None（**跳过 install 阶段**） | `venv: <rel-path-or-null>` | 字符串覆盖；null=跳过 install |
 | `pip_install_cmd` | `<path>/requirements.txt` 存在 → `["install", "-r", "requirements.txt"]`；否则 None（**跳过 install 阶段**） | `pip_install: [...]` 或 null | list 覆盖；null=跳过 install |
 | `pre_merge_hooks` | `[]` | `pre_merge_hooks: [<cmd>...]` | list 替换 |
@@ -239,6 +262,8 @@ ERROR: submodule "daily_stock_analysis" 缺少 upstream remote。
 | `.update_submodules.yaml` 格式错误 | 低 | 低 | warning 跳过该 override，回落启发式 | 人工修正 |
 | 启发式推断 wrong（venv 路径非 .venv） | 低 | 低 | dry-run 显示推断结果；opt-in override 可改 | 显式 opt-in 修 |
 | upstream remote 缺失 | 低 | 低 | 报清晰错误退出，不自动 add | 人工 `git remote add` |
+| 来源/目标异名或错误 HEAD | 本次已确认 | 高（错推分支） | 独立发现/配置，执行前比对当前目标分支；不自动切换 | 人工检查后重试，不自动修 Git 状态 |
+| ref 缺失/查询失败被伪装 0/0 | 本次源码已确认 | 高（假通过） | unknown/fail，禁止据此跳过 merge 或继续 apply 后续阶段 | dry-run 提示缓存不足，不偷偷 fetch |
 | 并发升级多个 submodule 资源竞争 | 低 | 低 | 串行处理，不并行 | N/A |
 
 ## 6. auto-discovery vs manifest-driven 权衡

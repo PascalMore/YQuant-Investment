@@ -19,6 +19,8 @@
 
 ## 1. 需求摘要
 
+> 2026-10-16 分支映射交叉说明：§4.5、A-113 等“不配置时 dry-run 输出与 v2.1.0 一致”仅约束本文历史 install/diagnostic 增量；本次分支发现/覆盖、unknown/fail 及其必要输出以 SPEC-10-008 V2.1 §3.4–§3.8、§8.1 为准。install_exclude/diagnostic 语义及原测试覆盖保留；不恢复 P3 子仓写入授权。
+
 本 SPEC 将 RFC-10-012 的三项优化落为可执行契约：(1) opt-in `install_exclude` 包级排除——Phase 3 install 前过滤 requirements 中锚定该包的整行，成功后 audit 记录 degraded；(2) `classify_pip_failure` 的 sample 二次选择——分类与六类集合不变，仅在命中行集合内优先选择含包名+版本约束的诊断行；(3) 确认 `skills/research/daily_stock_analysis/.update_submodules.yaml` 走既有 merge_override 机制（health_check / systemd_service 字段零新机制）。所有行为均为 opt-in 或诊断增强，未配置时脚本行为与 v2.1.0 完全一致。
 
 ## 2. 范围

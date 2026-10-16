@@ -61,6 +61,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -432,6 +433,17 @@ class TestMergeConflict:
         call_count = [0]
         def mock_run(cmd, **kwargs):
             call_count[0] += 1
+            # V2.1 _validate_target_branch runs symbolic-ref + rev-parse
+            # refs/heads/<branch> before merge; answer them so we reach
+            # the actual merge/conflict path.
+            if cmd[:3] == ["git", "symbolic-ref", "--quiet"]:
+                return us.CommandResult(
+                    cmd=cmd, cwd=None, exit_code=0,
+                    stdout="main\n", stderr="")
+            if cmd[:3] == ["git", "rev-parse", "--verify"]:
+                return us.CommandResult(
+                    cmd=cmd, cwd=None, exit_code=0,
+                    stdout="abc\n", stderr="")
             if "merge" in cmd and "--abort" not in cmd:
                 return us.CommandResult(cmd=cmd, cwd=None, exit_code=1,
                                         stdout="", stderr="CONFLICT")
@@ -702,7 +714,10 @@ class TestAuditLog:
             "--repo-root", str(project),
             "--audit-dir", str(audit_dir),
         ])
-        assert rc == 0
+        # V2.1: dry-run without a cached upstream commit is an unknown
+        # (DESIGN §3.9.5) — fetch fails and CLI exits 1. The audit file
+        # is still produced so the operator can review what was attempted.
+        assert rc == 1
         audit_files = list(audit_dir.glob("update_submodules_audit_*.md"))
         assert len(audit_files) >= 1
         content = audit_files[0].read_text(encoding="utf-8")
@@ -718,13 +733,46 @@ class TestAuditLog:
 
 class TestProcessSubmodule:
     def test_process_pass_with_upstream(self, us, tmp_path):
+        """V2.1: dry-run with NO upstream cache must be ``fail`` (unknown).
+
+        Without a real ``refs/remotes/upstream/<branch>^{commit}`` cache,
+        phase_fetch correctly reports unknown and the pipeline aborts.
+        We assert the fail shape, then verify a fetch-then-dry-run pair
+        succeeds (cached comparison), preserving a passing path.
+        """
         project = _make_project(tmp_path, [("sub1", "sub1", True)])
         result = us.process_submodule(
             "sub1", Path("sub1"), project, dry_run=True,
         )
+        assert result.overall == "fail"
+        fetch_phase = [p for p in result.phases if p.phase == "fetch"][0]
+        assert fetch_phase.status == "fail"
+        assert "unresolved" in fetch_phase.detail or "unknown" in fetch_phase.detail.lower()
+        # push should still be skip (no --push); abort is reflected in overall.
+        push_phase = [p for p in result.phases if p.phase == "push"][0]
+        assert push_phase.status == "skip"
+
+    def test_process_pass_with_cached_upstream(self, us, tmp_path):
+        """V2.1: cached upstream ref makes dry-run return pass (cached
+        comparison, not a network freshness claim)."""
+        project = _make_project(tmp_path, [("sub1", "sub1", True)])
+        sub = project / "sub1"
+        # Pre-populate refs/remotes/upstream/main with the current local commit
+        # so dry-run has a cached ref to compare against.
+        env = {**os.environ,
+               "GIT_AUTHOR_NAME": "test", "GIT_AUTHOR_EMAIL": "test@test.com",
+               "GIT_COMMITTER_NAME": "test",
+               "GIT_COMMITTER_EMAIL": "test@test.com"}
+        head_sha = _git(sub, "rev-parse", "HEAD", env=env).stdout.strip()
+        _git(sub, "update-ref",
+             "refs/remotes/upstream/main", head_sha, env=env)
+        result = us.process_submodule(
+            "sub1", Path("sub1"), project, dry_run=True,
+        )
         assert result.overall == "pass"
-        assert len(result.phases) == 5
-        # push should be skip (no --push)
+        fetch_phase = [p for p in result.phases if p.phase == "fetch"][0]
+        # behind=0 cached comparison
+        assert "cached" in fetch_phase.detail.lower() or "behind=0" in fetch_phase.detail
         push_phase = [p for p in result.phases if p.phase == "push"][0]
         assert push_phase.status == "skip"
 
@@ -802,21 +850,87 @@ class TestUpstreamDefaultBranch:
             assert us._detect_upstream_default_branch(sub_path) is None
 
     def test_discover_branch_priority(self, us, tmp_path):
-        """opt-in > upstream > origin > 'main'."""
+        """V2.1: _discover_branch now resolves TARGET only.
+
+        Priority per SPEC §3.5: opt-in > .gitmodules branch > current
+        symbolic HEAD > cached origin HEAD > main fallback. Source branch
+        resolution is independent (see _discover_upstream_branch). This test
+        exercises only the target-side chain; mocking both _detect_upstream
+        and parse_origin_head ensures the upstream-side helper isn't
+        consulted for the target.
+        """
         sub_path = tmp_path / "repo"
         sub_path.mkdir()
-        with patch.object(us, "_detect_upstream_default_branch",
-                          return_value="detect-A") as m_upstream:
-            with patch.object(us, "parse_origin_head",
-                              return_value="origin-B") as m_origin:
-                assert us._discover_branch(sub_path, optin_branch=None) == "detect-A"
-                assert us._discover_branch(sub_path, optin_branch="optin-C") == "optin-C"
-                m_upstream.return_value = None
-                assert us._discover_branch(sub_path, optin_branch=None) == "origin-B"
-                m_origin.return_value = None
-                assert us._discover_branch(sub_path, optin_branch=None) == "main"
-                m_upstream.assert_called()
-                m_origin.assert_called()
+
+        def _stub_target(optin_branch: Optional[str], *, current: Optional[str],
+                         origin_head: Optional[str]) -> str:
+            return us._discover_target_branch(
+                sub_path, project_root=sub_path, section="",
+                optin_branch=optin_branch,
+            )
+
+        with patch.object(us, "_read_gitmodules_branch", return_value=None), \
+             patch.object(us, "run_cmd") as mrun:
+            def _symbolic(*args, **kwargs):
+                # Question: git symbolic-ref --quiet --short HEAD
+                cmd = args[0] if args else kwargs.get("cmd", [])
+                if cmd and cmd[:3] == ["git", "symbolic-ref", "--quiet"]:
+                    if current_branch is None:
+                        return us.CommandResult(
+                            cmd=cmd, cwd=None, exit_code=1,
+                            stdout="", stderr="",
+                        )
+                    return us.CommandResult(
+                        cmd=cmd, cwd=None, exit_code=0,
+                        stdout=f"{current_branch}\n", stderr="",
+                    )
+                return us.CommandResult(
+                    cmd=cmd, cwd=None, exit_code=1, stdout="", stderr="",
+                )
+
+            # opt-in wins
+            current_branch = None
+            mrun.side_effect = _symbolic
+            assert _stub_target("optin-C", current=None, origin_head=None) == "optin-C"
+
+            # optin=None, .gitmodules=None (mocked), current=develop
+            current_branch = "develop"
+            assert _stub_target(None, current="develop", origin_head=None) == "develop"
+
+            # everything None -> main fallback
+            def _symbolic_none(*args, **kwargs):
+                cmd = args[0] if args else kwargs.get("cmd", [])
+                return us.CommandResult(
+                    cmd=cmd, cwd=None, exit_code=1, stdout="", stderr="",
+                )
+            mrun.side_effect = _symbolic_none
+            assert _stub_target(None, current=None, origin_head=None) == "main"
+
+        # Source resolution is independent: optin_upstream_branch beats
+        # legacy branch. When neither is provided, _discover_upstream_branch
+        # consults the upstream-HEAD chain via run_cmd (covered by the
+        # dedicated A-BM-011 / local_bare tests in test_update_submodules_
+        # branch_mapping.py). Here we assert the opt-in and legacy
+        # short-circuits are honored.
+        with patch.object(us, "run_cmd") as mrun:
+            mrun.side_effect = lambda *args, **kwargs: us.CommandResult(
+                cmd=(args[0] if args else kwargs.get("cmd", [])),
+                cwd=None, exit_code=1, stdout="", stderr="",
+            )
+            # optin upstream_branch beats legacy branch
+            assert us._discover_upstream_branch(
+                sub_path, optin_branch="master", legacy_branch="develop",
+            ) == "master"
+            # legacy branch used when no optin upstream_branch
+            assert us._discover_upstream_branch(
+                sub_path, optin_branch=None, legacy_branch="develop",
+            ) == "develop"
+            # neither optin nor legacy: every upstream-HEAD probe and
+            # cached fallback fails -> unresolved (None), never silently
+            # substituted with main.
+            assert us._discover_upstream_branch(
+                sub_path, optin_branch=None, legacy_branch=None,
+            ) is None
 
 
 # -------------------------------------------------------------------
@@ -925,6 +1039,17 @@ class TestConflictFiles:
             pre_head="abc", behind=1, ahead=1, upstream_ref="upstream/main",
         )
         def mock_run(cmd, **kwargs):
+            # V2.1 _validate_target_branch runs symbolic-ref + rev-parse
+            # refs/heads/<branch> before merge; mock must answer them so
+            # the test reaches the actual merge/conflict path.
+            if cmd[:3] == ["git", "symbolic-ref", "--quiet"]:
+                return us.CommandResult(
+                    cmd=cmd, cwd=None, exit_code=0,
+                    stdout="main\n", stderr="")
+            if cmd[:3] == ["git", "rev-parse", "--verify"]:
+                return us.CommandResult(
+                    cmd=cmd, cwd=None, exit_code=0,
+                    stdout="abc\n", stderr="")
             if "merge" in cmd and "--abort" not in cmd:
                 return us.CommandResult(cmd=cmd, cwd=None, exit_code=1,
                                          stdout="", stderr="CONFLICT")

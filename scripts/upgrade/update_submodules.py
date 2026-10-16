@@ -110,14 +110,15 @@ class SubmoduleConfig:
     origin: Optional[str]
     upstream: Optional[str]
     branch: str
-    venv: Optional[Path]
-    pip_install_cmd: Optional[tuple[str, ...]]
-    pre_merge_hooks: tuple[str, ...]
-    systemd_service: Optional[str]
-    health_check: Optional[str]
-    skip_push: bool
-    notes: str
-    config_source: str  # "heuristic" | "heuristic+opt-in" | "opt-in-only"
+    upstream_branch: Optional[str] = None  # V2.1: 来源分支; None 表示独立发现
+    venv: Optional[Path] = None
+    pip_install_cmd: Optional[tuple[str, ...]] = None
+    pre_merge_hooks: tuple[str, ...] = ()
+    systemd_service: Optional[str] = None
+    health_check: Optional[str] = None
+    skip_push: bool = False
+    notes: str = ""
+    config_source: str = "heuristic"  # "heuristic" | "heuristic+opt-in" | "opt-in-only"
     install_exclude: tuple[str, ...] = ()  # v2.2.0: opt-in pkg filter (PEP 503 normalized)
 
 
@@ -137,9 +138,11 @@ class SubmoduleState:
     config: SubmoduleConfig
     abs_path: Path
     pre_head: Optional[str]
-    behind: int
-    ahead: int
-    upstream_ref: str
+    # V2.1: behind/ahead are Optional to represent "unresolved / not
+    # compared yet". They must NEVER silently become 0/0.
+    behind: Optional[int] = None
+    ahead: Optional[int] = None
+    upstream_ref: str = ""  # SHA for apply; cached/empty for dry-run
 
 
 @dataclass
@@ -392,12 +395,19 @@ def normalize_remote_branch(ref: str, *, remote: str = "origin") -> Optional[str
       - main -> main
       - refs/remotes/origin/feature/x -> feature/x
 
+    V2.1: stricter — rejects refs whose remote prefix doesn't match ``remote``,
+    HEAD, empty suffix, ``refs/tags/...``, full SHA IDs, refs whose remainder
+    starts with ``-``, illegal-ref expressions (``main..x``, ``main~1``, globs),
+    or `(unknown)`. Returns None for any unrecognised input.
+
     `git symbolic-ref --short refs/remotes/origin/HEAD` returns `origin/main`,
     not `refs/remotes/origin/main`.  Fetching upstream with the un-normalized
     value would run `git fetch upstream origin/main`, which fails because
     upstream has `main`, not `origin/main`.
     """
-    ref = (ref or "").strip()
+    if ref is None:
+        return None
+    ref = ref.strip()
     if not ref:
         return None
     full_prefix = f"refs/remotes/{remote}/"
@@ -406,7 +416,39 @@ def normalize_remote_branch(ref: str, *, remote: str = "origin") -> Optional[str
         ref = ref[len(full_prefix):]
     elif ref.startswith(short_prefix):
         ref = ref[len(short_prefix):]
-    if not ref or ref == "HEAD" or ref.endswith("/HEAD"):
+    else:
+        # No prefix strip → must be a bare name with no remote namespace.
+        # Reject if it carries any other remote prefix (e.g. `upstream/main`
+        # passed to origin remote).
+        wrong = "upstream" if remote == "origin" else "origin"
+        if ref.startswith(f"{wrong}/") \
+                or ref.startswith(f"refs/remotes/{wrong}/"):
+            return None
+    # After stripping, the remainder must look like a local branch name.
+    if not ref:
+        return None
+    if ref == "HEAD" or ref.endswith("/HEAD"):
+        return None
+    if ref.startswith("-"):
+        return None
+    # Reject any refs/* that aren't refs/heads (e.g. refs/tags/v1)
+    if ref.startswith("refs/") and not ref.startswith("refs/heads/"):
+        return None
+    if ref.startswith("tags/") or ref.startswith("remotes/"):
+        return None
+    # Illegal ref expression characters
+    illegal_chars = set("*~?[]\\^:")
+    if any(c in ref for c in illegal_chars):
+        return None
+    # Reject "main..x", "main...x", and similar ranges
+    if ".." in ref:
+        return None
+    # SHA-like (40 hex) object id passed as branch
+    if len(ref) >= 40 and all(c in "0123456789abcdef" for c in ref.lower()):
+        return None
+    # Verify ref format via git (best-effort); falls back to string check.
+    r = run_cmd(["git", "check-ref-format", "--branch", ref])
+    if r.exit_code != 0:
         return None
     return ref
 
@@ -464,23 +506,156 @@ def _detect_upstream_default_branch(submodule_path: Path) -> Optional[str]:
     return None
 
 
-def _discover_branch(submodule_path: Path, *, optin_branch: Optional[str]) -> str:
-    """Resolve the local-branch knob in priority order:
+def _read_gitmodules_branch(project_root: Path, section: str) -> Optional[str]:
+    """Read `.gitmodules` section branch via ``git config --file``.
 
-      1. opt-in YAML ``branch:``
-      2. upstream default branch (HEAD / main / develop / master probe)
-      3. origin HEAD (via ``parse_origin_head``)
-      4. literal ``"main"``
+    Returns the configured branch name (normalized to bare form when
+    ``branch = .`` is used), or None if the key is absent / unreadable.
+    An explicit empty value or a read error does NOT silently fall back —
+    the caller decides between None (absent) and a parse failure (raise).
     """
+    r = run_cmd(
+        ["git", "config", "--file", str(project_root / ".gitmodules"),
+         "--get", f"submodule.{section}.branch"],
+        cwd=str(project_root),
+    )
+    if r.exit_code != 0:
+        return None
+    val = r.stdout.strip()
+    if not val:
+        return None
+    if val == ".":
+        # Expand to the project root's current symbolic HEAD.
+        head_ref = run_cmd(["git", "symbolic-ref", "--short", "HEAD"],
+                           cwd=str(project_root))
+        if head_ref.exit_code != 0:
+            raise ValueError(
+                f".gitmodules branch='.' requires a symbolic HEAD in {project_root}"
+            )
+        return normalize_remote_branch(head_ref.stdout.strip(), remote="origin")
+    return val
+
+
+def _gitmodules_target_branch(project_root: Path, section: str,
+                               fallback: Optional[str] = None) -> Optional[str]:
+    """Target branch from .gitmodules. The fallback argument is consulted only
+    if ``.gitmodules`` is absent; explicit empty/illegal values raise so the
+    caller can fail rather than silently fall back.
+    """
+    gm = project_root / ".gitmodules"
+    if not gm.exists():
+        return fallback
+    return _read_gitmodules_branch(project_root, section)
+
+
+def _discover_target_branch(submodule_path: Path, *,
+                             project_root: Path,
+                             section: str,
+                             optin_branch: Optional[str]) -> str:
+    """Resolve target (local/origin) branch per SPEC §3.5 priority:
+
+      1. valid opt-in branch
+      2. .gitmodules branch (per section identity; ``.`` expands to project HEAD)
+      3. current submodule HEAD (must be a symbolic branch)
+      4. cached origin HEAD
+      5. fallback ``main``
+
+    Returns the bare branch name. Raises ValueError when an explicit source
+    (.gitmodules or opt-in) is malformed, or when .gitmodules ``branch=.`` and
+    the project root is detached.
+    """
+    # 1. opt-in branch — caller already validated, but double-check it normalizes.
     if optin_branch:
         return optin_branch
-    detected = _detect_upstream_default_branch(submodule_path)
-    if detected:
-        return detected
+
+    # 2. .gitmodules branch for THIS section (not for any other submodule).
+    bm = _read_gitmodules_branch(project_root, section)
+    if bm:
+        return bm
+
+    # 3. current symbolic HEAD (must NOT be a SHA)
+    head_r = run_cmd(["git", "symbolic-ref", "--quiet", "--short", "HEAD"],
+                     cwd=str(submodule_path))
+    if head_r.exit_code == 0:
+        cur = head_r.stdout.strip()
+        if cur:
+            return cur
+
+    # 4. cached origin HEAD
     origin_branch = parse_origin_head(submodule_path)
     if origin_branch:
         return origin_branch
+
+    # 5. literal fallback
     return "main"
+
+
+def _discover_upstream_branch(submodule_path: Path, *,
+                               optin_branch: Optional[str],
+                               legacy_branch: Optional[str]) -> Optional[str]:
+    """Resolve the upstream source branch per SPEC §3.5 priority:
+
+      1. opt-in upstream_branch (caller passes already-validated value)
+      2. opt-in legacy ``branch`` — used as a same-name source fallback
+      3. cached upstream HEAD (symbolic-ref or commit ref)
+      4. read-only ``git remote show upstream`` (no fetch / no set-head)
+      5. probe upstream/main, upstream/develop, upstream/master commit cache
+
+    Returns the bare branch name, or None if every step failed (caller
+    treats that as ``upstream_branch unresolved``).
+    """
+    if optin_branch:
+        return optin_branch
+    if legacy_branch:
+        return legacy_branch
+
+    # 1. cached upstream/HEAD symbolic ref
+    r = run_cmd(["git", "symbolic-ref", "--short",
+                 "refs/remotes/upstream/HEAD"],
+                cwd=str(submodule_path))
+    if r.exit_code == 0 and r.stdout.strip():
+        ref = normalize_remote_branch(r.stdout.strip(), remote="upstream")
+        if ref:
+            # Prefer name even when commit cache is missing; dry-run will
+            # then surface unknown explicitly. Don't substitute candidates.
+            return ref
+
+    # 2. read-only remote show (allow LC_ALL=C; never fetch / set-head)
+    env = {**os.environ, "LC_ALL": "C"}
+    r = run_cmd(["git", "remote", "show", "upstream"],
+                cwd=str(submodule_path), env=env)
+    if r.exit_code == 0:
+        for line in r.stdout.splitlines():
+            line = line.strip()
+            if line.lower().startswith("head branch:"):
+                name = line.split(":", 1)[1].strip()
+                if name and name != "(unknown)":
+                    norm = normalize_remote_branch(name, remote="upstream")
+                    if norm:
+                        return norm
+
+    # 3. probe common cached defaults (commit ref only — never fetches)
+    for candidate in ("main", "develop", "master"):
+        r = run_cmd(["git", "rev-parse", "--verify", "--quiet",
+                     f"refs/remotes/upstream/{candidate}"],
+                    cwd=str(submodule_path))
+        if r.exit_code == 0:
+            return candidate
+
+    return None
+
+
+def _discover_branch(submodule_path: Path, *, optin_branch: Optional[str]) -> str:
+    """Backward-compatible target-only discovery (legacy helper, now a thin
+    wrapper around ``_discover_target_branch``). Uses the empty project_root
+    and a synthetic section name ``""`` so no .gitmodules lookup is done.
+    """
+    return _discover_target_branch(
+        submodule_path,
+        project_root=submodule_path.parent,
+        section="",
+        optin_branch=optin_branch,
+    )
 
 
 def list_remotes(submodule_path: Path) -> list[str]:
@@ -518,8 +693,17 @@ def match_systemd_unit(submodule_path: Path) -> Optional[str]:
     return best
 
 
-def discover_submodule(name: str, path: Path, project_root: Path) -> SubmoduleConfig:
-    """启发式推断所有字段. cwd = project_root; git 命令用 -C <path>."""
+def discover_submodule(name: str, path: Path, project_root: Path,
+                        *, override: Optional[dict] = None,
+                        resolve_source: bool = True) -> SubmoduleConfig:
+    """启发式推断所有字段. cwd = project_root; git 命令用 -C <path>.
+
+    V2.1: 接受 ``override`` (validated opt-in dict) 与 ``resolve_source``。
+    当 ``override`` 提供时, 启发式仅填充尚未显式给出的字段, 已覆盖字段
+    不会被发现结果"反噬"。``resolve_source=False`` 表示 resume 等场景
+    不需要做 upstream 默认发现, 仅返回 cfg.upstream_branch=None 交由 phase_fetch
+    报 unknown。
+    """
     abs_path = (project_root / path).resolve()
 
     # origin
@@ -533,9 +717,39 @@ def discover_submodule(name: str, path: Path, project_root: Path) -> SubmoduleCo
     else:
         upstream = None
 
-    # branch: opt-in override 看 add_healpts; 其他走 _discover_branch() P2 补丁
-    # opt-in 加载在 process_submodule() 里走 merge_override, 这里启发式探测不带 override.
-    branch = _discover_branch(abs_path, optin_branch=None)
+    # V2.1: 显式 opt-in 字段优先于任何发现; 但 target 仅依赖 override 与
+    # .gitmodules/current/origin (不再用 upstream 默认). upstream_branch
+    # 在 resolve_source=True 时走独立发现链.
+    optin_branch = override.get("branch") if override else None
+    optin_upstream_branch = override.get("upstream_branch") if override else None
+
+    try:
+        target_branch = _discover_target_branch(
+            abs_path,
+            project_root=project_root,
+            section=name,
+            optin_branch=optin_branch,
+        )
+    except ValueError as exc:
+        # .gitmodules branch='.' but project detached, or similar
+        raise ValueError(
+            f"submodule \"{name}\" 目标发现失败: {exc}"
+        ) from exc
+
+    if resolve_source:
+        # legacy same-name source: only when opt-in has explicit branch and no
+        # explicit upstream_branch. computed target_branch must NOT act as legacy.
+        legacy_source = None
+        if override is not None and "upstream_branch" not in override \
+                and "branch" in override:
+            legacy_source = optin_branch
+        upstream_branch = _discover_upstream_branch(
+            abs_path,
+            optin_branch=optin_upstream_branch,
+            legacy_branch=legacy_source,
+        )
+    else:
+        upstream_branch = None
 
     # venv
     venv = Path(".venv") if (abs_path / ".venv").exists() else None
@@ -554,7 +768,8 @@ def discover_submodule(name: str, path: Path, project_root: Path) -> SubmoduleCo
         path=path,
         origin=origin,
         upstream=upstream,
-        branch=branch,
+        branch=target_branch,
+        upstream_branch=upstream_branch,
         venv=venv,
         pip_install_cmd=pip_install_cmd,
         pre_merge_hooks=(),
@@ -572,9 +787,51 @@ def discover_submodule(name: str, path: Path, project_root: Path) -> SubmoduleCo
 # ---------------------------------------------------------------------------
 
 
+def _validate_branch_field(value: Any, *, field_name: str,
+                           remote: str) -> Optional[str]:
+    """Validate an explicit opt-in branch value per SPEC §3.6.
+
+    Returns the bare normalized branch name on success. Raises ValueError
+    for explicit null, empty, non-string, illegal-ref, or wrong-remote
+    inputs. Returning None signals the field was absent (no opt-in entry).
+    """
+    if value is None:
+        raise ValueError(
+            f"opt-in {field_name} 显式为 null, 字段值非法"
+        )
+    if not isinstance(value, str):
+        raise ValueError(
+            f"opt-in {field_name} 必须是字符串, 收到 {type(value).__name__}"
+        )
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError(f"opt-in {field_name} 显式为空字符串")
+    if stripped == "HEAD":
+        raise ValueError(f"opt-in {field_name} 不能为 HEAD")
+    # Wrong-remote short prefix (e.g. upstream/main passed to origin remote)
+    wrong_remote = "upstream" if remote == "origin" else "origin"
+    if stripped.startswith(f"{wrong_remote}/") \
+            or stripped.startswith(f"refs/remotes/{wrong_remote}/"):
+        raise ValueError(
+            f"opt-in {field_name}={value!r} 使用了错误 remote 前缀 "
+            f"(字段角色要求 {remote}/* 或裸名)"
+        )
+    norm = normalize_remote_branch(stripped, remote=remote)
+    if norm is None:
+        raise ValueError(
+            f"opt-in {field_name}={value!r} 不是合法的 {remote} 分支名"
+        )
+    return norm
+
+
 def validate_override(raw: dict) -> Optional[dict]:
-    """校验 .update_submodules.yaml schema (V2.0).
-    返回 validated dict 或 None (schema 错误).
+    """校验 .update_submodules.yaml schema (V2.0 / V2.1).
+
+    V2.1 变更: ``branch`` 与 ``upstream_branch`` 在 opt-in 中显式给出但
+    值非法 (null/empty/non-string/illegal-ref/wrong-remote) 时必须抛
+    ``ValueError``, 不能像 v2.1.0 那样静默按字段缺失处理. 文件无法
+    加载 / schema_version 错误 / 其他字段类型错误保持原有 warning +
+    None 回落契约不变.
     """
     if not isinstance(raw, dict):
         return None
@@ -587,8 +844,20 @@ def validate_override(raw: dict) -> Optional[dict]:
             log_warn(f"opt-in schema_version 非法: {sv}, 跳过 override")
             return None
 
+    # V2.1: 显式分支字段必须先单独校验, 失败直接抛 ValueError (不被
+    # 既有 file-YAML 捕获吞掉).
     out: dict[str, Any] = {}
-    for key in ("origin", "upstream", "branch", "venv", "systemd_service",
+    if "branch" in raw:
+        out["branch"] = _validate_branch_field(
+            raw["branch"], field_name="branch", remote="origin"
+        )
+    if "upstream_branch" in raw:
+        out["upstream_branch"] = _validate_branch_field(
+            raw["upstream_branch"], field_name="upstream_branch",
+            remote="upstream",
+        )
+
+    for key in ("origin", "upstream", "venv", "systemd_service",
                 "health_check", "notes"):
         if key in raw:
             out[key] = raw[key]
@@ -614,9 +883,13 @@ def validate_override(raw: dict) -> Optional[dict]:
 
 def load_optin_override(submodule_path: Path) -> Optional[dict]:
     """加载 <submodule_path>/.update_submodules.yaml.
+
     不存在 -> None (常态).
     YAML 解析失败 -> warning + None (回落启发式).
     schema 校验失败 -> warning + None.
+    V2.1 变更: 显式分支字段 (branch/upstream_branch) 值非法时抛 ValueError,
+    由 process_submodule 单独捕获并 fail 该 submodule, 不被文件级 warning
+    吞掉.
     """
     override_path = submodule_path / OPTIN_FILENAME
     if not override_path.exists():
@@ -634,15 +907,34 @@ def load_optin_override(submodule_path: Path) -> Optional[dict]:
 
 
 def merge_override(base: SubmoduleConfig, override: dict) -> SubmoduleConfig:
-    """每个字段独立合并: override 中存在的字段覆盖 base, 未指定保留."""
+    """每个字段独立合并: override 中存在的字段覆盖 base, 未指定保留.
+
+    V2.1 变更:
+      - ``upstream_branch`` 单独覆盖来源, 不影响目标.
+      - 仅当 override 显式给出 ``branch`` 且未显式给出 ``upstream_branch``
+        时, 把规范化的 ``branch`` 裸名同时赋给 upstream_branch (legacy 同名
+        兜底); 自动算出的 ``cfg.branch`` 不充当 legacy 显式来源.
+      - ``branch`` 字段如有, 仍覆盖目标 (与 v2.1.0 一致).
+    """
     changes: dict[str, Any] = {}
 
-    for field_name in ("origin", "upstream", "branch", "systemd_service",
+    for field_name in ("origin", "upstream", "systemd_service",
                        "health_check", "notes"):
         if field_name in override:
             changes[field_name] = override[field_name]
             if override[field_name] is not None:
                 changes[field_name] = override[field_name]
+
+    # V2.1 branch 与 upstream_branch 严格键存在判定, 非 truthy.
+    explicit_branch = "branch" in override
+    explicit_upstream_branch = "upstream_branch" in override
+    if explicit_branch:
+        changes["branch"] = override["branch"]
+    if explicit_upstream_branch:
+        changes["upstream_branch"] = override["upstream_branch"]
+    elif explicit_branch and override["branch"]:
+        # legacy: opt-in 提供 branch 但未提供 upstream_branch, 来源同名兜底
+        changes["upstream_branch"] = override["branch"]
 
     if "venv" in override:
         v = override["venv"]
@@ -683,6 +975,7 @@ def _replace_config(base: SubmoduleConfig, changes: dict, source: str) -> Submod
         "origin": changes.get("origin", base.origin),
         "upstream": changes.get("upstream", base.upstream),
         "branch": changes.get("branch", base.branch),
+        "upstream_branch": changes.get("upstream_branch", base.upstream_branch),
         "venv": changes.get("venv", base.venv),
         "pip_install_cmd": changes.get("pip_install_cmd", base.pip_install_cmd),
         "pre_merge_hooks": changes.get("pre_merge_hooks", base.pre_merge_hooks),
@@ -948,7 +1241,18 @@ def _prefer_constraint_sample(matched_lines: list[str]) -> str:
 
 def phase_fetch(state: SubmoduleState, *, dry_run: bool) -> PhaseResult:
     """Phase 1: fetch upstream.
-    config.upstream is None -> ABORT.
+
+    V2.1:
+      - cfg.upstream is None -> ABORT (V2.0 行为保留).
+      - cfg.upstream_branch is None -> unknown, fail (来源 unresolved, 不回填
+        目标 main).
+      - dry-run: 不 fetch, 只读 ``refs/remotes/upstream/<upstream_branch>^{commit}``
+        与 HEAD 比较; 缺缓存或计数非法时 unknown, 停止后续阶段; 标记 cached/not
+        fetched, 不声称"远端最新"。
+      - apply: 严格 ``git fetch upstream refs/heads/<upstream_branch>`` (单
+        refspec 避免同名 tag / tracking refspec 偷换), 成功后立即解析
+        ``FETCH_HEAD^{commit}`` 存到 ``state.upstream_ref``, 比较与 merge 都
+        使用该 SHA (避免 hooks 改 tracking ref 后偷换来源)。
     """
     cfg = state.config
     if cfg.upstream is None:
@@ -956,38 +1260,111 @@ def phase_fetch(state: SubmoduleState, *, dry_run: bool) -> PhaseResult:
                           f'upstream remote 缺失: submodule "{cfg.name}"; '
                           "请手动 git remote add upstream <url> "
                           f"或在 {cfg.path}/{OPTIN_FILENAME} 声明")
+    if cfg.upstream_branch is None:
+        state.behind = None
+        state.ahead = None
+        state.upstream_ref = ""
+        return _make_fail(
+            "fetch",
+            f'upstream 来源 unresolved: submodule "{cfg.name}"; '
+            "未配置 upstream_branch 且无缓存可比较",
+        )
+
+    src_refspec = f"refs/heads/{cfg.upstream_branch}"
+
     if dry_run:
-        # still try to compute behind/ahead for plan output
-        ref = f"upstream/{cfg.branch}"
-        state.upstream_ref = ref
-        r = run_cmd(["git", "rev-list", "--left-right", "--count",
-                     f"{ref}...HEAD"], cwd=str(state.abs_path))
-        behind, ahead = _parse_rev_count(r.stdout)
-        state.behind = behind
-        state.ahead = ahead
-        return _make_pass("fetch",
-                          f"[dry-run] git fetch upstream {cfg.branch} "
-                          f"(behind={behind}, ahead={ahead})")
+        # read-only: only consult cached refs/remotes/upstream/<branch>
+        cache_ref = f"refs/remotes/upstream/{cfg.upstream_branch}"
+        rev_r = run_cmd(["git", "rev-parse", "--verify", "--quiet",
+                         f"{cache_ref}^{{commit}}"],
+                        cwd=str(state.abs_path))
+        if rev_r.exit_code != 0:
+            state.behind = None
+            state.ahead = None
+            state.upstream_ref = ""
+            return _make_fail(
+                "fetch",
+                f"unknown: 缺缓存 ref {cache_ref}; "
+                "dry-run 未 fetch, 无法判定 behind/ahead",
+            )
+        sha = rev_r.stdout.strip()
+        state.upstream_ref = sha
+        count_r = run_cmd(["git", "rev-list", "--left-right", "--count",
+                           f"{sha}...HEAD"], cwd=str(state.abs_path))
+        parsed = _parse_rev_count_strict(count_r.stdout)
+        if parsed is None:
+            state.behind = None
+            state.ahead = None
+            return _make_fail(
+                "fetch",
+                f"unknown: rev-list 输出无法解析 "
+                f"({count_r.stdout!r}); cached 比较无法判定",
+            )
+        state.behind, state.ahead = parsed
+        if state.behind == 0:
+            return _make_pass(
+                "fetch",
+                f"[dry-run cached] source={cfg.upstream_branch} target={cfg.branch} "
+                f"behind=0 ahead={state.ahead}; 未 fetch; "
+                f"merge/push 计划仅按缓存比较",
+            )
+        return _make_pass(
+            "fetch",
+            f"[dry-run cached] source={cfg.upstream_branch} target={cfg.branch} "
+            f"behind={state.behind} ahead={state.ahead}; "
+            f"将执行 git fetch upstream {src_refspec} + "
+            f"git merge {'--ff-only' if state.ahead == 0 else '--no-ff'} <commit> "
+            f"+ git push origin {cfg.branch}",
+        )
+
     t0 = time.time()
-    r = run_cmd(["git", "fetch", "upstream", cfg.branch],
-                cwd=str(state.abs_path))
-    dur = time.time() - t0
-    if r.exit_code != 0:
-        return _make_fail("fetch", f"git fetch 失败: {redact(r.stderr)[:300]}",
-                          exit_code=r.exit_code, duration=dur)
-    ref = f"upstream/{cfg.branch}"
-    state.upstream_ref = ref
-    r2 = run_cmd(["git", "rev-list", "--left-right", "--count",
-                  f"{ref}...HEAD"], cwd=str(state.abs_path))
-    behind, ahead = _parse_rev_count(r2.stdout)
-    state.behind = behind
-    state.ahead = ahead
-    return _make_pass("fetch", f"behind={behind}, ahead={ahead}",
-                      exit_code=0, duration=dur)
+    fetch_r = run_cmd(["git", "fetch", "upstream", src_refspec],
+                      cwd=str(state.abs_path))
+    if fetch_r.exit_code != 0:
+        state.behind = None
+        state.ahead = None
+        state.upstream_ref = ""
+        return _make_fail("fetch",
+                          f"git fetch 失败: {redact(fetch_r.stderr)[:300]}",
+                          exit_code=fetch_r.exit_code, duration=time.time() - t0)
+    rev_r = run_cmd(["git", "rev-parse", "--verify", "--quiet",
+                     "FETCH_HEAD^{commit}"], cwd=str(state.abs_path))
+    if rev_r.exit_code != 0:
+        state.behind = None
+        state.ahead = None
+        state.upstream_ref = ""
+        return _make_fail(
+            "fetch",
+            "FETCH_HEAD^{commit} 解析失败, 拒绝使用旧缓存计数",
+            exit_code=rev_r.exit_code, duration=time.time() - t0,
+        )
+    sha = rev_r.stdout.strip()
+    state.upstream_ref = sha
+    count_r = run_cmd(["git", "rev-list", "--left-right", "--count",
+                       f"{sha}...HEAD"], cwd=str(state.abs_path))
+    parsed = _parse_rev_count_strict(count_r.stdout)
+    if parsed is None:
+        state.behind = None
+        state.ahead = None
+        return _make_fail(
+            "fetch",
+            f"rev-list 输出无法解析 ({count_r.stdout!r}); "
+            "拒绝伪造 behind/ahead, 停止后续阶段",
+            exit_code=count_r.exit_code, duration=time.time() - t0,
+        )
+    state.behind, state.ahead = parsed
+    return _make_pass("fetch",
+                      f"source={cfg.upstream_branch} commit={sha[:12]} "
+                      f"behind={state.behind} ahead={state.ahead}",
+                      exit_code=0, duration=time.time() - t0)
 
 
 def _parse_rev_count(stdout: str) -> tuple[int, int]:
-    """Parse 'N\\tM' -> (behind, ahead)."""
+    """Parse 'N\\tM' -> (behind, ahead).
+
+    DEPRECATED: retained for backward compatibility but never used by
+    phase_fetch / dry-run. New callers must use ``_parse_rev_count_strict``.
+    """
     parts = stdout.strip().split()
     if len(parts) >= 2:
         try:
@@ -995,6 +1372,63 @@ def _parse_rev_count(stdout: str) -> tuple[int, int]:
         except ValueError:
             pass
     return 0, 0
+
+
+def _parse_rev_count_strict(stdout: str) -> Optional[tuple[int, int]]:
+    """Parse ``git rev-list --left-right --count`` output strictly.
+
+    Returns ``(behind, ahead)`` only when the output is exactly two
+    non-negative integers separated by whitespace. Returns None for empty,
+    one-token, three-or-more-token, negative, or non-integer inputs.
+    """
+    if stdout is None:
+        return None
+    parts = stdout.strip().split()
+    if len(parts) != 2:
+        return None
+    try:
+        a = int(parts[0])
+        b = int(parts[1])
+    except ValueError:
+        return None
+    if a < 0 or b < 0:
+        return None
+    return a, b
+
+
+def _validate_target_branch(abs_path: Path, branch: str) -> None:
+    """Verify that ``refs/heads/<branch>`` resolves to a commit AND that
+    the current symbolic HEAD equals ``branch``.
+
+    Raises ValueError on:
+      - detached HEAD (symbolic-ref fails)
+      - target branch missing locally
+      - HEAD branch not equal to the requested branch
+
+    Hooks / external state changes that move HEAD after this check are
+    not auto-recovered; the caller is expected to re-check before merge
+    and before push (DESIGN §3.9.4).
+    """
+    # 1. symbolic HEAD must be a branch, not a detached SHA
+    head_r = run_cmd(["git", "symbolic-ref", "--quiet", "--short", "HEAD"],
+                     cwd=str(abs_path))
+    if head_r.exit_code != 0:
+        raise ValueError(
+            f"目标分支 {branch!r} 校验失败: HEAD 处于 detached 状态"
+        )
+    cur = head_r.stdout.strip()
+    if cur != branch:
+        raise ValueError(
+            f"目标分支 {branch!r} 校验失败: 当前符号 HEAD={cur!r} 与目标不符"
+        )
+
+    # 2. refs/heads/<branch> must resolve to a commit
+    rev_r = run_cmd(["git", "rev-parse", "--verify", "--quiet",
+                     f"refs/heads/{branch}"], cwd=str(abs_path))
+    if rev_r.exit_code != 0:
+        raise ValueError(
+            f"目标分支 {branch!r} 校验失败: refs/heads/{branch} 不存在"
+        )
 
 
 _CONFLICT_STATUS_PREFIXES = ("UU", "AA", "DD", "AU", "UA", "DU", "UD")
@@ -1023,18 +1457,46 @@ def _collect_conflict_files(status_porcelain: str) -> list[str]:
 
 
 def phase_merge(state: SubmoduleState, *, dry_run: bool) -> PhaseResult:
-    """Phase 2: merge upstream/<branch>."""
+    """Phase 2: merge upstream/<upstream_branch>.
+
+    V2.1:
+      - state.behind/ahead=None -> refuse (unknown), fail.
+      - known behind=0 -> skip (cached or fetched).
+      - dry-run 文本必须含 ``git merge [--ff-only] <source-commit>`` 完整命令,
+        不能截断为 ``git --ff-only ...``.
+      - apply 前再调一次 ``_validate_target_branch`` (hooks 可能已经切走 HEAD).
+      - merge ref 使用 ``state.upstream_ref`` (apply) 或缓存 commit (dry-run),
+        永远是单一 SHA, 不是 ``upstream/<branch>`` 跟踪 ref.
+    """
     cfg = state.config
+    if state.behind is None or state.ahead is None:
+        return _make_fail(
+            "merge",
+            "unknown: behind/ahead 未比较, 拒绝进入 merge",
+        )
     if state.behind == 0:
-        return _make_skip("merge", "behind=0, skip (up-to-date)")
+        return _make_skip("merge", "behind=0, skip (cached/fetched)")
+    if not state.upstream_ref:
+        return _make_fail("merge",
+                        "upstream_ref SHA 未绑定, 拒绝执行 merge")
     if dry_run:
-        mode = "--ff-only" if state.ahead == 0 else "merge"
-        return _make_pass("merge", f"[dry-run] git {mode} {state.upstream_ref}")
+        mode = "--ff-only" if state.ahead == 0 else "--no-ff"
+        return _make_pass(
+            "merge",
+            f"[dry-run] git merge {mode} {state.upstream_ref}",
+        )
+    # Hooks may have changed HEAD; re-validate target before merge.
+    try:
+        _validate_target_branch(state.abs_path, cfg.branch)
+    except ValueError as exc:
+        return _make_fail("merge", str(exc))
+
     # pre_merge_hooks
     for hook in cfg.pre_merge_hooks:
         r = run_cmd(["sh", "-c", hook], cwd=str(state.abs_path))
         if r.exit_code != 0:
             log_warn(f"pre_merge_hook 失败 (不阻塞): {hook}")
+
     t0 = time.time()
     if state.ahead == 0:
         r = run_cmd(["git", "merge", "--ff-only", state.upstream_ref],
@@ -1044,13 +1506,11 @@ def phase_merge(state: SubmoduleState, *, dry_run: bool) -> PhaseResult:
                     cwd=str(state.abs_path))
     dur = time.time() - t0
     if r.exit_code != 0:
-        # conflict detection (P-15: also collect file list for the audit)
         status = run_cmd(["git", "status", "--porcelain"],
                          cwd=str(state.abs_path))
         conflict_files = _collect_conflict_files(status.stdout)
         if conflict_files:
             run_cmd(["git", "merge", "--abort"], cwd=str(state.abs_path))
-            # show at most 8 files in audit, summarize the rest
             shown = conflict_files[:8]
             extra = len(conflict_files) - len(shown)
             file_list = ", ".join(shown)
@@ -1064,7 +1524,8 @@ def phase_merge(state: SubmoduleState, *, dry_run: bool) -> PhaseResult:
                               exit_code=r.exit_code, duration=dur)
         return _make_fail("merge", f"merge 失败: {redact(r.stderr)[:300]}",
                           exit_code=r.exit_code, duration=dur)
-    return _make_pass("merge", f"merged {state.upstream_ref}",
+    return _make_pass("merge",
+                      f"merged {state.upstream_ref[:12]}",
                       exit_code=0, duration=dur)
 
 
@@ -1362,12 +1823,29 @@ def phase_restart(state: SubmoduleState, *, dry_run: bool) -> PhaseResult:
 
 
 def phase_push(state: SubmoduleState, *, dry_run: bool) -> PhaseResult:
-    """Phase 5: push origin <branch>. 永远不 --force."""
+    """Phase 5: push origin <branch>. 永远不 --force.
+
+    V2.1 (T3R closeout): target safety is enforced by the caller
+    (``process_submodule``) BEFORE this phase is invoked, for both
+    dry-run and apply, so a dry-run plan only ever appears after the
+    local target branch has been validated.  This function therefore
+    only performs the actual ``git push`` (or renders its dry-run text)
+    and never re-runs ``_validate_target_branch`` — that helper belongs
+    to the process boundary, not the phase itself (DESIGN §3.9.4).
+
+    Ordinary ``git push`` execution failures (non-zero exit, network
+    errors, remote rejection, etc.) are recorded as ``status=fail`` but
+    deliberately do NOT escalate to ``aborted=True`` at the process
+    boundary: that escalation is reserved for target-safety errors
+    caught earlier in ``process_submodule``.
+    """
     cfg = state.config
     if cfg.skip_push:
         return _make_skip("push", "skip_push=true (opt-in)")
     if dry_run:
-        return _make_pass("push", f"[dry-run] git push origin {cfg.branch}")
+        return _make_pass("push",
+                          f"[dry-run] git push origin {cfg.branch} "
+                          f"(target={cfg.branch})")
     t0 = time.time()
     # NEVER use --force
     r = run_cmd(["git", "push", "origin", cfg.branch],
@@ -1387,41 +1865,121 @@ def phase_push(state: SubmoduleState, *, dry_run: bool) -> PhaseResult:
 
 def process_submodule(name: str, path: Path, project_root: Path, *,
                       skip_merge: bool = False, skip_install: bool = False,
-                      skip_restart: bool = False, resume_after_merge: bool = False,
+                      skip_restart: bool = False,
+                      resume_after_merge: bool = False,
                       do_push: bool = False, dry_run: bool = True,
                       force_dirty: bool = False,
                       fail_fast: bool = False) -> PipelineResult:
-    """Process a single submodule through the 5-phase pipeline."""
+    """Process a single submodule through the 5-phase pipeline.
+
+    V2.1 变更:
+      - 先 ``load_optin_override`` 再 ``discover_submodule(override=...)``;
+        显式 opt-in 字段在发现阶段就被尊重, 不会被启发式"反噬"。
+      - 任何写阶段 (fetch / hooks / install / restart / push) 之前调用
+        ``_validate_target_branch``, 错误直接 fail/exit 1, 不 checkout,
+        不 reset, 不创建/重建本地分支.
+      - ``resume_after_merge``: 跳过 source 发现 (``resolve_source=False``)
+        与 fetch/merge; detail 明确"未比较", 不写 behind=0/latest; 保留目标
+        检查, 仍可走原 install/restart/目标 push 流程.
+      - ``skip_merge``: 仍 fetch/比较, 只跳 merge.
+      - push 失败时令 aborted=True (确保本次目标安全错误 overall fail);
+        既有非目标异常已阻断的总体结果仍按主控原 scope 外保留.
+    """
     abs_path = (project_root / path).resolve()
 
-    # discover
-    cfg = discover_submodule(name, path, project_root)
-
-    # opt-in override
-    override = load_optin_override(abs_path)
-    if override:
-        cfg = merge_override(cfg, override)
-    # P2补丁: 如果 opt-in 提供了 branch, 但启发式另算了一个 (上游默认分支探测), 以 opt-in 为准.
-    # merge_override 已经会用 opt-in branch, 这里仅防御 opt-in 未指定 branch 但 cfg.branch 是 fallback "main" 的情形.
-    if cfg.branch == "main" and override and "branch" in override:
-        cfg = _replace_config(cfg, {"branch": override["branch"]}, cfg.config_source)
-
-    # dirty worktree check
+    # dirty worktree check (apply only; dry-run never mutates; force_dirty
+    # explicitly allows through).
     if dry_run or force_dirty:
-        pass  # dry-run never mutates; force_dirty allows
+        pass
     else:
         dirty = run_cmd(["git", "status", "--porcelain"], cwd=str(abs_path))
         if dirty.exit_code == 0 and dirty.stdout.strip():
             log_warn(f'submodule "{name}" 有 dirty worktree (--force-dirty 可放行)')
             return PipelineResult(
-                name=name, config_source=cfg.config_source, phases=[],
+                name=name, config_source="heuristic", phases=[],
                 overall="fail",
                 abort_reason="dirty_worktree (use --force-dirty to override)",
             )
 
+    # V2.1: load opt-in FIRST, then discover with override context so
+    # explicit opt-in fields win without heuristic re-fighting them.
+    override: Optional[dict] = None
+    override_load_error: Optional[Exception] = None
+    try:
+        override = load_optin_override(abs_path)
+    except ValueError as exc:
+        # Explicit branch/upstream_branch illegal value; field-level error
+        # cannot be swallowed by file-level warning.
+        override_load_error = exc
+    if override_load_error is not None:
+        log_err(
+            f'submodule "{name}" opt-in 分支字段非法: {override_load_error}'
+        )
+        return PipelineResult(
+            name=name, config_source="opt-in-only", phases=[],
+            overall="fail",
+            abort_reason=str(override_load_error),
+        )
+
+    try:
+        cfg = discover_submodule(
+            name, path, project_root,
+            override=override,
+            resolve_source=not resume_after_merge,
+        )
+    except ValueError as exc:
+        log_err(f'submodule "{name}" 目标发现失败: {exc}')
+        return PipelineResult(
+            name=name, config_source=cfg_source(override),
+            phases=[],
+            overall="fail",
+            abort_reason=str(exc),
+        )
+
+    # merge opt-in AFTER discover so cfg.upstream_branch fallback (legacy
+    # same-name) does not overwrite an explicit upstream_branch=.
+    if override:
+        cfg = merge_override(cfg, override)
+    # V2.1 (T3R closeout): always log branch selection so the operator
+    # sees source/target even on heuristic-only submodules (e.g. OctoBot
+    # with no .update_submodules.yaml).  The log line is the canonical
+    # visibility hook that DESIGN §3.9.7 calls out for both opt-in and
+    # heuristic flows.
+    log_info(
+        f"submodule \"{name}\" branch selection: "
+        f"target={cfg.branch} source={cfg.upstream_branch} "
+        f"(config_source={cfg.config_source})"
+    )
+
+    # Target safety check — runs even in dry-run and resume, because all
+    # modes need to validate the local target before any read/write.
+    if not resume_after_merge:
+        # In normal flow, validate target before fetch.
+        try:
+            _validate_target_branch(abs_path, cfg.branch)
+        except ValueError as exc:
+            log_err(f'submodule "{name}" 目标校验失败: {exc}')
+            return PipelineResult(
+                name=name, config_source=cfg.config_source, phases=[],
+                overall="fail",
+                abort_reason=str(exc),
+            )
+    else:
+        # resume: still validate target (DESIGN §3.9.4) before install/push.
+        try:
+            _validate_target_branch(abs_path, cfg.branch)
+        except ValueError as exc:
+            log_err(f'submodule "{name}" 目标校验失败: {exc}')
+            return PipelineResult(
+                name=name, config_source=cfg.config_source, phases=[],
+                overall="fail",
+                abort_reason=str(exc),
+            )
+
     state = SubmoduleState(
-        config=cfg, abs_path=abs_path, pre_head=None,
-        behind=0, ahead=0, upstream_ref=f"upstream/{cfg.branch}",
+        config=cfg,
+        abs_path=abs_path,
+        pre_head=None,
     )
 
     # record pre_head for merge conflict recovery
@@ -1434,15 +1992,20 @@ def process_submodule(name: str, path: Path, project_root: Path, *,
     abort_reason: Optional[str] = None
 
     def _should_abort(phase_result: PhaseResult) -> bool:
-        """Return True if this phase result should abort subsequent phases."""
         return phase_result.status == "fail"
 
     # Phase 1: fetch
     if resume_after_merge:
         phases.append(_make_skip("fetch", "resume_after_merge, skip"))
+        # resume must not claim behind=0/latest — leave state.behind/ahead None.
     else:
         pr = phase_fetch(state, dry_run=dry_run)
         phases.append(pr)
+        # V2.1 (T3R closeout): surface the fetch plan on plain CLI without
+        # --verbose (DESIGN §3.9.1 / §3.9.5).  Re-use the existing log_info
+        # so --no-audit & no-verbose still show cached/not-fetched and the
+        # resolved git fetch upstream refs/heads/<source> plan.
+        log_info(f'fetch {pr.status}: {pr.detail}')
         if _should_abort(pr):
             aborted = True
             abort_reason = pr.detail
@@ -1451,6 +2014,11 @@ def process_submodule(name: str, path: Path, project_root: Path, *,
     if not aborted and not skip_merge and not resume_after_merge:
         pr = phase_merge(state, dry_run=dry_run)
         phases.append(pr)
+        # V2.1 (T3R closeout): surface the merge plan on plain CLI without
+        # --verbose (DESIGN §3.9.1 / §3.9.5).  Re-use the existing log_info
+        # to reveal the resolved ``git merge [--ff-only] <commit>`` plan
+        # even when behind=0 triggers a cached skip.
+        log_info(f'merge {pr.status}: {pr.detail}')
         if _should_abort(pr):
             aborted = True
             abort_reason = pr.detail
@@ -1478,14 +2046,47 @@ def process_submodule(name: str, path: Path, project_root: Path, *,
         phases.append(_make_skip("restart", "skip_restart"))
 
     # Phase 5: push (only if --push and not aborted)
+    #
+    # V2.1 (T3R closeout): the target-safety check is unified at the
+    # process boundary (DESIGN §3.9.4) — runs for both dry-run and
+    # apply so a dry-run push plan never appears without a validated
+    # local target.  When the safety check fails the push phase is
+    # recorded as ``fail`` AND ``aborted`` flips to True, mirroring the
+    # existing target-safety semantics for fetch/merge.  An ordinary
+    # ``git push`` execution failure (handled by ``phase_push`` itself)
+    # does NOT touch ``aborted``: only target-safety errors do, and
+    # the historical push-aggregation behaviour is preserved as scope-
+    # out residue.
     if do_push and not aborted:
-        if not cfg.skip_push:
-            pr = phase_push(state, dry_run=dry_run)
-            phases.append(pr)
-            if _should_abort(pr):
-                abort_reason = pr.detail
-        else:
+        if cfg.skip_push:
             phases.append(_make_skip("push", "skip_push=true"))
+        else:
+            try:
+                _validate_target_branch(abs_path, cfg.branch)
+            except ValueError as exc:
+                phases.append(_make_fail("push", f"目标校验失败: {exc}"))
+                # V2.1 (T3R closeout): surface the push target check failure
+                # on plain CLI without --verbose (DESIGN §3.9.1 / §3.9.4).
+                log_info(f'push fail (目标校验): {exc}')
+                aborted = True
+                abort_reason = f"目标校验失败 (push 前): {exc}"
+            else:
+                pr = phase_push(state, dry_run=dry_run)
+                phases.append(pr)
+                # V2.1 (T3R closeout): surface the push plan on plain CLI
+                # without --verbose (DESIGN §3.9.1 / §3.9.5).  Always re-use
+                # the existing log_info so --no-audit & no-verbose still show
+                # the resolved git push origin <branch> command or the error.
+                log_info(f'push {pr.status}: {pr.detail}')
+                # V2.1 (T3R closeout): preserve non-empty abort_reason from
+                # ordinary ``git push`` execution failures without flipping
+                # ``aborted`` to True.  The aggregation behaviour is the
+                # scope-out residue explicitly preserved by DESIGN §3.9.4:
+                # only target-safety errors escalate to overall=fail; an
+                # ordinary push execution failure records abort_reason for
+                # callers/diagnostics but keeps overall=pass.
+                if pr.status == "fail" and not abort_reason:
+                    abort_reason = pr.detail
     else:
         reason = "no --push" if not do_push else ("aborted" if aborted else "")
         phases.append(_make_skip("push", reason))
@@ -1495,6 +2096,16 @@ def process_submodule(name: str, path: Path, project_root: Path, *,
         name=name, config_source=cfg.config_source,
         phases=phases, overall=overall, abort_reason=abort_reason,
     )
+
+
+def cfg_source(override: Optional[dict]) -> str:
+    """Helper used by process_submodule when discover_submodule raises
+    before merging; if any opt-in keys exist we declare opt-in-only so
+    the audit reflects that load happened.
+    """
+    if override:
+        return "opt-in-only"
+    return "heuristic"
 
 
 # ---------------------------------------------------------------------------

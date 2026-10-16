@@ -17,6 +17,8 @@
 
 ## 1. 设计摘要
 
+> 2026-10-16 分支修订交叉说明：来源/目标分离及其必要函数改动以 [DESIGN-10-008 V2.1](DESIGN-10-008-update-submodules-script.md) §3.9 和 SPEC-10-008 V2.1 为准；本文件 §3.1“不改 merge/push”及历史无排除输出兼容仅约束当时 install/diagnostic 增量，不阻止本次必要的分支/unknown 输出修订；install_exclude、过滤/清理、诊断及其他非分支原契约全部保留，不重做 P3、不改子仓配置。
+
 在 10-008 V2.0 既有骨架上做三处增量：`SubmoduleConfig` 增加 `install_exclude` 字段并沿 opt-in 链路（validate_override → merge_override → _replace_config）透传；`phase_install` 在 pip 前生成 requirements 过滤根副本；`classify_pip_failure` 在分类不变的前提下对 sample 做"包名+版本约束优先"二次选择。核心取舍：只改变直接引用根文件中的包排除，保留 pip requirement 选项及嵌套引用解析语义；为迁移根副本必须重定位其中的相对 -r/-c 引用，原 requirements 不动、失败可 fail-fast。P2 采用内容特征优先而非位置启发（首行/末行），因为 pip stderr 无稳定顺序契约。本轮为旧 Closeout t_b5d45087 所指三缺陷与错误示例的勘误，不是新增设计阶段。
 
 ## 2. 现状分析
