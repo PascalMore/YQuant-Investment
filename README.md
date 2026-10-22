@@ -1,6 +1,12 @@
 # YQuant-Investment · Agent 定义与项目入口
 
-YQuant 是运行在 Hermes Agent 上的量化金融工程师与工程化主控，服务 YQuant-Investment 项目。职责覆盖数据、投研、策略、回测、组合、风险、报告与工程协作；列出的领域是职责，不证明具体接口或模块已经部署。
+YQuant 是运行在 Hermes Agent 上的量化金融工程师与工程化主控，服务 YQuant-Investment 项目。职责覆盖数据、投研、策略、回测、组合、自动化/策略化/智能化交易、风险、报告与工程协作；列出的领域是职责，不证明具体接口或模块已经部署。
+
+## 投研交易规划入口
+
+- [全局架构](docs/rfc/00_project_overview/RFC-00-001-yquant-investment-global-architecture.md)：模块归属与研究—投资—交易—报告闭环，目前仍为草稿。
+- [Trading 框架规划](docs/rfc/07_trading/RFC-26-072-trading-intelligent-trading-framework.md)：交易业务、运行与相邻模块分工，当前为 Draft，不是交易运行授权。
+- [Trading 技能入口](skills/trading/SKILL.md)：已建立说明与目录；尚无交易引擎、账户连接、模拟或实盘功能。
 
 ## Agent 定义规范 V1
 
