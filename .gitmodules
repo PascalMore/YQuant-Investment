@@ -6,3 +6,15 @@
 	path = skills/apps/TradingAgents-CN
 	url = git@github.com:PascalMore/TradingAgents-CN.git
 	branch = main
+[submodule "skills/trading/auto-trading/quantdinger/QuantDinger"]
+	path = skills/trading/auto-trading/quantdinger/QuantDinger
+	url = git@github.com:PascalMore/QuantDinger.git
+	branch = main
+[submodule "skills/trading/auto-trading/quantdinger/QuantDinger-Vue"]
+	path = skills/trading/auto-trading/quantdinger/QuantDinger-Vue
+	url = git@github.com:PascalMore/QuantDinger-Vue.git
+	branch = main
+[submodule "skills/trading/auto-trading/quantdinger/QuantDinger-Mobile"]
+	path = skills/trading/auto-trading/quantdinger/QuantDinger-Mobile
+	url = git@github.com:PascalMore/QuantDinger-Mobile.git
+	branch = main
