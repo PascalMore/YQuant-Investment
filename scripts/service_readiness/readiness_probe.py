@@ -48,8 +48,23 @@ ALL_SERVICES = (
 
 DSA_UNIT = "daily-stock-analysis.service"
 TACN_UNIT = "tradingagents-cn.service"
-GW_YQUANT_UNIT = "hermes-gateway-yquant.service"
-GW_YINGLONG_UNIT = "hermes-gateway-yinglong.service"
+
+# After the 2026-10-27 multiplexed-gateway migration ONE systemd user unit
+# (``hermes-gateway.service``) serves every profile, so both gateway
+# readiness probes now target that single unit. The former per-profile
+# units (``hermes-gateway-yquant.service`` /
+# ``hermes-gateway-yinglong.service``) were deleted from disk and no
+# longer exist.
+GW_UNIT = "hermes-gateway.service"
+
+# The multiplexed gateway serves many profiles from one unit, so the unit
+# journal can no longer attribute a connection to a profile. The
+# authoritative per-profile source is the gateway state file below.
+GW_SERVICE_PROFILES = {
+    GW_YQUANT_SERVICE_NAME: "yquant",
+    GW_YINGLONG_SERVICE_NAME: "yinglong",
+}
+GATEWAY_STATE_PATH = Path.home() / ".hermes" / "gateway_state.json"
 
 DEFAULT_TIMEOUT = 10.0
 DEFAULT_INTERVAL = 5.0
@@ -123,7 +138,7 @@ def _journal(unit_name: str, since_ts: int) -> _CompletedProcess:
     always return empty output and silently mask the real readiness
     evidence. This helper is the single chokepoint for every caller
     that consumes unit journal entries (currently only
-    ``probe_gwy_p3``).
+    ``probe_gwy_journal_connected``).
     """
 
     return _run(
@@ -288,8 +303,21 @@ def probe_gwy_p1(unit_name: str) -> tuple[bool, int | None, str | None]:
     return result.returncode == 0, None, None if result.returncode == 0 else "inactive"
 
 
-def probe_gwy_p2(unit_name: str) -> tuple[bool, int | None, str | None]:
-    return _probe_pid_alive(unit_name)
+def probe_gwy_p2(
+    unit_name: str, main_pid: int | None = None
+) -> tuple[bool, int | None, str | None]:
+    """P-GWY-2 — the unit's main process must be alive.
+
+    ``main_pid`` may be supplied by the caller (the gateway round already
+    resolved it for the P-GWY-3 staleness guard) to avoid a second
+    ``systemctl`` query.
+    """
+
+    if main_pid is None:
+        main_pid, error = _unit_main_pid(unit_name)
+        if main_pid is None:
+            return False, None, error
+    return _probe_pid_alive_pid(main_pid)
 
 
 def _sanitize_evidence(line: str) -> str:
@@ -303,15 +331,25 @@ def _sanitize_evidence(line: str) -> str:
         category = "websocket connected"
     elif "platform" in lowered and "connected" in lowered:
         category = "platform connected"
+    elif "connected" in lowered and "profile:" in lowered:
+        match = re.search(r"profile:\s*([A-Za-z0-9_.-]{1,64})", line)
+        category = f"connected (profile: {match.group(1)})" if match else "connected"
     else:
         category = "connected"
     return f"{timestamp[:64]} [{category}]"[:128]
 
 
-def probe_gwy_p3(
+def probe_gwy_journal_connected(
     unit_name: str, unit_active_ts: int
 ) -> tuple[bool, str | None, str | None, str | None]:
-    """Find bounded, redacted connection evidence in the unit journal."""
+    """Find bounded, redacted connection evidence in the unit journal.
+
+    This is **unit-level corroboration only**. The multiplexed gateway
+    serves every profile from one unit, so a journal ``connected`` line
+    cannot be attributed to a specific profile — two profiles would
+    share one piece of evidence. The authoritative per-profile judgement
+    is :func:`probe_gwy_p3`, which reads the gateway state file.
+    """
 
     try:
         result = _journal(unit_name, unit_active_ts)
@@ -328,7 +366,85 @@ def probe_gwy_p3(
     return False, None, None, None
 
 
-def _probe_pid_alive(unit_name: str) -> tuple[bool, int | None, str | None]:
+def _read_gateway_state() -> tuple[dict[str, Any] | None, str | None]:
+    """Read and parse the multiplexed gateway state file.
+
+    Returns ``(payload, error)``. The file is JSON; any read or parse
+    failure is reported as an error so the caller can degrade to
+    "no evidence" instead of raising.
+    """
+
+    try:
+        raw = GATEWAY_STATE_PATH.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None, "gateway_state_missing"
+    except (OSError, UnicodeError):
+        return None, "gateway_state_unreadable"
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return None, "gateway_state_invalid_json"
+    if not isinstance(payload, dict):
+        return None, "gateway_state_invalid_payload"
+    return payload, None
+
+
+def probe_gwy_p3(
+    profile: str, main_pid: int | None
+) -> tuple[bool, str | None, str | None, str | None]:
+    """P-GWY-3 — per-profile platform_connected evidence.
+
+    The only source that can attribute a connection to one profile is
+    the gateway state file's ``platforms["<profile>:feishu"]`` entry:
+    ``state == "connected"``.
+
+    Staleness guard: the entry's ``writer_pid`` must equal the *current*
+    gateway MainPID. The state file is not refreshed while the gateway is
+    down, so a stale ``connected`` record from a previous gateway
+    lifetime would otherwise be reported as a live connection. A stale
+    record is judged as **no evidence** (unknown), never as connected.
+    """
+
+    if main_pid is None:
+        return False, None, None, "no_main_pid"
+
+    payload, error = _read_gateway_state()
+    if payload is None:
+        return False, None, None, error
+
+    platforms = payload.get("platforms")
+    if not isinstance(platforms, dict):
+        return False, None, None, "gateway_state_no_platforms"
+
+    entry = platforms.get(f"{profile}:feishu")
+    if not isinstance(entry, dict):
+        return False, None, None, "platform_not_found"
+
+    writer_pid = entry.get("writer_pid")
+    if writer_pid is None:
+        return False, None, None, "platform_writer_pid_missing"
+    if type(writer_pid) is not int or writer_pid <= 0:
+        return False, None, None, "platform_writer_pid_invalid"
+    if writer_pid != main_pid:
+        return False, None, None, "platform_state_stale"
+
+    if entry.get("state") != "connected":
+        return False, None, None, "platform_not_connected"
+
+    updated_at = str(entry.get("updated_at") or "")
+    timestamp = updated_at[:25].strip() or None
+    evidence = _sanitize_evidence(f"{updated_at} [Lark] connected (profile: {profile})")
+    return True, timestamp, evidence, None
+
+
+def _unit_main_pid(unit_name: str) -> tuple[int | None, str | None]:
+    """Read a user unit's MainPID; returns ``(pid, error)``.
+
+    ``pid`` is ``None`` whenever the unit has no live main process. The
+    error strings are shared by P-GWY-2 and the gateway staleness guard
+    so both report the same reason when the unit is down.
+    """
+
     try:
         shown = _run(
             ["systemctl", "--user", "show", "-p", "MainPID", unit_name, "--value"],
@@ -337,17 +453,23 @@ def _probe_pid_alive(unit_name: str) -> tuple[bool, int | None, str | None]:
             timeout=10,
         )
     except FileNotFoundError:
-        return False, None, "systemctl_not_found"
+        return None, "systemctl_not_found"
     except subprocess.TimeoutExpired:
-        return False, None, "systemctl_timeout"
+        return None, "systemctl_timeout"
     if shown.returncode != 0:
-        return False, None, "show_failed"
+        return None, "show_failed"
     pid = (shown.stdout or "").strip()
     pid = pid.split()[0] if pid else ""
     if not pid or pid == "0" or not pid.isdigit():
-        return False, None, "no_main_pid"
+        return None, "no_main_pid"
+    return int(pid), None
+
+
+def _probe_pid_alive_pid(main_pid: int) -> tuple[bool, int | None, str | None]:
+    """Check that a known PID is still alive."""
+
     try:
-        process = _run(["ps", "-p", pid], timeout=10)
+        process = _run(["ps", "-p", str(main_pid)], timeout=10)
     except FileNotFoundError:
         return False, None, "ps_not_found"
     except subprocess.TimeoutExpired:
@@ -355,12 +477,19 @@ def _probe_pid_alive(unit_name: str) -> tuple[bool, int | None, str | None]:
     return process.returncode == 0, None, None if process.returncode == 0 else "pid_dead"
 
 
+def _probe_pid_alive(unit_name: str) -> tuple[bool, int | None, str | None]:
+    main_pid, error = _unit_main_pid(unit_name)
+    if main_pid is None:
+        return False, None, error
+    return _probe_pid_alive_pid(main_pid)
+
+
 def _unit_for_service(service: str) -> str:
     return {
         DSA_SERVICE_NAME: DSA_UNIT,
         TACN_SERVICE_NAME: TACN_UNIT,
-        GW_YQUANT_SERVICE_NAME: GW_YQUANT_UNIT,
-        GW_YINGLONG_SERVICE_NAME: GW_YINGLONG_UNIT,
+        GW_YQUANT_SERVICE_NAME: GW_UNIT,
+        GW_YINGLONG_SERVICE_NAME: GW_UNIT,
     }[service]
 
 
@@ -554,12 +683,38 @@ def _evaluate_tacn(results: dict[str, Any]) -> str:
     return "starting"
 
 
-def _probe_round_gwy(unit: str, unit_active_ts: int) -> dict[str, Any]:
+def _probe_round_gwy(
+    service: str, unit: str, unit_active_ts: int
+) -> dict[str, Any]:
+    """Run P-GWY-1/2/3 for one gateway profile against the shared unit.
+
+    P-GWY-1 and P-GWY-2 are unit-level (the multiplexed gateway has one
+    unit). P-GWY-3 is per-profile and is judged from the gateway state
+    file. The unit journal is queried as **corroboration only**
+    (``P-GWY-3J``) — its ``connected`` lines carry no profile name and
+    therefore never decide the per-profile verdict.
+    """
+
     p1 = (f"systemd:{unit}", *probe_gwy_p1(unit))
-    p2 = (f"pid:{unit}", *probe_gwy_p2(unit))
-    matched, timestamp, evidence, error = probe_gwy_p3(unit, unit_active_ts)
-    p3 = ("journal:platform_connected", matched, timestamp, evidence, error)
-    return {"P-GWY-1": p1, "P-GWY-2": p2, "P-GWY-3": p3}
+    main_pid, pid_error = _unit_main_pid(unit)
+    if main_pid is None:
+        p2 = (f"pid:{unit}", False, None, pid_error)
+    else:
+        p2 = (f"pid:{unit}", *probe_gwy_p2(unit, main_pid))
+    profile = GW_SERVICE_PROFILES[service]
+    matched, timestamp, evidence, error = probe_gwy_p3(profile, main_pid)
+    p3 = ("gateway_state:platform_connected", matched, timestamp, evidence, error)
+    journal_matched, journal_ts, journal_evidence, journal_error = (
+        probe_gwy_journal_connected(unit, unit_active_ts)
+    )
+    p3j = (
+        "journal:unit_connected",
+        journal_matched,
+        journal_ts,
+        journal_evidence,
+        journal_error,
+    )
+    return {"P-GWY-1": p1, "P-GWY-2": p2, "P-GWY-3": p3, "P-GWY-3J": p3j}
 
 
 def _evaluate_gwy(results: dict[str, Any]) -> tuple[str, str | None, str | None]:
@@ -859,14 +1014,15 @@ def probe_service(service: str, args: argparse.Namespace) -> dict[str, Any]:
             status = _evaluate_tacn(results)
             platform_connected = platform_evidence = None
         else:
-            results = _probe_round_gwy(unit, active_ts)
+            results = _probe_round_gwy(service, unit, active_ts)
             status, platform_connected, platform_evidence = _evaluate_gwy(results)
 
         probe, http_status, error = _state_probe_details(service, results)
         if service.startswith("gw-"):
-            journal_error = results["P-GWY-3"][4]
-            if error is None and journal_error:
-                error = journal_error
+            # Only authoritative per-profile evidence affects the result;
+            # auxiliary journal availability must not pollute a ready state.
+            if error is None:
+                error = results["P-GWY-3"][4]
         state = _build_state(
             service=service,
             status=status,

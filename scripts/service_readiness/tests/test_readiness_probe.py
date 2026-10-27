@@ -669,7 +669,7 @@ def test_journal_queries_user_systemd_unit_selector(
 
     monkeypatch.setattr(rp, "_run", runner)
 
-    result = rp._journal("hermes-gateway-yquant.service", since_ts=1_700_000_000)
+    result = rp._journal("hermes-gateway.service", since_ts=1_700_000_000)
 
     assert result.returncode == 0
     assert len(captured) == 1, f"expected exactly one _run call, got {len(captured)}"
@@ -682,7 +682,7 @@ def test_journal_queries_user_systemd_unit_selector(
     user_selectors = [arg for arg in cmd if arg.startswith("_SYSTEMD_USER_UNIT=")]
     sys_selectors = [arg for arg in cmd if arg.startswith("_SYSTEMD_UNIT=")]
     assert user_selectors == [
-        "_SYSTEMD_USER_UNIT=hermes-gateway-yquant.service"
+        "_SYSTEMD_USER_UNIT=hermes-gateway.service"
     ], (
         "Gateway is a user-systemd unit; _journal must use "
         f"_SYSTEMD_USER_UNIT=<unit>, got {user_selectors!r}"
@@ -694,29 +694,27 @@ def test_journal_queries_user_systemd_unit_selector(
 
 
 # ---------------------------------------------------------------------------
-# GWY-UT-07: Gateway still surfaces Lark connected evidence via the new selector
+# GWY-UT-07: journal connected evidence is unit-level corroboration only
 # ---------------------------------------------------------------------------
 
 
-def test_probe_gwy_p3_still_extracts_lark_connected_evidence(
+def test_journal_connected_evidence_is_redacted_unit_level_corroboration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Gateway P-GWY-3 must still recover ``[Lark] connected`` evidence.
+    """The journal ``connected`` line stays a redacted unit-level signal.
 
-    The user-unit selector change MUST NOT relax the connection-evidence
-    redactor. When the underlying ``journalctl`` (driven here via the
-    real ``_journal`` path) emits ``[Lark] connected``, the probe must
-    yield a successful match plus a sanitized evidence string that:
+    After the multiplexed-gateway migration the journal belongs to ONE
+    unit serving every profile, so its ``connected`` lines carry no
+    profile name. They are therefore corroboration only and must never
+    decide a per-profile verdict (see GWY-UT-08).
 
-    * preserves a bounded timestamp prefix from the journal line,
-    * collapses the message into the redacted ``[connected]`` category
-      because the Gateway ``[Lark] connected`` log line is not (yet)
-      surfaced under one of the more specific categories, and
-    * remains shorter than the existing 128-char cap.
+    The redaction contract must not be relaxed: the evidence string
+    keeps a bounded timestamp prefix, collapses the message into the
+    redacted ``[connected]`` category, and stays under the 128-char cap.
     """
 
     journal_line = (
-        "2026-07-28T07:30:01+08:00 hermes-gateway-yquant[1234]: "
+        "2026-07-28T07:30:01+08:00 hermes[1234]: "
         "[Lark] connected with session_id=abc123\n"
     )
 
@@ -740,8 +738,8 @@ def test_probe_gwy_p3_still_extracts_lark_connected_evidence(
     monkeypatch.setattr(rp, "_run", runner)
     monkeypatch.setattr(rp, "UNIT_ACTIVE_TS_OVERRIDE", 1_700_000_000)
 
-    matched, timestamp, evidence, error = rp.probe_gwy_p3(
-        "hermes-gateway-yquant.service", unit_active_ts=1_700_000_000
+    matched, timestamp, evidence, error = rp.probe_gwy_journal_connected(
+        "hermes-gateway.service", unit_active_ts=1_700_000_000
     )
 
     assert matched is True, "the `[Lark] connected` line must match the platform_connected pattern"
@@ -756,5 +754,378 @@ def test_probe_gwy_p3_still_extracts_lark_connected_evidence(
     )
     # The journalctl invocation used the user-unit selector.
     assert any(
-        arg == "_SYSTEMD_USER_UNIT=hermes-gateway-yquant.service" for arg in captured[0]
+        arg == "_SYSTEMD_USER_UNIT=hermes-gateway.service" for arg in captured[0]
     ), f"journalctl must use _SYSTEMD_USER_UNIT=..., got {captured[0]!r}"
+
+
+# ---------------------------------------------------------------------------
+# GWY-UT-08: P-GWY-3 reads the multiplexed gateway state per profile
+# ---------------------------------------------------------------------------
+
+
+def _write_gateway_state(
+    tmp_path: Path,
+    *,
+    platforms: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Inject a fake ``~/.hermes/gateway_state.json`` for offline tests."""
+
+    state_path = tmp_path / "gateway_state.json"
+    state_path.write_text(
+        json.dumps({"platforms": platforms}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(rp, "GATEWAY_STATE_PATH", state_path)
+
+
+def test_probe_gwy_p3_reads_per_profile_platform_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """P-GWY-3 must judge ``platforms["<profile>:feishu"]`` only.
+
+    The multiplexed gateway serves every profile from one unit, so the
+    gateway state file's per-profile entry is the ONLY source that can
+    attribute a connection to one profile.
+    """
+
+    _write_gateway_state(
+        tmp_path,
+        platforms={
+            "yquant:feishu": {
+                "state": "connected",
+                "writer_pid": 66990,
+                "updated_at": "2026-10-27T17:07:53.170497+00:00",
+            },
+            "yinglong:feishu": {
+                "state": "disconnected",
+                "writer_pid": 66990,
+                "updated_at": "2026-10-27T17:07:51.490755+00:00",
+            },
+        },
+        monkeypatch=monkeypatch,
+    )
+
+    matched, timestamp, evidence, error = rp.probe_gwy_p3("yquant", 66990)
+    assert matched is True
+    assert error is None
+    assert timestamp is not None
+    assert evidence is not None and "connected" in evidence
+    assert len(evidence) <= 128
+
+    matched, _timestamp, evidence, error = rp.probe_gwy_p3("yinglong", 66990)
+    assert matched is False, "a disconnected profile must not be reported connected"
+    assert evidence is None
+    assert error == "platform_not_connected"
+
+
+def test_probe_gwy_p3_ignores_journal_connected_lines(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A journal ``connected`` line must NOT confirm a profile.
+
+    Both gateway profiles share one unit, so a journal ``connected`` line
+    would otherwise let two profiles reuse the same evidence. P-GWY-3
+    must stay unknown when the gateway state file has no entry for the
+    profile.
+    """
+
+    _write_gateway_state(
+        tmp_path,
+        platforms={
+            "yquant:feishu": {
+                "state": "connected",
+                "writer_pid": 66990,
+                "updated_at": "2026-10-27T17:07:53.170497+00:00",
+            },
+        },
+        monkeypatch=monkeypatch,
+    )
+
+    journal_line = (
+        "2026-10-28T01:07:24+08:00 hermes[66990]: "
+        "[Lark] connected to wss://msg-frontier.feishu.cn/ws/v2\n"
+    )
+
+    def runner(
+        cmd: list[str],
+        *,
+        timeout: float | None = None,
+        capture: bool = False,
+        text: bool | None = None,
+        check: bool = False,
+    ) -> _FakeCompletedProcess:
+        if cmd and cmd[0] == "journalctl":
+            return _FakeCompletedProcess(0, journal_line, "")
+        return _FakeCompletedProcess(0, "", "")
+
+    monkeypatch.setattr(rp, "_run", runner)
+    monkeypatch.setattr(rp, "UNIT_ACTIVE_TS_OVERRIDE", 1_700_000_000)
+
+    matched, _timestamp, evidence, error = rp.probe_gwy_p3("yinglong", 66990)
+    assert matched is False, (
+        "the journal 'connected' line is unit-level only and must not "
+        "confirm a profile that has no gateway-state entry"
+    )
+    assert evidence is None
+    assert error == "platform_not_found"
+
+
+# ---------------------------------------------------------------------------
+# GWY-UT-09: stale gateway-state records are never reported connected
+# ---------------------------------------------------------------------------
+
+
+def test_probe_gwy_p3_rejects_stale_writer_pid(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale ``writer_pid`` must degrade to "no evidence".
+
+    ``gateway_state.json`` is not refreshed while the gateway is down,
+    so a leftover ``connected`` record from a previous gateway lifetime
+    must not be reported as a live connection. The record is judged
+    unknown, not connected.
+    """
+
+    _write_gateway_state(
+        tmp_path,
+        platforms={
+            "yquant:feishu": {
+                "state": "connected",
+                "writer_pid": 24440,  # previous gateway lifetime
+                "updated_at": "2026-10-27T16:37:36.014115+00:00",
+            },
+        },
+        monkeypatch=monkeypatch,
+    )
+
+    matched, _timestamp, evidence, error = rp.probe_gwy_p3("yquant", 66990)
+    assert matched is False, "a stale writer_pid must not be judged connected"
+    assert evidence is None
+    assert error == "platform_state_stale"
+
+
+# ---------------------------------------------------------------------------
+# GWY-UT-10: both gateway probes target the single multiplexed unit
+# ---------------------------------------------------------------------------
+
+
+def test_gateway_probes_target_single_multiplexed_unit() -> None:
+    """Both gateway services must map to ``hermes-gateway.service``.
+
+    The per-profile units were deleted during the multiplexed-gateway
+    migration; pointing the probes at them would make P-GWY-1/P-GWY-2
+    fail permanently.
+    """
+
+    assert rp.GW_UNIT == "hermes-gateway.service"
+    assert rp._unit_for_service("gw-yquant") == "hermes-gateway.service"
+    assert rp._unit_for_service("gw-yinglong") == "hermes-gateway.service"
+    assert rp.GW_SERVICE_PROFILES == {
+        "gw-yquant": "yquant",
+        "gw-yinglong": "yinglong",
+    }
+
+
+def test_gateway_round_uses_state_for_p3_and_journal_only_as_corroboration(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """P-GWY-3 must come from the state file; the journal is corroboration.
+
+    The round result must expose P-GWY-3 (per-profile, from the state
+    file) and P-GWY-3J (unit-level journal) separately so a reviewer can
+    see that the journal never decides the per-profile verdict.
+    """
+
+    _write_gateway_state(
+        tmp_path,
+        platforms={
+            "yquant:feishu": {
+                "state": "connected",
+                "writer_pid": 66990,
+                "updated_at": "2026-10-27T17:07:53.170497+00:00",
+            },
+        },
+        monkeypatch=monkeypatch,
+    )
+
+    def runner(
+        cmd: list[str],
+        *,
+        timeout: float | None = None,
+        capture: bool = False,
+        text: bool | None = None,
+        check: bool = False,
+    ) -> _FakeCompletedProcess:
+        if cmd[:2] == ["systemctl", "--user"] and "is-active" in cmd:
+            return _FakeCompletedProcess(0, "", "")
+        if cmd[:2] == ["systemctl", "--user"] and "show" in cmd:
+            return _FakeCompletedProcess(0, "66990\n", "")
+        if cmd[:1] == ["ps"]:
+            return _FakeCompletedProcess(0, "66990 ...", "")
+        if cmd and cmd[0] == "journalctl":
+            return _FakeCompletedProcess(0, "", "")
+        return _FakeCompletedProcess(0, "", "")
+
+    monkeypatch.setattr(rp, "_run", runner)
+    monkeypatch.setattr(rp, "UNIT_ACTIVE_TS_OVERRIDE", 1_700_000_000)
+
+    results = rp._probe_round_gwy("gw-yquant", "hermes-gateway.service", 1_700_000_000)
+
+    assert results["P-GWY-1"][1] is True
+    assert results["P-GWY-2"][1] is True
+    assert results["P-GWY-3"][1] is True
+    assert results["P-GWY-3"][0] == "gateway_state:platform_connected"
+    assert results["P-GWY-3J"][1] is False, "no journal connected line was emitted"
+
+    status, platform_connected, platform_evidence = rp._evaluate_gwy(results)
+    assert status == "ready"
+    assert platform_connected == "confirmed_at_boot"
+    assert platform_evidence == results["P-GWY-3"][3]
+
+
+def test_gateway_round_degrades_when_state_has_no_profile_entry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unit healthy but no per-profile evidence → degraded/unknown.
+
+    The journal reports a ``connected`` line for the shared unit, but the
+    yquant profile has no entry in the gateway state file, so the
+    per-profile verdict must stay unknown.
+    """
+
+    _write_gateway_state(
+        tmp_path,
+        platforms={
+            "yinglong:feishu": {
+                "state": "connected",
+                "writer_pid": 66990,
+                "updated_at": "2026-10-27T17:07:51.490755+00:00",
+            },
+        },
+        monkeypatch=monkeypatch,
+    )
+
+    journal_line = (
+        "2026-10-28T01:07:24+08:00 hermes[66990]: [Lark] connected\n"
+    )
+
+    def runner(
+        cmd: list[str],
+        *,
+        timeout: float | None = None,
+        capture: bool = False,
+        text: bool | None = None,
+        check: bool = False,
+    ) -> _FakeCompletedProcess:
+        if cmd[:2] == ["systemctl", "--user"] and "is-active" in cmd:
+            return _FakeCompletedProcess(0, "", "")
+        if cmd[:2] == ["systemctl", "--user"] and "show" in cmd:
+            return _FakeCompletedProcess(0, "66990\n", "")
+        if cmd[:1] == ["ps"]:
+            return _FakeCompletedProcess(0, "66990 ...", "")
+        if cmd and cmd[0] == "journalctl":
+            return _FakeCompletedProcess(0, journal_line, "")
+        return _FakeCompletedProcess(0, "", "")
+
+    monkeypatch.setattr(rp, "_run", runner)
+    monkeypatch.setattr(rp, "UNIT_ACTIVE_TS_OVERRIDE", 1_700_000_000)
+
+    results = rp._probe_round_gwy("gw-yquant", "hermes-gateway.service", 1_700_000_000)
+
+    assert results["P-GWY-1"][1] is True
+    assert results["P-GWY-2"][1] is True
+    assert results["P-GWY-3"][1] is False
+    assert results["P-GWY-3J"][1] is True, "the journal line is unit-level corroboration"
+
+    status, platform_connected, platform_evidence = rp._evaluate_gwy(results)
+    assert status == "degraded"
+    assert platform_connected == "unknown"
+    assert platform_evidence is None
+
+
+@pytest.mark.parametrize("writer_pid", [True, 66990.5, "66990", [], {}, -1])
+def test_gateway_rejects_invalid_writer_pid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, writer_pid: Any
+) -> None:
+    """Only the integer PID written by the gateway is valid evidence."""
+    _write_gateway_state(
+        tmp_path,
+        platforms={"yquant:feishu": {"state": "connected", "writer_pid": writer_pid}},
+        monkeypatch=monkeypatch,
+    )
+    assert rp.probe_gwy_p3("yquant", 66990) == (
+        False, None, None, "platform_writer_pid_invalid"
+    )
+
+
+@pytest.mark.parametrize(
+    ("raw", "error"),
+    [
+        (None, "gateway_state_missing"),
+        (b"\xff", "gateway_state_unreadable"),
+        (b"{", "gateway_state_invalid_json"),
+        (b"[]", "gateway_state_invalid_payload"),
+        (b"{}", "gateway_state_no_platforms"),
+    ],
+)
+def test_gateway_invalid_state_is_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, raw: bytes | None, error: str
+) -> None:
+    """Missing or corrupt local state must never confirm a connection."""
+    state_path = tmp_path / "gateway_state.json"
+    if raw is not None:
+        state_path.write_bytes(raw)
+    monkeypatch.setattr(rp, "GATEWAY_STATE_PATH", state_path)
+    assert rp.probe_gwy_p3("yquant", 66990) == (False, None, None, error)
+
+
+def test_gateway_does_not_echo_untrusted_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Unexpected state text must not leak into emitted error strings."""
+    _write_gateway_state(
+        tmp_path,
+        platforms={"yquant:feishu": {"state": "secret=" + "s" * 500, "writer_pid": 66990}},
+        monkeypatch=monkeypatch,
+    )
+    assert rp.probe_gwy_p3("yquant", 66990) == (
+        False, None, None, "platform_not_connected"
+    )
+
+
+@pytest.mark.parametrize("unit_active,pid_alive", [(False, True), (True, False)])
+def test_gateway_unhealthy_unit_eventually_fails(
+    monkeypatch: pytest.MonkeyPatch, unit_active: bool, pid_alive: bool
+) -> None:
+    """Current profile evidence cannot override inactive/dead unit probes."""
+    monkeypatch.setattr(rp, "UNIT_ACTIVE_TS_OVERRIDE", 1_700_000_000)
+    monkeypatch.setattr(rp, "probe_gwy_p1", lambda unit: (unit_active, None, None))
+    monkeypatch.setattr(rp, "_unit_main_pid", lambda unit: (66990, None))
+    monkeypatch.setattr(rp, "probe_gwy_p2", lambda unit, pid: (pid_alive, None, None))
+    monkeypatch.setattr(rp, "probe_gwy_p3", lambda profile, pid: (True, None, "connected", None))
+    monkeypatch.setattr(rp, "probe_gwy_journal_connected", lambda *args: (False, None, None, None))
+    result = rp.probe_service("gw-yquant", _make_args(max_retries=1))
+    assert result["status"] == "failed"
+
+
+def test_gateway_ready_is_not_polluted_by_auxiliary_journal_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Journal availability must not affect authoritative readiness evidence."""
+    monkeypatch.setattr(rp, "UNIT_ACTIVE_TS_OVERRIDE", 1_700_000_000)
+    monkeypatch.setattr(rp, "probe_gwy_p1", lambda unit: (True, None, None))
+    monkeypatch.setattr(rp, "_unit_main_pid", lambda unit: (66990, None))
+    monkeypatch.setattr(rp, "probe_gwy_p2", lambda unit, pid: (True, None, None))
+    monkeypatch.setattr(rp, "probe_gwy_p3", lambda profile, pid: (True, None, "connected", None))
+    monkeypatch.setattr(
+        rp, "probe_gwy_journal_connected", lambda *args: (False, None, None, "journal_unreadable")
+    )
+    result = rp.probe_service("gw-yquant", _make_args())
+    assert result["status"] == "ready"
+    assert result["probe_error"] is None
