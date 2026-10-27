@@ -19,7 +19,7 @@
 ## 2. 五步行为
 
 1. 保留必填且无默认值的 Distro、LogPath，名称及顺序不变；保留 `$WslExe = Join-Path $env:WINDIR "System32\wsl.exe"`、`$ErrorActionPreference = "Stop"`，以及带 `[$(Get-Date -Format s)]` 前缀、UTF-8 追加到 LogPath 的既有事件日志。
-2. 用 Start-Process 后台启动原命令 `wsl.exe -d <Distro> --exec /bin/sh -lc 'exec sleep infinity'`，正确传递参数引号，用 -PassThru 保留进程对象。启动抛异常或未取得对象，记录错误并 exit 1，不操作 Redis；不重定向或合并子进程 stdout/stderr，不增加包装器或输出文件。
+2. 用 Start-Process 后台启动保活命令 `wsl.exe -d <Distro> --exec sleep infinity`，用 -PassThru 保留进程对象。Start-Process 的 ArgumentList 只做空格拼接、不补引号，因此每个参数必须不含空格：不得再使用带引号的多词 payload（如 `/bin/sh -lc "exec sleep infinity"`），否则 Windows 参数解析会把它拆成多个 argv，shell 立即退出而不再保活。启动抛异常或未取得对象，记录错误并 exit 1，不操作 Redis；不重定向或合并子进程 stdout/stderr，不增加包装器或输出文件。
 3. 首次等待后，在每轮通过 Get-NetTCPConnection 检查 Windows 6379/6380 的 Listen 条目，任意本地地址有监听即跳过对应服务；确定未监听才执行 `Restart-Service -Name <对应服务名> -Force`，每服务每轮最多一次。查询异常不等于确定无监听：记录错误、跳过该次操作；重启异常记录错误，继续另一实例及后续轮次。仅当本轮同一次查询中两端口同时监听才提前结束；历史曾监听不参与结束判定，否则最多 3 轮；轮间等待 15 秒。
 4. 检查结束后向既有 LogPath 追加结果行，带时间戳、两实例最后监听观察结果、是否尝试重启及错误摘要。查询失败标为未知；未复查的重启不冒充恢复成功，不写凭据。不因恢复失败退出或终止已启动的保活。
 5. 等待保活进程 WaitForExit，记录既有 WSL_EXITED 事件并 exit 该进程退出码。Redis 恢复结果不覆盖保活退出码，不主动停止保活。
@@ -59,3 +59,5 @@ Windows 实际执行、Redis 恢复、任务控制权限及整机重启分别记
 V2.0（2026-10-27）：按 Pascal 指示收敛为最小方案，删除过度设计。
 
 V2.0 验收澄清（2026-10-27，主控据 M3 F-1～F-3）：提前结束只依据当前轮同时监听；历史监听字段仅作结果信息，不新增机制或改变 3 轮/15 秒边界。
+
+V2.1（2026-10-27，重启后实测修正）：保活负载改为 `--exec sleep infinity`，移除 /bin/sh 与内嵌引号。理由：2026-10-27 重启后日志出现 `WSL_EXITED code=-1`，保活子进程 37 秒内退出，WSL 不再被该任务保持；WSL 侧对照实验证实带引号的多词 payload 会被拆成多个 argv（`sh -lc` 只拿到 `exec`，立即退出）。Redis 监听检查逻辑、3 轮/15 秒常量、日志格式与退出码处理均未改变。

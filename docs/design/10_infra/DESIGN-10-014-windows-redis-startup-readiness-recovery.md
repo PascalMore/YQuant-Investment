@@ -13,8 +13,8 @@
 
 唯一运行文件：`C:\Users\pascal\AppData\Local\YQuant\wsl-keepalive-runner.ps1`。
 保留原参数、WslExe 解析、ErrorActionPreference=Stop 及 RUNNER_STARTED 事件。
-Start-Process 后台启动原 WSL 保活命令，以 -PassThru 保存进程对象。
-传参须保留 Distro 的参数边界，并使 `/bin/sh -lc` 收到完整的 `exec sleep infinity` 命令字符串。
+Start-Process 后台启动保活命令 `wsl.exe -d <Distro> --exec sleep infinity`，以 -PassThru 保存进程对象。
+Start-Process 的 ArgumentList 不补引号，各元素必须无空格；直接调用 sleep 可完全避开 shell 参数拆分问题。
 不使用 stdout/stderr 重定向，不增加 cmd/PowerShell 包装器或日志文件。
 
 进程启动成功 → 等待 15 秒 → 检查监听并按需重启 → 必要时等待 15 秒进入下一轮。
@@ -45,3 +45,5 @@ Start-Process 抛异常或无进程对象：记录 RUNNER_ERROR，退出 1，不
 V2.0（2026-10-27）：按 Pascal 指示收敛为最小方案，删除过度设计。
 
 V2.0 验收澄清（2026-10-27，主控据 M3 F-1～F-3）：提前结束只依据当前轮同时监听；历史监听字段仅作结果信息，不新增机制或改变 3 轮/15 秒边界。
+
+V2.1（2026-10-27，重启后实测修正）：保活负载改为 `--exec sleep infinity`（见 SPEC §2 第2步与 V2.1 记录）；其余执行顺序、异常边界与 3 轮/15 秒常量不变。
