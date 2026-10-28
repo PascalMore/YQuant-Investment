@@ -6,7 +6,7 @@
 | 作者 | YQuant-Principal |
 | 创建日期 | 2026-10-28 |
 | 最后更新 | 2026-10-28 |
-| 版本号 | V1.1 |
+| 版本号 | V1.2 |
 | 来源RFC | RFC-10-015-gateway-multiplex-migration-acceptance |
 | 目标模块 | 10_infra（基础设施 / 服务治理） |
 | 适配Agent | YQuant-Test-Engineer（独立验证） |
@@ -23,6 +23,7 @@
 |---|---|---|---|
 | V1.0 | 2026-10-28 | 初始创建：承载六项验收实测证据、双层口径精确实现路径、systemd 两行修正 patch 与验证读回、回归基线、回滚资产与八项遗留 | YQuant-Principal |
 | V1.1 | 2026-10-28 | T3 修复：修正 §2.5/§2.6/§5 的 `platform_evidence` 来源描述（状态文件 `updated_at` 派生；journal 命中只被计算、不进入输出）；§4.d 代理地址脱敏；§4.f audit 时序口径明确化；L7 计数区间化；新增 L9 遗留记录本次描述偏差修正 | YQuant-Principal |
+| V1.2 | 2026-10-28 | T5 修复：更正 §4.f 中 audit 完成时刻的来源与字段归因——01:47:18 为 systemd `ExecMainExitTimestamp` 字段读数（非「journal 中最后一条 audit ready 输出时刻」）；ready 输出经 `logs/boot-readiness-audit.log` 文件 append、不经 journald（journalctl 检索 0 命中） | YQuant-Principal |
 
 ---
 
@@ -173,9 +174,17 @@ commit `15238e4` 后的 `scripts/service_readiness/readiness_probe.py`：
   01:46:38 boot-readiness audit unit 启动（systemd 实测
   `ExecMainStartTimestamp=2026-10-28 01:46:38 CST`）→
   01:47:13 yinglong:feishu WS connected → 01:47:14 yquant:feishu WS connected →
-  01:47:18 journal 中最后一条 audit ready 输出时刻（audit 判定
-  `Result=success` / `ExecMainStatus=0`，exit 0；oneshot 类型无独立完成时刻字段，
-  故以「01:46:38 启动 + 01:47:18 末条 ready 输出」口径记录）。
+  01:47:18 audit unit 退出时刻（T5 自测 systemd 四字段：
+  `ExecMainStartTimestamp=2026-10-28 01:46:38 CST` /
+  `ExecMainExitTimestamp=2026-10-28 01:47:18 CST`（oneshot 类型存在该独立完成
+  时刻字段，V1.0/V1.1「无独立完成时刻字段」的表述不成立）/ `Result=success` /
+  `ExecMainStatus=0`，exit 0）。
+  ready 输出落盘更正：四服务 ready 的 ndJSON 行由探针进程 append 到项目日志文件
+  `logs/boot-readiness-audit.log`（T5 实测末行
+  `gw-yinglong … "status": "ready"`，文件 mtime 01:47），**不经 journald**——
+  `journalctl --user` 检索 `boot-readiness` 为 0 命中；V1.0/V1.1 把 01:47:18
+  归因为「journal 中最后一条 audit ready 输出时刻」属来源错误，现更正为
+  `ExecMainExitTimestamp` 字段读数。
   boot → 双 bot 就绪 **85 秒**（无 3 分钟盲区）。抢锁检查：journal 唯一 "lock" 命中
   为 Kafka 客户端无害重试日志，无 Kanban/systemd 抢锁。
 - [T1复核-归档] 当前 `boot_id=8801e629-…` 复现（§1 表）；未重启服务。
@@ -269,3 +278,10 @@ V1.1（2026-10-28）：T3 修复（Kanban t_368a7769）。修正 §2.5/§2.6 与
 条目 `updated_at` 经 `_sanitize_evidence` 合成；journal 命中（`P-GWY-3J`，L707-717）只被
 计算、从不进入输出（`_evaluate_gwy` L720-729 只取 `results["P-GWY-3"][3]`）。§4.d 代理
 地址脱敏；§4.f audit 时序改为口径明确表述；L7 计数改区间口径；新增 L9 记录本次描述偏差。
+
+V1.2（2026-10-28）：T5 修复（Kanban t_f2ec01e5）。§4.f 中 01:47:18 的来源更正：
+该时刻是 systemd oneshot unit 的 `ExecMainExitTimestamp` 字段读数（T5 实测四字段
+Start=2026-10-28 01:46:38 CST / Exit=2026-10-28 01:47:18 CST / Result=success /
+ExecMainStatus=0），不是「journal 中最后一条 audit ready 输出时刻」——四服务
+ready 的 ndJSON 行由探针进程 append 到 `logs/boot-readiness-audit.log`，不经
+journald（`journalctl --user` 检索 boot-readiness 为 0 命中）。
