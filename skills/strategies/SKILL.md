@@ -28,6 +28,7 @@ strategies/
 │   ├── strategy_executor.py
 │   ├── strategy_executor.bat
 │   └── strategy.log  # .gitignore 忽略，本地日志
+├── strategy-lab/    # Strategy Lab：研发工具 + 策略实例（见其 SKILL.md）
 ├── backtest/        # 回测引擎与框架（待建设）
 ├── signals/         # 信号生成器（待建设）
 └── templates/       # 策略模板（待建设）
@@ -39,7 +40,15 @@ strategies/
   不作为实盘建议；未经授权不得 import、执行或修改其中代码。
 - **OctoBot 已移除**：2026-10-22 按 Pascal 明确决定移除源码 submodule；不再登记、安装或自动发现。其虚拟环境已按授权直接删除，历史调研不代表当前接入。
 - **backtest / signals / templates**：🚧 建设中，以上目录为规划而非已实现能力。
+- **[Strategy Lab](strategy-lab/SKILL.md)**：操作 QuantDinger 原生回测/进化与真实数据研究的
+  操作型 Skill（定义 → 执行 → 交付）。研发工具资产在 `strategy-lab/` 根层，具体策略/研究实例
+  集中在 `strategy-lab/strategies/<strategy-id>/`。研究/回测在本模块边界内；交易运行仍按上方
+  职责划分归 Trading。当前实现与真实接入验收状态以子 SKILL「状态」节为准。
 - TWAP/VWAP 等执行算法改归 Trading 的规划范围；本次没有迁移代码或建立执行接口。
+
+## Strategy Lab 本地运行环境
+
+Strategy Lab 的本地 CLI、研究脚本和测试统一从项目根使用 `.venv/bin/python` 显式执行；其他工作目录使用 `/home/pascal/workspace/yquant-investment/.venv/bin/python`。不依赖 PATH/环境激活，不使用 Hermes 自带 Python，不新建模块 venv，不借用 QuantDinger 后端 venv。QuantDinger 平台沙箱内策略继续由平台管理环境。此规则不授权运行 legacy，也不表示 strategy-lab 已验收；子 Skill 交付时必须保留相同约定。
 
 ## 与 Trading 的协作（规划）
 

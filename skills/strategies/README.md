@@ -6,6 +6,9 @@
 
 - `SKILL.md`：模块说明、目录结构、当前状态总览。
 - `legacy/`：旧 A 股 / QUANTAXIS 策略历史归档，仅作历史参考，不作为实盘建议。
+- `strategy-lab/`：Strategy Lab 研发工具与策略实例——工具资产（SKILL、README、`scripts/`、
+  `templates/`、`tests/`）在根层，具体策略/研究实例在 `strategy-lab/strategies/<strategy-id>/`；
+  现有样例为 `strategy-lab/strategies/spy-ma-smoke/` 与 `strategy-lab/strategies/spy-close-research/`。
 - `backtest/`、`signals/`、`templates/`：待建设（规划目录，非已实现）。
 - TWAP/VWAP 等执行算法改归 [Trading](../trading/SKILL.md) 的规划范围，不在本次建立或迁移执行代码。
 
