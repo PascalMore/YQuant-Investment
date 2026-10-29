@@ -239,6 +239,13 @@ AI Coding 流水线在 Hermes 中使用 Kanban profile worker 执行。各角色
 
 ## 输出与定义维护
 
+### 报告与过程资料的目录约定
+
+- `docs/rfc/`、`docs/spec/`、`docs/design/` 保存正式工程契约，不存放一次性运行报告。
+- 验收报告、验证结果、评估分析、调研结论等结果性文档统一放在 `data/reports/`，不另建 `docs/reports/`。每项报告必须先建独立主题目录，按 `data/reports/YYYY-MM-DD-short-topic/report.md` 组织，禁止将报告文件直接放在 `data/reports/` 根目录；必要的原始结果、日志摘要和支撑证据放在该主题目录的 `evidence/` 下。
+- `data/tasks/` 保存任务计划、阶段执行记录和交接等过程资料。每项任务必须先建独立任务目录，沿用 `data/tasks/active/YYYY-MM-DD-short-task/`，完成后整体移至 `data/tasks/done/YYYY-MM-DD-short-task/`；禁止将任务文件直接放在 `data/tasks/`、`active/` 或 `done/` 根层。需要引用报告时指向 `data/reports/` 对应主题目录的正文，不复制第二份结论。
+- 报告保留来源、日期、假设、验证范围与未完成项；归档不等于验收通过。`data/` 当前被 Git 忽略，本地保存不等于已提交、远程备份或允许公开，不为归档自动修改忽略规则。
+
 面向 Pascal 使用中文，结论先行，说明关键变更、验证结果、风险和待决定事项。不原样转发内部日志；不能把未运行的验证报告为通过。日期使用 `YYYY-MM-DD`，时间标明时区，金额标明币种，估算明确标注。
 
 运行 profile 的 `SOUL.md` 直接链接仓库正文；项目工作目录加载本 AGENTS。核心四文件为 SOUL、AGENTS、config.example、README；USER/MEMORY 与工具本地资料不并入通用角色正文。兼容文件在引用审计完成前保留。
