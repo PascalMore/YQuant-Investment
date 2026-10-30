@@ -7,16 +7,16 @@
 | 状态 | Accepted |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-10-29 |
-| 最后更新 | 2026-10-30 |
-| 版本 | V1.4（方案 C：仅延长 spy-ma-smoke 窗口；待独立 Gate，非整体验收） |
-| 来源 RFC | [RFC-06-001 V1.4](../../rfc/06_strategy/RFC-06-001-strategy-lab.md) |
-| 配套 Design | [DESIGN-06-001 V1.4](../../design/06_strategy/DESIGN-06-001-strategy-lab.md) |
+| 最后更新 | 2026-10-31 |
+| 版本 | V1.5（Agent Token 接入增量：费用条款修订、Agent 异步 job/result 与持久化读回契约；待独立 Gate，非整体验收） |
+| 来源 RFC | [RFC-06-001 V1.5](../../rfc/06_strategy/RFC-06-001-strategy-lab.md) |
+| 配套 Design | [DESIGN-06-001 V1.5](../../design/06_strategy/DESIGN-06-001-strategy-lab.md)（V1.5 Agent 增量的实现 allowlist 已由 T2 冻结，见 DESIGN §8.1–§8.11） |
 | 目标模块 | strategy（skills/strategies/strategy-lab/） |
 | 适配 Agent | YQuant-Developer-Engineer, YQuant-Test-Engineer, YQuant-Reviewer-Principal |
 
 ## 1. 需求摘要
 
-实现 `skills/strategies/strategy-lab/` 操作型 Skill：SKILL.md 承载「定义 → 执行 → 交付」业务三步与自动进化子流程的最小编排约定，配最小薄调用脚本与策略目录结构。交易类经 QuantDinger Human API（JWT）完成私有源码保存、原生回测与一次有界原生进化；研究类用平台真实数据跑可重跑 Python。全部判定语义、入口矩阵与停止约束以本 SPEC 为准，Developer 不做语义再决策。
+实现 `skills/strategies/strategy-lab/` 操作型 Skill：SKILL.md 承载「定义 → 执行 → 交付」业务三步与自动进化子流程的最小编排约定，配最小薄调用脚本与策略目录结构。交易类完成私有源码保存、原生回测与一次有界原生进化：V1.5 起 Agent Token 通道（`/api/agent/v1`，whoami 实测身份 MYM_QUANT_AI）为身份/行情/编译/异步回测的首选入口，Human API（JWT）显式兼容用于源码 detail 读回闭环与 Strategy Evolution（Agent 网关无对应路由），双入口不混用认证。研究类用平台真实数据跑可重跑 Python。全部判定语义、入口矩阵与停止约束以本 SPEC 为准，Developer 不做语义再决策。
 
 ## 2. 范围
 
@@ -41,6 +41,7 @@
 |---|---|---|---|---|
 | F-001 | 源码保存并读回：编译校验（`POST /api/strategies/script-sources/compile`）→ `POST .../script-sources/create`（客户端显式 visibility=private, status=draft；Human 服务仅默认这些值，不强制覆盖 payload）→ `GET .../script-sources/detail?id=` 读回 | 策略源码、名称 | sourceId + 读回一致的 detail（name/code/metadata/asset_type/visibility/status；metadata允许平台canonical补充，见Design §3.3） | 编译 400（codeRequired/contractInvalid）→ 停止；创建 500 → 停止；读回不一致 → 仅重读 ≤1 次后停止，create 不重发 |
 | F-002 | 基准回测：`POST /api/backtest/jobs`（sourceId + 窗口/成本/params，persist=true）→ 轮询 `GET /api/backtest/jobs/{jobId}` 至 succeeded/failed/cancelled → `GET /api/backtest/get?runId=` 读回 run | spec 窗口与成本 | runId、全段指标（totalReturn/maxDrawdown/sharpeRatio/annualizedReturn/winRate/totalTrades）、dataProvenance、executionAssumptions | 402 insufficient_credits / 400 BacktestRangeLimitError → 如实停止；job failed 带 error → 停止 |
+| F-002A | Agent 异步回测（V1.5 增量）：`POST /api/agent/v1/backtest/run`（仅白名单字段 code/startDate/endDate/initialCapital/commission/slippage/leverageEnabled/leverage/params/instrumentRulesSnapshotId + `Idempotency-Key` 头）202 拿 `{job_id,status}` → `GET /api/agent/v1/jobs/{jobId}` 轮询终态 succeeded/failed/cancelled → 从 job `result` 取 `runId` 与扁平顶层指标（totalReturn/maxDrawdown/sharpeRatio/annualizedReturn/winRate/totalTrades 等，RFC §5.6），如实记录 `billing` 收据 | spec 窗口与成本 | jobId、终态 job、result.runId、全段指标、billing.status | 未知字段 400、缺幂等键 400、同 key 冲突/进行中 409、429 并发上限 → 停止；提交状态未知用同 key 重放或读回，不盲发新提交；billing 出现 `status:"charged"`/`charged>0`/402 与关闭计费前提矛盾 → 停止并披露，不自动付费/重试/退款 |
 | F-003 | 进化适用性判定：`GET /api/strategy-evolution/parameter-space?sourceId=` | sourceId | 判定结果 ∈ {触发, 跳过+原因} | scope=none / 无 optimizable 参数 / 用户显式禁优化 / 研究类 → 跳过分支，正常交付 |
 | F-004 | 预算估算：`POST /api/strategy-evolution/estimate`（parameterSpace + config） | 限定后的参数行、config；folds固定4 | backtestRuns/relativeUnits/resourceTier/minimumRecommendedTrials/sampleSufficient/isUpperBound | 超预算 → 仅收缩 trials/声明内空间后重估 ≤2 次，folds不变；仍超 → 停止并报估算值 vs 内部预算，不虚报实耗 |
 | F-005 | 一次有界进化：`POST /api/strategy-evolution/run`（202+jobId）→ 轮询 `GET .../jobs/{jobId}` ≥15s 间隔至终态 → `GET .../jobs?sourceId=` 交叉核对列表可见 | 步骤 F-003/F-004 产物 | 终态 succeeded: result（summary/bestParams/topCandidates/selection）；failed: progress.failure 诊断；cancelled | failed/cancelled/超预算 → 停止并报告；禁止自动重跑或二次 run |
@@ -54,18 +55,23 @@
 入口矩阵与请求/响应语义继承 RFC-06-001 §5.3（已对源码核实）；补充实现级要点：
 
 - Human 信封：成功 `{"code":1,...,"data":...}`，普通业务失败 `{"code":0,"msg":"<错误键>","data":...}`；HTTP 400/402/404/500。认证失败可为HTTP401/code401，先检查HTTP状态。认证头 `Authorization: Bearer <既有会话>`，7天、单客户端（token_version），仅从既有安全机制注入；禁止新造 token 或绕认证。
+- Agent 信封（V1.5）：成功 `{code:0,message,data}`；失败 `{code:<http状态码>,message,details,retriable,data:null}`（agent_v1/_helpers.py envelope/error）。Human 与 Agent 信封结构不同（msg vs message），客户端按 base URL 区分解析，不得混读。
+- Agent 幂等（V1.5）：SCOPE_B/W 的非 GET 调用（含 `/strategy-sources/compile` 与 `/backtest/run`）必须带 `Idempotency-Key`（≤120 字符）：缺失或超长 400；同 key 不同请求体 409（IDEMPOTENCY_CONFLICT）；同 key 相同请求仍在进行 409；重放返回已保存响应并带 `Idempotent-Replayed: true` 头（agent_auth.py:661-712、agent_jobs.py:105-119）。提交超时/断连视为状态未知，先用同 key 重放或 `GET /jobs/{jobId}` 读回，不盲发新提交；未知终态不重发。
 - 进化 `POST /api/strategy-evolution/run` 请求仅接受 `{sourceId, startDate, endDate, initialCapital, commission, slippage, leverageEnabled?, leverage?, parameterSpace[], config}`；parameterSpace 行超出声明范围返回 400 `strategyEvolution.parameterRangeOutsideDeclaration|parameterNotDeclared|parameterStepInvalid`。平台 `config` 合法域：`method∈{tpe,grid,random}`（默认 tpe）、`trials`（tpe≥24，随机/网格上限见平台）、`folds` 4-10、`trainRatio` 0.55-0.85、`blindRatio` 0-0.3、`costMultipliers` 0-10、`seed`；首版客户端另受§8预算约束，folds仅4，不依赖平台夹值。
 - 进化 result 关键字段（判定输入）：`summary.recommended/sampleSufficient/oosReturn/oosSharpe/maxDrawdown/blindReturn/blindPassed/actualBacktestRuns`、`bestParams`、`topCandidates[]`、`summary.selectionObjective="oosCompoundedReturn"` 与 `selection.objective="oosCompoundedReturn"`、`validation.{pbo,deflatedSharpe,monteCarlo,costStress}`（各项可 `available:false`）；失败时 `progress.failure.{messageKey,dominantReason,reasonCounts,actualBacktestRuns}`。缺字段如实未知，不伪造另一层级字段（engine.py:219-265）。
 - 口径声明（防误读）：`summary.maxDrawdown` 仅为 validation/OOS 折回撤绝对值平均，不含 blind、不是全段最大回撤（statistics.py:27-55；无validation时源码兜底100）。blind证据由 `summary.blindReturn/blindPassed` 独立提供。硬约束核对只认 F-006 原生全段读回 run 的 `data.result.maxDrawdown`（峰值净值口径）。fold 复用是单次回放后按时间切片，不得称逐折重新训练；`selection.blindUsedForSelection=false` 仅描述原生搜索，最终全段复检已包含blind，不能再声称最终选参有完全未触碰的独立留出集。
 - 私有性源码依据：Human `app/services/script_source.py:247-283` 接受payload visibility/status，private/draft只是默认；F-001显式字段与精确读回不可省略。Design §3.3固定首版同Human JWT/sourceId/owner闭环。
 - 预算字段：内部 `estimate.backtestRuns/relativeUnits` 与成功 `result.summary.actualBacktestRuns`（失败时 `progress.failure.actualBacktestRuns`）分开记录，也与外层持久化backtest jobs分栏；estimate.isUpperBound=false，不能把估算当实耗或服务端硬上界。folds固定4，超预算只降trials/缩空间或停止；首版样例与上限见§8、Design §3.5。
-- 零付费预检：先具备可用Human JWT，再以同一认证读 `GET /api/settings/public-config`（settings.py:2087-2099的login_required），明确 `data.billing_enabled=false` 才提交；true/缺失/401/403即停止，不访问billing写接口。该名称不表示匿名可读。
+- 零付费预检（V1.4 历史事实，已被 V1.5 费用条款取代，不再作为 Agent 模式前置）：原要求先具备可用Human JWT，再以同一认证读 `GET /api/settings/public-config`（settings.py:2087-2099的login_required），明确 `data.billing_enabled=false` 才提交；true/缺失/401/403即停止，不访问billing写接口。该名称不表示匿名可读。
 - 回测 job（Human）：`POST /api/backtest/jobs` 202 返回 jobId；请求字段与 Agent 网关不同，接受 `sourceId/strategyId/code` 关联与 `persist`；范围受 compile 返回的 `backtestRangePolicy.maxSelectedDays` 约束（按市场/周期，如 USStock 1D 10 年、1m 30 天）。
+- Agent 回测 job（V1.5）：`POST /api/agent/v1/backtest/run` 仅接受白名单字段 `code/startDate/endDate/initialCapital/commission/slippage/leverageEnabled/leverage/params/instrumentRulesSnapshotId`（`_BACKTEST_FIELDS`，agent_v1/backtests.py:28-32），未知字段 400；不接受 `sourceId/persist/strategyId`（persist 恒服务端默认 true）。202 响应为 `{job_id,status:"queued",kind:"backtest",created_at[,billing]}`（`_job_receipt`，agent_jobs.py:215-222）。job 读回字段 `job_id/user_id/agent_token_id/kind/status/request/result/error/progress/created_at/started_at/finished_at`（agent_jobs.py:465-482）；终态 `succeeded/failed/cancelled`。成功 `result = {**回测结果, "runId": run_id}`（backtest_jobs.py:58-80），指标为扁平顶层键：`totalReturn/maxDrawdown/maxDrawdownPeakEquity/maxDrawdownTroughEquity/maxDrawdownPeakTime/maxDrawdownTroughTime/winRate/sharpeRatio/annualizedReturn/annualizedReturnAvailable/annualizedReturnCapped`（runtime.py:2057-2109），服务端另注入 `resultStatus/dataProvenance/executionAssumptions/benchmark*/excessReturn/benchmarkRelativeMetrics/diagnostics`（service.py:280-434）。失败 `error` 为截断文本（≤6000 字符），计费退费自动在终态事务完成（agent_jobs.py:437-462）。曲线类数组经 `compact_backtest_result` 有界采样（storage.py:361-389），报告不得把采样数组当全量明细。
+- Agent 持久化读回差异（V1.5，与 Human 关键不同）：Agent 入口不注入 `__source_id`，持久化 run 的 `source_id` 为 NULL，不产生 Human 通道 sourceId→run 的 UI 历史关联；Agent 网关无 run 读回或 history 路由（agent_v1/backtests.py 仅 `POST /backtest/run`）。Agent 模式结果判定以 job `result` 为准；「UI 历史可查/sourceId 读回闭环」仅在 Human 显式兼容路径可用，混用必须显式标注认证切换，不承诺 Agent 具备 Human 全部关联/持久化能力。
+- 费用条款（V1.5 修订，取代 V1.1 Human-only 零付费预检）：本地实例按操作人 Pascal 2026-10-31「本地部署的 quantdinger 付费已关闭」确认执行，Agent 模式不要求提交前费用证明（不读 Human JWT public-config、不调 Agent 计费接口、不要管理员登录或证明文件）；旧预检条款仅作 V1.4 历史事实保留。运行时判据：回测提交在创建 job 事务内调用 `consume_in_transaction`（agent_jobs.py:120-135），billing 关闭或 cost=0 返回 `status:"free"`、`charged:0`（billing_service.py:662-701）；202 响应与 job 读回中的 `billing`（`enabled/feature/cost/charged/remaining/status`）是实际计费收据，客户端如实记录。该确认是操作人部署前提声明，不是 API 实测结论，不泛化到未知远端或可能收费实例；预算上限与无付费授权边界全部保留。若实际出现 `status:"charged"`、`charged>0`、HTTP402 或其他矛盾信号：如实报告并停止后续提交，不自动付费/重试/退款，不就同一问题再次要求独立免费证明。
 - 未授权调用不可达清单：Quick Trade 下单、deployments 创建/启停、credentials、billing、Live 相关 agent 路由（SCOPE_T/C）——Skill 不生成任何对它们的调用。
 
 ## 4.bis 持久化契约
 
-平台持久化（QuantDinger 所有，YQuant 只读引用）：qd_script_sources（私有源码，读回验证）、回测 run 仓库（runId、结果、dataProvenance、executionAssumptions）、qd_agent_jobs（kind=strategy_evolution，status/progress/result/error，列表按 sourceId 过滤）。YQuant 本轮不新增任何数据库/集合/schema；不直写平台表。
+平台持久化（QuantDinger 所有，YQuant 只读引用）：qd_script_sources（私有源码，读回验证）、回测 run 仓库（runId、结果、dataProvenance、executionAssumptions；Agent 模式持久化 run 的 source_id 为 NULL，见 §4）、qd_agent_jobs（kind=strategy_evolution 与 Agent kind=backtest：job_id/status/request/result/error/progress/agent_token_id/idempotency_key/billing，Human 列表按 sourceId 过滤、Agent `GET /jobs` 按 tenant+kind/limit）。YQuant 本轮不新增任何数据库/集合/schema；不直写平台表。
 
 本地持久化（唯一写入范围，均无 schema 迁移需求）：
 
@@ -74,7 +80,7 @@
 | `strategy-lab/strategies/<id>/spec.md` | 目标/参数语义/硬约束/预算/验收 | md | 是 | 随策略目录保留 | L1 |
 | `strategy-lab/strategies/<id>/config.json` | 可调参数数值 | json | 交易样例是 | 随策略目录保留 | L1 |
 | `strategy-lab/strategies/<id>/strategy.py` \| `research.py` | 主脚本 | py | 是 | 随策略目录保留 | L1 |
-| `strategy-lab/strategies/<id>/reports/` | 运行结果、报告、证据摘要 | 文件 | 是 | 最新结果即可；重要结论归档 | L1-L2（含平台 ID、指标；不含凭据/账户私密数据） |
+| `strategy-lab/strategies/<id>/reports/` | 运行结果、报告、证据摘要（含 Agent jobId/runId/billing 收据） | 文件 | 是 | 最新结果即可；重要结论归档 | L1-L2（含平台 ID、指标；不含凭据/账户私密数据） |
 
 凭据流：JWT/agent token 仅经环境变量注入进程，不落盘、不入 reports、不入日志；报告与代码中零秘密。不建 version/runs/manifest/快照目录。
 
@@ -101,6 +107,8 @@
 | A-004 | 判定输出符合 §5 六分支之一，核对summary.selectionObjective与selection.objective；summary.maxDrawdown仅validation折绝对值平均、不含blind，硬约束用全段data.result.maxDrawdown；最终选参触及留出集如实披露 | 报告内容核对 + 字段/口径/判定逻辑单元断言 |
 | A-005 | 研究样例：真实数据、reports 落盘、同脚本二次执行成功 | 实跑两次比对输出 |
 | A-006 | 负分支（F-009）断言通过 | 单测/断言脚本运行记录 |
+| A-006A | Agent 异步回测（F-002A）真实闭环：202 回执、jobId 轮询终态、result.runId 与扁平顶层指标与 RFC §5.6 契约一致；billing 收据如实记录且与「关闭计费」前提无矛盾（矛盾即停止并披露） | API 实调 + job 读回比对；fixture 不得替代真实验证 |
+| A-006B | Agent 幂等与错误分支断言：缺 Idempotency-Key 400、同 key 冲突 409、未知字段 400、401 停止不重试；fixture 断言与真实 401/403 分开陈述 | 单测/断言脚本运行记录 |
 | A-007 | 未授权调用不可达：脚本源码 grep 无下单/deploy/credentials 调用 | grep 审计 |
 | A-008 | 凭据零泄露：文档/代码/报告/日志无 token 值 | grep 秘密模式审计 |
 | A-009 | 预算与停止：estimate预检生效，folds恒为4，超预算仅减trials/缩空间 ≤2 次后停止；进化仅run一次；内部估计/实际与外层jobs分别符合§8/Design预算，不得增大安全上限 | 日志/报告核对（估计与actual未知不得混写） |
@@ -108,7 +116,7 @@
 ## 7. 测试要求
 
 - 单元测试：判定函数（§5 分支映射）、参数行构造（范围裁剪）、错误信封解析。fixture 仅用于此层。
-- 集成（真实）：F-001~F-008 按 A-003/A-005 真实执行；无凭据/平台不可用时明确阻塞披露，不降级为 mock 验收。
+- 集成（真实）：F-001~F-008 按 A-003/A-005 真实执行；F-002A 按 A-006A 真实执行（Agent 身份/行情/编译/异步回测至少各一次真实调用，billing 收据留档）；无凭据/平台不可用时明确阻塞披露，不降级为 mock 验收。
 - 回归：二次执行研究脚本输出一致（允许时间戳类字段差异）。
 - 不可自动化验证项：UI 页面人工实查（sourceId/runId 在原生界面可见）由 Verify 阶段以截图或页面读数留证。
 
@@ -117,7 +125,7 @@
 - 禁止事项：修改 QuantDinger 子模块源码；新建 SDK/MCP/包结构；直写平台 DB；Demo/Live/调度/凭据操作；提交研究/进化/回测任务以外的任何平台写；把 fixture 结果冒充真实验收；无限进化循环。
 - 运行环境：Pascal 已确认本地CLI、研究脚本和测试从项目根显式使用 `.venv/bin/python`（本机核验为Python 3.12.13）；不使用Hermes自带解释器、不新建模块venv、不借用QuantDinger后端venv。跨工作目录使用该解释器的项目绝对路径；平台沙箱环境保持平台所有。
 - 依赖限制：首版CLI、研究脚本和离线测试仅用Python标准库，不新增三方依赖。Design §2.1的T2缺包记录属于当时的Hermes解释器，不代表项目venv缺包。平台沙箱内策略的DataFrame不要求在本地执行。
-- 性能/安全/风控约束：安全上限trials ≤64、全段复检参数组（含基准）≤5、外层持久化 `POST /api/backtest/jobs` ≤8、研究数据API调用 ≤50、墙钟 ≤30分钟；任务可下调，不得上调这些上限。folds固定4（平台下限4，首版上限4），不能降3或升5；任务只允许<4则停止。轮询间隔≥15s；所有写动作读回验证；进程退出码非0即该步骤失败。
+- 性能/安全/风控约束：安全上限trials ≤64、全段复检参数组（含基准）≤5、外层持久化回测 job ≤8（V1.5 起按通道无关计数：Human `POST /api/backtest/jobs` 与 Agent `POST /api/agent/v1/backtest/run` 的持久化提交合并计入）、研究数据API调用 ≤50、墙钟 ≤30分钟；任务可下调，不得上调这些上限。folds固定4（平台下限4，首版上限4），不能降3或升5；任务只允许<4则停止。轮询间隔≥15s；所有写动作读回验证；进程退出码非0即该步骤失败。
 - 内部回放与外层持久化job是不同预算：内部上限按Design §3.5显式声明，首版样例backtestRuns/actualBacktestRuns≤8、relativeUnits≤8；外层基准1+去重候选最多4+最终1，最多6且受总上限8。内部analysis_only/persist=false不算外层job。4个grid点、costMultipliers=[1,2]、blindRatio=0.15、universeSize=1时，估算 `4+(2-1)+1=6`、relativeUnits=6，不乘folds（service.py:111-116）；actual未知不得记6。估算并非强上界，实际超预算/未知如实披露并停止补跑，不能承诺取消强杀远端计算。样例墙钟1200s等更低值见Design §5.1。
 
 ### 8.1 方案 C 样例执行契约（仅 spy-ma-smoke，2026-10-30）
@@ -132,7 +140,7 @@
 
 ## 9. 运行前提与开放问题
 
-- Design §3.3已固定进程入口 `QUANTDINGER_BASE_URL` / `QUANTDINGER_JWT`，不声称profile已配置；仅由主控经现有安全机制注入，不读/改.env、不登录、不收集浏览器token、不请求新token。认证可用性与免费开关仍未验收，是后续真实运行前提，不是交给Developer裁决的业务语义。
+- Design §3.3已固定进程入口 `QUANTDINGER_BASE_URL` / `QUANTDINGER_JWT`，不声称profile已配置；V1.5 Agent 入口新增精确环境键 `QUANT_DINGER_AI_AGENT_TOKEN_MYMQUANT`（skills/.env，实际身份 MYM_QUANT_AI，whoami HTTP200 已实测）。V1.5 最小例外：CLI 进程内按精确键名读取 skills/.env 中该唯一 Agent 键，仅当环境变量 `QUANTDINGER_AGENT_TOKEN` 未注入时启用，注入边界由 T2 Design 冻结；仍禁止读取其他任何键或整份 .env、禁止回写 .env、禁止输出到 stdout/stderr/异常/报告/argv/测试/fixture、禁止自动登录与收集浏览器 token。Human JWT 纪律不变（仍仅走环境变量 `QUANTDINGER_JWT`，CLI 不读 .env 找 JWT）；主控不经浏览器、不收集浏览器 token、不请求新 token。认证可用性与真实业务/UI 仍未完整验收，是后续真实运行前提，不是交给Developer裁决的业务语义；免费开关按操作人 2026-10-31「本地实例已关闭计费」前提执行（§4 费用条款），billing 字段与该前提矛盾时按契约停止并披露。
 - 复用主控2026-10-29 20:29:25 CST（Asia/Shanghai UTC+08:00）探测：127.0.0.1:15000/api/health HTTP200 healthy role=api；public-config与strategy-evolution/jobs均HTTP401/code401/Token missing；127.0.0.1:15080/ HTTP200。仅证明可达及未认证响应，不等于免费开关、真实业务或UI已验收；早先5000/8888历史及追加纠正在Design §2.1，不追认旧origin推断。
 
 ## 版本记录
@@ -144,11 +152,12 @@
 | V1.2 | 2026-10-30 | 按 Pascal 明确裁定将策略/研究实例移到 skills/strategies/<strategy-id>/；同步当前路径清单与本地守卫，不改业务、预算或冻结安全边界 |
 | V1.3 | 2026-10-30 | Pascal纠正最终实例根为 skills/strategies/strategy-lab/strategies/<strategy-id>/；取代V1.2直属目录方案，仅同步路径、守卫与导入，不改业务/预算/安全门禁 |
 | V1.4 | 2026-10-30 | 同步方案 C 窗口、真实2159/2158条四折预检和新窗口最多1个job的一次性额度；历史保留、每轮预算及通用停止规则不变，未真实重跑 |
+| V1.5 | 2026-10-31 | Agent Token 接入增量（t_b3832b43）：新增 F-002A Agent 异步回测与 A-006A/A-006B 验收；§4 冻结 Agent 信封、幂等（Idempotency-Key/400/409/Replayed）、job/result 扁平指标层级与持久化读回差异（source_id NULL、无 run 读回路由）；按 Pascal「本地实例已关闭计费」裁定把零付费预检降为 V1.4 历史事实，改为 billing 收据事后如实记录+矛盾即停；三层同步，双入口与历史证据不变，待独立 Gate。2026-10-31 跨层对齐修正（t_5509aca5）：保持版本号 V1.5 不变，修正 SPEC §9 与 DESIGN §8.3 的 .env 表述一致（skills/.env 精确单键 QUANT_DINGER_AI_AGENT_TOKEN_MYMQUANT 兜底），DESIGN §8.3 补冻结单一凭据解析口径 |
 
 ## V1.3 最终目录裁定（2026-10-30，取代 V1.2 目录方案）
 
 当前唯一有效实例位置为 `skills/strategies/strategy-lab/strategies/<strategy-id>/`。两个验证样例分别是 `skills/strategies/strategy-lab/strategies/spy-close-research/` 与 `skills/strategies/strategy-lab/strategies/spy-ma-smoke/`；二者不是用户网格策略、不代表可上线。strategy-lab 根层保留 SKILL、README、scripts、templates、tests，并由 strategies 子目录集中容纳具体实例。不得在 strategy-lab 根层或 skills/strategies 直属层留下这两个实例的副本或兼容 symlink。
 
-V1.2 的直属目录位置已被本节替代，其版本记录保留作历史，不作为当前执行指令。此前已搬文件直接从现场继续收口，不能重建或覆盖已有 reports；历史报告命令/结论与数据逐字保留。CLI 路径守卫仅接受上述实例根的直接子目录，拒绝根外、更深嵌套和 symlink 逃逸。V1.3 当时只调整目录、必要路径/导入与命令，不改策略、算法、API、预算、认证或交易逻辑；目录裁定仍有效，当前 RFC/SPEC/Design 契约版本统一 V1.4，样例窗口及一次性额度以 §8.1 为准。
+V1.2 的直属目录位置已被本节替代，其版本记录保留作历史，不作为当前执行指令。此前已搬文件直接从现场继续收口，不能重建或覆盖已有 reports；历史报告命令/结论与数据逐字保留。CLI 路径守卫仅接受上述实例根的直接子目录，拒绝根外、更深嵌套和 symlink 逃逸。V1.3 当时只调整目录、必要路径/导入与命令，不改策略、算法、API、预算、认证或交易逻辑；目录裁定仍有效，当前 RFC/SPEC/Design 契约版本统一 V1.5（本节保留 V1.4 表述仅作历史事实），样例窗口及一次性额度以 §8.1 为准。
 
 用户要求继续 T4 的请求保留；目录迁移只做离线验证，不等于解除既有安全暂停或真实业务通过。T4 的凭据传递与诊断拒绝须先按已批准边界纠正，禁止恢复已删除的明文 JWT 文件、禁止重跑被拒辅助诊断；不新增实盘/部署授权。

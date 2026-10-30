@@ -4,16 +4,16 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 | Draft（V1.4 方案 C 待独立 Design Gate；不代表 T4/T5 通过） |
+| 状态 | Draft（V1.5 Agent Token 接入增量待独立 Design Gate；不代表 T4/T5 通过；V1.4 历史验收事实不改写） |
 | 作者 | YQuant-Codex-Principal |
-| 创建日期 / 最后更新 | 2026-10-29 / 2026-10-30 |
-| 版本 | V1.4（方案 C：仅延长 spy-ma-smoke 窗口；非整体验收） |
-| 来源 RFC | [RFC-06-001 V1.4](../../rfc/06_strategy/RFC-06-001-strategy-lab.md) |
-| 来源 SPEC | [SPEC-06-001 V1.4](../../spec/06_strategy/SPEC-06-001-strategy-lab.md) |
+| 创建日期 / 最后更新 | 2026-10-29 / 2026-10-31 |
+| 版本 | V1.5（V1.4 方案 C + Agent Token 接入增量，增量设计见 §8；非整体验收） |
+| 来源 RFC | [RFC-06-001 V1.5](../../rfc/06_strategy/RFC-06-001-strategy-lab.md) |
+| 来源 SPEC | [SPEC-06-001 V1.5](../../spec/06_strategy/SPEC-06-001-strategy-lab.md) |
 | 目标模块 | skills/strategies/strategy-lab/ |
-| 设计任务 | t_f1988e16；上游 t_5fcb98dd；docs-only纠正 t_0f6f7508 |
-| 主仓基线 | e378bef8d1d89565ccb15b0f5320f5008f9b657e |
-| 源码核验时间 | 2026-10-29，Asia/Shanghai（UTC+08:00） |
+| 设计任务 | t_f1988e16；上游 t_5fcb98dd；docs-only纠正 t_0f6f7508；V1.5 增量 t_1d818392（上游契约 t_b3832b43） |
+| 主仓基线 | 0a961c0a72d5e222b6d978d08f093b85607490e6（V1.5 增量核验基线；V1.0 创建基线 e378bef8d1d89565ccb15b0f5320f5008f9b657e 为历史） |
+| 源码核验时间 | 2026-10-29，Asia/Shanghai（UTC+08:00，V1.4 基线）；V1.5 增量 2026-10-31 由 T1（t_b3832b43）只读核验 |
 
 ## 1. 设计摘要
 
@@ -24,6 +24,8 @@
 预算分开记录：进化内部 `estimate.backtestRuns` / `result.summary.actualBacktestRuns`（失败时 `progress.failure.actualBacktestRuns`），以及外层 `POST /api/backtest/jobs` 次数（总数不超过8）。folds固定4，满足平台下限4与SPEC上限4；不能降3或升5。任务可降低其他安全上限但不得提高；不能用folds=3假装成功收缩。真实API、真实UI与离线fixture的证据分栏，未知不能通过。
 
 T2初版只新增本Design；V1.1 docs-only纠正仅同步指定RFC/SPEC/Design五项事实，没有写实现、测试或stub，也未提交研究、进化或回测任务。下面文件及命令仍为后续Implement/Verify的交付契约，不是现存能力声明；不以修订追认旧错误表述。
+
+V1.5 增量（2026-10-31）：按 RFC §5.6 / SPEC F-002A 把 Agent 通道从「仅研究行情」扩展为「身份/行情/编译/异步回测」的受限研究通道，新增 `agent-whoami` 与 `agent-backtest` 两个受限命令及对应白名单操作；`trade` 的 Human 源码/进化/UI 闭环不变（Agent 网关无进化与 run/sourceId 读回路由，显式 unsupported，见 §8.4）。Agent 模式费用按 Pascal 2026-10-31「本地实例已关闭计费」前提执行：不再做提交前费用证明，billing 收据事后如实记录、矛盾即停（§8.8）；§3.3 步骤0 的 public-config 预检自 V1.5 起不再是任何提交的门禁，仅保留为诊断操作。V1.5 全部实现边界冻结于 §8；V1.0-V1.4 历史表述与验收证据原样保留。
 
 ## 2. 现状分析与事实来源
 
@@ -90,7 +92,7 @@ T2初版只新增本Design；V1.1 docs-only纠正仅同步指定RFC/SPEC/Design�
 
 已有 L/README.md、L/templates/strategy-spec.md 保留不改；父 skills/strategies/README.md 不需要修改，不在实现 allowlist。首版不改变配置字段语义、不整理整个 Trading 模块。临时 pycache 不作为交付物，测试使用 PYTHONDONTWRITEBYTECODE=1。
 
-本 Design 不授予后续任务修改本表外文件的权限；验证阶段工程报告仍按 AGENTS 放 data/reports/<日期>-strategy-lab-verify/report.md，由主控在 Verify 卡独立授权，不作为产品实现文件扩张。业务结果 reports 的局部约定来自 intake §目标与范围，覆盖一般 data 报告目录。
+本 Design 不授予后续任务修改本表外文件的权限；验证阶段工程报告仍按 AGENTS 放 data/reports/<日期>-strategy-lab-verify/report.md，由主控在 Verify 卡独立授权，不作为产品实现文件扩张。业务结果 reports 的局部约定来自 intake §目标与范围，覆盖一般 data 报告目录。V1.5 增量的文件边界见 §8.1：只按冻结条款修改 quantdinger.py、tests/test_quantdinger.py、SKILL.md、README.md 四个既有文件，不新增文件；本轮工程报告按 intake 落 data/reports/2026-10-30-strategy-lab-agent-token/。
 
 ### 3.2 最小调用入口与函数边界
 
@@ -127,13 +129,15 @@ CLI 输入（均写进各业务 spec 的实际命令，不从自然语言 Markdo
 
 认证传入契约：`QUANTDINGER_BASE_URL` 为已确认的 origin（不带 /api，禁止 userinfo/query 中塞凭据）；`QUANTDINGER_JWT` 为本 CLI 约定的 Human 会话环境入口；`QUANTDINGER_AGENT_TOKEN` 复用官方已有命名，仅用于显式 Agent 行情模式。JWT 变量名是本 Design 定义的进程接口，不是声称 profile .env 已有该键。不要新增/编辑任何 .env、profile/config 或凭据文件。
 
+V1.5 修订（精确边界见 §8.3）：`QUANTDINGER_AGENT_TOKEN` 的适用范围扩展为全部 Agent 白名单操作（whoami/klines/compile/backtest.run/jobs 读回）；并在用户显式批准下新增最小受控 `skills/.env` 定向键读取作为兜底注入路径（唯一键 `QUANT_DINGER_AI_AGENT_TOKEN_MYMQUANT`，环境变量优先）。本节「不读任何 .env」自 V1.5 起按该精确边界收紧解释；其余凭据纪律不变：不新增/编辑 .env、JWT 仅环境变量注入、令牌值零输出。
+
 由主控通过现有安全机制把正常会话注入 worker/进程；本 Skill 不登录、不签 JWT、不读 SECRET_KEY、不解码或收集浏览器存储、不从会话日志捞 token。缺失时无网络写并返回 auth-missing；有变量也须由受保护只读端点成功确认可用性。401/403 一次即停止，不重登/刷新/换 token 绕过。UI 登录遇认证墙，只能沿用现有 vault/操作者流程，headless 无可用凭据则报告阻塞，不索取聊天明文。
 
 首版所有交易 HTTP 用同一个 Human origin/JWT，不混 Agent 用户。source detail.user_id 必须与后续 get run.user_id 一致；平台 GET 已按会话 owner 过滤。报告只存 sourceId/runId/jobId，不保存 user_id 原值。只有将来明确选择 Agent 源码入口时才需两侧 owner 精确验证，本次不实现该分支。
 
 | 顺序 | operation / 真实 method 与 path | 请求关键字段 | 读取与检查 |
 |---|---|---|---|
-| 0 | GET /api/settings/public-config（先具备可用Human JWT，Authorization随请求发送） | 无业务body；不是匿名接口 | Human code=1，data.billing_enabled必须明确false；401/403、true/缺失则停止，不提交任务/不调用billing路由/不充值；404同样停止 |
+| 0 | GET /api/settings/public-config（先具备可用Human JWT，Authorization随请求发送） | 无业务body；不是匿名接口 | （V1.4 历史步骤；V1.5 起不再是任何提交门禁，仅诊断可选，见 §8.8）Human code=1，data.billing_enabled必须明确false；401/403、true/缺失则停止，不提交任务/不调用billing路由/不充值；404同样停止 |
 | 1 | GET /api/strategies/script-templates | 无 | data.items 中 template_key/key=strategy_v2_single_ma；实现时校对当前模板身份与声明，不运行迁移 SQL |
 | 2 | POST /api/strategies/script-sources/compile | code | data.manifest 与 backtestRangePolicy；核对市场/周期/方向/范围；超范围停止，不擅改研究窗口 |
 | 3 | POST /api/strategies/script-sources/create | name,code,description,template_key,asset_type=script,visibility=private,status=draft；仅必要 metadata | data.id 作为 sourceId；不传 user_id/strategyId；不使用 publish/update/create-deployment |
@@ -190,7 +194,7 @@ RFC §5.1/§5.3、SPEC F-001/§4已同步事实：Human service接受payload vis
 | 研究数据请求 | SPEC≤50；样例每次≤4，两次合计≤8 | 独立于job轮询次数，分页必须游标前进，空/重复页有界停止 |
 | 轮询 | 每15s一次 | trade总墙钟样例1200s，默认不得超过1800s；单回测job≤180s，进化job≤600s，均受总剩余时间约束；总预算预留最后30s作取消/精确读回和报告，不在截止后再开等待循环 |
 | 估算收缩 | 初始后≤2次 | 第一次减trials（不低于方法最小值），第二次缩已声明数值空间；folds保持4；仍超即停止；不换目标、成本或放宽MDD |
-| 实际花费 | 本样例0新增人民币/美元支出、0付费积分 | billing_enabled true/未知即在提交前停止；不配置充值、不调用billing API、不切到其他入口规避计费 |
+| 实际花费 | 本样例0新增人民币/美元支出、0付费积分 | V1.4 原文要求提交前停止；V1.5 起按 §8.8 关闭计费前提执行（无提交前费用证明，billing 收据事后如实记录、矛盾即停）；仍不配置充值、不调用billing API、不切到其他入口规避计费 |
 
 样例内部估算按当前 singlePass：4 个trial +（2个costMultipliers减1个blind基准缓存）+1个blind=6；不是4×4×2。终态若actual缺失不能报实际为6。客户端无服务端强杀能力，墙钟保证的是停止新提交/停止本地等待并请求取消；cancelled 不保证远端线程停止，报告必须披露。需严格服务端CPU硬预算的后续任务不在本版承诺内，不为此修改子模块。
 
@@ -313,6 +317,8 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m unittest discover -s skills/strate
 | A-007 | 审阅HTTP operation白名单及策略仅沙箱执行；否定用例拒绝交易路径 | grep无关键词但保留任意HTTP透传 |
 | A-008 | 检查本次文档/代码/报告/控制台无凭据值，测试敏感字段过滤；不读取真实.env做扫描 | 用原始HTTP/环境dump作为证据 |
 | A-009 / F-004 | estimate原值vs预算、收缩计数、run=1、内部实际vs外层jobs、超时记录 | 内外回测数混用、超预算自动重启/加预算 |
+| A-006A / F-002A | §8.10 Agent 增量离线断言 + §8.11 真实异步回测（202 回执→终态→result.runId/扁平指标/billing 收据留档） | fixture 冒充真实接入；把 Agent 扁平指标当 Human data.result 读回；billing 矛盾仍继续提交 |
+| A-006B | §8.10 幂等/错误分支断言（缺键拒发、409 停止或有界同键重放、未知字段 400、401 停止不重试） | 只测 HTTP 200 路径；把重放响应（Idempotent-Replayed: true）冒称新提交 |
 
 成功平台写的验证为必要条件，但不等于所有业务/页面验收已完成。Tester记录真实与fixture各自PASS/FAIL/未运行，Reviewer至少抽读交易/研究报告与UI读数；正确处理失败分支的单测通过不表示真实闭环通过。
 
@@ -346,11 +352,132 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m unittest discover -s skills/strate
 | V1.2 | 2026-10-30 | 按 Pascal 明确裁定将策略/研究实例移到 skills/strategies/<strategy-id>/；同步当前路径清单与本地守卫，不改业务、预算或冻结安全边界 |
 | V1.3 | 2026-10-30 | Pascal纠正最终实例根为 skills/strategies/strategy-lab/strategies/<strategy-id>/；取代V1.2直属目录方案，仅同步路径、守卫与导入，不改业务/预算/安全门禁 |
 | V1.4 | 2026-10-30 | 方案 C：仅延长交易样例窗口至2017-06-01..2025-12-31；列真实2159/2158条原生四折预检、范围兼容与一次性最多1个新job边界，历史及每轮预算不变，未真实重跑 |
+| V1.5 | 2026-10-31 | Agent Token 接入增量（t_1d818392，来源 RFC/SPEC V1.5）：新增 §8 冻结实现/测试文件 allowlist（四既有文件、零新增）、operation→method/path/scope 白名单（whoami/klines/compile/backtest.run/jobs 读回）、凭据边界（QUANTDINGER_AGENT_TOKEN 扩展 + skills/.env 精确键 QUANT_DINGER_AI_AGENT_TOKEN_MYMQUANT 单键兜底，JWT 不读 .env 纪律不变）、Agent/Human 隔离与 unsupported 前置、信封与幂等键生命周期/未知提交处理、agent-backtest 结果适配（扁平指标、source_id NULL 差异）、关闭计费前提与 billing 收据矛盾即停、G3 受控扩张说明（2044 基线，预计≤2310，拆分触发条件）、A-006A/A-006B 验收映射与 T4 真实验收方案；V1.4 业务、预算与历史证据不变，待独立 Gate |
+
+## 8. V1.5 Agent Token 接入增量设计（2026-10-31，t_1d818392）
+
+本章把 RFC-06-001 V1.5 §5.6 与 SPEC-06-001 V1.5 §3（F-002A）/§4/§6（A-006A/A-006B）冻结为实现边界。未在本章出现的能力不变：`trade` 的 Human 源码闭环、进化六分支、预算与 §3.1 文件 allowlist（新增文件为空集）继续按 V1.4 执行；两套认证不混用、Agent 网关无的能力显式 unsupported。
+
+### 8.1 V1.5 实现/测试文件 allowlist（冻结；零新增文件）
+
+V1.5 只允许修改以下四个既有文件，不新增任何文件、包、配置或依赖；`strategies/` 实例目录与 §3.1 其余条目不在本轮 allowlist：
+
+| 精确路径 | 动作 / V1.5 职责边界 |
+|---|---|
+| skills/strategies/strategy-lab/scripts/quantdinger.py | 增量修改：新增 §8.2 的 5 个 AGENT 白名单操作与 `agent-whoami`/`agent-backtest` 子命令、Agent 凭据解析、幂等键生成、Agent 结果适配与报告字段；不重构既有 Human 函数，不改其签名与语义 |
+| skills/strategies/strategy-lab/tests/test_quantdinger.py | 增量修改：追加 §8.10 离线断言（Agent 信封、幂等、未知字段、401、billing 矛盾、路径逃逸、凭据零输出）；不改写既有 48 项断言 |
+| skills/strategies/strategy-lab/SKILL.md | 增量修改：Agent 通道能力矩阵（支持/unsupported 前置说明）、两个新命令用法、凭据注入边界与 unsupported 清单 |
+| skills/strategies/strategy-lab/README.md | 增量修改：Agent 命令示例（不含凭据值）、whoami/异步回测输出字段说明、计费前提与矛盾即停条款 |
+
+本轮工程报告（实现记录、验证证据）按 intake 写 `data/tasks/active/2026-10-30-strategy-lab-agent-token/`（交接）与 `data/reports/2026-10-30-strategy-lab-agent-token/`（结果）；Git 忽略树内，不算实现文件。历史样例、reports、模板、父 SKILL 不动。
+
+### 8.2 operation→method/path/scope 白名单（V1.5 增量，冻结）
+
+在 `HTTP_OPERATIONS` 追加且仅追加以下 5 项（api=AGENT）；任何未列出的 Agent 路由保持不可达，无泛化透传：
+
+| operation | method + path | scope | 用途与关键约束 |
+|---|---|---|---|
+| agent_whoami | GET /api/agent/v1/whoami | R | 身份前检：实际名称/scopes/paper_only/限流如实入报告；无缓存冒充 |
+| agent_klines | GET /api/agent/v1/klines | R | 已有（V1.4）；单次 ≤2000 根、before_time 回翻分页、≤50 次预算不变 |
+| agent_compile | POST /api/agent/v1/strategy-sources/compile | W | 编译校验，仅返回 manifest；无 backtestRangePolicy 字段时如实缺失，不编造范围策略；必须带 Idempotency-Key |
+| agent_backtest_run | POST /api/agent/v1/backtest/run | B | §8.6 异步回测提交；请求体仅 `_BACKTEST_FIELDS` 白名单 10 字段；必须带 Idempotency-Key |
+| agent_job | GET /api/agent/v1/jobs/{jobId} | R | job 读回至终态；无 run/history 路由（不添加） |
+
+保持不可达（不可调用也不可配置）：`/api/agent/v1/strategy-sources` 的 create/list、price/markets 之外的任何 Agent 路由、SCOPE_N/SCOPE_T/SCOPE_C 全部能力（news/research/trade/credentials 等）；一切平台写除上述两个 Agent W/B 操作（及既有 Human 白名单写操作，仅 `trade` 闭环使用）外。既有 `public_config` 操作保留为诊断用途，V1.5 起不再是任何提交的门禁（见 §8.8），不删除也不扩展。
+
+### 8.3 凭据载入边界（冻结；含 skills/.env 精确键修订）
+
+- 唯一 Agent 令牌环境键：`QUANT_DINGER_AI_AGENT_TOKEN_MYMQUANT`（skills/.env，实际身份 MYM_QUANT_AI，whoami HTTP200 为 2026-10-30 T1 前核验事实）。进程内解析顺序：`QUANTDINGER_AGENT_TOKEN`（环境变量，操作者/主控显式注入，优先）→ 若为空，读取 `skills/.env` 中且仅该单键的值（行格式 `KEY=value`，解析器只取该键，忽略其余行，不做整文件读入内存后的任何其他用途）。两项均缺失 → exit4 auth-missing，无网络请求。
+- 该单键读取是用户 2026-10-30/31 明确批准的最小例外；禁止扩大：不改写、不回写、不复制 skills/.env，不读取其他任何键、其他 .env、环境整文、浏览器存储或会话日志；值不进 stdout/stderr/异常/报告/argv/测试/fixture。读取实现集中在一个私有函数，测试用临时文件夹具，fixture 值必须是假值。
+- JWT（Human）纪律不变：仅环境变量 `QUANTDINGER_JWT` 注入，CLI 不读 .env 找 JWT；`.env` 单键例外仅适用于上述 Agent 键。
+- 令牌仅最终 CLI 进程内存消费；各协作角色（Developer/Tester 日常、Reviewer）不读取凭据文件，真实 CLI 验证中 .env 定向消费仅发生在 T4 批准范围内的本机命令。
+- 单一解析口径（V1.5 跨层对齐冻结，t_5509aca5）：既有 `fetch-klines --data-api agent` 路径（scripts/quantdinger.py:2016-2021，当前直接读 `os.environ`）与新增 Agent 命令必须共用同一个凭据解析函数（含上列 `QUANTDINGER_AGENT_TOKEN` 优先 → skills/.env 精确单键兜底的完整顺序），禁止出现「行情一种取法、回测另一种取法」的双口径；Human/JWT 读取路径不变（仅环境变量 `QUANTDINGER_JWT`）。
+- `_scrub` 脱敏（Bearer/JWT/secret 键模式）覆盖所有新增输出路径；Agent 令牌同样被 `<redacted>` 规则覆盖（实测 `_JWT_RE` 不能假设匹配 agent 令牌形状，测试须断言 agent token 形状的过滤）。
+
+### 8.4 Agent/Human 隔离与通道选择（unsupported 前置，冻结）
+
+- 单次命令单通道：`agent-*` 系列只携带 Agent 令牌访问 `/api/agent/v1/*`；`trade`/Human 研究只携带 JWT。禁止同进程混用认证头，禁止 401/403 后自动切换通道、自动重登或换凭据绕过（exit4 一次即停）。
+- 显式 unsupported 清单（CLI 判定前先解释，不静默跳过、不静默降级）：网格 generate、Strategy Evolution 全链路（parameter-space/estimate/run）、run/sourceId 读回与 history、UI 历史关联、publish/部署/Live、Agent 交易（SCOPE_T/C）。相关证据：agent_v1 目录无对应路由（T1 只读核验）；本文档不为其扩平台、不建 SDK/MCP。
+- Agent 模式结果判定以 job `result` 为准（扁平顶层指标 + runId）；如需 UI 历史/sourceId 闭环，属 Human 显式兼容路径，必须显式标注认证切换，不承诺 Agent 具备该能力。
+- Human 闭环（源码保存/detail 读回/进化/取消）仍走 V1.4 §3.3 步骤1-11；Agent 编译仅作无 JWT 时的校验前置，不能替代 Human create 的同 owner 读回闭环。
+
+### 8.5 Agent 信封解析与幂等键生命周期（冻结）
+
+- 信封按 api family 区分：AGENT 成功 `{code:0,message,data}`、失败 `{code:<http状态码>,message,details,retriable,data:null}`；解析器对 code=0 且 data=null 视为异常契约错误（不判成功）；HTTP 4xx/5xx/429 不再解析业务 code 即失败；`retriable:true` 不自动重试（fail-closed，错误如实报告）。与 Human `{code:1,msg,data}` 不混读。
+- 幂等键生命周期（仅 agent_compile/agent_backtest_run，头 `Idempotency-Key`）：值由 `uuid4().hex` 生成（32 hex ≤120），每逻辑提交一枚；一次命令运行内 compile、backtest.run 各一枚，不同操作不得共用。已知 jobId 存在时读回优先（GET 无需幂等键）。
+- 未知提交处理：提交请求超时/断连/connection error 后提交状态未知——同命令内用同一 Idempotency-Key 重放原请求恰好一次；若重放返回 `Idempotent-Replayed: true` 则视为同一提交继续轮询既有 jobId；若两次均网络失败 → outcome-unknown、exit5，禁止盲发新提交（新键=新提交）。收到 409（同 key 异体/同 key 进行中）→ 停止 exit2；仅允许用已知 jobId 精确读回。缺键/键>120 → 服务端 400；客户端发送前自校验（缺失拒发、超长截断拒绝），与 A-006B 断言对应。
+
+### 8.6 agent-backtest 命令与 Agent 结果适配（冻结）
+
+命令形状：
+
+```text
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/quantdinger.py agent-whoami
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/quantdinger.py agent-backtest --strategy-dir skills/strategies/strategy-lab/strategies/<id> --start YYYY-MM-DD --end YYYY-MM-DD --capital <number> --commission <ratio> --slippage <ratio> [--wall-seconds <int>]
+```
+
+`agent-backtest` 语义：本地读 `<strategy-dir>/strategy.py` 源码与 `config.json` 参数（`--strategy-dir` 复用 `resolve_strategy_dir` 同一守卫：仅 S 实例根直接子目录、拒绝 `../` 与 symlink 逃逸）；一次 `agent_compile` 校验（成功取 manifest，失败即停 exit2）→ 一次 `agent_backtest_run`（请求体仅白名单字段：`code`+日期/资金/成本+`leverageEnabled=false`+`leverage=1`+`params`来自config；禁止携带 sourceId/persist/strategyId/未知字段）→ `agent_job` 按 §3.2 同款 15s 间隔/monotonic 截止轮询至终态（单 job ≤180s、总墙钟默认 ≤300s 且受 §3.5 约束）→ 成功从 `result` 取 runId 与扁平指标；失败取 `error` 截断文本，不重试。
+
+结果适配（Agent 扁平 vs Human data.result，禁止混层级）：
+
+| 项 | Agent（job.result，扁平） | Human（GET backtest/get 的 data.result） |
+|---|---|---|
+| runId | `result.runId` | `data.id`（runId 由 job.result.runId 关联） |
+| 指标 | 顶层 `totalReturn/maxDrawdown/sharpeRatio/annualizedReturn/winRate/totalTrades`（annualizedReturn* 分级键照实引用） | `data.result.totalReturn/...` |
+| 附加 | `resultStatus/dataProvenance/executionAssumptions/benchmark*/excessReturn/benchmarkRelativeMetrics/diagnostics` 服务端注入，照实记录 | 同名注入字段（service.py:280-434） |
+| 身份核对 | job `kind=backtest`；user/agent_token_id 不输出原值 | source/owner/params 同 V1.4 核对 |
+| 曲线数组 | 经 `compact_backtest_result` 有界采样（≤1500/≤1200），报告注明采样、不当全量明细 | 同 |
+
+新增写动作读回规则与 V1.4 一致：提交后必读 job 终态；`source_id` 在 Agent 持久化 run 中为 NULL 是已核验契约差异，不作为失败，也不声称 UI 历史可见。
+
+### 8.7 原生回测 code 载荷与持久化结果差异（契约确认）
+
+Agent 提交的是策略源码全文 `code`（无 sourceId），服务端以该 code 直接构建回测并持久化 run（persist 恒 true）；run 的 `source_id` 因入口不注入 `__source_id` 而 NULL，与 Human 通道 sourceId→run 关联不同（agent_v1/backtests.py 白名单 + backtest_jobs.py 源码依据，RFC §5.6）。客户端差异处理：Agent 报告以 jobId/runId 为关联键，标注「Agent 提交、无 sourceId 关联」；不得把 Agent run 冒充 Human sourceId 关联读回，也不得为补关联静默改走 Human 提交。`instrumentRulesSnapshotId` 属白名单字段但当前 OpenAPI 文档未列（源码/文档差异，T1 已核验），本版 CLI 不发送该字段，留空。
+
+### 8.8 计费前提、billing 收据与矛盾即停（冻结）
+
+- 前提声明：本地实例按操作人 Pascal 2026-10-31 确认「付费已关闭」执行；这是部署前提声明而非 API 实测，不泛化到未知远端或可能收费实例，不建立证明有效期/失效检测/签名体系，不新增收费保护平台。
+- 客户端行为：提交后如实记录 202 回执与 job 读回中的 `billing`（`enabled/feature/cost/charged/remaining/status`）到报告收据栏；billing 缺失记 absent，不推断为 free。
+- 矛盾即停：实际响应出现 `status:"charged"`、`charged>0`、HTTP402 或其他与关闭计费前提矛盾的信号 → 停止后续提交，报告矛盾证据，交操作者裁定；不自动付费、不自动重试、不自动请求退款，也不就同一问题再次要求独立免费证明。
+- 预算上限（内部回放≤8、外层持久化回测≤8 通道无关计数、墙钟等）与「无付费授权」边界全部保留；`public-config` 预检降级为诊断可选，不再是提交门禁。
+
+### 8.9 quantdinger.py 受控扩张说明（G3：2044 行基线）
+
+- 职责边界：该文件是 strategy-lab 唯一 HTTP/判定入口单文件 CLI；V1.5 只增「Agent 受限研究通道」（5 个白名单操作 + 2 个子命令 + 信封/幂等/结果适配 + .env 单键兜底读取），不引入通用 HTTP 客户端、插件、任务引擎、第二套回测实现。
+- 增长原因与量级：新增能力是既有职责内的通道扩展（信封解析、轮询、判定、脱敏均可复用既有函数），预计净增 ≤260 行（约 2044→≤2310），不涉及既有函数重写。
+- 拆分触发条件（满足其一，下一次实质扩展前须先出拆分 Design 并交独立 Review）：①文件超过 2400 行；②出现第二个非 strategy-lab 调用方；③需要引入非 stdlib 依赖或异步/并发模型；④Agent 与 Human 共享逻辑开始复制而非复用。届时优先拆 `agent_client.py`（信封/幂等/操作白名单）与 `judgment.py`（判定），拆分属独立任务，不在本轮实施。
+- 交独立 Review：T5 Reviewer 须核对实际行数、增长是否超出上述量级、触发条件是否被绕过。
+
+### 8.10 离线断言增量（tests/test_quantdinger.py 追加，冻结）
+
+- Agent 信封：code=0/data 结构成功解析；code≠0 失败分支；HTTP 4xx/5xx 不解析业务 code；Human/Agent 解析器互不混用。
+- 白名单：5 个新 operation 之外的操作名（含 Human 操作名传入 agent 路径、任意 path/method）被拒绝；`HTTP_OPERATIONS` 无 `/backtest/run` 之外的 Agent 写路由。
+- 幂等：缺键拒发（客户端校验）；键 >120 拒发；409 停止且无第二次写提交；网络失败后同键重放恰好一次；`Idempotent-Replayed: true` 响应不产生新 jobId 请求。
+- 未知字段：请求体构造器输出恰为白名单字段集合（对样例 config 断言无 sourceId/persist/strategyId/instrumentRulesSnapshotId）。
+- 401/403：一次请求即停，无通道切换、无重试、无重登。
+- billing：`status:"charged"`/`charged>0`/402 任一出现 → 后续提交调用数为 0 且报告含矛盾标记；billing absent 记 absent。
+- 凭据：.env 单键解析器仅返回目标键（多行文件夹具，其余键必须被忽略）；缺文件/缺键 → auth-missing；输出/报告/异常序列化经 `_scrub` 后无 agent 令牌形状值。
+- 路径守卫：`--strategy-dir` 越界/`../`/symlink 逃逸拒绝（复用既有用例风格，不新建测试文件）。
+- 导入测试：导入 quantdinger 模块网络调用数=0、无 .env 读取副作用。
+
+### 8.11 真实验收方案（T4 执行，本卡零 API 调用）与回滚
+
+真实验收（串行、失败即停，预算以 intake 修订为准；本 Design 仅冻结命令与判定，不在文档阶段执行）：
+
+1. `agent-whoami`：HTTP200、`MYM_QUANT_AI`、scopes 含 R/W/B、paper_only=true；输出脱敏。
+2. `agent_klines`（fetch-klines --data-api agent）：真实 Binance swap 或 USStock 行情一次，≤2000 根，输出标准化时间升序。
+3. `agent_compile`：spy-ma-smoke 现有 strategy.py 编译成功取 manifest。
+4. `agent-backtest`（A-006A）：spy-ma-smoke 现有 config 一次异步回测到终态；202 回执、jobId、终态、result.runId、扁平指标、billing 收据全部留档于 `data/reports/2026-10-30-strategy-lab-agent-token/`（evidence/ 子目录）；billing 矛盾即停（§8.8）。
+5. 幂等/错误负分支（A-006B）以 §8.10 fixture 断言为准，真实 401/403 分开陈述；本预算内不制造真实 409/402。
+
+预算硬顶：最多 1 个 private/draft 验收 source（如 Human 显式兼容路径需要时）+ 1 个持久化历史 backtest job（第 4 步）；串行、未知提交状态按 §8.5 同键重放一次，不重发、失败/取消即停；不得重跑旧 SPY 进化、不创建新 Evolution/部署。
+
+回滚：V1.5 增量的回滚为对四个 allowlist 文件的最小反向 diff（主控决定，不在本卡执行）；不删平台侧 Agent run/job（qd_strategy_backtest_runs/qd_agent_jobs 平台所有），不回滚 skills/.env，无 DB/部署操作。
 
 ## V1.3 最终目录裁定（2026-10-30，取代 V1.2 目录方案）
 
 当前唯一有效实例位置为 `skills/strategies/strategy-lab/strategies/<strategy-id>/`。两个验证样例分别是 `skills/strategies/strategy-lab/strategies/spy-close-research/` 与 `skills/strategies/strategy-lab/strategies/spy-ma-smoke/`；二者不是用户网格策略、不代表可上线。strategy-lab 根层保留 SKILL、README、scripts、templates、tests，并由 strategies 子目录集中容纳具体实例。不得在 strategy-lab 根层或 skills/strategies 直属层留下这两个实例的副本或兼容 symlink。
 
-V1.2 的直属目录位置已被本节替代，其版本记录保留作历史，不作为当前执行指令。此前已搬文件直接从现场继续收口，不能重建或覆盖已有 reports；历史报告命令/结论与数据逐字保留。CLI 路径守卫仅接受上述实例根的直接子目录，拒绝根外、更深嵌套和 symlink 逃逸。V1.3 当时只调整目录、必要路径/导入与命令，不改策略、算法、API、预算、认证或交易逻辑；目录裁定仍有效，当前 RFC/SPEC/Design 契约版本统一 V1.4，样例窗口及一次性额度以 §5.1 为准。
+V1.2 的直属目录位置已被本节替代，其版本记录保留作历史，不作为当前执行指令。此前已搬文件直接从现场继续收口，不能重建或覆盖已有 reports；历史报告命令/结论与数据逐字保留。CLI 路径守卫仅接受上述实例根的直接子目录，拒绝根外、更深嵌套和 symlink 逃逸。V1.3 当时只调整目录、必要路径/导入与命令，不改策略、算法、API、预算、认证或交易逻辑；目录裁定仍有效，当前 RFC/SPEC/Design 契约版本统一 V1.5（V1.5 起样例窗口及一次性额度见本文件 §5.1，Agent 增量边界见 §8）。
 
 用户要求继续 T4 的请求保留；目录迁移只做离线验证，不等于解除既有安全暂停或真实业务通过。T4 的凭据传递与诊断拒绝须先按已批准边界纠正，禁止恢复已删除的明文 JWT 文件、禁止重跑被拒辅助诊断；不新增实盘/部署授权。

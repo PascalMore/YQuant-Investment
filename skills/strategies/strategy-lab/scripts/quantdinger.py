@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 """Thin, whitelist-only QuantDinger client used by the Strategy Lab skill.
 
-Two commands are exposed (``trade`` and ``fetch-klines``) plus a small set of
-pure helpers that the research sample imports.  There is no task engine, no
-persistence layer and no SDK: every remote call goes through
-:func:`request_json`, which only accepts the frozen operation whitelist.
+Four commands are exposed (``trade``, ``fetch-klines``, ``agent-whoami`` and
+``agent-backtest``) plus a small set of pure helpers that the research sample
+imports.  There is no task engine, no persistence layer and no SDK: every
+remote call goes through :func:`request_json` or :func:`agent_call`, which only
+accept the frozen operation whitelist.
+
+The ``agent-*`` commands use the Agent Gateway (``/api/agent/v1``) with an
+agent token; the ``trade`` flow uses the Human API with a JWT.  The two
+channels never share credentials inside one process.
 
 Importing this module performs no I/O and no network access.
 """
@@ -25,6 +30,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
@@ -64,6 +70,15 @@ MAX_WALL_SECONDS = 1800.0
 MAX_DATA_PAGES = 4
 MAX_TOP_CANDIDATES = 4
 
+# Agent channel (V1.5).  The token comes from the environment first and only
+# falls back to the single approved key inside skills/.env.
+AGENT_TOKEN_ENV = "QUANTDINGER_AGENT_TOKEN"
+AGENT_TOKEN_ENV_FILE_KEY = "QUANT_DINGER_AI_AGENT_TOKEN_MYMQUANT"
+AGENT_TOKEN_ENV_FILE = LAB_ROOT.parents[1] / ".env"
+IDEMPOTENCY_KEY_MAX_LENGTH = 120
+AGENT_JOB_SECONDS = 180.0
+AGENT_WALL_SECONDS = 300.0
+
 # operation -> (method, path template, api family). The only reachable routes.
 HTTP_OPERATIONS: dict[str, tuple[str, str, str]] = {
     "public_config": ("GET", "/api/settings/public-config", HUMAN),
@@ -84,7 +99,25 @@ HTTP_OPERATIONS: dict[str, tuple[str, str, str]] = {
     "evolution_cancel": ("POST", "/api/strategy-evolution/jobs/{jobId}/cancel", HUMAN),
     "human_klines": ("GET", "/api/indicator/kline", HUMAN),
     "agent_klines": ("GET", "/api/agent/v1/klines", AGENT),
+    "agent_whoami": ("GET", "/api/agent/v1/whoami", AGENT),
+    "agent_compile": ("POST", "/api/agent/v1/strategy-sources/compile", AGENT),
+    "agent_backtest_run": ("POST", "/api/agent/v1/backtest/run", AGENT),
+    "agent_job": ("GET", "/api/agent/v1/jobs/{jobId}", AGENT),
 }
+
+# Agent backtest request fields accepted by the gateway whitelist.  Anything
+# else (sourceId, persist, strategyId, ...) is rejected before sending.
+AGENT_BACKTEST_FIELDS = ("code", "startDate", "endDate", "initialCapital", "commission",
+                          "slippage", "leverageEnabled", "leverage", "params")
+# Flat metrics and server injected context of an Agent job result.
+AGENT_METRIC_KEYS = ("totalReturn", "maxDrawdown", "winRate", "sharpeRatio",
+                      "annualizedReturn", "annualizedReturnAvailable",
+                      "annualizedReturnCapped", "totalTrades")
+AGENT_CONTEXT_KEYS = ("resultStatus", "dataProvenance", "executionAssumptions",
+                      "benchmark", "excessReturn", "benchmarkRelativeMetrics", "diagnostics")
+# Capabilities the Agent gateway does not expose; explained before any call.
+AGENT_UNSUPPORTED = ("gridGenerate", "strategyEvolution", "runOrSourceIdReadback",
+                      "agentTrading")
 
 _PATH_VALUE_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _SECRET_KEY_RE = re.compile(
@@ -92,6 +125,9 @@ _SECRET_KEY_RE = re.compile(
 )
 _BEARER_RE = re.compile(r"(?i)bearer\s+[A-Za-z0-9._\-]+")
 _JWT_RE = re.compile(r"\beyJ[A-Za-z0-9._\-]{10,}")
+# Agent Gateway tokens are "qd_agent_" + token_urlsafe(32); they carry no JWT
+# header, so they need their own redaction rule.
+_AGENT_TOKEN_RE = re.compile(r"\bqd_agent_[A-Za-z0-9._\-]{8,}")
 
 
 class LabError(Exception):
@@ -113,6 +149,7 @@ def _scrub(text: str) -> str:
     """Remove credential-looking substrings from any user visible string."""
     cleaned = _BEARER_RE.sub("Bearer <redacted>", str(text or ""))
     cleaned = _JWT_RE.sub("<redacted>", cleaned)
+    cleaned = _AGENT_TOKEN_RE.sub("<redacted>", cleaned)
     return _SECRET_KEY_RE.sub(lambda m: f"{m.group(1)}=<redacted>", cleaned)
 
 
@@ -222,37 +259,51 @@ def _http_exit_code(status: int) -> int:
     return EXIT_AUTH if status in (401, 403) else EXIT_CONTRACT
 
 
-def _http_call(
+def _http_send(
     url: str, method: str, headers: dict[str, str], payload: Optional[bytes], timeout: float
-) -> bytes:
+) -> tuple[int, bytes, dict[str, str]]:
+    """Perform one HTTP call and return ``(status, body, headers)``.
+
+    HTTP error statuses are returned instead of raised so that the Agent
+    contract (402 billing, 409 idempotency) can be judged by the caller.
+    """
     request = urllib.request.Request(url, data=payload, headers=headers, method=method)
     try:
         with _OPENER.open(request, timeout=timeout) as response:
-            return response.read()
+            return int(response.status), response.read(), dict(response.headers.items())
     except urllib.error.HTTPError as exc:
         try:
             raw = exc.read()
         except Exception:  # pragma: no cover - defensive only
             raw = b""
-        message = ""
-        try:
-            parsed = json.loads(raw.decode("utf-8"))
-            if isinstance(parsed, dict):
-                message = str(parsed.get("msg") or parsed.get("message") or "")
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            message = ""
-        raise LabError(
-            _http_exit_code(int(exc.code)),
-            f"http.{exc.code}",
-            detail=_scrub(message) or "httpError",
-            url=_scrub(url.split("?")[0]),
-        ) from exc
+        return int(exc.code), raw, dict(getattr(exc, "headers", {}) or {})
     except urllib.error.URLError as exc:
         raise LabError(
             EXIT_CONTRACT, "http.unreachable", detail=_scrub(str(exc.reason))
         ) from exc
     except TimeoutError as exc:
         raise LabError(EXIT_BUDGET, "http.timeout", url=_scrub(url.split("?")[0])) from exc
+
+
+def _http_call(
+    url: str, method: str, headers: dict[str, str], payload: Optional[bytes], timeout: float
+) -> bytes:
+    status, raw, _ = _http_send(url, method, headers, payload, timeout)
+    if status < 400:
+        return raw
+    message = ""
+    try:
+        parsed = json.loads(raw.decode("utf-8"))
+        if isinstance(parsed, dict):
+            message = str(parsed.get("msg") or parsed.get("message") or "")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        message = ""
+    raise LabError(
+        _http_exit_code(status),
+        f"http.{status}",
+        detail=_scrub(message) or "httpError",
+        url=_scrub(url.split("?")[0]),
+    )
 
 
 def _build_url(base_url: str, template: str, path_values: dict[str, Any]) -> str:
@@ -337,6 +388,290 @@ def call_data(operation: str, **kwargs: Any) -> Any:
     """Call one whitelisted operation and return the unwrapped ``data`` field."""
     status, payload = request_json(operation, **kwargs)
     return parse_envelope(operation, status, payload)
+
+
+# ───────────────────────── Agent channel (V1.5) ─────────────────────────
+# The Agent Gateway is a separate identity space: agent token in, agent routes
+# out.  The Human JWT paths above are untouched by everything below.
+
+def _agent_env_file_value(path: Path) -> Optional[str]:
+    """Return only the approved key of skills/.env; every other line is ignored."""
+    prefix = AGENT_TOKEN_ENV_FILE_KEY + "="
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                stripped = line.strip()
+                if not stripped.startswith(prefix):
+                    continue
+                value = stripped[len(prefix):].strip()
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                    value = value[1:-1]
+                return value or None
+    except OSError:
+        return None
+    return None
+
+
+def resolve_agent_token(
+    *,
+    env: Optional[dict[str, str]] = None,
+    env_file: Optional[Path] = None,
+) -> Optional[str]:
+    """Resolve the agent token: injected environment first, then the .env key.
+
+    This is the single credential path of the Agent channel, shared by the
+    market-data command and the agent commands.  The Human JWT path stays on
+    the environment only and never reads ``.env``.
+    """
+    environ = os.environ if env is None else env
+    injected = str(environ.get(AGENT_TOKEN_ENV) or "").strip()
+    if injected:
+        return injected
+    path = AGENT_TOKEN_ENV_FILE if env_file is None else env_file
+    return _agent_env_file_value(Path(path))
+
+
+def new_idempotency_key() -> str:
+    """Return one fresh idempotency key for one logical submission."""
+    return uuid.uuid4().hex
+
+
+def agent_call(
+    operation: str,
+    *,
+    base_url: str,
+    token: Optional[str],
+    params: Optional[dict[str, Any]] = None,
+    body: Optional[dict[str, Any]] = None,
+    path_values: Optional[dict[str, Any]] = None,
+    timeout: float = 30.0,
+    idempotency_key: Optional[str] = None,
+) -> tuple[Any, dict[str, str]]:
+    """Call one whitelisted Agent operation and return ``(data, headers)``.
+
+    The Agent envelope is judged on its own: ``code=0`` carries the payload, a
+    failure carries the HTTP status and stops the client immediately.
+    """
+    spec = HTTP_OPERATIONS.get(operation)
+    if spec is None:
+        raise LabError(EXIT_USAGE, "http.operationNotAllowed", operation=operation)
+    method, template, api = spec
+    if api != AGENT:
+        raise LabError(EXIT_USAGE, "agent.operationNotAllowed", operation=operation)
+    if not token:
+        raise LabError(EXIT_AUTH, "auth.missing", operation=operation)
+    key = "" if idempotency_key is None else str(idempotency_key).strip()
+    if idempotency_key is not None and (not key or len(key) > IDEMPOTENCY_KEY_MAX_LENGTH):
+        raise LabError(EXIT_USAGE, "idempotency.keyInvalid")
+    if method == "POST" and not key:
+        # Every Agent write carries its own Idempotency-Key; a missing key is
+        # rejected before the request leaves the process.
+        raise LabError(EXIT_USAGE, "idempotency.keyMissing", operation=operation)
+    url = _build_url(base_url, template, path_values or {})
+    query = {k: v for k, v in (params or {}).items() if v is not None}
+    if query:
+        url = f"{url}?{urllib.parse.urlencode(query)}"
+    headers = {"Accept": "application/json", "User-Agent": "yquant-strategy-lab/1"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    if key:
+        headers["Idempotency-Key"] = key
+    payload = None
+    if body is not None:
+        payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    if _finite(timeout) is None or timeout <= 0:
+        raise LabError(EXIT_BUDGET, "http.deadlineExceeded")
+    status, raw, response_headers = _http_send(
+        url, method, headers, payload, min(30.0, float(timeout))
+    )
+    try:
+        parsed = json.loads(raw.decode("utf-8")) if raw else {}
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        parsed = {}
+    if not isinstance(parsed, dict):
+        parsed = {"data": parsed}
+    message = str(parsed.get("message") or parsed.get("msg") or "")
+    if status in (401, 403):
+        raise LabError(EXIT_AUTH, f"http.{status}", detail=_scrub(message))
+    if status == 402:
+        raise LabError(EXIT_CONTRACT, "billing.charged", detail=_scrub(message))
+    if status == 409:
+        raise LabError(EXIT_CONTRACT, "idempotency.conflict", detail=_scrub(message))
+    if status >= 400:
+        raise LabError(EXIT_CONTRACT, f"http.{status}", detail=_scrub(message))
+    if parsed.get("code") not in (0, "0"):
+        raise LabError(EXIT_CONTRACT, "business.error", code=parsed.get("code"),
+                       detail=_scrub(message))
+    data = parsed.get("data")
+    if data is None:
+        raise LabError(EXIT_CONTRACT, "agent.dataMissing")
+    return data, response_headers
+
+
+def agent_submit(
+    operation: str,
+    body: dict[str, Any],
+    *,
+    base_url: str,
+    token: Optional[str],
+    idempotency_key: str,
+    timeout: float = 30.0,
+) -> tuple[dict[str, Any], bool]:
+    """Submit one Agent write and return ``(receipt, idempotentReplay)``.
+
+    A transport failure leaves the submission state unknown; the identical
+    request is then replayed exactly once with the same Idempotency-Key.  Two
+    transport failures are reported as outcome-unknown instead of sending a
+    new submission under a new key.
+    """
+    for attempt in (1, 2):
+        try:
+            data, headers = agent_call(
+                operation, base_url=base_url, token=token, body=body,
+                idempotency_key=idempotency_key, timeout=timeout,
+            )
+        except LabError as exc:
+            if exc.message not in {"http.unreachable", "http.timeout"}:
+                raise
+            if attempt == 1:
+                continue
+            raise LabError(EXIT_BUDGET, "agent.outcomeUnknown", operation=operation,
+                           detail=_scrub(exc.message)) from exc
+        replayed = str(headers.get("Idempotent-Replayed")
+                       or headers.get("idempotent-replayed") or "").lower() == "true"
+        return _as_dict(data), replayed
+    raise LabError(EXIT_BUDGET, "agent.outcomeUnknown", operation=operation)
+
+
+def build_agent_backtest_body(
+    *,
+    code: str,
+    start: str,
+    end: str,
+    capital: float,
+    commission: float,
+    slippage: float,
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the Agent backtest request body from the whitelist only."""
+    body = {
+        "code": code,
+        "startDate": start,
+        "endDate": end,
+        "initialCapital": float(capital),
+        "commission": float(commission),
+        "slippage": float(slippage),
+        "leverageEnabled": False,
+        "leverage": 1,
+        "params": dict(params),
+    }
+    if set(body) != set(AGENT_BACKTEST_FIELDS):
+        raise LabError(EXIT_CONTRACT, "agent.backtestFieldsMismatch")
+    return body
+
+
+def billing_contradiction(billing: Any) -> Optional[str]:
+    """Return a reason when billing contradicts the closed-billing premise."""
+    if not isinstance(billing, dict):
+        return None
+    if str(billing.get("status") or "").strip().lower() == "charged":
+        return "billing.status=charged"
+    charged = _finite(billing.get("charged"))
+    if charged is not None and charged > 0:
+        return "billing.charged>0"
+    return None
+
+
+def agent_backtest(
+    *,
+    code: str,
+    params: dict[str, Any],
+    start: str,
+    end: str,
+    capital: float,
+    commission: float,
+    slippage: float,
+    base_url: str,
+    token: Optional[str],
+    budget: Budget,
+    job_timeout: float = AGENT_JOB_SECONDS,
+    timeout: float = 30.0,
+) -> dict[str, Any]:
+    """Compile, submit and read one Agent backtest job to its terminal state.
+
+    The compile is a precondition, not a side effect: a failed compile stops
+    before any backtest submission.  The flat Agent result is returned as-is
+    and is never merged with the Human ``data.result`` hierarchy.
+    """
+    budget.check()
+    compiled, _ = agent_submit(
+        "agent_compile", {"code": code}, base_url=base_url, token=token,
+        idempotency_key=new_idempotency_key(), timeout=timeout,
+    )
+    manifest = _as_dict(compiled.get("manifest"))
+    if not manifest:
+        raise LabError(EXIT_CONTRACT, "agent.manifestMissing")
+    reason = billing_contradiction(compiled.get("billing"))
+    if reason:
+        raise LabError(EXIT_CONTRACT, "billing.contradiction", reason=reason)
+    body = build_agent_backtest_body(
+        code=code, start=start, end=end, capital=capital, commission=commission,
+        slippage=slippage, params=params,
+    )
+    budget.take_outer_job()
+    receipt, replayed = agent_submit(
+        "agent_backtest_run", body, base_url=base_url, token=token,
+        idempotency_key=new_idempotency_key(), timeout=timeout,
+    )
+    job_id = str(receipt.get("job_id") or receipt.get("jobId") or "")
+    submit_billing = receipt.get("billing")
+    if not job_id:
+        raise LabError(EXIT_CONTRACT, "agent.jobIdMissing")
+    reason = billing_contradiction(submit_billing)
+    if reason:
+        raise LabError(EXIT_CONTRACT, "billing.contradiction", reason=reason, jobId=job_id)
+    deadline = min(budget.deadline, time.monotonic() + float(job_timeout))
+    job = poll_job(
+        "agent_job",
+        job_id,
+        base_url=base_url,
+        token=token,
+        deadline=deadline,
+        timeout=timeout,
+        fetch=lambda: agent_call("agent_job", base_url=base_url, token=token,
+                                 path_values={"jobId": job_id})[0],
+    )
+    state = str(job.get("status") or "").lower()
+    job_billing = job.get("billing")
+    if state != "succeeded":
+        raise LabError(EXIT_CONTRACT, "agent.jobNotSucceeded", jobId=job_id, status=state,
+                       detail=_scrub(str(job.get("error") or ""))[:600])
+    result = _as_dict(job.get("result"))
+    run_id = int(result.get("runId") or 0)
+    if run_id <= 0:
+        raise LabError(EXIT_CONTRACT, "agent.runIdMissing", jobId=job_id)
+    reason = billing_contradiction(job_billing)
+    if reason:
+        raise LabError(EXIT_CONTRACT, "billing.contradiction", reason=reason, jobId=job_id)
+    return {
+        "jobId": job_id,
+        "status": state,
+        "runId": run_id,
+        "kind": str(receipt.get("kind") or ""),
+        "createdAt": str(receipt.get("created_at") or ""),
+        "idempotentReplay": replayed,
+        "compileManifest": manifest,
+        "metrics": {key: result[key] for key in AGENT_METRIC_KEYS if key in result},
+        "context": {key: result[key] for key in AGENT_CONTEXT_KEYS if key in result},
+        "sampledArrays": {key: len(value) for key, value in result.items()
+                          if isinstance(value, (list, tuple))},
+        "billing": submit_billing if submit_billing is not None else job_billing,
+        "billingStatus": "present" if (
+            submit_billing is not None or job_billing is not None) else "absent",
+        "sourceAssociation": "none: agent channel has no sourceId/run read-back route",
+        "unsupported": list(AGENT_UNSUPPORTED),
+    }
 
 
 class Budget:
@@ -594,6 +929,7 @@ def poll_job(
     sleep_fn: Callable[[float], None] = time.sleep,
     timeout: float = 30.0,
     cancel_operation: Optional[str] = None,
+    fetch: Optional[Callable[[], Any]] = None,
 ) -> dict[str, Any]:
     """Poll one job until it reaches a terminal state or the deadline passes.
 
@@ -614,11 +950,14 @@ def poll_job(
             )
             raise LabError(EXIT_BUDGET, "job.deadlineExceeded", jobId=job_id,
                            status="deadline", **cancel)
-        status, payload = request_json(
-            operation, base_url=base_url, token=token, path_values={"jobId": job_id},
-            timeout=min(30.0, float(timeout), remaining),
-        )
-        data = _as_dict(parse_envelope(operation, status, payload))
+        if fetch is not None:
+            data = _as_dict(fetch())
+        else:
+            status, payload = request_json(
+                operation, base_url=base_url, token=token, path_values={"jobId": job_id},
+                timeout=min(30.0, float(timeout), remaining),
+            )
+            data = _as_dict(parse_envelope(operation, status, payload))
         if monotonic_fn() < deadline and str(data.get("status") or "").lower() in TERMINAL_JOB_STATUS:
             return data
         remaining = deadline - monotonic_fn()
@@ -1967,6 +2306,98 @@ def run_trade(args: argparse.Namespace) -> int:
         raise
 
 
+def _agent_report_lines(payload: dict[str, Any]) -> list[str]:
+    """Render the Agent backtest receipt as a short markdown report."""
+    lines = [
+        "# Strategy Lab agent backtest report",
+        "",
+        f"- generatedAt (UTC): {_utc_now_iso()}",
+        f"- jobId: {payload.get('jobId')}",
+        f"- status: {payload.get('status')}",
+        f"- runId: {payload.get('runId')}",
+        f"- kind: {payload.get('kind')}",
+        f"- idempotentReplay: {payload.get('idempotentReplay')}",
+        f"- billing: {payload.get('billingStatus')}",
+        f"- sourceAssociation: {payload.get('sourceAssociation')}",
+        "",
+        "## Metrics (Agent flat job result)",
+        "",
+    ]
+    for key, value in sorted(_as_dict(payload.get("metrics")).items()):
+        lines.append(f"- {key}: {json.dumps(value, ensure_ascii=False)}")
+    lines += ["", "## Server injected context", ""]
+    for key, value in sorted(_as_dict(payload.get("context")).items()):
+        lines.append(f"- {key}: {json.dumps(value, ensure_ascii=False, sort_keys=True)}")
+    lines += ["", "## Sampled arrays (gateway bounded sample, not the full series)", ""]
+    for key, value in sorted(_as_dict(payload.get("sampledArrays")).items()):
+        lines.append(f"- {key}: {value} elements")
+    lines += ["", "## Notes", ""]
+    lines += [
+        "- Agent curve arrays are reported by length only; the gateway samples "
+        "closedTrades/executions to <=1500 and equity/benchmark curves to <=1200.",
+        "- The Agent channel has no sourceId/run read-back route; the persisted "
+        "run's source_id is NULL by platform contract and is not a failure.",
+        "- Unsupported on this channel: grid generate, Strategy Evolution, "
+        "run/sourceId read-back, agent trading.",
+    ]
+    return lines
+
+
+def run_agent_whoami(args: argparse.Namespace) -> int:
+    """Print the Agent identity; the token never reaches the output."""
+    base_url = os.environ.get("QUANTDINGER_BASE_URL") or ""
+    if not base_url:
+        raise LabError(EXIT_USAGE, "baseUrl.missing")
+    token = resolve_agent_token()
+    if not token:
+        raise LabError(EXIT_AUTH, "auth.missing")
+    identity = _as_dict(agent_call("agent_whoami", base_url=base_url, token=token)[0])
+    if not identity.get("agent_name"):
+        raise LabError(EXIT_CONTRACT, "agent.identityMissing")
+    safe = {key: value for key, value in identity.items() if key != "user_id"}
+    print(json.dumps(safe, ensure_ascii=False))
+    return EXIT_OK
+
+
+def run_agent_backtest(args: argparse.Namespace) -> int:
+    """Compile, submit and read one Agent backtest job."""
+    strategy_dir = resolve_strategy_dir(args.strategy_dir)
+    code = (strategy_dir / "strategy.py").read_text(encoding="utf-8")
+    params = _read_json(strategy_dir / "config.json")
+    if not params or any(isinstance(value, bool) or not isinstance(value, (int, float))
+                         or _finite(value) is None for value in params.values()):
+        raise LabError(EXIT_USAGE, "config.finiteNumericParamsRequired")
+    for label, value in (("capital", args.capital), ("commission", args.commission),
+                         ("slippage", args.slippage)):
+        if _finite(value) is None:
+            raise LabError(EXIT_USAGE, f"{label}.invalid")
+    base_url = os.environ.get("QUANTDINGER_BASE_URL") or ""
+    if not base_url:
+        raise LabError(EXIT_USAGE, "baseUrl.missing")
+    token = resolve_agent_token()
+    if not token:
+        raise LabError(EXIT_AUTH, "auth.missing")
+    payload = agent_backtest(
+        code=code,
+        params=params,
+        start=args.start,
+        end=args.end,
+        capital=float(args.capital),
+        commission=float(args.commission),
+        slippage=float(args.slippage),
+        base_url=base_url,
+        token=token,
+        budget=Budget(wall_seconds=args.wall_seconds),
+    )
+    report_path = strategy_dir / "reports" / "agent-backtest.md"
+    if not report_path.resolve().is_relative_to(strategy_dir.resolve()):
+        raise LabError(EXIT_USAGE, "report.pathEscape")
+    _atomic_write(report_path,
+                  _scrub("\n".join(_agent_report_lines(payload))).rstrip() + "\n")
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="quantdinger.py",
@@ -2003,6 +2434,19 @@ def build_parser() -> argparse.ArgumentParser:
     klines.add_argument("--start", default="")
     klines.add_argument("--end", default="")
     klines.add_argument("--max-pages", type=int, default=MAX_DATA_PAGES)
+
+    sub.add_parser("agent-whoami", help="Show the Agent identity and scopes.")
+
+    backtest = sub.add_parser(
+        "agent-backtest", help="Run one Agent backtest job (compile -> run -> read job)."
+    )
+    backtest.add_argument("--strategy-dir", required=True)
+    backtest.add_argument("--start", required=True)
+    backtest.add_argument("--end", required=True)
+    backtest.add_argument("--capital", type=float, required=True)
+    backtest.add_argument("--commission", type=float, required=True)
+    backtest.add_argument("--slippage", type=float, required=True)
+    backtest.add_argument("--wall-seconds", type=float, default=AGENT_WALL_SECONDS)
     return parser
 
 
@@ -2012,12 +2456,16 @@ def main(argv: Optional[list[str]] = None) -> int:
     try:
         if args.command == "trade":
             return run_trade(args)
+        if args.command == "agent-whoami":
+            return run_agent_whoami(args)
+        if args.command == "agent-backtest":
+            return run_agent_backtest(args)
         if args.command == "fetch-klines":
             base_url = os.environ.get("QUANTDINGER_BASE_URL") or ""
             token = (
                 os.environ.get("QUANTDINGER_JWT")
                 if args.data_api == HUMAN
-                else os.environ.get("QUANTDINGER_AGENT_TOKEN")
+                else resolve_agent_token()
             )
             if not base_url:
                 raise LabError(EXIT_USAGE, "baseUrl.missing")

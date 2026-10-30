@@ -32,6 +32,74 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/strate
 
 此约定只统一调用环境，不表示测试或业务闭环已通过。策略源码在 QuantDinger 平台沙箱执行时仍由平台管理其运行环境，不能将本地解释器替换到平台服务。
 
+## 1.1 Agent 通道（V1.5）
+
+strategy-lab 除 Human JWT 通道外，新增一条受限的原生 Agent Gateway 通道
+（`/api/agent/v1`）。两条通道**互不混用**：一次命令只用一个通道，401/403 一次即停，
+不自动切换、不重登、不换凭据绕过。
+
+### 命令示例（不含任何凭据值）
+
+```bash
+# 身份前检：返回 agent_name / scopes / markets / instruments / paper_only / 限额
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/quantdinger.py agent-whoami
+
+# Agent 异步回测：compile 校验 -> 提交 -> 轮询 job 至终态 -> 写 reports/agent-backtest.md
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/quantdinger.py agent-backtest --strategy-dir skills/strategies/strategy-lab/strategies/spy-ma-smoke --start 2024-01-01 --end 2024-12-31 --capital 10000 --commission 0.0005 --slippage 0.0005
+
+# Agent 行情（与 Human 行情共用同一 CLI，显式选择通道）
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/quantdinger.py fetch-klines --data-api agent --market USStock --symbol SPY --timeframe 1D
+```
+
+凭据由操作者经环境注入（`QUANTDINGER_AGENT_TOKEN`）；环境变量缺失时 CLI 只读
+`skills/.env` 中且仅 `QUANT_DINGER_AI_AGENT_TOKEN_MYMQUANT` 一个键作为兜底。
+**令牌值不出现在命令行、输出、报告或异常中**，本文档与示例一律不写真实 token。
+
+### 输出字段说明
+
+`agent-whoami`（stdout 单行 JSON，已剔除 `user_id`）：
+
+| 字段 | 含义 |
+|---|---|
+| `agent_name` | Agent 身份名（如 `MYM_QUANT_AI`） |
+| `scopes` | 授权 scope 列表（`R`/`W`/`B` 等） |
+| `markets` / `instruments` | 允许的市场与标的范围 |
+| `paper_only` | 是否仅模拟盘 |
+| `rate_limit_per_min` / `max_order_notional` / `max_daily_notional` | 限流与名义额度 |
+
+`agent-backtest`（stdout 单行 JSON + `<strategy-dir>/reports/agent-backtest.md`）：
+
+| 字段 | 含义 |
+|---|---|
+| `jobId` / `status` / `kind` / `createdAt` | 提交回执与 job 身份 |
+| `runId` | 平台回测 run 标识（来自 Agent job `result.runId`） |
+| `idempotentReplay` | 本次是否命中同键重放（`Idempotent-Replayed: true`） |
+| `metrics` | Agent 扁平顶层指标（`totalReturn`/`maxDrawdown`/`sharpeRatio`/`annualizedReturn*`/`totalTrades` 等），**不与 Human `data.result` 混读** |
+| `context` | 服务端注入字段（`resultStatus`/`dataProvenance`/`executionAssumptions`/`benchmark*`/`diagnostics` 等），照实记录 |
+| `sampledArrays` | 网关有界采样的曲线数组长度（不是全量明细） |
+| `billing` / `billingStatus` | 202 回执与 job 读回的计费收据；`billingStatus=absent` 表示缺失，**不等于 free** |
+| `sourceAssociation` | 恒为「无 sourceId/run 读回关联」；Agent 持久化 run 的 `source_id` 为 NULL 是平台契约差异，不视为失败 |
+| `unsupported` | 该通道不可用能力清单（网格 generate、Strategy Evolution、run/sourceId 读回、Agent 交易） |
+
+### 计费前提与矛盾即停
+
+本地实例按操作人 Pascal 2026-10-31 确认「付费已关闭」执行。这是**部署前提声明**，
+不是 API 实测，也不泛化到未知远端或可能收费的实例。
+
+- 客户端事后如实记录 billing 收据（`enabled`/`feature`/`cost`/`charged`/`remaining`/`status`）；
+  缺失记 `absent`，不推断为 free。
+- 出现 `status="charged"`、`charged>0`、HTTP 402，或其他与「付费已关闭」前提矛盾的信号 →
+  **立即停止后续提交**，把矛盾证据写进报告，交操作者裁定。
+- 不自动付费、不自动重试、不自动退款，也不静默改走 Human 通道绕过。
+
+### 幂等与未知提交
+
+`compile` 与 `backtest.run` 各自使用一枚 `Idempotency-Key`（`uuid4().hex`）。
+缺键或键长 >120 字符在客户端发送前即拒发。收到 409（同键异体 / 同键进行中）立即停止 exit2。
+提交后网络失败或超时使状态未知时，用**同一把键**重放原请求恰好一次；收到
+`Idempotent-Replayed: true` 即视为同一提交并继续轮询既有 jobId；两次都失败则报
+outcome-unknown（exit5），禁止用新键盲发新提交。
+
 ## 2. 只有三个业务步骤
 
 ```text

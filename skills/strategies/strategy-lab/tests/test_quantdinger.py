@@ -3,11 +3,14 @@
 import copy
 import datetime as dt
 import importlib.util
+import inspect
 import io
 import json
 from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
+import urllib.request
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "quantdinger.py"
 LAB_ROOT = MODULE_PATH.parents[1]
@@ -679,6 +682,327 @@ class OfflineOrchestration(unittest.TestCase):
         report = self.saved_report
         self.assertIsNotNone(report)
         self.assertEqual(report["report"]["reason"], "baselineEvidenceUnknown")
+
+
+class OfflineAgentChannel(unittest.TestCase):
+    """DESIGN §8.10 offline assertions for the Agent channel (V1.5)."""
+
+    AGENT_TOKEN = "qd_agent_OFFLINEfakeTOKEN0123456789"
+    AGENT_OPS = ("agent_whoami", "agent_klines", "agent_compile",
+                 "agent_backtest_run", "agent_job")
+
+    def agent_envelope(self, data, status=200, code=0, message="ok"):
+        body = json.dumps({"code": code, "message": message, "data": data}).encode()
+        return status, body, {}
+
+    def test_agent_envelope_code_zero_is_success_and_non_zero_is_failure(self):
+        ok = self.agent_envelope({"agent_name": "offline-agent"})
+        with patch.object(qd, "_http_send", return_value=ok):
+            data, headers = qd.agent_call("agent_whoami", base_url=BASE,
+                                          token=self.AGENT_TOKEN)
+        self.assertEqual(data["agent_name"], "offline-agent")
+        self.assertEqual(headers, {})
+        # An Agent reply with the Human success code is not a success.
+        with patch.object(qd, "_http_send", return_value=self.agent_envelope(
+                {"agent_name": "offline-agent"}, code=1)):
+            with self.assertRaises(qd.LabError) as caught:
+                qd.agent_call("agent_whoami", base_url=BASE, token=self.AGENT_TOKEN)
+        self.assertEqual(caught.exception.exit_code, qd.EXIT_CONTRACT)
+        self.assertEqual(caught.exception.message, "business.error")
+
+    def test_agent_envelope_never_reads_human_code_and_ignores_business_code_on_http_error(self):
+        # The Agent success code is 0 and the Human success code is 1; the two
+        # parsers never accept each other's envelope.
+        self.assertEqual(
+            qd.parse_envelope("agent_whoami", 200, {"code": 0, "data": {"ok": 1}}), {"ok": 1})
+        self.assertEqual(
+            qd.parse_envelope("human_klines", 200, {"code": 1, "msg": "ok", "data": {"ok": 1}}),
+            {"ok": 1})
+        for operation, payload in (
+            ("agent_whoami", {"code": 1, "msg": "human ok", "data": {"ok": 1}}),
+            ("human_klines", {"code": 0, "msg": "agent ok", "data": {"ok": 1}}),
+        ):
+            with self.subTest(operation=operation):
+                with self.assertRaises(qd.LabError):
+                    qd.parse_envelope(operation, 200, payload)
+        # HTTP 4xx/5xx is a failure even when the body carries code=0.
+        for status in (400, 429, 500):
+            with self.subTest(status=status):
+                with patch.object(qd, "_http_send",
+                                  return_value=self.agent_envelope({"ok": 1}, status=status)):
+                    with self.assertRaises(qd.LabError) as caught:
+                        qd.agent_call("agent_whoami", base_url=BASE, token=self.AGENT_TOKEN)
+                self.assertEqual(caught.exception.exit_code, qd.EXIT_CONTRACT)
+                self.assertEqual(caught.exception.message, f"http.{status}")
+
+    def test_agent_whitelist_has_exactly_five_operations_and_no_extra_write_route(self):
+        agent_ops = {name: spec for name, spec in qd.HTTP_OPERATIONS.items()
+                     if spec[2] == qd.AGENT}
+        self.assertEqual(tuple(sorted(agent_ops)), tuple(sorted(self.AGENT_OPS)))
+        self.assertEqual(agent_ops["agent_whoami"], ("GET", "/api/agent/v1/whoami", qd.AGENT))
+        self.assertEqual(agent_ops["agent_klines"], ("GET", "/api/agent/v1/klines", qd.AGENT))
+        self.assertEqual(agent_ops["agent_compile"],
+                         ("POST", "/api/agent/v1/strategy-sources/compile", qd.AGENT))
+        self.assertEqual(agent_ops["agent_backtest_run"],
+                         ("POST", "/api/agent/v1/backtest/run", qd.AGENT))
+        self.assertEqual(agent_ops["agent_job"],
+                         ("GET", "/api/agent/v1/jobs/{jobId}", qd.AGENT))
+        # The only Agent write routes are the two declared ones (compile + run).
+        self.assertEqual(sorted(name for name, spec in agent_ops.items() if spec[0] == "POST"),
+                         ["agent_backtest_run", "agent_compile"])
+        self.assertEqual(sorted(spec[1] for spec in agent_ops.values()),
+                         ["/api/agent/v1/backtest/run",
+                          "/api/agent/v1/jobs/{jobId}",
+                          "/api/agent/v1/klines",
+                          "/api/agent/v1/strategy-sources/compile",
+                          "/api/agent/v1/whoami"])
+
+    def test_agent_rejects_operations_outside_the_whitelist_without_any_request(self):
+        with patch.object(qd, "_http_send") as http:
+            for operation in ("human_klines", "backtest_submit", "agent_trade",
+                              "agent_generate", "agent_evolution_run", "agent_history"):
+                with self.subTest(operation=operation):
+                    with self.assertRaises(qd.LabError) as caught:
+                        qd.agent_call(operation, base_url=BASE, token=self.AGENT_TOKEN)
+                    self.assertEqual(caught.exception.exit_code, qd.EXIT_USAGE)
+            with self.assertRaises(qd.LabError):
+                qd.agent_call("agent_job", base_url=BASE, token=self.AGENT_TOKEN,
+                              path_values={"jobId": "../escape"})
+        http.assert_not_called()
+
+    def test_backtest_body_is_exactly_the_whitelist_without_source_fields(self):
+        body = qd.build_agent_backtest_body(
+            code=CODE, start="2024-01-01", end="2024-06-30", capital=10000.0,
+            commission=0.0005, slippage=0.0005, params=PARAMS)
+        self.assertEqual(set(body), set(qd.AGENT_BACKTEST_FIELDS))
+        for forbidden in ("sourceId", "source_id", "persist", "strategyId",
+                          "instrumentRulesSnapshotId"):
+            self.assertNotIn(forbidden, body)
+        self.assertFalse(body["leverageEnabled"])
+        self.assertEqual(body["leverage"], 1)
+        self.assertEqual(body["params"], PARAMS)
+
+    def test_missing_or_overlong_idempotency_key_is_refused_before_sending(self):
+        with patch.object(qd, "_http_send") as http:
+            with self.assertRaises(qd.LabError) as caught:
+                qd.agent_call("agent_compile", base_url=BASE, token=self.AGENT_TOKEN,
+                              body={"code": CODE})
+            self.assertEqual(caught.exception.exit_code, qd.EXIT_USAGE)
+            self.assertEqual(caught.exception.message, "idempotency.keyMissing")
+            with self.assertRaises(qd.LabError) as caught:
+                qd.agent_call("agent_compile", base_url=BASE, token=self.AGENT_TOKEN,
+                              body={"code": CODE}, idempotency_key="k" * 121)
+            self.assertEqual(caught.exception.message, "idempotency.keyInvalid")
+        http.assert_not_called()
+
+    def test_conflict_stops_immediately_without_a_second_write(self):
+        conflict = (409, json.dumps({"code": 409, "message": "conflict"}).encode(), {})
+        with patch.object(qd, "_http_send", return_value=conflict) as http:
+            with self.assertRaises(qd.LabError) as caught:
+                qd.agent_submit("agent_backtest_run", {"code": CODE}, base_url=BASE,
+                                token=self.AGENT_TOKEN, idempotency_key="k" * 32)
+        self.assertEqual(caught.exception.exit_code, qd.EXIT_CONTRACT)
+        self.assertEqual(caught.exception.message, "idempotency.conflict")
+        self.assertEqual(http.call_count, 1)
+
+    def test_transport_failure_replays_the_same_key_exactly_once(self):
+        ok = self.agent_envelope({"job_id": "offline-job"})
+        with patch.object(qd, "_http_send",
+                          side_effect=[qd.LabError(qd.EXIT_CONTRACT, "http.unreachable"), ok]) as http:
+            receipt, replayed = qd.agent_submit("agent_backtest_run", {"code": CODE},
+                                                base_url=BASE, token=self.AGENT_TOKEN,
+                                                idempotency_key="k" * 32)
+        self.assertEqual(receipt["job_id"], "offline-job")
+        self.assertFalse(replayed)
+        self.assertEqual(http.call_count, 2)
+        keys = {call.args[2]["Idempotency-Key"] for call in http.call_args_list}
+        self.assertEqual(keys, {"k" * 32})
+
+    def test_two_transport_failures_report_outcome_unknown_and_send_nothing_new(self):
+        failure = qd.LabError(qd.EXIT_CONTRACT, "http.unreachable")
+        with patch.object(qd, "_http_send", side_effect=[failure, failure]) as http:
+            with self.assertRaises(qd.LabError) as caught:
+                qd.agent_submit("agent_backtest_run", {"code": CODE}, base_url=BASE,
+                                token=self.AGENT_TOKEN, idempotency_key="k" * 32)
+        self.assertEqual(caught.exception.exit_code, qd.EXIT_BUDGET)
+        self.assertEqual(caught.exception.message, "agent.outcomeUnknown")
+        self.assertEqual(http.call_count, 2)
+
+    def test_idempotent_replay_header_reuses_the_known_job_without_new_submission(self):
+        submitted = []
+
+        def fake_submit(operation, body, **kwargs):
+            submitted.append(operation)
+            if operation == "agent_compile":
+                return ({"manifest": MANIFEST}, False)
+            return ({"job_id": "offline-job", "kind": "backtest",
+                     "created_at": "2026-01-01T00:00:00Z"}, True)
+
+        polled = []
+
+        def fake_poll(operation, job_id, **kwargs):
+            polled.append((operation, job_id))
+            return {"status": "succeeded",
+                    "result": {"runId": 42, "totalReturn": 1.5, "maxDrawdown": -2.0,
+                               "sharpeRatio": 0.8, "equityCurve": [1, 2, 3]}}
+
+        with patch.object(qd, "agent_submit", side_effect=fake_submit), \
+             patch.object(qd, "poll_job", side_effect=fake_poll):
+            payload = qd.agent_backtest(
+                code=CODE, params=PARAMS, start="2024-01-01", end="2024-06-30",
+                capital=10000.0, commission=0.0005, slippage=0.0005,
+                base_url=BASE, token=self.AGENT_TOKEN, budget=qd.Budget())
+        self.assertEqual(submitted, ["agent_compile", "agent_backtest_run"])
+        self.assertEqual(polled, [("agent_job", "offline-job")])
+        self.assertTrue(payload["idempotentReplay"])
+        self.assertEqual(payload["runId"], 42)
+        self.assertEqual(payload["metrics"]["totalReturn"], 1.5)
+        self.assertEqual(payload["sampledArrays"]["equityCurve"], 3)
+        self.assertEqual(payload["billingStatus"], "absent")
+        self.assertTrue(payload["sourceAssociation"].startswith("none"))
+
+    def test_auth_failure_stops_once_without_switching_channel_or_retry(self):
+        for status in (401, 403):
+            with self.subTest(status=status):
+                body = json.dumps({"code": status, "message": "denied"}).encode()
+                with patch.object(qd, "_http_send",
+                                  return_value=(status, body, {})) as http:
+                    with self.assertRaises(qd.LabError) as caught:
+                        qd.agent_submit("agent_compile", {"code": CODE}, base_url=BASE,
+                                        token=self.AGENT_TOKEN, idempotency_key="k" * 32)
+                self.assertEqual(caught.exception.exit_code, qd.EXIT_AUTH)
+                self.assertEqual(http.call_count, 1)
+
+    def test_billing_contradiction_stops_further_submissions(self):
+        self.assertEqual(qd.billing_contradiction({"status": "charged"}),
+                         "billing.status=charged")
+        self.assertEqual(qd.billing_contradiction({"charged": 1.5}), "billing.charged>0")
+        self.assertIsNone(qd.billing_contradiction({"status": "free", "charged": 0}))
+        self.assertIsNone(qd.billing_contradiction(None))
+
+        submitted = []
+
+        def fake_submit(operation, body, **kwargs):
+            submitted.append(operation)
+            if operation == "agent_compile":
+                return ({"manifest": MANIFEST, "billing": {"status": "charged"}}, False)
+            return ({"job_id": "offline-job"}, False)
+
+        with patch.object(qd, "agent_submit", side_effect=fake_submit), \
+             patch.object(qd, "poll_job") as poll:
+            with self.assertRaises(qd.LabError) as caught:
+                qd.agent_backtest(
+                    code=CODE, params=PARAMS, start="2024-01-01", end="2024-06-30",
+                    capital=10000.0, commission=0.0005, slippage=0.0005,
+                    base_url=BASE, token=self.AGENT_TOKEN, budget=qd.Budget())
+        self.assertEqual(caught.exception.exit_code, qd.EXIT_CONTRACT)
+        self.assertEqual(caught.exception.message, "billing.contradiction")
+        self.assertEqual(submitted, ["agent_compile"])
+        poll.assert_not_called()
+
+    def test_http_402_is_reported_as_a_billing_failure(self):
+        body = json.dumps({"code": 402, "message": "payment required"}).encode()
+        with patch.object(qd, "_http_send", return_value=(402, body, {})):
+            with self.assertRaises(qd.LabError) as caught:
+                qd.agent_call("agent_backtest_run", base_url=BASE, token=self.AGENT_TOKEN,
+                              body={"code": CODE}, idempotency_key="k" * 32)
+        self.assertEqual(caught.exception.exit_code, qd.EXIT_CONTRACT)
+        self.assertEqual(caught.exception.message, "billing.charged")
+
+    def test_env_file_parser_returns_only_the_approved_key(self):
+        with tempfile.TemporaryDirectory() as folder:
+            env_file = Path(folder) / ".env"
+            env_file.write_text(
+                "QUANTDINGER_JWT=offline-human-jwt\n"
+                "QUANT_DINGER_AI_AGENT_TOKEN_MYMQUANT=offline-agent-token\n"
+                "OTHER_SECRET=offline-other\n",
+                encoding="utf-8")
+            self.assertEqual(qd.resolve_agent_token(env={}, env_file=env_file),
+                             "offline-agent-token")
+            self.assertEqual(qd._agent_env_file_value(env_file), "offline-agent-token")
+            # An injected environment value wins over the file fallback.
+            self.assertEqual(
+                qd.resolve_agent_token(env={qd.AGENT_TOKEN_ENV: "offline-injected"},
+                                      env_file=env_file),
+                "offline-injected")
+
+    def test_missing_env_file_or_key_is_auth_missing_without_any_request(self):
+        with tempfile.TemporaryDirectory() as folder:
+            env_file = Path(folder) / ".env"
+            env_file.write_text("OTHER_SECRET=offline-other\n", encoding="utf-8")
+            self.assertIsNone(qd.resolve_agent_token(env={}, env_file=env_file))
+            self.assertIsNone(
+                qd.resolve_agent_token(env={},
+                                       env_file=Path(folder) / "absent.env"))
+        with patch.object(qd, "_http_send") as http:
+            with self.assertRaises(qd.LabError) as caught:
+                qd.agent_call("agent_whoami", base_url=BASE, token=None)
+            self.assertEqual(caught.exception.exit_code, qd.EXIT_AUTH)
+            self.assertEqual(caught.exception.message, "auth.missing")
+        http.assert_not_called()
+
+    def test_scrub_redacts_the_agent_token_shape(self):
+        scrubbed = qd._scrub(f"Bearer {self.AGENT_TOKEN} {self.AGENT_TOKEN}")
+        self.assertNotIn(self.AGENT_TOKEN, scrubbed)
+        self.assertIn("<redacted>", scrubbed)
+        self.assertNotIn(self.AGENT_TOKEN,
+                         qd.LabError(qd.EXIT_CONTRACT, "failed",
+                                     detail=self.AGENT_TOKEN).summary())
+        self.assertNotIn(self.AGENT_TOKEN,
+                         json.dumps(qd._safe_fields({"detail": self.AGENT_TOKEN})))
+
+    def test_agent_strategy_dir_escape_is_refused(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder) / "strategies"
+            case = root / "offline-case"
+            (case / "reports").mkdir(parents=True)
+            (case / "spec.md").write_text("offline", encoding="utf-8")
+            (case / "config.json").write_text(json.dumps(PARAMS), encoding="utf-8")
+            (case / "strategy.py").write_text(CODE, encoding="utf-8")
+            self.assertEqual(qd.resolve_strategy_dir(str(case), root), case.resolve())
+            for refused in (root / "nested" / "deeper", Path(folder) / "outside-case"):
+                with self.subTest(refused=str(refused)):
+                    with self.assertRaises(qd.LabError):
+                        qd.resolve_strategy_dir(str(refused), root)
+            # A symlinked strategy file must not escape the instance directory.
+            outside = Path(folder) / "outside"
+            outside.mkdir()
+            (outside / "secret.py").write_text(CODE, encoding="utf-8")
+            (case / "strategy.py").unlink()
+            (case / "strategy.py").symlink_to(outside / "secret.py")
+            with self.assertRaises(qd.LabError) as caught:
+                qd.resolve_strategy_dir(str(case), root)
+            self.assertEqual(caught.exception.message, "strategyDir.symlinkEscape")
+
+    def test_agent_backtest_command_refuses_paths_outside_the_strategies_root(self):
+        with tempfile.TemporaryDirectory() as folder:
+            case = Path(folder) / "outside-case"
+            case.mkdir()
+            (case / "strategy.py").write_text(CODE, encoding="utf-8")
+            (case / "config.json").write_text(json.dumps(PARAMS), encoding="utf-8")
+            parsed = qd.build_parser().parse_args([
+                "agent-backtest", "--strategy-dir", str(case), "--start", "2024-01-01",
+                "--end", "2024-06-30", "--capital", "10000", "--commission", "0.0005",
+                "--slippage", "0.0005"])
+            with patch.object(qd, "_http_send") as http:
+                with self.assertRaises(qd.LabError) as caught:
+                    qd.run_agent_backtest(parsed)
+            self.assertEqual(caught.exception.exit_code, qd.EXIT_USAGE)
+        http.assert_not_called()
+
+    def test_import_performs_no_network_call_and_reads_no_file(self):
+        def forbidden(*args, **kwargs):
+            raise AssertionError("import must not touch the network or the filesystem")
+
+        with patch.object(urllib.request, "urlopen", side_effect=forbidden), \
+             patch.object(Path, "open", side_effect=forbidden), \
+             patch.object(Path, "read_text", side_effect=forbidden):
+            module_spec = importlib.util.spec_from_file_location(
+                "offline_quantdinger_import", MODULE_PATH)
+            assert module_spec is not None and module_spec.loader is not None
+            module = importlib.util.module_from_spec(module_spec)
+            module_spec.loader.exec_module(module)
+        self.assertEqual(module.HTTP_OPERATIONS["agent_whoami"][1], "/api/agent/v1/whoami")
 
 
 class OfflinePolling(unittest.TestCase):
