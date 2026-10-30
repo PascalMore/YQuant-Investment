@@ -1244,19 +1244,21 @@ def evaluate_candidate(
 
     assumptions = _assumptions(run)
     funding_mode = str(assumptions.get("fundingMode") or "")
-    direct_equity = any(
-        isinstance(item, dict)
-        and str(item.get("product_type") or "").lower() == "direct_equity"
-        for item in _as_list(assumptions.get("exchangeEquityProducts"))
-    )
-    leverage_enabled = bool(assumptions.get("leverageEnabled"))
+    # Verified unlevered spot-equity identity, judged from read-back run
+    # evidence: exchangeEquityProducts is only populated for crypto targets,
+    # so a stock run is verified via market/symbol, market_type=spot and both
+    # leverage flags instead.
+    row = platform_run(run)
     if not assumptions:
         checks.append(_check("fundingAndExposure", UNKNOWN, "assumptionsMissing"))
     elif funding_mode and funding_mode != "not_modeled":
         checks.append(_check("fundingAndExposure", PASS, funding_mode))
     elif (
-        funding_mode == "not_modeled" and direct_equity and not leverage_enabled
+        funding_mode == "not_modeled"
         and identity.get("market") == "USStock" and identity.get("symbol") == "SPY"
+        and str(row.get("market_type") or "").lower() == "spot"
+        and assumptions.get("leverageEnabled") is False
+        and _as_dict(row.get("manifest")).get("leverageAllowed") is False
     ):
         checks.append(_check("fundingAndExposure", PASS, "notApplicableSpotEquity"))
     else:
@@ -1604,7 +1606,9 @@ def build_parameter_space(
         value = config_values.get(name, declaration.get("default"))
         _numeric_parameter_row(name, declaration, value, value, declaration.get("step", 1))
         if search:
-            if declaration.get("optimizable") is not True:
+            # The platform marks declared numeric parameters optimizable by
+            # omission; only an explicit false withdraws the capability.
+            if declaration.get("optimizable") is False:
                 raise LabError(EXIT_CONTRACT, "parameter.notOptimizable", name=name)
             low, high, step = search["min"], search["max"], search["step"]
         else:
@@ -1655,6 +1659,12 @@ def _trade_command(args: argparse.Namespace) -> str:
     parts = [
         "PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/quantdinger.py trade",
         f"--strategy-dir {args.strategy_dir}",
+    ]
+    # Reusing an existing source is part of the executed command; argparse
+    # defaults --source-id to 0 (= create a new source) and must not appear.
+    if args.source_id > 0:
+        parts.append(f"--source-id {args.source_id}")
+    parts += [
         f"--start {args.start}",
         f"--end {args.end}",
         f"--capital {args.capital}",
@@ -1799,7 +1809,7 @@ def _evolve_and_decide(
     )
     declared = _as_list(space_data.get("parameters"))
     if (str(space_data.get("scope") or "") == "none" or not declared
-            or not any(_as_dict(row).get("optimizable") is True for row in declared)
+            or not any(_as_dict(row).get("optimizable") is not False for row in declared)
             or not searches or all(item["min"] == item["max"] for item in searches)):
         report["notes"].append("Evolution skipped: no declared, requested variable parameters.")
         return "skipped", "noOptimizableSearch", None

@@ -4,12 +4,12 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 | Draft（T2 完成，待 YQuant Design Gate；不表示已实现） |
+| 状态 | Draft（V1.4 方案 C 待独立 Design Gate；不代表 T4/T5 通过） |
 | 作者 | YQuant-Codex-Principal |
-| 创建日期 / 最后更新 | 2026-10-29 / 2026-10-29 |
-| 版本 | V1.3（2026-10-30 目录纠正：strategy-lab/strategies；非整体验收） |
-| 来源 RFC | [RFC-06-001](../../rfc/06_strategy/RFC-06-001-strategy-lab.md) |
-| 来源 SPEC | [SPEC-06-001](../../spec/06_strategy/SPEC-06-001-strategy-lab.md) |
+| 创建日期 / 最后更新 | 2026-10-29 / 2026-10-30 |
+| 版本 | V1.4（方案 C：仅延长 spy-ma-smoke 窗口；非整体验收） |
+| 来源 RFC | [RFC-06-001 V1.4](../../rfc/06_strategy/RFC-06-001-strategy-lab.md) |
+| 来源 SPEC | [SPEC-06-001 V1.4](../../spec/06_strategy/SPEC-06-001-strategy-lab.md) |
 | 目标模块 | skills/strategies/strategy-lab/ |
 | 设计任务 | t_f1988e16；上游 t_5fcb98dd；docs-only纠正 t_0f6f7508 |
 | 主仓基线 | e378bef8d1d89565ccb15b0f5320f5008f9b657e |
@@ -230,18 +230,36 @@ HTTP白名单仅 §3.3 表及 `GET /api/indicator/kline`、`GET /api/agent/v1/kl
 
 ### 5.1 真实交易样例（只验首版接入，不是投资推荐）
 
-固定ID `spy-ma-smoke`；复用 `strategy_v2_single_ma`（USStock:SPY、1d、long_only、warmup260）；窗口2023-01-01至2025-12-31，UTC日期边界、交易所日线交易日语义，报告注明US市场日历。资本USD 10,000；commission=0.0005、slippage=0.0005，leverageEnabled=false、leverage=1。config仅 `ma_period=50,target_pct=0.95`，保留原生策略默认一致。
+固定ID `spy-ma-smoke`；复用 `strategy_v2_single_ma`（USStock:SPY、1d、long_only、warmup260）；当前窗口2017-06-01至2025-12-31（Pascal于2026-10-30批准方案C，仅延长窗口），UTC日期边界、交易所日线交易日语义，报告注明US市场日历。资本USD 10,000；commission=0.0005、slippage=0.0005，leverageEnabled=false、leverage=1。config仅 `ma_period=50,target_pct=0.95`，保留原生策略默认一致。
 
-搜索 ma_period=20..80、step20（4点），target_pct固定0.95（min=max=0.95、step0.05）；grid trials=4、folds=4、trainRatio=0.7、blindRatio=0.15、seed42、costMultipliers=[1,2]。先parameter-space核实名称/范围/可调属性，实际部署模板漂移则停止而非偷偷改策略规则。
+搜索 ma_period=20..80、step20（4点），target_pct固定0.95（min=max=0.95、step0.05）；grid trials=4、folds=4、trainRatio=0.7、blindRatio=0.15、embargo1、seed42、costMultipliers=[1,2]。先parameter-space核实名称/范围/可调属性，实际部署模板漂移则停止而非偷偷改策略规则。
 
 本样例硬约束：真实市场数据、SPY/无杠杆股票身份、同窗口同成本、finite totalReturn/sharpeRatio/maxDrawdown、原生totalExecutions>0、全段峰值MDD≤50%。目标为合格项全段totalReturn最大；不设盈利保证，不把50%解释为运行时保证。fundingMode=not_modeled仍披露，对无融资SPY资金费不适用；非该市场身份不得套此例外。gross exposure与交易所杠杆分开，现货无杠杆不证明三币合约机器人敞口/强平限额已落实。
 
 预算：内部estimate/actual≤8、relativeUnits≤8、外层jobs≤8且本样例预计最多6、复检参数组≤5、一次evolution run、总墙钟1200s、单backtest180s/evolution600s、轮询15s；零新增付费。成本与窗口来自本接入例子，不作为一般策略默认要求。
 
-未来命令（从项目根执行，凭据由主控预先安全注入；本阶段未执行）：
+方案C复用的只读预检（不是本卡重跑）：`data/reports/2026-10-29-strategy-lab-verify/evidence/2026-10-30-c-window-preflight.json`，原始真实行情为同目录`2026-10-30-c-window-klines.json`；来源QuantDinger公开行情接口，实际2159条SPY/1D，首末2017-06-01T13:30:00Z..2025-12-31T14:30:00Z。以真实时间戳直接调用原生`build_walk_forward_plan`，lookback260、minimumTrainBars1300、minimumValidationBars130、embargoBars1，得到：
+
+| UTC end边界 | sampleCount | developmentBars / blindBars | 各折trainBars | 各折validationBars | effectiveFolds |
+|---|---|---|---|---|---|
+| 2025-12-31T00:00:00Z | 2158 | 1834 / 323 | 1300,1433,1566,1699 | 132,132,132,134 | 4 |
+| 2025-12-31T23:59:59Z | 2159 | 1835 / 323 | 1300,1433,1566,1699 | 132,132,132,135 | 4 |
+
+原生依据（APP为§2缩写）：`services/strategy_evolution/walk_forward.py:66-164`按真实观测、lookback与gap拆分；`engine.py:64-80`取evaluator观测与warmup，`evaluator.py:104-119`过滤本次快照窗口。区间含首尾3136自然日；`services/backtest_limits.py:60-68,103-149`的USStock/1D maxDays3650、原生warmup日历预留对应当前maxSelectedDays3158，与该区间兼容，不改平台上限。变更窗口须核验真实观测与原生有效四折，不能以自然日或estimate.folds当通过证据；此前“约2125条足够四折”的估算已废弃，不作依据。公开行情预检不保证进化evaluator快照相同，真实job仍须核对有效四折、实际覆盖与成本；旧任务内部观测数未由API暴露，不声称已核验其完整取数。
+
+历史与本次额度分开（SPEC V1.4 §8.1）：
+
+| 窗口/轮次 | 已有事实 / 额度 | 执行边界 |
+|---|---|---|
+| 历史旧窗口2023-01-01..2025-12-31（superseded） | 基准run19成功；进化job `d249d4846e8e493b8d0d316b340f99de` failed，error=observationRangeTooShort | 原始失败及reports/命令原文保留，计入历史，不重试旧job；actualBacktestRuns=None为未报告，不能推断0次；旧基准不充当新窗口基准 |
+| 本次2017-06-01..2025-12-31 | Pascal一次性额外授权，最多新建1个原生进化job；本卡未提交、无新jobId | 主控开始前只读核查该窗口已有job，存在则只读回、禁止重复创建；提交结果未知不重发；失败/取消/超预算立即停止，不自动重试 |
+
+通用每次执行恰好一次进化规则及每轮上述预算均不变，不变成普遍2次额度。此次不修改源码、算法、搜索空间、成本或硬约束，不重做已完成CLI兼容修复/离线测试；沿用T4 `t_baaaef0b`与T5 `t_6346409a`。V1.4独立方案C Design Gate完成前主控不执行业务；Gate及文档同步均不等于真实T4/T5通过。
+
+未来命令（独立Gate放行并核查无该窗口job后，才由主控按一次性额度执行；从项目根运行，凭据预先安全注入；本次文档阶段未执行）：
 
 ```text
-PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/quantdinger.py trade --strategy-dir skills/strategies/strategy-lab/strategies/spy-ma-smoke --start 2023-01-01 --end 2025-12-31 --capital 10000 --commission 0.0005 --slippage 0.0005 --search ma_period:20:80:20 --objective totalReturn --max-drawdown-pct 50 --method grid --trials 4 --folds 4 --max-evolution-runs 8 --max-relative-units 8 --wall-seconds 1200
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/quantdinger.py trade --strategy-dir skills/strategies/strategy-lab/strategies/spy-ma-smoke --start 2017-06-01 --end 2025-12-31 --capital 10000 --commission 0.0005 --slippage 0.0005 --search ma_period:20:80:20 --objective totalReturn --max-drawdown-pct 50 --method grid --trials 4 --folds 4 --max-evolution-runs 8 --max-relative-units 8 --wall-seconds 1200
 ```
 
 报告保留baseline/候选各自全段totalReturn/annualizedReturn/sharpeRatio/maxDrawdown/winRate/totalTrades/totalExecutions与比较理由，原生OOS/blind统计另列；benchmarkTotalReturn可用则引用原生SPY基准。卡玛可由原生年化与MDD注明简单比值；换手/信息比率如原生未给且缺必要明细，写“不提供/不可核实”，不能造0或新写回测引擎补齐。样本内外取原生fold证据，披露单次回放切片与最终全段比较的过拟合限制。
@@ -327,11 +345,12 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m unittest discover -s skills/strate
 | V1.1 | 2026-10-29 | docs-only同步RFC/SPEC：Human默认值须显式发送/读回、真实wire字段、validation回撤不含blind、folds固定4与内外预算；追加15000/15080主控探测且保留5000/8888历史，public-config先JWT认证；不追认旧错误、不改业务目标/实现allowlist |
 | V1.2 | 2026-10-30 | 按 Pascal 明确裁定将策略/研究实例移到 skills/strategies/<strategy-id>/；同步当前路径清单与本地守卫，不改业务、预算或冻结安全边界 |
 | V1.3 | 2026-10-30 | Pascal纠正最终实例根为 skills/strategies/strategy-lab/strategies/<strategy-id>/；取代V1.2直属目录方案，仅同步路径、守卫与导入，不改业务/预算/安全门禁 |
+| V1.4 | 2026-10-30 | 方案 C：仅延长交易样例窗口至2017-06-01..2025-12-31；列真实2159/2158条原生四折预检、范围兼容与一次性最多1个新job边界，历史及每轮预算不变，未真实重跑 |
 
 ## V1.3 最终目录裁定（2026-10-30，取代 V1.2 目录方案）
 
 当前唯一有效实例位置为 `skills/strategies/strategy-lab/strategies/<strategy-id>/`。两个验证样例分别是 `skills/strategies/strategy-lab/strategies/spy-close-research/` 与 `skills/strategies/strategy-lab/strategies/spy-ma-smoke/`；二者不是用户网格策略、不代表可上线。strategy-lab 根层保留 SKILL、README、scripts、templates、tests，并由 strategies 子目录集中容纳具体实例。不得在 strategy-lab 根层或 skills/strategies 直属层留下这两个实例的副本或兼容 symlink。
 
-V1.2 的直属目录位置已被本节替代，其版本记录保留作历史，不作为当前执行指令。此前已搬文件直接从现场继续收口，不能重建或覆盖已有 reports；历史报告命令/结论与数据逐字保留。CLI 路径守卫仅接受上述实例根的直接子目录，拒绝根外、更深嵌套和 symlink 逃逸。只调整目录、必要路径/导入与命令，不改策略、算法、API、预算、认证或交易逻辑；来源 RFC/SPEC/Design 的目录基线统一 V1.3。
+V1.2 的直属目录位置已被本节替代，其版本记录保留作历史，不作为当前执行指令。此前已搬文件直接从现场继续收口，不能重建或覆盖已有 reports；历史报告命令/结论与数据逐字保留。CLI 路径守卫仅接受上述实例根的直接子目录，拒绝根外、更深嵌套和 symlink 逃逸。V1.3 当时只调整目录、必要路径/导入与命令，不改策略、算法、API、预算、认证或交易逻辑；目录裁定仍有效，当前 RFC/SPEC/Design 契约版本统一 V1.4，样例窗口及一次性额度以 §5.1 为准。
 
 用户要求继续 T4 的请求保留；目录迁移只做离线验证，不等于解除既有安全暂停或真实业务通过。T4 的凭据传递与诊断拒绝须先按已批准边界纠正，禁止恢复已删除的明文 JWT 文件、禁止重跑被拒辅助诊断；不新增实盘/部署授权。

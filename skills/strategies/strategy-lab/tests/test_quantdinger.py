@@ -47,13 +47,15 @@ def run_wrapper(return_pct=20, drawdown=-10, params=None, run_id=11):
                     "params": dict(values), "start_date": "2023-01-01",
                     "end_date": "2025-12-31", "commission": 0.0005,
                     "slippage": 0.0005, "market": "USStock", "symbol": "SPY",
+                    "market_type": "spot",
+                    "manifest": {"leverageAllowed": False, "maxLeverage": 1},
                     "timeframe": "1d", "initial_capital": 10000, "result": {
                         "dataProvenance": {"kind": "market", "source": "synthetic/offline"},
                         "totalReturn": return_pct, "sharpeRatio": 1.2,
                         "maxDrawdown": drawdown, "totalExecutions": 10,
                         "executionAssumptions": {
                             "fundingMode": "not_modeled", "leverageEnabled": False,
-                            "exchangeEquityProducts": [{"product_type": "direct_equity"}],
+                            "exchangeEquityProducts": [],
                         }}}}
 
 
@@ -124,6 +126,36 @@ class OfflineAdditionalContracts(unittest.TestCase):
         wrapper = run_wrapper()
         del wrapper["run"]["result"]["executionAssumptions"]["leverageEnabled"]
         self.assertEqual(qd.evaluate_candidate(wrapper, max_drawdown_pct=50)["status"], qd.UNKNOWN)
+
+    def test_spot_unlevered_equity_funding_needs_all_evidence(self):
+        def funding(wrapper):
+            evaluation = qd.evaluate_candidate(wrapper, max_drawdown_pct=50)
+            return next(item for item in evaluation["checks"]
+                        if item["check"] == "fundingAndExposure")
+
+        cases = {
+            "contractMarketType": lambda row: row.update(market_type="contract"),
+            "fundingMarketType": lambda row: row.update(market_type="funding"),
+            "missingMarketType": lambda row: row.pop("market_type"),
+            "leverageEnabled": lambda row: row["result"]["executionAssumptions"].update(
+                leverageEnabled=True),
+            "manifestLeverageAllowed": lambda row: row.update(
+                manifest={"leverageAllowed": True, "maxLeverage": 2}),
+            "missingManifest": lambda row: row.pop("manifest"),
+            "cryptoMarket": lambda row: row.update(market="Crypto"),
+            "cryptoContract": lambda row: row.update(market="Crypto", market_type="contract"),
+            "otherSymbol": lambda row: row.update(symbol="QQQ"),
+        }
+        for name, case in cases.items():
+            with self.subTest(case=name):
+                wrapper = run_wrapper()
+                case(wrapper["run"])
+                self.assertEqual(funding(wrapper)["status"], qd.UNKNOWN)
+        self.assertEqual(
+            funding(run_wrapper()),
+            {"check": "fundingAndExposure", "status": qd.PASS,
+             "detail": "notApplicableSpotEquity"},
+        )
 
     def test_readback_exact_run_id_and_complete_params_via_consumer(self):
         for change in ({"id": 99}, {"params": {**PARAMS, "unexpected": 1}},
@@ -422,12 +454,44 @@ class OfflineInputsAndPrivacy(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(qd.LabError):
                 qd._evolution_config(args(**change))
 
+    def test_trade_command_reports_explicit_source_id_only(self):
+        explicit = qd._trade_command(args(source_id=4))
+        self.assertIn("--source-id 4", explicit)
+        self.assertLess(explicit.index("--strategy-dir offline-case"),
+                        explicit.index("--source-id 4"))
+        self.assertLess(explicit.index("--source-id 4"), explicit.index("--start 2023-01-01"))
+        default = qd._trade_command(args())
+        self.assertNotIn("--source-id", default)
+        for text in (explicit, default):
+            for token in ("--strategy-dir offline-case", "--start 2023-01-01",
+                          "--end 2025-12-31", "--capital 10000.0", "--commission 0.0005",
+                          "--slippage 0.0005", "--objective totalReturn",
+                          "--max-drawdown-pct 50.0", "--method grid", "--trials 4",
+                          "--folds 4", "--max-evolution-runs 8", "--max-relative-units 8",
+                          "--wall-seconds 1200.0", "--search ma_period:20:80:20"):
+                self.assertIn(token, text)
+
     def test_source_parameter_consumption_not_comment_or_string(self):
         for code in ("# context.params.get('ma_period', 50)",
                      '"context.params.get(\'ma_period\', 50)"'):
             with self.assertRaises(qd.LabError):
                 qd.build_parameter_space(DECLARED, [qd._parse_search("ma_period:20:80:20")],
                                          PARAMS, code)
+
+    def test_declared_rows_without_optimizable_flag_build_search_space(self):
+        declared = [{key: value for key, value in row.items() if key != "optimizable"}
+                    for row in DECLARED]
+        rows = qd.build_parameter_space(declared, [qd._parse_search("ma_period:20:80:20")],
+                                        PARAMS, CODE)
+        self.assertEqual(rows[0], {"name": "ma_period", "type": "integer",
+                                   "min": 20, "max": 80, "step": 20})
+        self.assertEqual(rows[1], {"name": "target_pct", "type": "percent",
+                                   "min": 0.95, "max": 0.95, "step": 0.05})
+        with self.assertRaises(qd.LabError) as caught:
+            qd.build_parameter_space([{**DECLARED[0], "optimizable": False}],
+                                     [qd._parse_search("ma_period:20:80:20")],
+                                     {"ma_period": 50}, CODE)
+        self.assertEqual(caught.exception.message, "parameter.notOptimizable")
 
     def test_reports_do_not_serialize_sensitive_nested_fields(self):
         report = {"title": "offline", "identifiers": {"sourceId": 7, "user_id": "PRIVATE_OWNER",
@@ -595,6 +659,26 @@ class OfflineOrchestration(unittest.TestCase):
         self.assertEqual(len(self.submissions), 1)
         self.assertEqual(self.execute_trade(baseline=run_wrapper(None)), qd.EXIT_EVIDENCE)
         self.assertEqual(len(self.submissions), 1)
+
+    def test_declared_rows_without_optimizable_flag_run_evolution(self):
+        declared = [{key: value for key, value in row.items() if key != "optimizable"}
+                    for row in DECLARED]
+        self.assertEqual(self.execute_trade(declared=declared), 0)
+        self.assertTrue(self.evolution_bodies)
+        self.assertEqual(self.evolution_bodies[0]["parameterSpace"][0],
+                         {"name": "ma_period", "type": "integer",
+                          "min": 20, "max": 80, "step": 20})
+        report = self.saved_report
+        self.assertIsNotNone(report)
+        self.assertEqual(report["report"]["classification"], "baseline-kept")
+
+    def test_baseline_missing_spot_evidence_stops_insufficient(self):
+        wrapper = run_wrapper()
+        del wrapper["run"]["market_type"]
+        self.assertEqual(self.execute_trade(baseline=wrapper), qd.EXIT_EVIDENCE)
+        report = self.saved_report
+        self.assertIsNotNone(report)
+        self.assertEqual(report["report"]["reason"], "baselineEvidenceUnknown")
 
 
 class OfflinePolling(unittest.TestCase):

@@ -1,6 +1,6 @@
 # spy-ma-smoke 策略/研究需求
 
-> 交易类样例。按 [DESIGN-06-001 §5.1](../../../../../docs/design/06_strategy/DESIGN-06-001-strategy-lab.md) 冻结，用于验证首版 QuantDinger 接入闭环，不是投资推荐。
+> 交易类样例。按 [DESIGN-06-001 V1.4 §5.1](../../../../../docs/design/06_strategy/DESIGN-06-001-strategy-lab.md) 冻结（2026-10-30方案C），用于验证首版 QuantDinger 接入闭环，不是投资推荐；待独立Gate与真实验证。
 
 ## 目标
 
@@ -10,14 +10,14 @@
 
 ## 数据、规则与参数
 
-- 标的与数据：USStock / SPY / 1d，long_only，warmup 260 根；原生模板 `strategy_v2_single_ma`，基准为 SPY 自身。窗口 2023-01-01 至 2025-12-31（UTC 日期边界，美股交易日语义；报告须注明使用美股日历）。
+- 标的与数据：USStock / SPY / 1d，long_only，warmup 260 根；原生模板 `strategy_v2_single_ma`，基准为 SPY 自身。当前窗口 2017-06-01 至 2025-12-31（UTC 日期边界，美股交易日语义；报告须注明使用美股日历）。
 - 方法/规则：价格站上均线且无持仓时按 `target_pct` 目标仓位做多；价格跌破均线且有持仓时清仓。
 - 参数与约束（`config.json`）：`ma_period=50`（int）、`target_pct=0.95`（percent）。`ma_period` 参与搜索；`target_pct` 固定为 min=max 单行传入，值与源码默认一致。
 - QuantDinger 复用：原生模板源码、Strategy API V2 compile/create/detail、原生回测 job、原生 Strategy Evolution。缺口如实列明：无。
 - 自动进化设置：
   - 触发条件：存在已声明且源码实际消费的可调参数、有选优目标、预算允许、用户未禁止。
   - 搜索空间：`ma_period` 20..80 step 20（4 个点）；`target_pct` 固定 0.95。
-  - 进化 config：`method=grid`、`trials=4`、`folds=4`、`trainRatio=0.7`、`blindRatio=0.15`、`seed=42`、`costMultipliers=[1,2]`、`autoPrune=false`、`monteCarloPaths=100`、`topCandidates=4`。
+  - 进化 config：`method=grid`、`trials=4`、`folds=4`、`trainRatio=0.7`、`blindRatio=0.15`、`embargoBars=1`、`seed=42`、`costMultipliers=[1,2]`、`autoPrune=false`、`monteCarloPaths=100`、`topCandidates=4`。
   - 硬约束：真实市场数据；SPY 无杠杆股票身份；同窗口同成本；`totalReturn`/`sharpeRatio`/`maxDrawdown` 均为有限值；原生 `totalExecutions>0`；全段峰值口径 `maxDrawdown` 绝对值 ≤ 50%。
   - 比较目标：合格项中全段 `totalReturn` 最大者。50% 是约束阈值，不是运行时保证。
 
@@ -27,11 +27,18 @@
 - 验收：判定必须落在六分支之一；硬约束只用原生全段读回 run 的 `data.result.maxDrawdown`；原生 `summary.maxDrawdown`（validation 折绝对值均值）另列，不作硬约束。
 - 进化判定：基准合格且候选不更优 → 保留基准；基准不合格但候选合格 → 选候选；均不合格 → 无合格候选；关键证据未知 → 证据不足；run failed/cancelled/超预算 → 如实停止并记录诊断。不重试、不改窗口/成本/硬约束以求通过。
 - 平台可查：私有 source 需保存并读回（`visibility=private`、`status=draft`、源码一致）；基准/候选/最终 run 需在 `/backtest-center?sourceId=<sourceId>` 可见（由 Verify 阶段页面实查留证）。
-- 再次执行：见下方命令，凭据由主控经既有安全机制注入进程环境。
+- 本次执行：下方命令仅供独立方案C Design Gate放行后由主控使用一次性额度；开始前只读核查新窗口已有job，存在则只读回、不执行命令、不重复创建。凭据由主控经既有安全机制注入进程环境；本次文档同步未执行。
 
 ```text
-PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/quantdinger.py trade --strategy-dir skills/strategies/strategy-lab/strategies/spy-ma-smoke --start 2023-01-01 --end 2025-12-31 --capital 10000 --commission 0.0005 --slippage 0.0005 --search ma_period:20:80:20 --objective totalReturn --max-drawdown-pct 50 --method grid --trials 4 --folds 4 --max-evolution-runs 8 --max-relative-units 8 --wall-seconds 1200
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/quantdinger.py trade --strategy-dir skills/strategies/strategy-lab/strategies/spy-ma-smoke --start 2017-06-01 --end 2025-12-31 --capital 10000 --commission 0.0005 --slippage 0.0005 --search ma_period:20:80:20 --objective totalReturn --max-drawdown-pct 50 --method grid --trials 4 --folds 4 --max-evolution-runs 8 --max-relative-units 8 --wall-seconds 1200
 ```
+
+## 方案C修订与历史（2026-10-30）
+
+- 仅延长窗口；旧2023-01-01..2025-12-31窗口superseded。历史基准run19及failed进化job `d249d4846e8e493b8d0d316b340f99de`（observationRangeTooShort）保留，不重试旧job、不重写reports/旧命令；旧基准不能充当新窗口同口径证据。
+- Pascal仅对新窗口一次性额外授权最多1个新进化job；历史与新窗口分列，不清零历史，不把通用每次恰好一次进化规则改为2次。已有新窗口job只读回；提交结果未知不重发；失败/取消/超预算即停，不自动重试。
+- 复用Design §5.1所引真实预检：日末2159条/午夜2158条，原生拆分均有效4折；3136自然日兼容原生USStock/1D及warmup预留后的当前3158日上限，不放宽平台规则。改窗口须用真实观测与原生拆分核验有效四折，不能用自然日或estimate.folds代替；公开预检不保证evaluator快照一致，真实job仍须核对覆盖、四折和成本。
+- 源码/算法/搜索空间/成本/硬约束及每轮预算不变，不改Python/测试/config；沿用T4 `t_baaaef0b`与T5 `t_6346409a`，不重建任务图。actualBacktestRuns=None为未报告，不推断0；本次未真实重跑，不代表T4/T5通过。
 
 ## 实现边界
 

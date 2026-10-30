@@ -7,7 +7,7 @@ description: "YQuant Strategy Lab：按「定义 → 执行 → 交付」三步�
 
 按 [RFC-06-001](../../../docs/rfc/06_strategy/RFC-06-001-strategy-lab.md)、
 [SPEC-06-001](../../../docs/spec/06_strategy/SPEC-06-001-strategy-lab.md)、
-[DESIGN-06-001](../../../docs/design/06_strategy/DESIGN-06-001-strategy-lab.md)（V1.3，Design Gate APPROVE）
+[DESIGN-06-001](../../../docs/design/06_strategy/DESIGN-06-001-strategy-lab.md)（三文档V1.4；方案C独立Design Gate、T4验证及T5首版签收已通过，详见文末状态与正式报告）
 运行的操作型 Skill。本文件是面向 AI 的操作约定，不是 runtime；不建第二套回测引擎、任务系统或 SDK。
 
 ## 目录职责边界（2026-10-30 用户裁定）
@@ -84,9 +84,22 @@ strategy-lab/                     # 只放研发工具资产
 
 ## 命令与退出码
 
+spy-ma-smoke当前仅按2026-10-30批准的方案C延长至2017-06-01..2025-12-31，warmup260、folds4、
+源码/算法/搜索空间/成本/硬约束不变。独立方案C Design Gate完成前主控不执行业务；下方trade命令
+只在开始前只读核查该窗口无已有job后使用。若已有job则只读回、禁止重复创建；本次一次性额外
+授权最多1个新原生进化job，不把通用每次恰好一次进化规则改成2次。历史旧窗口
+2023-01-01..2025-12-31（superseded）的run19与failed job `d249d4846e8e493b8d0d316b340f99de`
+（observationRangeTooShort）保留并与新窗口job分列，不重试旧job、不改历史reports/命令。
+每轮内部backtestRuns/actualBacktestRuns≤8、relativeUnits≤8、外层持久化回测jobs≤8（预计最多6）、
+参数组含基准≤5、墙钟1200s、零新增付费保持；失败/取消/超预算立即停、不自动重试，提交结果未知不重发。
+
+变更样例窗口须用真实观测及原生拆分核验有效四折，不能以自然日或estimate.folds当通过证据。
+Design V1.4 §5.1所引C预检真实日末2159条/午夜2158条均有效4折；公开取数不保证进化evaluator
+快照相同，真实job仍须核对四折、覆盖与成本。actualBacktestRuns=None为未报告，不推断0。
+
 ```text
 # 交易类（示例固定值来自 spy-ma-smoke/spec.md；凭据由主控经安全机制注入环境）
-PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/quantdinger.py trade --strategy-dir skills/strategies/strategy-lab/strategies/spy-ma-smoke --start 2023-01-01 --end 2025-12-31 --capital 10000 --commission 0.0005 --slippage 0.0005 --search ma_period:20:80:20 --objective totalReturn --max-drawdown-pct 50 --method grid --trials 4 --folds 4 --max-evolution-runs 8 --max-relative-units 8 --wall-seconds 1200
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/quantdinger.py trade --strategy-dir skills/strategies/strategy-lab/strategies/spy-ma-smoke --start 2017-06-01 --end 2025-12-31 --capital 10000 --commission 0.0005 --slippage 0.0005 --search ma_period:20:80:20 --objective totalReturn --max-drawdown-pct 50 --method grid --trials 4 --folds 4 --max-evolution-runs 8 --max-relative-units 8 --wall-seconds 1200
 
 # 研究类（真实取数，两次执行可重跑比对）
 PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/strategies/spy-close-research/research.py --data-api human
@@ -110,5 +123,8 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/strate
 
 ## 状态
 
-- 代码、样例骨架与离线测试（37 用例）已交付；真实交易闭环（A-003）、研究取数（A-005）、
-  UI 实查与独立 Verify/Review 尚未完成，以独立 Verify 结论为准。
+- 2026-10-30 首版完成：独立方案C Design Gate run3359 APPROVE；T4独立复验 run3362 PASS，48/48测试、A-001~A-009最终矩阵全部通过；原T4卡已关闭。
+- T5原卡 t_6346409a 的完整审查 run3369 发现一项摘要精度Minor，修正后由 reviewer run3371 限定复核，最终 full_verdict=APPROVE、open_findings=0；历史REVISE与流程偏离保留，不追认。
+- 真实交易样例已完成私有源码、回测、原生进化、最终回测及平台UI核验；研究样例已完成两次真实取数与复算。以上指接入样例，不表示用户PUMP/HYPE/JUP合约网格已实现，也不表示实盘可用或盈利保证。
+- 正式证据：[T4验证报告](../../../data/reports/2026-10-29-strategy-lab-verify/report.md)、[T5签收报告（最终第6节）](../../../data/reports/2026-10-30-strategy-lab-final-review/report.md)。报告位于Git忽略的本地data目录，不代表已提交、推送或远程备份。
+- 此处仅同步已验收状态，不改变业务契约、代码、样例参数或原始证据；未执行Demo/Live、发单、部署、调度或生产配置变更。

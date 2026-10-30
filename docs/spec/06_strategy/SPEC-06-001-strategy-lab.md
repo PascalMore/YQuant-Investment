@@ -7,10 +7,10 @@
 | 状态 | Accepted |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-10-29 |
-| 最后更新 | 2026-10-29 |
-| 版本 | V1.3（2026-10-30 目录纠正：strategy-lab/strategies；非整体验收） |
-| 来源 RFC | [RFC-06-001](../../rfc/06_strategy/RFC-06-001-strategy-lab.md) |
-| 配套 Design | [DESIGN-06-001](../../design/06_strategy/DESIGN-06-001-strategy-lab.md) |
+| 最后更新 | 2026-10-30 |
+| 版本 | V1.4（方案 C：仅延长 spy-ma-smoke 窗口；待独立 Gate，非整体验收） |
+| 来源 RFC | [RFC-06-001 V1.4](../../rfc/06_strategy/RFC-06-001-strategy-lab.md) |
+| 配套 Design | [DESIGN-06-001 V1.4](../../design/06_strategy/DESIGN-06-001-strategy-lab.md) |
 | 目标模块 | strategy（skills/strategies/strategy-lab/） |
 | 适配 Agent | YQuant-Developer-Engineer, YQuant-Test-Engineer, YQuant-Reviewer-Principal |
 
@@ -120,6 +120,16 @@
 - 性能/安全/风控约束：安全上限trials ≤64、全段复检参数组（含基准）≤5、外层持久化 `POST /api/backtest/jobs` ≤8、研究数据API调用 ≤50、墙钟 ≤30分钟；任务可下调，不得上调这些上限。folds固定4（平台下限4，首版上限4），不能降3或升5；任务只允许<4则停止。轮询间隔≥15s；所有写动作读回验证；进程退出码非0即该步骤失败。
 - 内部回放与外层持久化job是不同预算：内部上限按Design §3.5显式声明，首版样例backtestRuns/actualBacktestRuns≤8、relativeUnits≤8；外层基准1+去重候选最多4+最终1，最多6且受总上限8。内部analysis_only/persist=false不算外层job。4个grid点、costMultipliers=[1,2]、blindRatio=0.15、universeSize=1时，估算 `4+(2-1)+1=6`、relativeUnits=6，不乘folds（service.py:111-116）；actual未知不得记6。估算并非强上界，实际超预算/未知如实披露并停止补跑，不能承诺取消强杀远端计算。样例墙钟1200s等更低值见Design §5.1。
 
+### 8.1 方案 C 样例执行契约（仅 spy-ma-smoke，2026-10-30）
+
+- 来源为 RFC V1.4 §5.5 的 Pascal 批准：当前唯一窗口 2017-06-01..2025-12-31，旧 2023-01-01..2025-12-31 窗口 superseded，仅保留历史证据；旧基准 run19 不作为新窗口同口径基准。源码/算法不变，不要求再实现已完成的 CLI 兼容修复或修改 Python/测试。
+- 不变值：warmup260、folds4、capital10000 USD、commission/slippage各0.0005、无杠杆、ma_period基准50/搜索20..80 step20、target_pct固定0.95、grid4 trials、trainRatio0.7、blindRatio0.15、embargo1；其余样例设置及硬约束继承 Design §5.1 与样例 spec，不放宽。
+- 本次一次性额外额度仅为新窗口最多新建1个原生进化 job。旧 job `d249d4846e8e493b8d0d316b340f99de` failed（observationRangeTooShort）计入历史，原样保留且不重试；新窗口 job 单独列示，未执行不编造ID。主控开始前须只读核查该窗口已有 job；存在则只读回、禁止重复创建，提交结果未知也不得自动重发。通用每次执行恰好一次进化/失败即停规则不变，不变成普遍2次额度。
+- 新一轮内部 backtestRuns/actualBacktestRuns≤8、relativeUnits≤8、外层持久化回测jobs≤8（预计最多6）、参数组含基准≤5、总墙钟1200s、单回测180s/进化600s、轮询15s、零新增付费；失败/取消/超预算立即停，不自动重试。历史与本轮分别记录，actualBacktestRuns缺失或None写“未报告”，不写0。
+- 范围兼容而非放宽平台规则：区间含首尾3136自然日；USStock/1D原生maxDays3650，warmup按原生函数预留，当前客户端maxSelectedDays3158。实际提交仍须核对compile返回策略，不修改上限或日期解析语义。
+- 复用真实预检 `data/reports/2026-10-29-strategy-lab-verify/evidence/2026-10-30-c-window-preflight.json`：日末2159条、午夜2158条，原生build_walk_forward_plan均effectiveFolds=4，详见Design §5.1。变更窗口须用真实观测及原生拆分核验有效四折，自然日或estimate.folds不作通过证据；公开取数不保证evaluator快照相同，真实任务仍须核对有效四折、覆盖、成本与终态。
+- 仅更新指定六个Markdown，沿用T4 `t_baaaef0b`/T5 `t_6346409a`，独立方案C Design Gate完成前主控不执行业务。此次文档同步未真实重跑，不改历史reports/命令原文，不代表A-003或T4/T5通过。
+
 ## 9. 运行前提与开放问题
 
 - Design §3.3已固定进程入口 `QUANTDINGER_BASE_URL` / `QUANTDINGER_JWT`，不声称profile已配置；仅由主控经现有安全机制注入，不读/改.env、不登录、不收集浏览器token、不请求新token。认证可用性与免费开关仍未验收，是后续真实运行前提，不是交给Developer裁决的业务语义。
@@ -133,11 +143,12 @@
 | V1.1 | 2026-10-29 | 与RFC/Design同步五项closure：纠正Human默认私有性、wire字段、validation回撤与blind独立、固定folds和双计数预算；追加正确端口探测/JWT前置；纠正依赖与凭据核实表述，不改变业务目标 |
 | V1.2 | 2026-10-30 | 按 Pascal 明确裁定将策略/研究实例移到 skills/strategies/<strategy-id>/；同步当前路径清单与本地守卫，不改业务、预算或冻结安全边界 |
 | V1.3 | 2026-10-30 | Pascal纠正最终实例根为 skills/strategies/strategy-lab/strategies/<strategy-id>/；取代V1.2直属目录方案，仅同步路径、守卫与导入，不改业务/预算/安全门禁 |
+| V1.4 | 2026-10-30 | 同步方案 C 窗口、真实2159/2158条四折预检和新窗口最多1个job的一次性额度；历史保留、每轮预算及通用停止规则不变，未真实重跑 |
 
 ## V1.3 最终目录裁定（2026-10-30，取代 V1.2 目录方案）
 
 当前唯一有效实例位置为 `skills/strategies/strategy-lab/strategies/<strategy-id>/`。两个验证样例分别是 `skills/strategies/strategy-lab/strategies/spy-close-research/` 与 `skills/strategies/strategy-lab/strategies/spy-ma-smoke/`；二者不是用户网格策略、不代表可上线。strategy-lab 根层保留 SKILL、README、scripts、templates、tests，并由 strategies 子目录集中容纳具体实例。不得在 strategy-lab 根层或 skills/strategies 直属层留下这两个实例的副本或兼容 symlink。
 
-V1.2 的直属目录位置已被本节替代，其版本记录保留作历史，不作为当前执行指令。此前已搬文件直接从现场继续收口，不能重建或覆盖已有 reports；历史报告命令/结论与数据逐字保留。CLI 路径守卫仅接受上述实例根的直接子目录，拒绝根外、更深嵌套和 symlink 逃逸。只调整目录、必要路径/导入与命令，不改策略、算法、API、预算、认证或交易逻辑；来源 RFC/SPEC/Design 的目录基线统一 V1.3。
+V1.2 的直属目录位置已被本节替代，其版本记录保留作历史，不作为当前执行指令。此前已搬文件直接从现场继续收口，不能重建或覆盖已有 reports；历史报告命令/结论与数据逐字保留。CLI 路径守卫仅接受上述实例根的直接子目录，拒绝根外、更深嵌套和 symlink 逃逸。V1.3 当时只调整目录、必要路径/导入与命令，不改策略、算法、API、预算、认证或交易逻辑；目录裁定仍有效，当前 RFC/SPEC/Design 契约版本统一 V1.4，样例窗口及一次性额度以 §8.1 为准。
 
 用户要求继续 T4 的请求保留；目录迁移只做离线验证，不等于解除既有安全暂停或真实业务通过。T4 的凭据传递与诊断拒绝须先按已批准边界纠正，禁止恢复已删除的明文 JWT 文件、禁止重跑被拒辅助诊断；不新增实盘/部署授权。
