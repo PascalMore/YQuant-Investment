@@ -76,6 +76,13 @@ def bar(day):
             "open": 10, "high": 12, "low": 9, "close": 11, "volume": 100}
 
 
+def series_bars(start_timestamp, count):
+    """Return ``count`` synthetic daily bars ascending from ``start_timestamp``."""
+    return [{"time": int(start_timestamp + index * 86400),
+             "open": 10, "high": 12, "low": 9, "close": 11, "volume": 100}
+            for index in range(count)]
+
+
 class OfflineDecisions(unittest.TestCase):
     def test_wrapper_metrics_and_csv_use_platform_result(self):
         wrapper = run_wrapper()
@@ -436,6 +443,38 @@ class OfflineMarketData(unittest.TestCase):
         self.assertLessEqual(request.call_count, 2)
         for value in (bar(1)["time"], bar(1)["time"] * 1000, "2024-01-01T08:00:00+08:00"):
             self.assertEqual(qd.parse_bar_time(value).timestamp(), bar(1)["time"])
+
+    def test_page_limit_is_500_on_both_routes(self):
+        self.assertEqual(qd.KLINE_PAGE_LIMIT, 500)
+        for data_api in (qd.HUMAN, qd.AGENT):
+            with self.subTest(data_api=data_api):
+                request = Mock(return_value=[bar(1)])
+                qd.fetch_klines(data_api=data_api, base_url=BASE, request=request)
+                self.assertEqual(request.call_args_list[0].kwargs["params"]["limit"], 500)
+
+    def test_agent_second_page_uses_before_time_cursor_and_page_cap(self):
+        request = Mock(side_effect=[[bar(2), bar(1)], []])
+        qd.fetch_klines(data_api="agent", base_url=BASE, request=request)
+        first, second = request.call_args_list
+        self.assertNotIn("before_time", first.kwargs["params"])
+        self.assertEqual(second.kwargs["params"]["before_time"], bar(1)["time"])
+        self.assertEqual(second.kwargs["params"]["limit"], 500)
+        capped = Mock(side_effect=[[bar(2), bar(1)], []])
+        qd.fetch_klines(data_api="agent", base_url=BASE, max_pages=1, request=capped)
+        self.assertEqual(capped.call_count, 1)
+
+    def test_two_full_pages_merge_ascending_without_duplicates(self):
+        base = bar(1)["time"]
+        first_page = series_bars(base, 999)
+        second_page = series_bars(base - 998 * 86400, 998) + [first_page[0]]
+        request = Mock(side_effect=[first_page, second_page])
+        result = qd.fetch_klines(data_api="agent", base_url=BASE, max_pages=2,
+                                 request=request)
+        stamps = [item["time"] for item in result]
+        self.assertEqual(len(stamps), 1997)
+        self.assertEqual(len(set(stamps)), 1997)
+        self.assertEqual(stamps, sorted(stamps))
+        self.assertEqual(request.call_count, 2)
 
 
 class OfflineInputsAndPrivacy(unittest.TestCase):

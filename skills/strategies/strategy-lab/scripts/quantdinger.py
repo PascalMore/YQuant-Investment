@@ -69,6 +69,16 @@ DEFAULT_WALL_SECONDS = 1200.0
 MAX_WALL_SECONDS = 1800.0
 MAX_DATA_PAGES = 4
 MAX_TOP_CANDIDATES = 4
+# Bars requested per page.  The Agent route serves crypto data from the
+# gate.io spot endpoint (api.gateio.ws/api/v4/spot/candlesticks).  Measured
+# against that venue, the first page (no before_time) always answers with 300
+# bars, and a follow-up page that rolls the window back with before_time hangs
+# (no response) once the requested limit reaches 600; limits of 300/400/500
+# answer normally.  The paging limit is therefore 500 so that before_time
+# pagination completes instead of stalling.  The Human route reuses the same
+# constant to keep a single source of truth; the paging mechanism itself
+# (before_time rollback plus max_pages) is unchanged.
+KLINE_PAGE_LIMIT = 500
 
 # Agent channel (V1.5).  The token comes from the environment first and only
 # falls back to the single approved key inside skills/.env.
@@ -872,7 +882,7 @@ def fetch_klines(
     if _finite(timeout) is None or timeout <= 0:
         raise LabError(EXIT_USAGE, "timeout.invalid")
     operation = "human_klines" if data_api == HUMAN else "agent_klines"
-    page_limit = 1000 if data_api == HUMAN else 2000
+    page_limit = KLINE_PAGE_LIMIT
     caller = request or call_data
     start_day = _parse_date(start, "start") if start else None
     end_day = _parse_date(end, "end") if end else None

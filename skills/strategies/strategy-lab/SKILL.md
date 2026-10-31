@@ -127,10 +127,34 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/strate
 全链路、run/sourceId 读回与 history、UI 历史关联、publish/部署/Live、Agent 交易（SCOPE_T/C）。
 Agent 网关没有这些路由，不为其扩平台、不建 SDK/MCP。
 
+### 行情取数契约（2026-10-31 实测）
+
+Agent 行情走 `/api/agent/v1/klines` → 平台 `KlineService.get_kline()` → 主源取自
+`CRYPTO_PUBLIC_DEFAULT_EXCHANGE`（**不是** `CRYPTO_PUBLIC_KLINE_PRIMARY`，后者只管
+`for_public_market` 路径）。本机出口仅 gate.io 可直连，故两个变量都设为 `gate`，
+且 `NO_PROXY` 必须含 `.gateio.ws`。
+
+**必须显式 `--max-pages 2`**（或带 `--start/--end`）。原因：
+
+- 第 1 页（无 `before_time`）：任何 limit 都返回 300 根，平台内部把单次返回封顶 300。
+- 第 2 页（带 `before_time`）：`limit ≤ 500` 时 HTTP 200（约 0.2s）；`limit ≥ 600` 时**请求挂起**
+  直到超时——平台按 `limit+1` 天换算窗口并落到跨所 fallback 链。
+- 第 3 页：PUMP 等 2025 年才上市的币，起点早于上市日 → 同样挂起。默认 `max_pages=4` 会一直
+  试到 30s HTTP 超时，报 `http.timeout` exit 5。
+
+因此 CLI 侧 `KLINE_PAGE_LIMIT = 500`（Human/Agent 共用单一常量），并用 `--max-pages 2`
+收敛翻页次数。实测覆盖：PUMPUSDT 475 根（2025-07-14 起），AAVE/JUP/SUI 各 800 根
+（2024-08-23 起），单次耗时 0.3–0.5s。gate spot 单请求窗口上限 999 天（1000 天 → HTTP 400）。
+
 ### 命令
 
 ```text
 PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/quantdinger.py agent-whoami
+
+# Agent 行情取数（必须显式 --max-pages 2，见下方「行情取数契约」）
+QUANTDINGER_BASE_URL=http://127.0.0.1:15000 NO_PROXY=127.0.0.1,localhost \
+  PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/quantdinger.py \
+  fetch-klines --data-api agent --market Crypto --symbol <SYM> --timeframe 1D --max-pages 2
 
 PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/quantdinger.py agent-backtest --strategy-dir skills/strategies/strategy-lab/strategies/<id> --start YYYY-MM-DD --end YYYY-MM-DD --capital <number> --commission <ratio> --slippage <ratio> [--wall-seconds <int>]
 ```
@@ -189,4 +213,6 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 - T5原卡 t_6346409a 的完整审查 run3369 发现一项摘要精度Minor，修正后由 reviewer run3371 限定复核，最终 full_verdict=APPROVE、open_findings=0；历史REVISE与流程偏离保留，不追认。
 - 真实交易样例已完成私有源码、回测、原生进化、最终回测及平台UI核验；研究样例已完成两次真实取数与复算。以上指接入样例，不表示用户PUMP/HYPE/JUP合约网格已实现，也不表示实盘可用或盈利保证。
 - 正式证据：[T4验证报告](../../../data/reports/2026-10-29-strategy-lab-verify/report.md)、[T5签收报告（最终第6节）](../../../data/reports/2026-10-30-strategy-lab-final-review/report.md)。报告位于Git忽略的本地data目录，不代表已提交、推送或远程备份。
+- 2026-10-31 Agent 通道 V1.5 完成：T4 真实四步验收 PASS（whoami/行情/compile/backtest，runId=25）、T5 独立审查 APPROVE（open_findings=0）、T6 Closeout PASS（[closeout.md](../../../data/reports/2026-10-30-strategy-lab-agent-token/closeout.md)）。六卡全 done，工程线收口。
+- 2026-10-31 行情取数契约实测沉淀（见上方「行情取数契约」节）：CLI 分页上限 500、`--max-pages 2` 纪律、本机 gate.io 直连 env 口径。
 - 此处仅同步已验收状态，不改变业务契约、代码、样例参数或原始证据；未执行Demo/Live、发单、部署、调度或生产配置变更。
