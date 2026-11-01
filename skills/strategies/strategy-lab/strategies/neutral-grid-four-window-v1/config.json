@@ -1,0 +1,9 @@
+{
+  "initial_margin": 1000,
+  "leverage": 10,
+  "commission": 0.0005,
+  "slippage": 0.0005,
+  "gross_limit": 2.5,
+  "max_drawdown_pct": 35,
+  "max_open_entry_orders": 4
+}

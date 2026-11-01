@@ -4,32 +4,32 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | V1.2 |
-| 状态 | T1 契约 PASS 保留；T2 已按 Pascal 离线授权分段修订至 V1.2：B-001 修复要求与最小范围不变，新增离线子阶段执行/验收；技术 pending，未实施、未研究验收 |
-| 日期/作者 | 2026-10-31，Asia/Shanghai（UTC+08:00）；YQuant Principal，t_cfccfe2c / t_1af91929 |
-| 来源 RFC | [RFC-06-002 V1.2](../../rfc/06_strategy/RFC-06-002-neutral-grid-multi-window-research.md) |
-| Design | docs/design/06_strategy/DESIGN-06-002-neutral-grid-multi-window-research.md V1.1，已由独立 T2 分段交付 |
+| 版本 | V1.5 |
+| 状态 | B-001与杠杆子集离线已验收；三件套离线ACCEPTED（Verify R3 153项OK、Review APPROVE）；本轮仅§9 G-02契约冻结，候选尚未实现/真实验收，G-02/G-03=OPEN；runtime_loaded=NOT_VERIFIED、historical_evidence=UNKNOWN、full_research_status=DEFERRED，16业务执行仍禁止 |
+| 日期/作者 | 2026-11-01，Asia/Shanghai（UTC+08:00）；YQuant Principal，t_cfccfe2c / t_1af91929 / t_9fddffed / t_1b635d49 / t_22b3495f |
+| 来源 RFC | [RFC-06-002 V1.5](../../rfc/06_strategy/RFC-06-002-neutral-grid-multi-window-research.md)，D-06唯一方案 |
+| Design | docs/design/06_strategy/DESIGN-06-002-neutral-grid-multi-window-research.md V1.4（§11.1..11.9已与RFC/SPEC V1.5对齐）；§4及§5-7均已离线验收；三层已同步，Implement由主控按§11.1派发 |
 | 权威输入 | data/tasks/active/2026-10-30-neutral-grid-research/pipeline-intake.md |
 
 ## 1. 摘要与完成语义
 
 本 SPEC 冻结四 Gate USDT 线性永续合约、四独立三日历月 15m 窗口、前置参数初始化、1000 USDT 保证金/10x 单次放大、真实权益指标、gross 风险审计及全仓组合情景。只复用原生回测，结果不可由本地撮合替代。工具 PASS、研究完整、策略合格分别判定。
 
-B-001 为已知平台单位缺口，见 §8。依据 pipeline-intake 追加决策，最小 Gate 修复授权等待已解除，技术仍 pending；T1 PASS 仅表示修复要求及最小范围冻结，不是平台或16研究 PASS。主控已读回 RFC/SPEC 并按 Pascal 离线授权解除既有 T2 门禁；T2 Design 不要求先修代码。离线子阶段（Gate swap 单位换算、缺证拒绝、消费者衔接、synthetic/offline 测试）可在运行加载与历史取证之前先行实现并验收，`offline_unit_fix` 独立 PASS 不等于 `runtime_loaded`/`historical_evidence`/`full_research_status` 通过。T3 实现→T4 真实独立验证→T5 Review 确认前不得称已修好；16业务提交须先通过 T4 相关独立前检。原 run3395 BLOCKED 为历史事实，后续真实研究可以得出 no-qualified-baseline、历史不足或证据不足，但主指标缺失不能最终 PASS，不能伪造十六次成功。
+B-001四文件离线修复已验收，见§8，不重新待实现或重跑132项。杠杆子集已通过独立Verify 79项与Review；Design §5-7三件套随后完成独立Verify R3 153项OK、Review t_40f89523 APPROVE及主控离线ACCEPTED，来源为data/reports/2026-11-01-strategy-lab-leverage-fix/trio-closeout.md。V1.4的待实现表述仅保留为历史版本事实，R1/R2失败与更正不追认成功。当前唯一delta是§9的G-02训练价格通道及提交前冻结，未实现、未真实取数。§9在该窄范围替代旧C-002候选与平台只读限制，其他原五点/16窗契约不变；不把旧签收写成新待办。16业务仍须相关独立前检及授权；主指标缺失不能最终PASS，不伪造十六次成功。
 
 ## 2. 范围与文件约束
 
-T1 仅允许新建/修改以下三个文件：
+原T1仅允许以下三个文件（历史范围，非当前授权）：
 
 - docs/rfc/06_strategy/RFC-06-002-neutral-grid-multi-window-research.md
 - docs/spec/06_strategy/SPEC-06-002-neutral-grid-multi-window-research.md
 - data/tasks/active/2026-10-30-neutral-grid-research/t1-handoff.md
 
-Agent 薄层抽取、研究实例与扩展规范文件 allowlist 仅在未来完整研究子阶段生效，当前禁止实现，作为未来未启用候选冻结；届时不能由 T3 自行扩张，CLI 扩展仍须先局部抽取、Human/trade 行为不变、不要求无关 judgment 全量迁移；研究辅助代码仅协调原生引擎、计算、审计、输出，不建引擎/SDK/常驻服务。
+已验收杠杆子集为quantdinger.py、agent_backtest.py、test_quantdinger.py及SKILL最小同步；已签收三件套为grid_research.py、test_grid_research.py及neutral-grid-four-window-v1五文件，不重新实现。当前t_22b3495f只可改本RFC、本SPEC、data/tasks/active/2026-11-01-grid-g01-g02/rfc-spec-handoff.md；不改Design/模板/源码/测试/SKILL/既有证据。下一阶段Design精确冻结§9候选的主仓/子仓文件增量、函数签名与定向测试，再由主控派发实现；不往quantdinger.py增加能力，不做无关拆分。通用evidence/恢复增强、标准表重构及16业务仍未启用。
 
-QuantDinger 子模块仅有 B-001 最小例外：T3 按 T2 Design 精确文件/函数 allowlist 修改现有 backend_api_python/app/data_sources/native_crypto.py 的必要 Gate swap 单位/元数据分支、确有消费者必要时的 app/data_sources/crypto.py 单位衔接及对应测试；其余子模块修改禁止。不得改 runtime 撮合、资金模型、生产配置、Binance/spot/其他交易所行为；不做双所整体适配、新切换、跨源对照、新 Agent 端点或扩大16目标矩阵，不建历史元数据平台/数据库迁移。缓存兼容、缺元数据处理与回归细节已由 T2 Design 冻结：缺证/未知在解析与消费两侧 fail closed，返回成功空列表或跨所 fallback 均为失败；缓存命中限制按 G-01 保持未闭合，属线上/完整研究前置，不阻塞合法离线实现/Verify/Review。既有 proxy dirty 按 b001-submodule-baseline.json 排除归属，不修改/还原。
+QuantDinger子模块本卡只读。B-001四文件既有OHLCV逻辑和测试仍受保护；未来§9只允许训练OHLC独立入口及必要透传、既有Agent klines/OpenAPI/alignment同步，精确文件由Design列出，不以§9泛授权改旧解析器。runtime撮合、资金、生产配置、Binance/spot/其他交易所、缓存写删均不改；不做双所适配、新端点族、历史metadata平台/数据库迁移。G-01由主控并行限定只读核验，结果未读到不声称PASS；既有回测历史volume缺证仍failclosed，不修改/还原共享dirty。
 
-数据库、代理、白名单、账户、生产配置、部署、绑定、发布、真实或 Demo 交易、长期调度仍禁止；禁止 commit/push、reset/stash/clean、新卡/新图、依赖安装/升级、新环境、覆盖旧 evidence、浏览器/JWT/其他凭据。仅使用 Agent 已批准 operation；unsupported 不回落 Human。若真实 E2E 需运行中进程加载源码变更，T2 列现有 unit/最小重启影响交主控判断，不自行重启/部署/另起实例，不把离线 PASS 当实际生效。任务授权不豁免 headless 安全策略，拒绝后不换解释器或包装绕过。
+数据库、代理、白名单、账户、生产配置、部署、绑定、发布、真实或 Demo 交易、长期调度仍禁止；禁止 commit/push、reset/stash/clean、依赖安装/升级、新环境、覆盖旧 evidence、浏览器/JWT/其他凭据。本worker不新建卡/新图，客户端后续由主控读回后派发。仅使用 Agent 已批准 operation；unsupported 不回落 Human；本次离线子阶段不发任何业务请求。若未来真实 E2E 需运行中进程加载源码变更，Design §9 的影响说明交主控判断，不自行重启/部署/另起实例，不把离线 PASS 当实际生效。任务授权不豁免 headless 安全策略，拒绝后不换解释器或包装绕过。
 
 ## 3. 功能规格
 
@@ -67,7 +67,7 @@ API runner 会将 endDate 扩为 23:59:59；wire endDate 必须为半开 end 前
 | SUIUSDT-W3 | SUIUSDT | W3 |
 | SUIUSDT-W4 | SUIUSDT | W4 |
 
-coverage 必须包含预期数/实际数、首末时间、唯一时间戳数、重复/缺失/错位/未收盘数量与市场身份。不能只凭首末范围或平台 tolerance 推断完整。上市前/无法取全窗：N/A+history_insufficient，保留该目标行，不发截短窗口；其他缺口：insufficient-evidence，不前向填价、不填零。计划冻结后运行顺序按合约列表、每合约 W1→W4；真实失败按 §3.8 停止，剩余行标 not_submitted_due_to_stop，不造 jobId。
+coverage 必须包含预期数/实际数、首末时间、唯一时间戳数、重复/缺失/错位/未收盘数量与市场身份。不能只凭首末范围或平台 tolerance 推断完整。上市前/无法取全窗：N/A+history_insufficient，保留该目标行，不发截短窗口；其他缺口：insufficient-evidence，不前向填价、不填零。计划冻结后运行顺序按合约列表、每合约 W1→W4；真实失败按 §3.8 停止，剩余行标 not_submitted_due_to_stop，不造 jobId。工具接口上，目标矩阵由 grid_research.build_cells 显式接受合约清单/窗口结构参数生成（缺省值即上表冻结矩阵与锚点 2026-10-31T00:00:00Z），未来换合约只传参、不改函数体；本轮语义、去重与日期规则不变。
 
 ### 3.2 F-002：每窗初始化与旧算法解释
 
@@ -77,7 +77,7 @@ L=min(low)，U=max(high)，要求 0<L<U。对整数 N=3..200，g_pct=100*((U/L)^
 
 旧 derive_grid_params.py 常数评分成本=0.14%，输入明确为 gate spot；新评分 C=100*2*(0.0005+0.0005)=0.20%，是可解释的线性往返成本近似，不代表原生每笔限价都会加滑点。记录 old_cost_assumption/new_score_cost/actual_fill_rule；固定正成本下选 N 的排序不因单纯成本比例变化而变成收益优化。不得把此基准称已做收益优化或参数搜索。
 
-每窗参数来源记录训练产品、日线区间、数量、最后收盘时刻、L/U/g/N、参数内容摘要、生成器源码路径/版本/sha256、提交源码sha256；冻结后不得按结果改参。动态锚定本轮关闭，原生中性角色划分/格生命周期保持；无额外优化或进化。参数文件和策略代码不得本地 import 执行；由原生沙箱 compile/backtest 验证。
+每窗参数来源记录训练产品、日线区间、数量、最后收盘时刻、L/U/g/N、参数内容摘要、生成器源码路径/版本/sha256、提交源码sha256；冻结后不得按结果改参。实际检索时刻与按收盘边界定义的可用时刻分列，精确契约见§9。动态锚定本轮关闭，原生中性角色划分/格生命周期保持；无额外优化或进化。参数文件和策略代码不得本地import执行；仅复用已验收纯函数/生成器，不在本卡发compile/backtest。
 
 ### 3.3 F-003：唯一杠杆传递
 
@@ -132,7 +132,7 @@ H(p)=E_s(p)-MM_s(p)-F_close(p)
 
 标准 volume 统一为基础币。direct线性合约在有效且适用的乘数m下，volume=base_volume=raw_v_contracts*m；原始张数、乘数、单位、产品和来源/有效期/检索时间保留。报价币sum不能用close*base_volume硬充真实值，只可另列近似。参与率按同一bar基础币sum(abs(fill_qty))/base_volume计算，同bar多单合计；同时保留逐订单率与引擎原始cap。base_volume缺失/非正、乘数未知或历史有效性未知为UNKNOWN/缺证，不补零、不默认乘数1，不送入把volume<=0视为无限流动性的撮合路径。不得硬用当前乘数回填历史；旧PUMP source=historical_fallback_no_snapshot、contract_size=1.0 仅为fallback，不是有效历史乘数证据。最小缺证阻断及缓存兼容方式由T2冻结，不改runtime规则、不新建持久化体系。
 
-原生 _liquidity_cap=0.1*volume按订单使用，没有全bar共享10%预算；当前native Gate swap直接把v传入。报告必须明确模拟cap、量纲一致性、partial/filled/deferred/rejected、statusReason、partial事件率的分子/分母和唯一订单partial比例分子/分母；压缩账本缺全量时比例N/A，不能对抽样算全量比例。limit_not_reached的coalesced occurrenceCount不是成交数。
+原生 _liquidity_cap=0.1*volume按订单使用，没有全bar共享10%预算；原T1现场native Gate swap直接把v传入（现离线修复状态见§8，不追改旧证据）。报告必须明确模拟cap、量纲一致性、partial/filled/deferred/rejected、statusReason、partial事件率的分子/分母和唯一订单partial比例分子/分母；压缩账本缺全量时比例N/A，不能对抽样算全量比例。limit_not_reached的coalesced occurrenceCount不是成交数。
 
 T4需取得Gate同产品同UTC15m官方公开历史bar与平台原始输入逐项对齐；至少逐窗固定首/中/末已收盘bar和出现partial的bar（若无partial如实记录），记录完整请求身份、字段映射、原始数据摘要/来源、数值差异、数量换算。抽样核对不证明全窗量纲与完整性，后者仍需源码链与coverage。若Agent业务通道没有同产品输出能力而需要新增平台支持，STOP上报，不私自直连官方行情API绕过授权。公开文档取证不等于已取得历史业务数据。
 
@@ -198,7 +198,16 @@ T4是唯一真实目标job提交角色；每合约最多4个目标作业，外�
 
 ## 6. 测试要求
 
-T1文档delta核验与run3395既有证据保留。本节保留原完整研究测试要求，但当前离线子阶段仅启用成交量换算/拒绝/消费者及非Gate回归，精确范围见Design §8的B001-Native、B001-Consumer、NonGate组及其第3条命令；日期、初始化、杠杆、指标、风险、强平、Agent恢复与CLI测试均属未来完整研究候选，本次不实施或重跑。T3离线测试、T4独立复验必须实际执行，不编造日志；`offline_unit_fix` 可独立离线验收，`runtime_loaded`、`historical_evidence`、`full_research_status` 不因离线文件齐全而通过。
+T1文档delta、run3395及B-001 132项/补审证据保留，本轮不重跑B-001。杠杆79项与三件套集合已独立执行并签收；下列保留为既有测试契约及完整研究候选，不是本卡新运行要求。G-02后续独立测试新增项仅见§9.7，本卡tests_executed=0，不以额外环境/测试探测补文档门禁：
+
+- 保留既有70项 unittest，不删除/放宽断言；新增默认false/1及1000/true/10从builder→Agent实际流程→真实parser/handler→请求体的离线贯通，不以仅helper或mock掉整个agent_backtest替代。
+- leverage_enabled严格bool，leverage仅非bool的int/float有限值，启用时1..100（允许小数，非整数专限），关闭时仅1；非法类型/NaN/±Inf/越界/关闭非1明确拒绝且无请求，不clamp。请求>1必须在compile后、backtest POST前取得manifest.leverageAllowed=true；精确maxLeverage语义见Design，不自行新增策略上限。
+- 默认调用/Human与trade、幂等/401/403/409/计费与预算/轮询/返回投影语义保持；动态文件import、cwd独立、导入无业务I/O、qd.agent_submit/agent_call/poll_job/_http_send等patch继续生效。
+- 全部synthetic/offline；无真实凭据、网络、策略import、业务请求或依赖安装。开发自检与Tester独立复验实际运行并记录命令、cwd、解释器版本、原始stdout/stderr与原生exit，不能把未执行命令写为通过。
+- 三件套新增：tests/test_grid_research.py 覆盖 build_cells 参数化/16去重/直接减月/月末截断/闰年、wire endDate前一天、365短历史、几何与指标算例、Sharpe异常矩阵、强平状态机、审计连续性/破产跳回调/缺seq、载体格式synthetic样例（精确断言以 Design §8 三件套小节为准）；策略实例五文件生成器测试含GRID_*_V1前缀、风险容量检查与公开API限定离线断言，不本地import执行策略。
+- 三件套纪律：stdlib unittest、synthetic/offline、项目根 .venv、无凭据/网络/业务请求；既有79项（含70旧）不得删改放宽；全量 discover 冻结命令自动纳入新测试文件。
+
+冻结命令（项目根）：`PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m unittest discover -s skills/strategies/strategy-lab/tests -p 'test_*.py' -v`。解释器已核实Python 3.12.13，不重复探测环境。本Principal只写文档不运行；后续客户端通过只代表离线客户端能力，不改变四项B-001/研究状态。以下为原完整研究测试，除上述当前子集外不构成本次门禁：
 
 - 日期：同锚点月末截断、闰年、闭开相邻不重叠、UTC未收盘、wire含日终转换、16去重、上市不足/缺口不缩窗。
 - 初始化：截止恰等start的已收盘日线可用，窗口内日线排除；2..365短样本、非法L/U、无可行N、N+1格线、0.14/0.20解释与固定成本排序。
@@ -218,11 +227,107 @@ T4先核对三文档、已实现B-001修复/正确既有路径的真实独立前
 
 ## 8. 阻塞与待核验
 
-B-001（授权已定、技术pending，来源 RFC §4/§5 与pipeline-intake追加决策）：当前native Gate swap `v→volume→0.1*volume` 未做合约乘数转换，却限制基础币订单数量。PUMP历史实际乘数数值未在T1取得，不能凭字段名或historical_fallback_no_snapshot的contract_size=1.0推断有效乘数。标准输入须为基础币并保留原始张/乘数/来源证据；历史适用性未知显式缺证，错误匹配PNL不靠报告修复。最小修复按§2与§3.7纳入原T3，优先复用正确既有路径；T2冻结精确allowlist、元数据复用/缓存兼容/缺证行为与回归，不建平台/迁移，不改引擎。T1契约PASS与主控读回已完成，T2已按Pascal离线授权分段修订；离线子阶段不因G-01/02/03阻塞，技术待T3→T4→T5闭合，T4相关独立前检通过前不提交16业务，不重复等待同一已给授权。
+B-001（offline_unit_fix=PASS；runtime_loaded=NOT_VERIFIED、historical_evidence=UNKNOWN）：四文件离线修复与132项记录复用不重做，来源仍为data/reports/2026-10-31-gate-volume-offline-fix/review.md及补审。真实Gate swap共用历史volume校验；不只是PUMP，不能拿当前metadata或fallback的1.0证明任意四合约历史适用性。G-02训练OHLC不产生合格基础币volume、不关闭G-03；相关前检及授权前不提交16业务，full_research_status=DEFERRED。
 
-C-002（能力核验，不自行扩权）：Agent klines当前不透传venue/product；T2须先证明可经现有原生多频历史/日志拿到同产品前置日线与15m审计，且不使用未来数据。若无可用既有通道，列最小产品/venue/source透传缺口，再报主控，不改平台/不偷走Human或直连官方业务行情。
+C-002（静态缺口已定位，候选未实现）：Agent klines当前无venue/product回执，作业内warmup不能证明提交前冻结；V1.5只选§9训练OHLC分支，替代旧候选顺序。无Human或研究端直连官方业务行情，无新增平台/端点族。
 
 C-003（真实数据待核验）：历史完整性、上市边界、官方同窗乘数/档位、日志连续性、真实指标均未实测。C-002/C-003不自动授权新接口或历史数据策略变更，具体必要缺口另报主控。不是T1已经完成的结果，也不能将UNKNOWN自动升PASS。OHLC/tick不可观测与funding not_modeled作为明确模型限制保留，不能向用户保证真实交易安全。
+
+## 9. G-02训练价格通道增量契约（V1.5，尚未实现）
+
+### 9.1 唯一范围与能力隔离
+
+决策源RFC D-06；本主题intake.md、data/reports/2026-11-01-grid-g01-g02-precheck/report.md、t_22b3495f comment3284与trio-closeout.md为事实来源。已有静态回源表明：markets.py:76-125有scope R/市场/标的校验但无产品透传；native_crypto.py:618-626对所有Gate swap调用OHLCV解析；:652-681仅当前metadata，历史有效性校验不认可真实当前快照；readiness不是提交前参数冻结。旧三件套已离线验收，不重新研发算法。
+
+仅扩展既有GET /api/agent/v1/klines，新增显式训练OHLC模式。后端复用现有Native公共请求设施及Gate futures/usdt/candlesticks，不引入HTTP栈/依赖、Human路由、研究端直连、文件输入或作业内初始化。新增价格入口只提取t/o/h/l/c，不调用_parse_gate_swap_ohlcv，不生成OHLCV数组，不送入回测DataFrame/缓存或撮合。默认OHLCV路径、原volume验证、标准单位、所有非Gate行为保持。训练分支不读写现有持久/共享kline缓存，不新增缓存平台；源端当前metadata内存复用可留痕，但不当历史快照。
+
+价格响应声明volume_status=not_provided与backtest_eligible=false，不含标准volume/base_volume/有效乘数，绝不以0或1占位。raw_rows中v/sum如有，仅为未认证原始字段，不能用于撮合；synthetic始终false。真实回测Gate volume仍需历史有效证据，缺证继续gate.swapVolumeHistoricalUnverified等既有错误；不开放synthetic接缝或关闭校验。G-03=OPEN。
+
+### 9.2 HTTP输入、权限与兼容
+
+以下字段是拟新增正式契约，不宣称当前API已经支持：
+
+| 字段 | training_ohlc约束 |
+|---|---|
+| data_mode | 新增枚举ohlcv/training_ohlc；省略等于ohlcv；未知值400 |
+| market / symbol | market必须Crypto；symbol使用现有Agent标的授权表示，不用native别名绕权限；四目标按§3.1 |
+| exchange_id / market_type | 新增；训练模式两者必填且恰为gate/swap；不走默认所/产品，不接受冲突后再覆盖 |
+| timeframe | 既有参数，训练仅接受1D；内部映射1d；其他值400，不默改 |
+| before_time | 既有Unix秒，训练必填，严格正整数字符串、UTC午夜、不得在服务端当前时刻之后；值即该窗start；beforeTime兼容别名仅单独出现时可用，两者同时出现训练模式400 |
+| limit | 训练省略为365，显式值严格整数2..365，非法/越界400，不沿用clip_int静默夹取；查询范围为截止前limit个UTC自然日，不扩大范围凑满样本 |
+
+保留agent_required(SCOPE_R)、market_allowed、instrument_allowed及既有tenant/token隔离；鉴权/市场和标的权限拒绝在任何provider调用之前。按授权symbol解析后，对解析所得canonical/native映射再次检查一致性，不扩大权限集合。新模式只接受实际Gate metadata确认的id、USDT结算、type=direct并核对合约映射/报价USDT；缺字段或不符拒绝，不从请求回显推定实际身份。
+
+旧调用未给新增字段时：默认OHLCV响应包络、默认参数、游标、原错误/行为均不变，不能把旧默认Gate spot重标为swap。ohlcv模式携带新增exchange_id/market_type则400（本增量不泛化OHLCV的身份路由）；训练模式不支持其他venue/product，400且不回退。OpenAPI的新增参数、条件必填/上下限、两种响应与错误及scope R必须同改，test_ai_agent_contract_alignment.py与必要路由契约测试覆盖；不新增operation/SDK/MCP能力。
+
+### 9.3 来源、时间与响应（新模式）
+
+保留既有包络code/message/data；成功读取返回HTTP200/code=0，data至少包含下表。数据合格性由data.status决定，HTTP200不代表G-02通过。
+
+| 字段 | 内容与实际来源 |
+|---|---|
+| schema_version / data_mode / status / reason | grid_training_ohlc_v1 / training_ohlc / ok或insufficient_evidence；原因显式，不能成功空列表 |
+| market / symbol / timeframe / count / klines | 兼容外层字段；klines为结构化OHLC对象，不是六列OHLCV；count严格等于规范化条数 |
+| identity | exchange_id=gate、market_type=swap、settle=USDT、contract_type=direct、canonical_symbol、native_contract；请求路由+实际metadata的id/settle/quote/info.type与合约映射交叉验证后产生 |
+| identity_evidence | 当前metadata原始业务字段及摘要、metadata检索时刻；metadata_scope=current_snapshot、historical_identity_validity=UNKNOWN；不杜撰生效区间，不取quanto_multiplier充当历史资格 |
+| source | provider=native_gate、实际无凭据公共来源host/path、实际contract/interval/from/to查询、retrieved_at_utc、raw_rows及raw_rows_sha256；来源路径为现有Gate /api/v4/futures/usdt/candlesticks，不是客户端填的venue |
+| klines每行 | open_time_utc来自原始t秒；close_time_utc=open_time+一个UTC自然日；open/high/low/close来自o/h/l/c，严格有限正数且low<=open,close<=high；identity引用实际验证身份 |
+| 时间留证 | 每行available_at_utc=close_time_utc，availability_basis=bar_close_boundary；observed_at_utc=实际取回时刻，与retrieved_at分列；不声称已有历史发布/归档快照 |
+| coverage | requested_start/cutoff、raw/actual/unique数量、首末open/close、重复/冲突/缺口/错位/剔除未收盘数、short_training_history、listing_boundary证据或UNKNOWN |
+| 能力限制 | synthetic=false、volume_status=not_provided、backtest_eligible=false、historical_volume_validity=UNKNOWN；价格可用不提升后两项 |
+
+raw_rows保留provider返回的原始业务行（t/o/h/l/c/v/sum存在则原值原类型保留，不补字段），不含headers/token/账户材料；不宣称为HTTP线缆字节。身份metadata同样仅保留上述业务白名单。摘要统一SHA256：UTF-8 JSON，sort_keys=true、ensure_ascii=false、separators=(',', ':')、allow_nan=false；对象键排序而数组原顺序保留，raw_rows不得先排序/去重/转float后冒称原始。摘要对精确保存的该对象计算；另对规范化OHLC对象数组计算normalized_sha256。客户端重算并校验两个摘要和身份metadata摘要，不把服务端单个布尔provenance_ok当证明。
+
+日线可用时刻是冻结的“收盘边界可用”研究约定，不是交易所历史发布延迟实测；当前retrieved_at可能晚于窗口start，不伪造过去下载时间。若要求历史发布时刻/历史身份变更证据而本来源不具备，则对应资格UNKNOWN并披露；不发明有效期。本轮按原§3.2收盘边界约定做无前视价格初始化，不扩建历史归档。G-02所需身份资格是实际Gate futures/usdt路径、native_contract与当前direct/USDT映射的一致性，不宣称取得全历史产品属性有效期；若发现更名/产品变更等具体冲突则影响训练资格、必须停止。历史身份有效期/发布延迟/volume资格的显式UNKNOWN是本次不解决的限制，不单独作为训练价格资格失败；不得据此提升这些限制为PASS。
+
+### 9.4 连续性、短历史与错误
+
+单窗最多一个有界日线请求覆盖[cutoff-limit日,cutoff)，provider from/to据此生成（秒边界，to不越cutoff前一秒）；不取窗口内日线，不翻页到更早价格凑数。保留原始返回顺序，规范化可按open升序；禁止静默去重掩盖重复或冲突。边界外/未收盘行只在明确时间裁剪时排除并记计数，不参与极值；窗口内数据不得进入算法。训练末根close必须恰等cutoff，相邻open相差一个UTC自然日，至少2根、最多limit根。low/high单根可相等，但总体L<U，否则算法拒绝。
+
+若limit=365、返回365根连续且接到cutoff，可形成完整训练段；2..364根仅在实际同产品上市边界证据证明请求范围前部为上市前、上市后无缺口时，允许short_training_history=true并披露风险。证据须记录实际来源、原始字段/值、检索时刻与摘要，不假定当前metadata一定提供上市时间，不杜撰字段或读路径。缺上市证据的短返回、空返回、尾部缺日/中间缺口、重复/冲突、价格非法、时区错位均insufficient_evidence，不把更早样本补入或缩小目标窗。不到两根有明确上市证据则history_insufficient/N/A，否则UNKNOWN。后续固定矩阵均请求365，显式较小limit仅供接口契约验证，不替代完整研究训练。
+
+| 行为 | HTTP / 结果 |
+|---|---|
+| 非法输入/不支持模式组合 | 400/code=400，message=training.invalidRequest，retriable=false；provider调用0 |
+| 未认证/缺scope/市场或标的不许 | 复用既有401/403契约；provider调用0，绝不换token/通道 |
+| provider网络/结构错误、身份缺失或冲突 | 502/code=502，message=training.sourceUnavailable或training.identityUnverified，data=null、retriable=false；可保留无秘密details.reason，不输出原始异常/凭据；原始NaN/Inf导致JSON不能安全留证也属结构错误 |
+| 有原始响应但连续性/数量/上市证明不足 | 200/code=0，data.status=insufficient_evidence，reason明确且保留上述来源/coverage；调用方结论UNKNOWN/N/A，不生成可提交参数 |
+| 真实价格合格、但几何无可行N | 数据status=ok；本地既有derive_geometry返回no-feasible-geometry，保留该目标与原因，不改阈值重试 |
+
+5xx/超时、缺字段、摘要不符、未知影响结论均停止后续真实取数并保存已有证据；接口retriable标志不授予自动重试。已知上市不足可按原安全隔离记N/A后继续，不能把任意缺证当上市不足。默认OHLCV继续其既有错误语义，训练错误不取代历史volume错误。
+
+### 9.5 提交前冻结：复用已验收纯函数
+
+新增薄适配只负责Agent读取/验证/留证，将验证通过的日线映射为derive_geometry既有输入；provenance_ok仅在原始摘要、实际身份、coverage和close<=start全部核验后由适配层赋值，不接受用户布尔值代替证据。不改变build_cells、derive_geometry、生成器与指标算法既有API/断言，不重新优化参数；独立小模块承载，不扩展quantdinger.py。
+
+按§3.1固定四合约四窗，一次性准备全部16行冻结清单。每行包括cell_id/完整身份/window/start/cutoff、原始/规范化/metadata摘要与证据相对路径、数量/首末/available_at/observed_at及时间约定、上市/coverage状态、几何全部L/U/g/N及成本约定、生成器与纯函数源码摘要、完整参数对象与params_sha256、最终生成但未执行的策略源码及code_sha256、status/reason。可执行行的params/code必须先写入本地，再计算冻结清单摘要；不只存文件名或mtime。所有摘要按§9.3规范（源码按原文件字节），持久化前必须排除秘密。
+
+清单包含ready/no-feasible-geometry/history_insufficient/insufficient_evidence，不漏目标；N/A原因有证据，不补默认参数。整个清单在任何未来compile/backtest提交之前冻结；后续提交再次按内容校验摘要，变更则STOP，不能事后补冻结。此卡不提交，也不新增去重恢复平台。载体位于data/reports/2026-11-01-grid-g01-g02/及evidence/，由Design定精确文件名；旧证据只读不覆盖。存在UNKNOWN时允许交付已取得证据但G-02保持OPEN；无可行几何或确证上市不足为真实已解决的N/A而非伪造成功实验。
+
+### 9.6 授权、预算与真实验收终点
+
+三层同步后的实现任务只许可Design精确文件增量及无网络/无凭据的离线自检；本RFC/SPEC任务不授予worker任何源码修改、测试、应用import、网络、凭据、数据库、服务加载权限。run3424额外源码/Git基线采集被安全拒绝（tool_calls_made=0），按Pascal后续恢复决定正式取消，记OMITTED_BY_AUTHORIZATION而非PASS；不在此卡或Design以terminal/execute_code/临时runner重采、不改审批配置。
+
+真实G-02验收必须通过正在运行且已确认加载候选的Agent API读取，不可用新起本地进程/mock替代。主控另行取得具体授权：限定现有Agent目标地址、GET whoami/klines操作、现有CLI内部必要Agent token消费方式、四合约四截止、本地无秘密证据保存与下列预算。旧§3.8凭据位置只描述既有路径，不给本worker读取权；G-01仅Redis例外不扩展到Agent。若需quantdinger-api.service等运行对象重载/重启，先列实际对象、影响及验证方式交主控具体确认，不启动、部署或另起实例。不得顺带加载celery/evaluator、写删缓存或进数据库。
+
+建议并冻结为后续具体授权的最大只读预算：整个G-02验收而非每重启/每阶段分别计，whoami至多1次，klines每cell至多1次且总计至多16次；后端实际对Gate的公共请求（含身份metadata加载、日线、任何分页/重试）总计<=50次，墙钟<=1800秒。无自动重试/替换标的/绕通道；不足以完成则停止报缺口，由主控决定，不拆组刷新预算。明确job/compile/backtest/Evolution=0，交易/数据库/缓存写删/长期调度=0。provider内部隐式重试也计预算，若无法约束则不得开始真实验收。401/403/402、charged>0或billing.status=charged、安全拒绝、预算/超时、身份/摘要矛盾、UNKNOWN影响结论立即STOP；billing absent不等于免费。
+
+G-02只有在独立Verify/Review确认实现与默认路径回归、主控确认必要运行加载和真实只读授权、真实16目标取数/分类及参数内容冻结证据齐备且无影响训练资格的UNKNOWN时方可关闭；§9.3明确排除的历史有效期/发布延迟/volume资格仍如实UNKNOWN。有确证N/A须列证据，不能声称16成功。仅离线mock PASS或参数文件存在不能关闭。G-01结果独立、G-03仍OPEN、historical_evidence=UNKNOWN、full_research=DEFERRED；本阶段不解除原T6或16作业禁止。
+
+### 9.7 可验证验收矩阵（后续实现/独立Verify使用，本卡不执行）
+
+| 编号 | 成功/失败断言与证据 |
+|---|---|
+| G02-01 | 默认无新增参数的请求/包络/错误兼容；新模式scope R、市场与标的拒绝、native别名冲突均在provider前停止；非法组合/小数limit/越界/双游标/非午夜拒绝，调用数0 |
+| G02-02 | 实际gate/swap/USDT/direct metadata与原生contract一致才回执；缺失/spot/跨所/身份矛盾502，不能回显请求冒充实际来源；raw与metadata摘要客户端重算一致，篡改一字段拒绝 |
+| G02-03 | synthetic离线365日/两日短上市证据可用；close恰等start可入、未收盘排除留计数；末根落后一天、缺日、重复/冲突、错位、NaN/Inf/非正价、短返回无上市证据、0/1根不得产ready参数 |
+| G02-04 | 相同原始Gate fixture可取训练OHLC而原OHLCV仍因历史volume缺证拒绝；四合约均覆盖，不只PUMP；无volume填0/乘数1/synthetic伪标，无缓存/回测frame接入；非Gate/spot原行为回归 |
+| G02-05 | 既有build_cells与derive_geometry被真实调用而非重新实现；16行无漏、参数/代码/原始/规范化摘要冻结，之后改任一内容则拒绝；no-feasible与上市N/A保留原因，provenance布尔无证输入拒绝 |
+| G02-06 | OpenAPI条件参数/两模式响应/权限/错误与路由一致，alignment/定向单元测试通过；既有B-001/杠杆/三件套断言不删改放宽。具体命令与文件由Design冻结，旧153项证据不冒充新增测试 |
+| G02-07 | 经另行授权的运行中Agent实际返回同产品原始行与来源时间/hash，每窗最多365连续日线或确证N/A；真实参数/代码内容先冻结、业务POST计数0；未加载、缺token授权、数据不足或运行不明则G-02 OPEN，不伪造PASS |
+| G02-08 | 预算跨阶段累计、错误/计费/身份未知即停，未执行目标留原因；日志/本地证据不含headers/token；G-01未被假定PASS，G-03未被价格成功关闭，无重启/缓存/数据库/交易越权 |
+
+本卡完成标准仅两独立文档及交接齐备、唯一方案/接口/权限/数值/失败语义无开放问题，可交接既有Design子卡；尚未实现与真实授权/取数缺口是已披露的后续工作，不误当本卡文档阻塞。后续Design须保留已验收三件套状态，列精确主仓/子仓文件及调用签名、原路径保护与最小离线测试、实际加载影响和上述真实验收清单；不得重选业务方案或扩大权限。
 
 ## 版本记录
 
@@ -231,3 +336,6 @@ C-003（真实数据待核验）：历史完整性、上市边界、官方同窗
 | V1.0 | 2026-10-31 | 五点可计算契约/验收与安全边界冻结；B-001阻塞，未开始Design/实现/业务 |
 | V1.1 | 2026-10-31 | 续接run3395：按Intake最小Gate授权同步状态/范围/单位/禁止条款/验收；T1契约PASS可交接T2，技术pending，原五点不降级；无实现/业务 |
 | V1.2 | 2026-10-31 | 续接run3399：按Pascal离线授权冻结B-001离线修复子阶段执行/验收，四状态分列，薄层/研究转未来候选；原五点与16窗口标准保留。主控读回同步校正来源版本、Design已交付状态及当前B001/NonGate测试与未来测试边界；无实现/业务提交 |
+| V1.3 | 2026-11-01 | t_9fddffed：指向RFC V1.3 / Design V1.2；B-001离线已验收并保护；仅启用三函数局部抽取/可选杠杆贯通与小集合离线验收，既有70项保留；完整研究与其他候选不启用，本卡无源码/测试执行/业务提交 |
+| V1.4 | 2026-11-01 | t_1b635d49：按Pascal授权窄启用§5-7三件套待实现契约（grid_research.py参数化纯函数库、指标/强平/汇总计算、策略实例neutral-grid-four-window-v1五文件含GRID_AUDIT_V1审计回调）；§1状态、§2 allowlist、§3.1工具接口注、§6三件套测试集合同步；杠杆子集标记已验收（79/79 OK、Review APPROVE）；指向RFC V1.4/Design V1.3；16业务执行、服务加载/缓存/凭据/通用evidence/稳定键恢复仍禁止，本卡无源码/测试执行/业务提交 |
+| V1.5 | 2026-11-01 | t_22b3495f：纠正三件套为已离线ACCEPTED，独立§9冻结G-02唯一训练OHLC模式、scope R/身份/兼容、来源/收盘可用时刻/原始与规范化摘要、连续短历史与UNKNOWN、16参数预冻结、预算与真实授权验收；Design已由子卡t_1f4c8c58同步至V1.4；本卡仅文档交接、测试/网络/业务执行0，取消的额外基线采集OMITTED_BY_AUTHORIZATION，G-02/G-03未闭合 |

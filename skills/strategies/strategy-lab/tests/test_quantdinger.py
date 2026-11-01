@@ -1073,5 +1073,242 @@ class OfflinePolling(unittest.TestCase):
             http.assert_called_once()
 
 
+class OfflineAgentLeverage(unittest.TestCase):
+    """L-01..06 synthetic client checks, not runtime or research evidence."""
+
+    def setUp(self):
+        self.enterContext(patch.dict(qd.os.environ, {}, clear=True))
+        self.http = self.enterContext(patch.object(
+            qd, "_http_send", side_effect=AssertionError("unfaked HTTP boundary")))
+        self.enterContext(patch.object(
+            urllib.request, "urlopen", side_effect=AssertionError("real network forbidden")))
+        self.enterContext(patch.object(qd, "resolve_agent_token", return_value="offline-token"))
+        self.inputs = dict(code=CODE, params=PARAMS, start="2024-01-01", end="2024-06-30",
+                           capital=1000, commission=0.0005, slippage=0.0005)
+        self.manifest = dict(MANIFEST, leverageAllowed=True, maxLeverage=100)
+        self.job = {"status": "succeeded", "result": {
+            "runId": 42, "totalReturn": 1.5, "equityCurve": [1, 2, 3]}}
+        self.submitted = []
+
+    def fake_submit(self, operation, body, **kwargs):
+        self.submitted.append((operation, copy.deepcopy(body)))
+        if operation == "agent_compile":
+            return {"manifest": self.manifest}, False
+        self.assertEqual(operation, "agent_backtest_run")
+        return {"job_id": "offline-job", "kind": "backtest"}, True
+
+    def run_flow(self, **overrides):
+        inputs = dict(self.inputs, **overrides)
+        with patch.object(qd, "agent_submit", side_effect=self.fake_submit), \
+             patch.object(qd, "poll_job", return_value=self.job) as poll:
+            payload = qd.agent_backtest(**inputs, base_url=BASE, token="offline-token",
+                                      budget=qd.Budget())
+        self.assertEqual([item[0] for item in self.submitted],
+                         ["agent_compile", "agent_backtest_run"])
+        poll.assert_called_once()
+        self.assertEqual(poll.call_args.args, ("agent_job", "offline-job"))
+        self.assertTrue(payload["idempotentReplay"])
+        self.assertEqual(payload["metrics"], {"totalReturn": 1.5})
+        self.assertEqual(payload["context"], {})  # Do not manufacture an engine receipt.
+        self.assertEqual(payload["sampledArrays"], {"equityCurve": 3})
+        self.assertEqual(payload["billingStatus"], "absent")
+        return self.submitted[-1][1]
+
+    def cli_case(self):
+        folder = self.enterContext(tempfile.TemporaryDirectory())
+        root = Path(folder) / "strategies"
+        case = root / "offline-case"
+        case.mkdir(parents=True)
+        (case / "spec.md").write_text("synthetic/offline", encoding="utf-8")
+        (case / "strategy.py").write_text(CODE, encoding="utf-8")
+        (case / "config.json").write_text(json.dumps(PARAMS), encoding="utf-8")
+        resolver = qd.resolve_strategy_dir
+        self.enterContext(patch.object(
+            qd, "resolve_strategy_dir", side_effect=lambda raw: resolver(raw, root)))
+        self.enterContext(patch.dict(qd.os.environ, {"QUANTDINGER_BASE_URL": BASE}, clear=True))
+        argv = ["agent-backtest", "--strategy-dir", str(case), "--start", "2024-01-01",
+                "--end", "2024-06-30", "--capital", "1000", "--commission", "0.0005",
+                "--slippage", "0.0005"]
+        return case, argv
+
+    def assert_body(self, body, enabled, leverage):
+        expected = dict(code=CODE, startDate="2024-01-01", endDate="2024-06-30",
+                        initialCapital=1000.0, commission=0.0005, slippage=0.0005,
+                        params=PARAMS, leverageEnabled=enabled, leverage=leverage)
+        self.assertEqual(body, expected)
+        self.assertIs(body["leverageEnabled"], enabled)
+        self.assertEqual(len(body), 9)
+
+    def test_default_body_and_actual_flow_keep_old_manifest_compatible(self):
+        self.manifest = dict(MANIFEST)  # No new leverage fields required for defaults.
+        self.assert_body(qd.build_agent_backtest_body(**self.inputs), False, 1)
+        self.assert_body(self.run_flow(), False, 1)
+        self.http.assert_not_called()
+
+    def test_explicit_builder_and_actual_flow_preserve_1000_true_10(self):
+        self.assertIn("leverage", inspect.signature(qd.agent_backtest).parameters)
+        self.assert_body(qd.build_agent_backtest_body(
+            **self.inputs, leverage_enabled=True, leverage=10), True, 10)
+        self.assert_body(self.run_flow(leverage_enabled=True, leverage=10), True, 10)
+        self.assertEqual(PARAMS, {"ma_period": 50, "target_pct": 0.95})
+        self.http.assert_not_called()
+
+    def test_valid_fractional_and_platform_boundaries_and_enabled_one(self):
+        self.assertIn("leverage", inspect.signature(qd.agent_backtest).parameters)
+        for enabled, leverage in ((False, 1.0), (True, 1), (True, 1.5), (True, 100)):
+            with self.subTest(enabled=enabled, leverage=leverage):
+                self.submitted.clear()
+                self.manifest = dict(MANIFEST) if leverage == 1 else dict(
+                    MANIFEST, leverageAllowed=True, maxLeverage=100)
+                self.assert_body(qd.build_agent_backtest_body(
+                    **self.inputs, leverage_enabled=enabled, leverage=leverage), enabled, leverage)
+                self.assert_body(self.run_flow(
+                    leverage_enabled=enabled, leverage=leverage), enabled, leverage)
+
+    def test_invalid_types_nonfinite_range_and_disabled_conflict_before_compile(self):
+        self.assertIn("leverage", inspect.signature(qd.agent_backtest).parameters)
+        invalid = [(enabled, 1) for enabled in (0, 1, "true", None, [], {})]
+        invalid += [(True, value) for value in (
+            True, False, "10", None, [], {}, float("nan"), float("inf"),
+            -float("inf"), 0, -1, 0.5, 100.1)]
+        invalid.append((False, 10))
+        with patch.object(qd, "agent_submit") as submit, \
+             patch.object(qd, "agent_call") as call, patch.object(qd, "poll_job") as poll:
+            for enabled, leverage in invalid:
+                with self.subTest(enabled=enabled, leverage=leverage):
+                    budget = qd.Budget()
+                    for function, extra in (
+                        (qd.build_agent_backtest_body, {}),
+                        (qd.agent_backtest, dict(base_url=BASE, token="offline-token", budget=budget)),
+                    ):
+                        with self.assertRaises(qd.LabError) as caught:
+                            function(**self.inputs, **extra,
+                                     leverage_enabled=enabled, leverage=leverage)
+                        self.assertEqual(caught.exception.exit_code, qd.EXIT_USAGE)
+                    self.assertEqual(budget.outer_jobs, 0)
+            submit.assert_not_called()
+            call.assert_not_called()
+            poll.assert_not_called()
+        self.http.assert_not_called()
+
+    def test_manifest_requires_strict_permission_before_job_consumption(self):
+        self.assertIn("leverage", inspect.signature(qd.agent_backtest).parameters)
+        for permission in (None, False, 0, 1, "true", [], {}):
+            with self.subTest(permission=permission):
+                self.submitted.clear()
+                self.manifest = dict(MANIFEST)
+                if permission is not None:
+                    self.manifest["leverageAllowed"] = permission
+                budget = qd.Budget()
+                with patch.object(qd, "agent_submit", side_effect=self.fake_submit), \
+                     patch.object(qd, "poll_job") as poll:
+                    with self.assertRaises(qd.LabError) as caught:
+                        qd.agent_backtest(**self.inputs, base_url=BASE, token="offline-token",
+                                          budget=budget, leverage_enabled=True, leverage=10)
+                self.assertEqual(caught.exception.exit_code, qd.EXIT_CONTRACT)
+                self.assertEqual([item[0] for item in self.submitted], ["agent_compile"])
+                self.assertEqual(budget.outer_jobs, 0)
+                poll.assert_not_called()
+        self.http.assert_not_called()
+
+    def test_real_cli_defaults_and_flags_reach_actual_flow_and_report(self):
+        case, argv = self.cli_case()
+        for flags, enabled, leverage in (([], False, 1),
+                                         (["--leverage-enabled", "--leverage", "10"], True, 10)):
+            with self.subTest(flags=flags):
+                self.submitted.clear()
+                with patch.object(qd, "agent_submit", side_effect=self.fake_submit), \
+                     patch.object(qd, "poll_job", return_value=self.job) as poll, \
+                     patch("sys.stdout", new_callable=io.StringIO) as stdout:
+                    self.assertEqual(qd.main(argv + flags), qd.EXIT_OK)
+                self.assertEqual([item[0] for item in self.submitted],
+                                 ["agent_compile", "agent_backtest_run"])
+                self.assert_body(self.submitted[-1][1], enabled, leverage)
+                poll.assert_called_once()
+                payload = json.loads(stdout.getvalue())
+                self.assertEqual(payload["context"], {})
+                self.assertNotIn("offline-token", stdout.getvalue())
+                report = (case / "reports" / "agent-backtest.md").read_text(encoding="utf-8")
+                self.assertIn("runId: 42", report)
+                self.assertNotIn("offline-token", report)
+        self.http.assert_not_called()
+
+    def test_real_cli_rejects_invalid_text_nonfinite_range_and_conflict_without_requests(self):
+        case, argv = self.cli_case()
+        with patch.object(qd, "agent_submit") as submit, \
+             patch.object(qd, "agent_call") as call, patch.object(qd, "poll_job") as poll, \
+             patch.object(qd.Budget, "take_outer_job") as take_job:
+            for value in ("bad", "nan", "inf", "-inf", "0.5", "0", "-1", "100.1"):
+                with self.subTest(value=value), patch("sys.stderr", new_callable=io.StringIO):
+                    try:
+                        result = qd.main(argv + ["--leverage-enabled", "--leverage=" + value])
+                    except SystemExit as exc:
+                        self.assertEqual(exc.code, 2)  # argparse text rejection.
+                    else:
+                        self.assertEqual(result, qd.EXIT_USAGE)
+            with patch("sys.stderr", new_callable=io.StringIO):
+                self.assertEqual(qd.main(argv + ["--leverage", "10"]), qd.EXIT_USAGE)
+            submit.assert_not_called()
+            call.assert_not_called()
+            poll.assert_not_called()
+            take_job.assert_not_called()
+        self.http.assert_not_called()
+        self.assertFalse((case / "reports").exists())
+
+    def test_late_http_and_agent_call_patches_reach_poll_fetch(self):
+        self.assertIn("leverage", inspect.signature(qd.agent_backtest).parameters)
+        responses = [
+            {"manifest": self.manifest}, {"job_id": "offline-job"}, self.job]
+        envelopes = [(200, json.dumps({"code": 0, "data": data}).encode(), {})
+                     for data in responses]
+        with patch.object(qd, "_http_send", side_effect=envelopes) as http, \
+             patch.object(qd, "agent_call", wraps=qd.agent_call) as call, \
+             patch.object(qd, "poll_job", wraps=qd.poll_job) as poll:
+            payload = qd.agent_backtest(**self.inputs, base_url=BASE, token="offline-token",
+                                       budget=qd.Budget(), leverage_enabled=True, leverage=10)
+        self.assertEqual(payload["runId"], 42)
+        self.assertEqual([item.args[0] for item in call.call_args_list],
+                         ["agent_compile", "agent_backtest_run", "agent_job"])
+        self.assertEqual(http.call_count, 3)
+        self.assertEqual([item.args[1] for item in http.call_args_list], ["POST", "POST", "GET"])
+        self.assert_body(json.loads(http.call_args_list[1].args[3]), True, 10)
+        poll.assert_called_once()
+
+    def test_dynamic_import_and_non_scripts_cwd_with_late_dependencies(self):
+        folder = self.enterContext(tempfile.TemporaryDirectory())
+        previous = Path.cwd()
+        try:
+            qd.os.chdir(folder)
+            module_spec = importlib.util.spec_from_file_location("leverage_dynamic", MODULE_PATH)
+            assert module_spec is not None and module_spec.loader is not None
+            module = importlib.util.module_from_spec(module_spec)
+            # The stdlib itself reads SSLKEYLOGFILE while building the module's
+            # no-redirect opener; only the module's own env reads are forbidden.
+            with patch.object(Path, "open", side_effect=AssertionError("business file read")), \
+                 patch.object(Path, "read_text", side_effect=AssertionError("business file read")), \
+                 patch.object(qd.os.environ, "get",
+                              side_effect=lambda key, default=None: (
+                                  AssertionError("environment read")
+                                  if key != "SSLKEYLOGFILE" else default)):
+                module_spec.loader.exec_module(module)
+                helper_spec = importlib.util.spec_from_file_location(
+                    "leverage_helper_dynamic", MODULE_PATH.with_name("agent_backtest.py"))
+                assert helper_spec is not None and helper_spec.loader is not None
+                helper = importlib.util.module_from_spec(helper_spec)
+                helper_spec.loader.exec_module(helper)
+            with patch.object(module, "agent_submit", side_effect=self.fake_submit), \
+                 patch.object(module, "poll_job", return_value=self.job) as poll:
+                payload = module.agent_backtest(**self.inputs, base_url=BASE, token="offline-token",
+                                                budget=module.Budget(),
+                                                leverage_enabled=True, leverage=10)
+                self.assert_body(module.build_agent_backtest_body(
+                    **self.inputs, leverage_enabled=True, leverage=10), True, 10)
+            self.assertEqual(payload["runId"], 42)
+            poll.assert_called_once()
+        finally:
+            qd.os.chdir(previous)
+        self.http.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -156,12 +156,17 @@ QUANTDINGER_BASE_URL=http://127.0.0.1:15000 NO_PROXY=127.0.0.1,localhost \
   PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/quantdinger.py \
   fetch-klines --data-api agent --market Crypto --symbol <SYM> --timeframe 1D --max-pages 2
 
-PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/quantdinger.py agent-backtest --strategy-dir skills/strategies/strategy-lab/strategies/<id> --start YYYY-MM-DD --end YYYY-MM-DD --capital <number> --commission <ratio> --slippage <ratio> [--wall-seconds <int>]
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/quantdinger.py agent-backtest --strategy-dir skills/strategies/strategy-lab/strategies/<id> --start YYYY-MM-DD --end YYYY-MM-DD --capital <number> --commission <ratio> --slippage <ratio> [--leverage-enabled --leverage <1..100>] [--wall-seconds <int>]
 ```
 
 `agent-backtest` 语义：读 `<strategy-dir>/strategy.py` 与 `config.json` → 一次 compile 校验
 （失败即停）→ 一次 backtest 提交（请求体仅白名单字段，禁 `sourceId/persist/strategyId`）→
 按 15s 间隔与单调截止轮询 job 至终态 → 报告写入 `<strategy-dir>/reports/agent-backtest.md`。
+`--leverage-enabled`（默认关）+ `--leverage`（默认 1，有限 1..100，关闭时必须为 1）在 compile
+等任何请求前校验；请求倍数 >1 时要求 compile manifest `leverageAllowed` 严格 True（否则 exit2
+且不发 backtest、不占 job 配额），默认/1 沿用旧 manifest 兼容，客户端不乘资本或订单。
+流程实现位于 `scripts/agent_backtest.py`（builder/计费矛盾/Agent 流程三函数抽取），CLI 保留同名
+兼容壳并调用时注入依赖；该抽取属本地离线实现，不表示运行中引擎杠杆已验收。
 提交后状态未知（网络失败/超时）时以**同一** Idempotency-Key 重放恰好一次；两次均失败 → outcome-unknown、
 exit5，禁止盲发新提交。409（同键异体/进行中）→ 立即停止 exit2。
 
@@ -206,6 +211,18 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 拆分阈值（触发条件①）。拆分（优先 `agent_client.py` 信封/幂等/白名单 与 `judgment.py` 判定）
 属独立任务，需先出拆分 Design 并交独立 Review。**后续任何实质扩展前必须先完成拆分**，
 不得继续在同一文件叠加能力。
+
+## 四窗口研究三件套（2026-11-01，仅离线）
+
+`strategies/neutral-grid-four-window-v1/` 五文件与 `scripts/grid_research.py` 已落地。
+协调入口只做纯函数计划/静态源码生成，策略只作文本读取，不本地 import/执行：
+
+    PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python skills/strategies/strategy-lab/strategies/neutral-grid-four-window-v1/research.py --describe
+
+`--execute` 明确拒绝（exit3、零业务请求）；`strategy.py` 为锁定的 synthetic 示例，
+不代表 PUMP 参数或可提交策略。离线全量自检通过不等于独立 Verify/Review，
+更不表示16研究可提交：G-01/02/03仍未闭合，runtime_loaded=NOT_VERIFIED、
+historical_evidence=UNKNOWN、full_research_status=DEFERRED。详见实例 README 与 Design-06-002 §5–8。
 
 ## 状态
 

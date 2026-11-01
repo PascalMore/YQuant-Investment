@@ -20,6 +20,7 @@ import argparse
 import ast
 import csv
 import datetime as dt
+import importlib.util
 import io
 import json
 import math
@@ -32,6 +33,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Callable, Iterable, Optional
 
 LAB_ROOT = Path(__file__).resolve().parent.parent
@@ -554,6 +556,27 @@ def agent_submit(
     raise LabError(EXIT_BUDGET, "agent.outcomeUnknown", operation=operation)
 
 
+def _validate_leverage_value(leverage: float) -> bool:
+    """True when CLI text like NaN/Inf/out-of-range is not a usable multiple."""
+    value = _finite(leverage)
+    return value is None or isinstance(leverage, bool) or not 1 <= value <= 100
+
+
+def _load_agent_backtest_module() -> ModuleType:
+    """Load scripts/agent_backtest.py by absolute path, independent of cwd.
+
+    The helper module import performs no business I/O, so this stays inside
+    the import-must-not-touch-anything contract of the CLI module.
+    """
+    path = Path(__file__).resolve().parent / "agent_backtest.py"
+    spec = importlib.util.spec_from_file_location("yquant_agent_backtest", path)
+    if spec is None or spec.loader is None:
+        raise LabError(EXIT_CONTRACT, "agentBacktest.moduleMissing")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def build_agent_backtest_body(
     *,
     code: str,
@@ -563,34 +586,23 @@ def build_agent_backtest_body(
     commission: float,
     slippage: float,
     params: dict[str, Any],
+    leverage_enabled: bool = False,
+    leverage: float = 1,
 ) -> dict[str, Any]:
-    """Build the Agent backtest request body from the whitelist only."""
-    body = {
-        "code": code,
-        "startDate": start,
-        "endDate": end,
-        "initialCapital": float(capital),
-        "commission": float(commission),
-        "slippage": float(slippage),
-        "leverageEnabled": False,
-        "leverage": 1,
-        "params": dict(params),
-    }
-    if set(body) != set(AGENT_BACKTEST_FIELDS):
-        raise LabError(EXIT_CONTRACT, "agent.backtestFieldsMismatch")
-    return body
+    """Compatibility shell delegating to the extracted agent_backtest module."""
+    module = _load_agent_backtest_module()
+    return module.build_agent_backtest_body(
+        code=code, start=start, end=end, capital=capital, commission=commission,
+        slippage=slippage, params=params, leverage_enabled=leverage_enabled,
+        leverage=leverage, error_type=LabError, exit_usage=EXIT_USAGE,
+        exit_contract=EXIT_CONTRACT, body_fields=AGENT_BACKTEST_FIELDS,
+    )
 
 
 def billing_contradiction(billing: Any) -> Optional[str]:
-    """Return a reason when billing contradicts the closed-billing premise."""
-    if not isinstance(billing, dict):
-        return None
-    if str(billing.get("status") or "").strip().lower() == "charged":
-        return "billing.status=charged"
-    charged = _finite(billing.get("charged"))
-    if charged is not None and charged > 0:
-        return "billing.charged>0"
-    return None
+    """Compatibility shell delegating to the extracted agent_backtest module."""
+    module = _load_agent_backtest_module()
+    return module.billing_contradiction(billing, finite=_finite)
 
 
 def agent_backtest(
@@ -607,6 +619,8 @@ def agent_backtest(
     budget: Budget,
     job_timeout: float = AGENT_JOB_SECONDS,
     timeout: float = 30.0,
+    leverage_enabled: bool = False,
+    leverage: float = 1,
 ) -> dict[str, Any]:
     """Compile, submit and read one Agent backtest job to its terminal state.
 
@@ -614,74 +628,22 @@ def agent_backtest(
     before any backtest submission.  The flat Agent result is returned as-is
     and is never merged with the Human ``data.result`` hierarchy.
     """
-    budget.check()
-    compiled, _ = agent_submit(
-        "agent_compile", {"code": code}, base_url=base_url, token=token,
-        idempotency_key=new_idempotency_key(), timeout=timeout,
+    # Dependencies are resolved at call time so call-site patches of
+    # agent_submit/agent_call/poll_job/_http_send keep taking effect, and no
+    # patched object is captured at import time.
+    module = _load_agent_backtest_module()
+    return module.agent_backtest(
+        code=code, params=params, start=start, end=end, capital=capital,
+        commission=commission, slippage=slippage, base_url=base_url, token=token,
+        budget=budget, job_timeout=job_timeout, timeout=timeout,
+        leverage_enabled=leverage_enabled, leverage=leverage,
+        agent_submit=agent_submit, agent_call=agent_call, poll_job=poll_job,
+        new_idempotency_key=new_idempotency_key,
+        build_body=build_agent_backtest_body, check_billing=billing_contradiction,
+        error_type=LabError, exit_contract=EXIT_CONTRACT, as_dict=_as_dict,
+        scrub=_scrub, metric_keys=AGENT_METRIC_KEYS, context_keys=AGENT_CONTEXT_KEYS,
+        unsupported=AGENT_UNSUPPORTED,
     )
-    manifest = _as_dict(compiled.get("manifest"))
-    if not manifest:
-        raise LabError(EXIT_CONTRACT, "agent.manifestMissing")
-    reason = billing_contradiction(compiled.get("billing"))
-    if reason:
-        raise LabError(EXIT_CONTRACT, "billing.contradiction", reason=reason)
-    body = build_agent_backtest_body(
-        code=code, start=start, end=end, capital=capital, commission=commission,
-        slippage=slippage, params=params,
-    )
-    budget.take_outer_job()
-    receipt, replayed = agent_submit(
-        "agent_backtest_run", body, base_url=base_url, token=token,
-        idempotency_key=new_idempotency_key(), timeout=timeout,
-    )
-    job_id = str(receipt.get("job_id") or receipt.get("jobId") or "")
-    submit_billing = receipt.get("billing")
-    if not job_id:
-        raise LabError(EXIT_CONTRACT, "agent.jobIdMissing")
-    reason = billing_contradiction(submit_billing)
-    if reason:
-        raise LabError(EXIT_CONTRACT, "billing.contradiction", reason=reason, jobId=job_id)
-    deadline = min(budget.deadline, time.monotonic() + float(job_timeout))
-    job = poll_job(
-        "agent_job",
-        job_id,
-        base_url=base_url,
-        token=token,
-        deadline=deadline,
-        timeout=timeout,
-        fetch=lambda: agent_call("agent_job", base_url=base_url, token=token,
-                                 path_values={"jobId": job_id})[0],
-    )
-    state = str(job.get("status") or "").lower()
-    job_billing = job.get("billing")
-    if state != "succeeded":
-        raise LabError(EXIT_CONTRACT, "agent.jobNotSucceeded", jobId=job_id, status=state,
-                       detail=_scrub(str(job.get("error") or ""))[:600])
-    result = _as_dict(job.get("result"))
-    run_id = int(result.get("runId") or 0)
-    if run_id <= 0:
-        raise LabError(EXIT_CONTRACT, "agent.runIdMissing", jobId=job_id)
-    reason = billing_contradiction(job_billing)
-    if reason:
-        raise LabError(EXIT_CONTRACT, "billing.contradiction", reason=reason, jobId=job_id)
-    return {
-        "jobId": job_id,
-        "status": state,
-        "runId": run_id,
-        "kind": str(receipt.get("kind") or ""),
-        "createdAt": str(receipt.get("created_at") or ""),
-        "idempotentReplay": replayed,
-        "compileManifest": manifest,
-        "metrics": {key: result[key] for key in AGENT_METRIC_KEYS if key in result},
-        "context": {key: result[key] for key in AGENT_CONTEXT_KEYS if key in result},
-        "sampledArrays": {key: len(value) for key, value in result.items()
-                          if isinstance(value, (list, tuple))},
-        "billing": submit_billing if submit_billing is not None else job_billing,
-        "billingStatus": "present" if (
-            submit_billing is not None or job_billing is not None) else "absent",
-        "sourceAssociation": "none: agent channel has no sourceId/run read-back route",
-        "unsupported": list(AGENT_UNSUPPORTED),
-    }
 
 
 class Budget:
@@ -2381,6 +2343,8 @@ def run_agent_backtest(args: argparse.Namespace) -> int:
                          ("slippage", args.slippage)):
         if _finite(value) is None:
             raise LabError(EXIT_USAGE, f"{label}.invalid")
+    if not isinstance(args.leverage_enabled, bool) or _validate_leverage_value(args.leverage):
+        raise LabError(EXIT_USAGE, "leverage.invalid")
     base_url = os.environ.get("QUANTDINGER_BASE_URL") or ""
     if not base_url:
         raise LabError(EXIT_USAGE, "baseUrl.missing")
@@ -2398,6 +2362,8 @@ def run_agent_backtest(args: argparse.Namespace) -> int:
         base_url=base_url,
         token=token,
         budget=Budget(wall_seconds=args.wall_seconds),
+        leverage_enabled=bool(args.leverage_enabled),
+        leverage=float(args.leverage),
     )
     report_path = strategy_dir / "reports" / "agent-backtest.md"
     if not report_path.resolve().is_relative_to(strategy_dir.resolve()):
@@ -2457,6 +2423,10 @@ def build_parser() -> argparse.ArgumentParser:
     backtest.add_argument("--commission", type=float, required=True)
     backtest.add_argument("--slippage", type=float, required=True)
     backtest.add_argument("--wall-seconds", type=float, default=AGENT_WALL_SECONDS)
+    backtest.add_argument("--leverage-enabled", action="store_true", default=False,
+                          help="Request exchange leverage (requires platform permission).")
+    backtest.add_argument("--leverage", type=float, default=1,
+                          help="Leverage multiple, finite 1..100; must stay 1 when disabled.")
     return parser
 
 
