@@ -43,11 +43,13 @@ strategy-lab/                     # 只放研发工具资产
 ├── SKILL.md                  # 本文件
 ├── README.md                 # 已确认方案（上游文档，不改动）
 ├── templates/strategy-spec.md  # spec.md 模板（上游文档，不改动）
+├── templates/research-report.md  # 研究类报告模板（可编辑）
 ├── scripts/quantdinger.py    # 单文件薄调用 CLI（trade / fetch-klines / agent-whoami / agent-backtest）
 ├── tests/test_quantdinger.py # stdlib unittest 离线断言
 └── strategies/                # 每个策略/研究一个目录，集中在 strategy-lab 内
-    ├── spy-ma-smoke/          # 交易类样例（README/spec/config/strategy.py/reports）
-    └── spy-close-research/    # 研究类样例（README/spec/research.py/reports）
+    ├── INDEX.md               # 实例索引（登记全部策略/研究实例）
+    ├── spy-ma-smoke/          # 交易类示例（README/spec/config/strategy.py/reports）
+    └── spy-close-research/    # 研究类示例（README/spec/research.py/reports）
 ```
 
 每个策略/研究一个目录：`spec.md`（需求冻结）、`config.json`（仅交易参数数值）、
@@ -68,6 +70,24 @@ strategy-lab/                     # 只放研发工具资产
    - 研究类：目录内 `research.py` 直接执行；只调用行情读接口，不交易、不进化。
 3. **交付**：报告记录 `sourceId`/`runId`/`jobId`、判定分类、限制与复现命令；
    平台侧 UI 实查（`/strategy-ide?sourceId=`、`/backtest-center?sourceId=`）由独立 Verify 完成。
+   研究类报告必须包含 [templates/research-report.md](templates/research-report.md) 的核心字段
+   （结论摘要、数据与口径声明、假设与未建模项、限制与不适用范围、结果明细、复现命令、证据分级）；
+   量化口径（年化周期数、初始资金、成本与未建模项等）必须显式标注，不得沿用默认值而不声明。
+
+## 研究预检（研究类开工前必过）
+
+研究类任务开写脚本、发起取数或提交回测前必须逐项过下表；这是必过门，不是可选参考。预检失败不消耗 job 配额：先缩范围或换通道，不提交、不等报错。
+
+| 检查项 | 判据 | 失败处理 |
+|---|---|---|
+| 回测窗口 vs 周期上限 | 1m/3m ≤30 天；5m ≤180 天；15m/30m ≤365 天；1H/4H/1D/1W ≤1095 天（表内为默认档基线；实际窗口上限以 compile 返回的 `backtestRangePolicy` 为准，USStock/Forex 可能更窄，如 USStock 5m/15m/30m ≤60 天、Forex 1m ≤7 天） | 先缩窗或改周期，不提交等报错 |
+| 标的上市日 vs 窗口起点 | 窗口起点晚于上市日；不足则证据不足 | 改窗口起点或标 insufficient-evidence |
+| 通道能力支持 | 网格 generate / Strategy Evolution / run-sourceId 读回 / Agent 交易 在 Agent 通道 unsupported | 声明不支持并换 Human 通道或说明缺口 |
+| 数据形态 | 单页 ≤500；第 1 页无 before_time 时平台封顶 300；翻页收敛为 `--max-pages 2`；gate spot 单请求窗口 ≤999 天 | 显式设 `--max-pages 2`；超窗改窗口 |
+| 取数连通 | 直连需 `NO_PROXY` 含 `.gateio.ws`；直连不可用时代理须可达 | 先核对 env，再判定数据不可得 |
+| 未建模项 | 资金费、强平、成交量单位/适用性 | 必须写入报告局限；未知不得标通过 |
+| 预算 | 研究数据请求 ≤50、外层持久化回测 job ≤8、墙钟 ≤1800s、folds 固定 4 | 超限先缩范围，不加预算 |
+| 交付形态 | spec.md / 可复现脚本 / reports/ / 复现命令 | 缺一不算完成 |
 
 ## 自动进化与停止规则（SPEC §5 冻结，不现场改判）
 
@@ -203,6 +223,7 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 - 策略源码中的 `order_target_percent` 只在平台历史回测沙箱执行，不构成真实下单授权；
   首版交易闭环固定 Human JWT，缺 JWT 如实阻塞，不 mock 替代。
 - 报告只存明确业务字段，丢弃 headers/token/password 样式字段；不含凭据、账户或原始 HTTP 响应。
+- 研究类在证据不足时必须 fail closed：退出码 3、零业务请求、不产出完成报告；离线自检通过不等于独立 Verify/Review。
 - 不修改 QuantDinger 子模块、不改部署/配置、不 commit/push、不做 Demo/Live 与调度。
 
 ## 维护提示：脚本已达拆分阈值
@@ -212,18 +233,6 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 属独立任务，需先出拆分 Design 并交独立 Review。**后续任何实质扩展前必须先完成拆分**，
 不得继续在同一文件叠加能力。
 
-## 四窗口研究三件套（2026-11-01，仅离线）
-
-`strategies/neutral-grid-four-window-v1/` 五文件与 `scripts/grid_research.py` 已落地。
-协调入口只做纯函数计划/静态源码生成，策略只作文本读取，不本地 import/执行：
-
-    PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python skills/strategies/strategy-lab/strategies/neutral-grid-four-window-v1/research.py --describe
-
-`--execute` 明确拒绝（exit3、零业务请求）；`strategy.py` 为锁定的 synthetic 示例，
-不代表 PUMP 参数或可提交策略。离线全量自检通过不等于独立 Verify/Review，
-更不表示16研究可提交：G-01/02/03仍未闭合，runtime_loaded=NOT_VERIFIED、
-historical_evidence=UNKNOWN、full_research_status=DEFERRED。详见实例 README 与 Design-06-002 §5–8。
-
 ## 状态
 
 - 2026-10-30 首版完成：独立方案C Design Gate run3359 APPROVE；T4独立复验 run3362 PASS，48/48测试、A-001~A-009最终矩阵全部通过；原T4卡已关闭。
@@ -232,4 +241,5 @@ historical_evidence=UNKNOWN、full_research_status=DEFERRED。详见实例 READM
 - 正式证据：[T4验证报告](../../../data/reports/2026-10-29-strategy-lab-verify/report.md)、[T5签收报告（最终第6节）](../../../data/reports/2026-10-30-strategy-lab-final-review/report.md)。报告位于Git忽略的本地data目录，不代表已提交、推送或远程备份。
 - 2026-10-31 Agent 通道 V1.5 完成：T4 真实四步验收 PASS（whoami/行情/compile/backtest，runId=25）、T5 独立审查 APPROVE（open_findings=0）、T6 Closeout PASS（[closeout.md](../../../data/reports/2026-10-30-strategy-lab-agent-token/closeout.md)）。六卡全 done，工程线收口。
 - 2026-10-31 行情取数契约实测沉淀（见上方「行情取数契约」节）：CLI 分页上限 500、`--max-pages 2` 纪律、本机 gate.io 直连 env 口径。
+- 2026-11-01 起的具体研究任务记录见 `data/tasks/active/2026-11-01-grid-g01-g02/` 与实例 `strategies/neutral-grid-four-window-v1/README.md`——本平台的一次具体研究任务记录，非平台契约。
 - 此处仅同步已验收状态，不改变业务契约、代码、样例参数或原始证据；未执行Demo/Live、发单、部署、调度或生产配置变更。
