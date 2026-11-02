@@ -4,16 +4,18 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | V1.4 |
-| 日期 | 2026-11-01，Asia/Shanghai（UTC+08:00） |
-| 阶段 | t_1f4c8c58，G-02最小Design；父t_22b3495f已done；只修订本Design与design-handoff.md，无实现/测试/业务 |
-| RFC / SPEC | [RFC-06-002 V1.5](../../rfc/06_strategy/RFC-06-002-neutral-grid-multi-window-research.md)，D-06 / [SPEC-06-002 V1.5](../../spec/06_strategy/SPEC-06-002-neutral-grid-multi-window-research.md)，§9；本Design §11落实唯一方案 |
+| 版本 | V1.5 |
+| 日期 | 2026-11-02，Asia/Shanghai（UTC+08:00） |
+| 阶段 | YQuant 按 Pascal 已确认决策同步审计 D-01 的局部撤销契约（§12）；历史 G-02 Design t_1f4c8c58 及旧验收记录保留，非本次重开 |
+| RFC / SPEC | [RFC-06-002 V1.6](../../rfc/06_strategy/RFC-06-002-neutral-grid-multi-window-research.md)，§9 / [SPEC-06-002 V1.6](../../spec/06_strategy/SPEC-06-002-neutral-grid-multi-window-research.md)，§10；本次局部撤销见 §12，§11 训练通道保留 |
 | 权威范围 | 本主题data/tasks/active/2026-11-01-grid-g01-g02/{intake,rfc-spec-handoff}.md及父卡；原pipeline-intake与杠杆/三件套授权作为已签收历史保留 |
-| 当前判定 | G-02设计契约齐备，主控读回三层后可派最小Implement→独立Verify→独立Review；B-001、杠杆、三件套离线均已验收，不重做；G-01=OPEN_PENDING_RUNTIME_AND_CACHE_IDENTITY_PROOF，G-02/G-03=OPEN；runtime_loaded=NOT_VERIFIED、historical_evidence=UNKNOWN、full_research_status=DEFERRED，原T6仍blocked、16业务禁止 |
+| 当前判定 | 审计 D-01 局部 Implement→独立 Verify 已完成并通过（离线，D01-01..07 全 CLOSED，t_8a23ea34），主控离线签收，未另开 Review；API 进程已受控重启并真实 HTTP 验证公共 Gate swap 读取与本地重采样（api_runtime_loaded=VERIFIED）；既有 G-02 离线线和五项修复验收保留。G-01（缓存身份）与 G-03（历史乘数适用性）仍 OPEN；historical_evidence=UNKNOWN、full_research_status=DEFERRED，后台角色未加载、原T6仍blocked、16业务禁止 |
 
 B-001四文件及132项/补审、§4杠杆79项/Review APPROVE均为已验收资产。§5-7三件套随后完成独立Verify R3 153项OK、Review t_40f89523 APPROVE、主控offline ACCEPTED，见data/reports/2026-11-01-strategy-lab-leverage-fix/trio-closeout.md；旧R1/R2失败、更正与旧卡不追认成功。§3-8保留既有API/算法/测试契约，不重新列待实现；当前唯一delta为§11的训练OHLC读取与参数预冻结。真实Gate swap全部共用历史volume拒绝路径，不仅PUMP；训练成功不能提供合格volume，四合约真实回测仍failclosed。G-01/02/03不因文档/离线工具通过而闭合；原T6 t_2b5702a5不解除。
 
 本轮t_1f4c8c58仅使用必要文件读取/检索及文档编辑，不运行命令/测试/应用import/网络，不读凭据、不启动服务、不建卡。run3424额外基线审计按Pascal恢复决定取消，OMITTED_BY_AUTHORIZATION，不重采、不重放、不记PASS、不改审批配置。Funding保持not_modeled；不新增端点族/SDK/平台/历史metadata数据库/缓存平台/依赖或runtime撮合资金模型。
+
+> 当前执行修订：Pascal 于 2026-11-02 同意审计 D-01 的局部撤销，唯一当前 delta 见 §12。旧阶段“本卡/本轮/尚未实现”是原时点记录；公共历史缺证阻断及旧 G02-04 断言在本次被替代，不追认旧契约下的验收为错误，也不解除研究锁。本文修订已完成不等于代码实现或真实加载完成；当前代码实现与独立 Verify 已离线完成，API 进程也已受控重启并真实请求验证；后台角色、缓存身份与历史证据仍未闭合。
 
 ## 1. 输入、基线与已验证事实
 
@@ -110,11 +112,11 @@ crypto.get_kline在Gate swap native分支读取该helper，在原有format_kline
 
 现有load_markets是检索时刻快照，没有历史有效区间。`retrieved_at`不能充作`effective_from`，当前direct类型和正乘数也不能证明过去一年未变。旧instrumentRulesSnapshot source=historical_fallback_no_snapshot、contract_size=1.0一律不作为证据。
 
-只有已有、可审计的同合约历史有效证据覆盖请求bar时，历史请求才可返回研究可用的基础币volume。现有代码没有给native传历史快照的既有接口，故本设计不虚构一个自动取证路径、不新增持久化系统：未知适用性按上节错误fail closed，T4保存UNKNOWN并停止目标提交。T3可用明确synthetic有效区间fixture证明换算逻辑，但不得将fixture/当前metadata用于真实历史PASS。若主控只授权先修单位链路，则其验收是转换/阻断工具行为，不是历史B-001业务闭合。
+只有已有、可审计的同合约历史有效证据覆盖请求bar时，本项研究才可将基础币volume视为历史适用性已验证。按 §12，公共读取不再因该资格 unknown 而 fail closed；当前快照可用于正确换算并返回，但不能作为历史有效性证明。本研究保存 UNKNOWN，原目标提交锁保持；不新增历史元数据平台或公共回测门禁。明确 synthetic fixture 只证明离线逻辑，不能用于真实历史 PASS。
 
 当发现确有可复用历史快照入口时，必须先证明其产品、有效期和来源，再在本设计修订精确接缝；禁止临时硬编码PUMP乘数或给当前快照伪造长期有效期。
 
-当前离线成功用例通过 Gate 分支私有的纯解析/换算接缝注入明确标为 synthetic 的元数据及适用区间，覆盖 native→crypto 消费链；不为此增加 fetch_ohlcv 的公共参数或真实历史输入通道。生产 load_markets 当前快照不含已验证历史区间时，实际 Gate swap 历史请求仍按 historical_applicability=unknown 拒绝。测试可验证换算成功不表示生产历史路径可用。
+保留私有 synthetic 解析接缝作为测试设施，不新增 fetch_ohlcv 公共参数；但正常公共 Gate swap 读取必须同时覆盖无 synthetic、无历史有效期的当前元数据形状成功路径，其 historical_applicability 为 unknown。公共历史读取不再仅因 unknown 拒绝，不能因此宣称历史资格通过。
 
 ### 3.4 缓存兼容与停止规则
 
@@ -397,7 +399,7 @@ available_at=close仅为原SPEC研究约定；observed_at/retrieved_at可能晚�
 | G02-01 | 新Agent契约测试经真实GET/decorator验证401、scope/market/instrument 403调用0；参数互斥/边界/小数/重复/未来/非午夜400调用0；默认OHLCV逐字段等旧包络，原错误不改 |
 | G02-02 | 新后端训练测试取实际目标metadata与路由路径，name/type/quote/settle缺失冲突、别名映射不符502；主仓独立重算三摘要及raw→normalized对应，分别篡改字段/顺序拒绝 |
 | G02-03 | synthetic完整365与纯validator两日确证短上市成功；close=cutoff可入、窗口内/未收盘剔除计数；缺尾/缺日/相同重复/冲突重复/错位/非法价/字符串NaN/数值Inf/0或1/无证明短返回不得ready；raw顺序不被正常化覆盖 |
-| G02-04 | 同一四合约Gate fixture走训练得OHLC、旧_parse_gate_swap_ohlcv缺历史有效期仍报gate.swapVolumeHistoricalUnverified；用旧生产入口测试spy确保未开放metadata注入。训练无volume/无缓存/无frame/无fallback；旧NonGate/spot回归不改断言 |
+| G02-04 | 按 §12 修订：同一四合约 Gate fixture 训练得 OHLC 且仍无 volume/backtest_eligible=false；公共 Native 入口使用有效当前元数据正常返回单次换算 OHLCV，历史适用性 unknown，不注入 synthetic parser、不新增公共 metadata 参数。训练无缓存/无frame/无fallback；NonGate/spot回归保持 |
 | G02-05 | 新主仓测试spy实际build_cells/check_coverage/derive_geometry/generate_strategy_source调用；不信任provenance=True，16唯一状态行/完整params/锁定代码；逐个篡改raw/metadata/normalized/参数/代码/生成器/清单及尾部未读取行拒绝或如实incomplete；no-feasible与N/A不补参 |
 | G02-06 | OpenAPI+alignment新增参数/条件/响应/error/scope测试；真实route结果字段匹配schema；主仓discover含旧153及新测试，旧API/断言不放宽。B-001无需重新跑原132项整链，但触及native须下面最小NonGate/volume回归 |
 | G02-07 | 此项真实运行中API证据不得以离线测试替代；mock只检验预计请求与格式，本轮记NOT_EXECUTED，不假称runtime已加载/真实取数已通过 |
@@ -432,10 +434,39 @@ G-01现成证据已定向读取：evidence/g01-cache-audit.json记录observed_at
 
 已签收SHA仅复用trio-closeout：grid_research.py=19f69b9959ce6b0fe7d14f3e54477f5b1d2953654ea363b113bf0fe4b5a9d33a；test_grid_research.py=913ff228d8b777ae8ce84c876fbc3845eeaa3e1bb3af78a200cf09c49071bb14；不是本卡当前重测。新Design/RFC/SPEC SHA=NOT_COLLECTED，取消额外采集不记PASS、不填假SHA；实现/独立验收阶段仍需按授权实际校准候选身份。共享dirty只按本卡两个文档归属，不宣称其它路径clean或还原上游差异。本卡零源码/测试/SKILL/配置变更、零命令/凭据/网络/数据库/服务动作；Markdown工具未运行linter。最小交接完成后kanban_complete，后续派发归主控、不自行建卡。
 
+## 12. 审计 D-01：公共取数局部撤销（Pascal 已确认）
+
+本节落实 RFC V1.6 §9 / SPEC V1.6 §10，优先替代 §2/§3/§10/§11 中旧阶段的公共历史证明阻断及禁止触及此分支的保护范围；其余研究、训练、权限、资金与执行锁不变。采用 Light Flow 两张正式卡（Implement→独立 Verify），主控先同步本三文档；不另建文档阶段或独立 Review，不把局部撤销扩为平台建设。
+
+### 12.1 精确允许文件与实现边界
+
+相对子仓 `skills/trading/auto-trading/quantdinger/QuantDinger/` 仅允许：
+
+- `backend_api_python/app/data_sources/native_crypto.py`：仅 Gate swap 解析/现有证据产生。撤销 synthetic-only 和历史有效期必备阻断；正常当前元数据来源与检索时间如实留在已有字段，历史适用性 unknown。保留单次换算、产品身份/非法乘数/数值检查、线程/页证据隔离与 F-01 最终返回 limit；训练方法和 _get 等不改。
+- `backend_api_python/app/data_sources/crypto.py`：仅 Gate swap 消费/重采样接缝。移除历史适用性必须 verified 的公共前提及基于缺研究证明的重采样禁止；保留已知错误单位/身份/必要数值一致性检查。聚合后 volume 直接来自已换算原始 bar 的既有聚合，不再次乘数、不两位舍入；无法保留原生逐根证据时诚实 unknown，不伪造单 bar volume_evidence。不得重写其它 venue/spot、fallback/代理/分页策略。
+- `backend_api_python/tests/test_native_crypto_public_client.py`：更新仅被本决策替代的历史拒绝断言，新增正常生产形状成功反例；保留单位、身份、数值、线程/页边界和 F-01 回归。
+- `backend_api_python/tests/test_gate_swap_volume_units.py`：正常 Native→crypto 链的最新/历史读取、unknown 披露、重采样与小正量精度、错误身份/单位拒绝；不把旧裸缓存重标为正确单位。
+- `backend_api_python/tests/test_training_ohlc.py`：仅更新 G02-04 四合约“公共必须拒绝”的旧断言为公共可读 unknown；保留训练隔离及所有 F-02..F-05 回归，不改训练服务。
+
+本次开工前已有五项修复 dirty 是合法已验收输入，按本次 before 快照做 delta，不得 checkout/restore/reset/stash/clean 或整文件覆盖制造基线。旧 snapshot/缓存、零量撮合语义不在本次范围，不借撤销修撮合、不默认乘数1、不造正 epsilon。训练服务、Agent 路由/OpenAPI、配置、主仓研究源码全部保护。
+
+### 12.2 验证与停止条件
+
+仅离线 fixture/fake HTTP transport，无真实网络、凭据、数据库/缓存/快照或服务访问。先以正常当前 metadata 无 synthetic 取得针对性 RED，再最小修复；禁止回退源码重放 RED。冻结完整命令在子仓 `backend_api_python/`：
+
+```bash
+PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m pytest -p no:cacheprovider tests/test_training_ohlc.py tests/test_agent_training_ohlc_contract.py tests/test_ai_agent_contract_alignment.py tests/test_agent_current_contract.py tests/test_native_crypto_public_client.py tests/test_gate_swap_volume_units.py tests/test_crypto_kline_exchange_matrix.py -q
+```
+
+开发自检一次、独立 Verify 一次，分项对 SPEC D01-01..07 给证据，子集不累计成总数；不增加重复全量/相邻模块测试作为新门禁。记录 cwd/命令/原始 stdout+stderr/原生 exit/候选 SHA 和相对 before 的路径 diff，保护文件按本轮基线核验。主仓三文档由主控同步后为保护输入，验证者只读核对一致性，不重测未变的主仓研究工具。
+
+新安全/审批拒绝立即 STOP 留证并 block，不拆命令/换工具/换执行器绕行。遇真实契约外失败或必须扩文件时停止上报最小 delta；全部范围内验收通过则 done，未部署和 G-03 明确在 OUT 不作为本轮代码失败。仅称 D-01 offline 恢复，不称线上可用或历史/16研究通过。不 commit/push/fetch/merge、不改分支/gitlink、不部署重启/回测交易。
+
 ## 版本记录
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.5 | 2026-11-02 | 按 Pascal 决策增 §12，修订 §3.3 / G02-04，局部撤销公共 Gate 历史缺证和重采样阻断；保留单位精度/五项修复/训练和研究锁；指向 RFC/SPEC V1.6；离线实现与独立 Verify 已完成（t_8a23ea34），API 进程已受控重启并真实请求验证；研究准入仍未放行 |
 | V1.0 | 2026-10-31 | 基于RFC/SPEC V1.1给出B001最小设计及研究工具候选边界；既有70测试真实通过；明确G-01/G-02/G-03路径缺口，T2 BLOCKED，不实现/不释放T3 |
 | V1.1 | 2026-10-31 | 续接run3399：按Pascal离线授权分段修订，指向RFC/SPEC V1.2；T3当前仅B-001离线修复allowlist，§4-7薄层/研究/策略转未来未启用候选；G-01/02/03改列为线上/完整研究前置不阻塞离线；offline_design=PASS、full readiness=DEFERRED。主控读回同步校正§2.1四文件归属、当前B001/NonGate测试与未来CLI/杠杆测试边界、纯synthetic解析接缝及迁移表述；不新增业务语义或文件范围。主控二次同步（run3401交接后、Pascal「请继续」授权）：§2.2 crypto.py补齐_fetch_ohlcv两处catch与_fetch_ohlcv_fallback两处catch仅五类gate.swapVolume*单位错误立即re-raise的最小接缝及format_kline精度注意；§8定向pytest解释器改为backend_api_python自带.venv（不安装依赖）。§3.2行为契约、测试断言与§2.2文件边界不变 |
 | V1.2 | 2026-11-01 | t_9fddffed/run3409：指向RFC/SPEC V1.3，B-001离线已验收并保护；仅启用§4三函数抽取/杠杆/CLI，核实平台100与manifest许可真实语义，§8冻结L-01..06离线集合与项目根unittest命令；通用evidence/恢复、§5-7及16研究仍未启用，本卡零源码/测试执行/业务 |

@@ -4,12 +4,14 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | V1.5 |
-| 状态 | B-001与杠杆子集离线已验收；三件套离线ACCEPTED（Verify R3 153项OK、Review APPROVE）；本轮仅§9 G-02契约冻结，候选尚未实现/真实验收，G-02/G-03=OPEN；runtime_loaded=NOT_VERIFIED、historical_evidence=UNKNOWN、full_research_status=DEFERRED，16业务执行仍禁止 |
-| 日期/作者 | 2026-11-01，Asia/Shanghai（UTC+08:00）；YQuant Principal，t_cfccfe2c / t_1af91929 / t_9fddffed / t_1b635d49 / t_22b3495f |
-| 来源 RFC | [RFC-06-002 V1.5](../../rfc/06_strategy/RFC-06-002-neutral-grid-multi-window-research.md)，D-06唯一方案 |
-| Design | docs/design/06_strategy/DESIGN-06-002-neutral-grid-multi-window-research.md V1.4（§11.1..11.9已与RFC/SPEC V1.5对齐）；§4及§5-7均已离线验收；三层已同步，Implement由主控按§11.1派发 |
+| 版本 | V1.6 |
+| 状态 | 既有离线工程线及 F-01..F-05 已验收；§10 审计 D-01 局部撤销已获 Pascal 确认、已实现并通过独立 Verify（离线，D01-01..07 全 CLOSED，t_8a23ea34），API 进程已受控重启并真实 HTTP 验证公共读取与本地重采样（api_runtime_loaded=VERIFIED）；G-01（缓存身份）与 G-03（历史乘数适用性）仍 OPEN，historical_evidence=UNKNOWN、full_research_status=DEFERRED，后台角色未加载、16业务仍禁止 |
+| 日期/作者 | 2026-11-02，Asia/Shanghai（UTC+08:00）；原作者保留；YQuant 按 Pascal 已确认的审计 D-01 决策同步 §10 |
+| 来源 RFC | [RFC-06-002 V1.6](../../rfc/06_strategy/RFC-06-002-neutral-grid-multi-window-research.md)，§9 审计 D-01；D-06 训练通道保留 |
+| Design | docs/design/06_strategy/DESIGN-06-002-neutral-grid-multi-window-research.md V1.5 §12；本次仅局部撤销，原 §11 训练通道其余契约保留 |
 | 权威输入 | data/tasks/active/2026-10-30-neutral-grid-research/pipeline-intake.md |
+
+> 当前修订：§10 是 Pascal 于 2026-11-02 确认的审计 D-01 局部撤销契约，优先替代下文公共历史缺证阻断及旧 G02-04 拒绝断言；其余旧阶段状态为当时记录。G-02 离线工程线和五项局部修复已有独立验收，本次撤销已实现并通过独立 Verify（离线），且 API 进程已受控重启并真实请求验证；不因此宣称 G-01/G-03 闭合或完整研究已通过。
 
 ## 1. 摘要与完成语义
 
@@ -321,7 +323,7 @@ G-02只有在独立Verify/Review确认实现与默认路径回归、主控确认
 | G02-01 | 默认无新增参数的请求/包络/错误兼容；新模式scope R、市场与标的拒绝、native别名冲突均在provider前停止；非法组合/小数limit/越界/双游标/非午夜拒绝，调用数0 |
 | G02-02 | 实际gate/swap/USDT/direct metadata与原生contract一致才回执；缺失/spot/跨所/身份矛盾502，不能回显请求冒充实际来源；raw与metadata摘要客户端重算一致，篡改一字段拒绝 |
 | G02-03 | synthetic离线365日/两日短上市证据可用；close恰等start可入、未收盘排除留计数；末根落后一天、缺日、重复/冲突、错位、NaN/Inf/非正价、短返回无上市证据、0/1根不得产ready参数 |
-| G02-04 | 相同原始Gate fixture可取训练OHLC而原OHLCV仍因历史volume缺证拒绝；四合约均覆盖，不只PUMP；无volume填0/乘数1/synthetic伪标，无缓存/回测frame接入；非Gate/spot原行为回归 |
+| G02-04 | 按 §10 的审计 D-01 决策修订：同一四合约 fixture 的训练 OHLC 仍无 volume、backtest_eligible=false；公共 OHLCV 对有效当前元数据正常返回单次换算后的数据，历史适用性 unknown，不要求 synthetic、不冒充 verified；无乘数默认1或训练volume填0，无训练缓存/回测frame接入；非Gate/spot原行为回归 |
 | G02-05 | 既有build_cells与derive_geometry被真实调用而非重新实现；16行无漏、参数/代码/原始/规范化摘要冻结，之后改任一内容则拒绝；no-feasible与上市N/A保留原因，provenance布尔无证输入拒绝 |
 | G02-06 | OpenAPI条件参数/两模式响应/权限/错误与路由一致，alignment/定向单元测试通过；既有B-001/杠杆/三件套断言不删改放宽。具体命令与文件由Design冻结，旧153项证据不冒充新增测试 |
 | G02-07 | 经另行授权的运行中Agent实际返回同产品原始行与来源时间/hash，每窗最多365连续日线或确证N/A；真实参数/代码内容先冻结、业务POST计数0；未加载、缺token授权、数据不足或运行不明则G-02 OPEN，不伪造PASS |
@@ -329,10 +331,27 @@ G-02只有在独立Verify/Review确认实现与默认路径回归、主控确认
 
 本卡完成标准仅两独立文档及交接齐备、唯一方案/接口/权限/数值/失败语义无开放问题，可交接既有Design子卡；尚未实现与真实授权/取数缺口是已披露的后续工作，不误当本卡文档阻塞。后续Design须保留已验收三件套状态，列精确主仓/子仓文件及调用签名、原路径保护与最小离线测试、实际加载影响和上述真实验收清单；不得重选业务方案或扩大权限。
 
+## 10. 审计 D-01 局部撤销的执行规格
+
+来源：RFC V1.6 §9、Pascal 于 2026-11-02“好的 同意执行局部撤销 已完成d01”。“已完成”登记为决策完成，代码须独立 Verify 通过才可称本轮离线修复完成。模式为局部撤销＋必要文档同步＋独立验证，不新开完整流水线或独立 Review。
+
+| 编号 | 本次验收要求 |
+|---|---|
+| D01-01 | 有效的 Gate direct/USDT 当前元数据，无 synthetic、无历史有效期，公共 Native 与 crypto 真实消费链均能返回非空数据；覆盖最新请求及历史范围请求，不靠注入 synthetic parser 证明生产形状成功 |
+| D01-02 | v 到基础币只乘一次；保留原始来源及现有单位字段，历史适用性为 unknown，不伪造 verified、有效期或历史乘数；缺必要乘数、身份冲突、非法数值仍明确失败 |
+| D01-03 | Gate 需要本地重采样的周期恢复既有聚合；价格/时间和基础币 volume 正确，保持小正量精度，不因缺聚合后的逐根研究证据拒绝，不伪造合成 bar 的原始单 bar 证据 |
+| D01-04 | F-01 数量/最终页证据边界与 F-02..F-05 训练参数/2xx/空 timeframe/上游结构错误修复保持；产品身份/单位相矛盾的证据和错误单位旧缓存不得被追认为有效 |
+| D01-05 | G02-04 从“公共必须拒绝”调整为“公共可读但研究资格不升级”；四合约训练通道仍无标准 volume、backtest_eligible=false，原身份/摘要/权限/错误与六列兼容不变；只更新被新决策直接替代的旧断言，其他旧测试不弱化 |
+| D01-06 | 非Gate/spot、代理、旧 _get、Agent 路由/OpenAPI、主仓研究锁保持；不为公共回测/交易另建新的 unknown 拦截，不以本次修复关闭 G-03 或提交16业务 |
+| D01-07 | 对逐文件开工快照做范围 diff，保留已有五项修复 dirty；只跑 Design §12 的离线冻结集合，记录命令/原始输出/原生 exit/候选 SHA；独立 Verify 覆盖上述矩阵后才签收 |
+
+§2、§8、§9.1/9.7 中旧公共阻断与旧保护范围仅在上述窄 delta 被替代，其余研究历史证据/资金/风险/停止规则不变。此修订不把 unknown 当研究 PASS、不清理或重标旧快照，也不授权真实业务/部署/生产访问或 VCS 发布。
+
 ## 版本记录
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| V1.6 | 2026-11-02 | 按 Pascal 决策增加 §10 的 D01-01..07，修订 G02-04 公共拒绝断言；仅恢复公共读取/重采样，保留单位与五项修复、训练契约和研究锁；来源 RFC V1.6 §9 / Design V1.5 §12；离线实现与独立 Verify 已完成（t_8a23ea34），API 进程已受控重启并真实请求验证；研究准入仍未放行 |
 | V1.0 | 2026-10-31 | 五点可计算契约/验收与安全边界冻结；B-001阻塞，未开始Design/实现/业务 |
 | V1.1 | 2026-10-31 | 续接run3395：按Intake最小Gate授权同步状态/范围/单位/禁止条款/验收；T1契约PASS可交接T2，技术pending，原五点不降级；无实现/业务 |
 | V1.2 | 2026-10-31 | 续接run3399：按Pascal离线授权冻结B-001离线修复子阶段执行/验收，四状态分列，薄层/研究转未来候选；原五点与16窗口标准保留。主控读回同步校正来源版本、Design已交付状态及当前B001/NonGate测试与未来测试边界；无实现/业务提交 |

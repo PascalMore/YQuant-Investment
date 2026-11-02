@@ -4,13 +4,15 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | V1.5 |
-| 状态 | B-001与杠杆子集离线已验收；三件套离线ACCEPTED（独立Verify 153项OK、Review APPROVE）；G-02契约已三层冻结（RFC/SPEC V1.5 + Design V1.4 §11），候选尚未实现/真实验收，G-02/G-03=OPEN；runtime_loaded=NOT_VERIFIED、historical_evidence=UNKNOWN、full_research_status=DEFERRED，16业务执行仍禁止 |
+| 版本 | V1.6 |
+| 状态 | 既有 B-001/杠杆/三件套/G-02 离线工程线及 F-01..F-05 已验收；审计 D-01 局部撤销（§9 / SPEC V1.6 §10 / Design V1.5 §12）已实现并通过独立 Verify（离线，335 passed，t_8a23ea34），主控离线签收；API 进程已受控重启并真实 HTTP 验证公共 Gate swap 读取与本地重采样（api_runtime_loaded=VERIFIED，见 data/reports/2026-11-02-quantdinger-d01-local-revert/runtime-verification.md）；G-01（缓存身份）、G-03（历史乘数适用性）仍 OPEN，historical_evidence=UNKNOWN、full_research_status=DEFERRED，后台角色未加载、16业务仍禁止 |
 | 作者 | YQuant Principal / t_cfccfe2c / t_1af91929 / t_9fddffed / t_1b635d49 / t_22b3495f |
-| 日期 | 2026-11-01，Asia/Shanghai（UTC+08:00） |
+| 日期 | 2026-11-02，Asia/Shanghai（UTC+08:00） |
 | 项目 | /home/pascal/workspace/yquant-investment |
 | 来源 | data/tasks/active/2026-10-30-neutral-grid-research/pipeline-intake.md |
 | 配套 | [SPEC-06-002](../../spec/06_strategy/SPEC-06-002-neutral-grid-multi-window-research.md) |
+
+> 当前修订：Pascal 于 2026-11-02 同意审计 D-01 的局部撤销，执行边界见 §9、SPEC V1.6 §10、Design V1.5 §12。此处“审计 D-01”不是 §3 的“D-01 时间与市场身份”。先前“本卡/本轮/尚未实现”等是旧阶段时点记录；仅与公共取数研究阻断有关的要求由本修订替代，旧验收不追认或抹除。当前撤销已实现并通过独立 Verify（离线），API 进程也已受控重启并真实请求验证；这只关闭“API 已加载”，不表示历史证据通过或研究准入成立。
 
 ## 1. 结论与动机
 
@@ -125,10 +127,23 @@ CLI 的必要局部抽取已按 Design §4 完成，既有79项已独立验收�
 - 原算法：data/reports/2026-10-31-neutral-grid-param-derivation/derive_grid_params.py:26-56,73-108；其输入说明明确 gate spot，旧独立单腿强平近似不沿用为全仓估算。
 - 官方 Gate SDK 2026-10-31 公开只读检索：`https://raw.githubusercontent.com/gateio/gateapi-python/master/docs/FuturesCandlestick.md`，v 为合约规模成交量、sum 为报价币成交量；`https://raw.githubusercontent.com/gateio/gateapi-python/master/docs/Contract.md`，描述 quanto_multiplier、maintenance_rate 和风险档位查询字段。未取得 PUMP 任一历史时点乘数数值，不用当前字段定义证明历史档位或实际可得性。这些是字段证据，不是强平公式或账户规则的官方背书。
 
+## 9. 审计 D-01：局部撤销公共 Gate 取数的研究阻断
+
+Pascal 已确认：不应把单项研究的历史证据要求施加给 QuantDinger 通用取数。撤销 Native 公共 Gate swap 解析必须 synthetic 来源/历史有效期覆盖才返回的限制，以及 crypto 公共消费者因历史适用性 unknown 和缺重采样逐根研究证明而拒绝整批数据的限制。真实数据不得伪标 synthetic 或 verified；当前快照的历史适用性诚实保留 unknown。
+
+保留 Gate 张数到基础币的单次换算、精度、必要产品身份/单位/非法数值检查、公共六列接口和已独立验收的 F-01..F-05。不能整提交 revert、整文件还原或重引错误单位；已证明错误的单位/身份、旧裸缓存不得冒充正确基础币证据。恢复既有重采样，但不得将聚合 bar 冒充带原始逐根历史证据的 bar。
+
+本修订优先替代 §5、D-06 及 SPEC/Design 中“公共 OHLCV 历史缺证必须阻断”“旧 OHLCV 必须拒绝才证明训练隔离”及针对旧阶段的禁止修改条款；这些旧表述保留为原阶段契约记录，不再作为本次撤销的验收要求。训练通道的身份、摘要、无 volume、backtest_eligible=false 等要求不变；普通 Agent 分支的产品身份能力未补齐，不删除 training_ohlc。
+
+研究门槛与平台公共可读性分开：G-03、原研究锁、16 业务禁止仍保留；公共可返回 unknown 不证明研究合格。不在公共回测/交易入口另加同类限制，不修改撮合或另建准入系统；本次不声称所有通用消费者会自动拒绝 unknown。局部撤销仅离线代码与直接测试，按 Light Flow 实现→独立验证收口，用户已确认范围，不另建 RFC/SPEC/Design 阶段或独立 Review。精确文件/验收见配套 SPEC §10 与 Design §12。
+
+无真实取数、凭据/数据库/缓存访问、回测/交易、部署/服务加载、commit/push/fetch/merge、分支切换或 gitlink 变更授权。upstream 整合不是本次前提。
+
 ## 版本记录
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.6 | 2026-11-02 | Pascal 同意审计 D-01 局部撤销；§9 将公共可读性与研究历史资格分开，保留单位/精度/五项修复和研究锁；指向 SPEC V1.6 §10 / Design V1.5 §12；撤销实施与独立验收已离线完成（t_8a23ea34，335 passed），API 进程已受控重启并真实请求验证；G-01/G-03 与历史证据仍未闭合 |
 | V1.0 | 2026-10-31 | 五点语义、边界、源码事实及 B-001 阻塞；未实施或执行业务 |
 | V1.1 | 2026-10-31 | 续接run3395：按Intake最小Gate授权同步状态/范围/单位/禁止条款/验收；T1契约PASS可交接T2，技术pending，原五点不降级；无实现/业务 |
 | V1.2 | 2026-10-31 | 续接run3399：按Pascal离线授权冻结B-001离线修复子阶段执行/验收，状态同步T2分段交付；原五点与16窗口标准保留，技术仍pending。主控读回同步校正未来CLI工作与当前离线测试边界；无实现/业务提交 |
