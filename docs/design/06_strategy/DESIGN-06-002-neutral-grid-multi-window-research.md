@@ -4,10 +4,10 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | V1.5 |
-| 日期 | 2026-11-02，Asia/Shanghai（UTC+08:00） |
-| 阶段 | YQuant 按 Pascal 已确认决策同步审计 D-01 的局部撤销契约（§12）；历史 G-02 Design t_1f4c8c58 及旧验收记录保留，非本次重开 |
-| RFC / SPEC | [RFC-06-002 V1.6](../../rfc/06_strategy/RFC-06-002-neutral-grid-multi-window-research.md)，§9 / [SPEC-06-002 V1.6](../../spec/06_strategy/SPEC-06-002-neutral-grid-multi-window-research.md)，§10；本次局部撤销见 §12，§11 训练通道保留 |
+| 版本 | V1.7 |
+| 日期 | 2026-11-03（V1.7；V1.6 为 2026-11-03 同日续修订），Asia/Shanghai（UTC+08:00） |
+| 阶段 | YQuant 按 Pascal 已确认决策同步契约：审计 D-01 局部撤销（V1.5 §12，已实现并独立 Verify）、v=0 零成交 bar 合法化实现契约（V1.6 §13，Pascal 2026-11-03 D1 决策）与消费链 crypto.py 放行契约（本版 §13.4，t_b8db70b3 D2 决策）；§13.1/13.2 的 native 层已由 t_aa056536 实现并通过平台侧验证，§13.4 待实现；历史 G-02 Design t_1f4c8c58 及旧验收记录保留，非本次重开 |
+| RFC / SPEC | [RFC-06-002 V1.8](../../rfc/06_strategy/RFC-06-002-neutral-grid-multi-window-research.md)，§9/§10 / [SPEC-06-002 V1.8](../../spec/06_strategy/SPEC-06-002-neutral-grid-multi-window-research.md)，§10/§11；D-01 撤销见 §12（对应 RFC/SPEC V1.6 §9/§10），v=0 合法化见 §13（§13.4 消费链 D2）；§11 训练通道保留 |
 | 权威范围 | 本主题data/tasks/active/2026-11-01-grid-g01-g02/{intake,rfc-spec-handoff}.md及父卡；原pipeline-intake与杠杆/三件套授权作为已签收历史保留 |
 | 当前判定 | 审计 D-01 局部 Implement→独立 Verify 已完成并通过（离线，D01-01..07 全 CLOSED，t_8a23ea34），主控离线签收，未另开 Review；API 进程已受控重启并真实 HTTP 验证公共 Gate swap 读取与本地重采样（api_runtime_loaded=VERIFIED）；既有 G-02 离线线和五项修复验收保留。G-01（缓存身份）与 G-03（历史乘数适用性）仍 OPEN；historical_evidence=UNKNOWN、full_research_status=DEFERRED，后台角色未加载、原T6仍blocked、16业务禁止 |
 
@@ -15,7 +15,7 @@ B-001四文件及132项/补审、§4杠杆79项/Review APPROVE均为已验收资
 
 本轮t_1f4c8c58仅使用必要文件读取/检索及文档编辑，不运行命令/测试/应用import/网络，不读凭据、不启动服务、不建卡。run3424额外基线审计按Pascal恢复决定取消，OMITTED_BY_AUTHORIZATION，不重采、不重放、不记PASS、不改审批配置。Funding保持not_modeled；不新增端点族/SDK/平台/历史metadata数据库/缓存平台/依赖或runtime撮合资金模型。
 
-> 当前执行修订：Pascal 于 2026-11-02 同意审计 D-01 的局部撤销，唯一当前 delta 见 §12。旧阶段“本卡/本轮/尚未实现”是原时点记录；公共历史缺证阻断及旧 G02-04 断言在本次被替代，不追认旧契约下的验收为错误，也不解除研究锁。本文修订已完成不等于代码实现或真实加载完成；当前代码实现与独立 Verify 已离线完成，API 进程也已受控重启并真实请求验证；后台角色、缓存身份与历史证据仍未闭合。
+> 当前执行修订：Pascal 于 2026-11-02 同意审计 D-01 的局部撤销，见 §12。旧阶段“本卡/本轮/尚未实现”是原时点记录；公共历史缺证阻断及旧 G02-04 断言在本次被替代，不追认旧契约下的验收为错误，也不解除研究锁。§12 的代码实现与独立 Verify 已离线完成，API 进程已受控重启并真实请求验证；后台角色、缓存身份与历史证据仍未闭合。最新修订（V1.6）：§13 是 Pascal 于 2026-11-03 决策（D1）的 `_gate_swap_volume_number` v=0 零成交 bar 合法化实现契约，实现/验证均未发生；五类 gate.swapVolume* 拒绝语义、单位换算链、runtime 撮合器与研究锁不变。 V1.7（t_b8db70b3，D2）：native 层已实现并通过平台侧验证（t_aa056536，237 passed + 1 xfailed）；新增 §13.4 消费链 crypto.py 两处 volume>0 数据有效性谓词放宽（≤0→<0）的精确实现契约，待实现与独立 Verify；R-01 未修复，runtime 撮合器与研究锁不变。
 
 ## 1. 输入、基线与已验证事实
 
@@ -462,10 +462,68 @@ PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m pytest 
 
 新安全/审批拒绝立即 STOP 留证并 block，不拆命令/换工具/换执行器绕行。遇真实契约外失败或必须扩文件时停止上报最小 delta；全部范围内验收通过则 done，未部署和 G-03 明确在 OUT 不作为本轮代码失败。仅称 D-01 offline 恢复，不称线上可用或历史/16研究通过。不 commit/push/fetch/merge、不改分支/gitlink、不部署重启/回测交易。
 
+## 13. v=0 零成交 bar 合法化实现契约（Pascal 2026-11-03 D1 决策；native 层已实现，消费链 §13.4 待实现）
+
+本节落实 RFC V1.8 §10 / SPEC V1.8 §11，来源诊断报告 `data/reports/2026-11-03-pathb-probe-jup-15m/nomarketdata-root-cause.md`。§13.1/13.2/13.3 的 native 层实现已由 t_aa056536 完成（平台侧 237 passed + 1 xfailed，xfail 为 §13.4 解除前的契约阻断标记；主仓 185 项基线 185/OK/exit 0），剩余实现增量为 §13.4 消费链放行（D2 决策），仍按 Light Flow（Implement→独立 Verify）；不扩 RFC/SPEC/Design 阶段，不解除 16 窗口研究锁，不消耗 QuantDinger job 配额。
+
+### 13.1 校验函数行为变更的精确实现契约
+
+目标文件 `backend_api_python/app/data_sources/native_crypto.py`（当前 896 行量级，§11.1 G3 边界沿用）。现状（2026-11-03 复核，native_crypto.py:838-854）：`_gate_swap_volume_number(value, field)` 对全部调用点统一执行 `isinstance(value, bool) or not math.isfinite(number) or number < 0 or (field != "sum" and number == 0)` 即拒绝。变更契约：
+
+1. **合法化只在 raw_v_contracts 调用点**（_parse_gate_swap_ohlcv 内 `raw_v_contracts = self._gate_swap_volume_number(raw_v, "raw_v_contracts")` 处）。推荐最小实现：该调用点改为 `raw_v_contracts = self._gate_swap_volume_zero_ok(raw_v, "raw_v_contracts")`，其中 `_gate_swap_volume_zero_ok` 为新增私有 static helper，谓词顺序：非数值/null（含 bool、非数值字符串）→ gate.swapVolumeInvalid；`math.isfinite` 失败 → 同上；`number < 0` → 同上（负值边界即 D1"负值"语义）；`if number == 0: return 0.0`（零成交合法分支）；其余正数原样返回（等价于转发 `_gate_swap_volume_number` 原逻辑）。**负零口径（冻结）**：IEEE 754 下 float("-0") == 0 且 -0.0 < 0 为 False，故字面量 "-0"/-0.0/"-0.0" 经 `number < 0` 不拒绝、经 `number == 0` 自然进入合法分支并返回 0.0——即负零按数值相等语义归入零成交，不视为负值；实现**不得**为负零增加符号位特判（copysign 检查等），该特判属于对 D1 边界的外扩。v==0 合法分支返回后，调用点短路：base_volume 直接取 0.0，不进入乘积调用点（无"负零漏进乘积链被零拒绝"的路径）。
+2. **base_volume 乘积调用点不动**：`base_volume = self._gate_swap_volume_number(raw_v_contracts * multiplier, "base_volume")` 保持原函数。v==0 分支在调用点短路：raw_v_contracts==0.0 时 base_volume 直接取 0.0，不调用乘积校验（0×有限正乘数=+0.0 无下溢；若未来乘数出现非有限值，乘数校验已先行拒绝，到不了乘积）。raw_v_contracts>0 时乘积零拒绝完整保留（下溢守卫），非有限拒绝保留（上溢守卫）。短路的等价实现（分支在乘积调用前以 `if raw_v_contracts == 0.0: base_volume = 0.0 else: ...` 表达）同样合规，验收以行为为准，不强制函数拆分形态。
+3. **sum 调用点不动**：`quote_volume` 对 sum=="0" 本就放行（sum 字段零值合法），缺失仍 None；不改。
+4. **校验顺序不变**：合约身份（id/settle/name/type=direct）→ 乘数（缺失 MetadataMissing、非数值/非有限/非正 MetadataInvalid）→ v（本次唯一变更点）→ 乘积 → sum。乘数缺失 + v==0 的组合仍以 MetadataMissing 拒绝。
+5. **不动项清单**：五类错误标识与消息、gate_swap_volume_v1 证据对象字段集合、applicability 判定（synthetic 覆盖区间→verified / 当前快照→unknown，v=0 不改变该判定）、线程/页证据隔离、F-01 最终页边界、_get/训练方法/factory.py/runtime 撮合器、NonGate/spot/其他交易所行为；crypto.py 在本条（§13.1 阶段）不动，其消费链谓词变更由 §13.4（D2）单独授权且仅限该节两处。**禁止引入 epsilon 或任何最小流动性下限**；**禁止把零成交 bar 送入任何 volume>0 前提的撮合可用性分支**（runtime 撮合语义维持不动，见 R-01）。
+
+### 13.2 受影响测试逐文件清单（Implement 与独立 Verify 的断言基线）
+
+平台侧 pytest 集合（均相对子仓 backend_api_python/，不含主仓 185 项 discover，后者见 SPEC §11.3）：
+
+1. `tests/test_native_crypto_public_client.py`（27 个测试函数）：
+   - **保留不动**：`test_gate_rejects_missing_non_positive_or_non_finite_raw_v` 的参数表 `[None, "", "bad", "0", "-1", "NaN", "Inf", "-Inf", True]` **必须将 "0" 移除**（v=0 不再属于拒绝集合），其余 8 个形态原样保留并必须继续全部通过；`test_gate_rejects_multiplication_overflow_and_underflow`（("1e308","10") 与 ("1e-300","1e-300")）原样保留；`test_gate_invalid_sum_is_not_silently_zeroed` 原样保留；其余身份/乘数/隔离/F-01 回归全部原样保留。参数表唯一允许的删改就是移除 "0" 并同步新增下述独立零成交用例；不允许改写其余断言或放宽消息匹配。
+   - **新增（最低集合）**：(a) v="0" 合法零成交 bar 用例——base_volume 精确 ==0.0、raw_v_contracts==0.0、六列长度/顺序不变、证据对象字段集合与既有完全一致、sum="0" 时 quote_volume==0.0、synthetic 覆盖区间 fixture 下 historical_applicability=="verified"；(b) 生产当前快照 fixture（无 synthetic 标记、无生效区间）下 v="0" 用例——applicability=="unknown"；(c) 负零合法化断言——v="-0" 与 "-0.0" 与 v="0" 行为一致（成功、base_volume==0.0），锁定"负零按数值相等归入零成交、无符号位特判"的冻结口径；(d) 乘数缺失 + v="0" 组合仍 MetadataMissing（校验顺序锁定）；(e) raw_v="1e-300" + multiplier="0.0"（非正乘数）仍 MetadataInvalid——非正乘数先于一切 v 语义。
+2. `tests/test_gate_swap_volume_units.py`（11 个测试函数）：
+   - **保留不动**：`test_gate_swap_unit_error_propagates_without_retry_or_fallback`（五类错误 × 两窗口共 10 组合）、`test_gate_consumer_rejects_wrong_or_unknown_evidence`、`test_gate_old_or_mixed_cache_fixture_cannot_be_relabeled`、`test_gate_consumer_rejects_missing_evidence_fields`、`test_gate_fallback_catches_also_propagate_unit_errors`（7 形态 × 两路径）全部原样保留并通过。
+   - **新增**：v=0 消费链用例必须是**独立测试函数**（不得加入 `test_gate_native_to_consumer_preserves_units_projection_and_small_volume` 的参数表——该表含 `assert row["volume"] > 0` 与小正量精度断言，零量不属于该表语义）：v="0" 时 get_kline 正常返回单行、不抛错、不触发 local/public fallback、volume==0.0、raw_v_contracts==0.0、base_volume==0.0、quote_volume==0.0（sum="0"）、volume_unit=="base"、volume_evidence 字段集合完整。**V1.7 增补（D2/§13.4）**：(i) 删除该用例之上的 `@pytest.mark.xfail(strict=True)` 整块装饰器（当前工作树 148-158 行），函数体与断言不动；(ii) 新增重采样路径独立测试函数：全零成交源 bars（bucket>1 的 mock，source rows volume 全为 "0"）经 get_kline 正常返回、聚合 volume==0.0、volume_unit=="base"、volume_historical_applicability=="unknown"（聚合 bar 无逐根证据，不得伪造 volume_evidence）、不抛错、不走 fallback，锁定 crypto.py:648 谓词放宽。
+3. `tests/test_training_ohlc.py`（33 个测试函数）：无 v=0 相关断言（训练通道 volume_status=not_provided 不变），预期零变更；若有失败即实现越界（改到训练通道），停止上报。
+4. `tests/test_crypto_kline_exchange_matrix.py`：gate swap 行 mock volume 均为正量，预期零变更；失败即实现越界，停止上报。
+
+预期断言净变化：上述两文件合计新增约 5-7 个测试函数/用例组、test_native_crypto_public_client.py 参数表移除 1 个形态（"0"）；除此之外不得有任何既有断言删改放宽。
+
+### 13.3 验证命令、R-01 披露载体与停止条件
+
+冻结命令（子仓 backend_api_python 工作目录，Implement 自检一次、独立 Verify 一次，不重复累计为门禁）：
+
+```bash
+PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m pytest -p no:cacheprovider tests/test_native_crypto_public_client.py tests/test_gate_swap_volume_units.py tests/test_training_ohlc.py tests/test_crypto_kline_exchange_matrix.py tests/test_agent_current_contract.py -q
+```
+
+主仓冻结基线（SPEC §11.3，185 项，项目根执行，实现后必须重跑核对 185/OK/exit 0）：`PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m unittest discover -s skills/strategies/strategy-lab/tests -p 'test_*.py' -v`。记录 cwd/命令/原始 stdout+stderr/原生 exit/候选文件 SHA；仅离线 synthetic fixture，无网络/凭据/数据库/缓存/服务动作，job/compile/backtest=0。
+
+**R-01 披露载体**：实现移交物（implement 移交文档）必须逐字包含 RFC §10.3 披露全文——平台 `_liquidity_cap`（runtime.py:1274-1281）对 volume<=0 返回 None（零成交 bar 上模拟撮合器不设 10% 上限），与研究语义"该 bar 网格限价单不成交"存在差异；该差异按 D1 边界不在本修订修复范围。SPEC V1.7-08 以此为验收项：披露缺失即 Verify 不通过。禁止把披露写成"已修复"或顺带改 runtime。
+
+停止条件：任何保护文件越界修改、既有断言删除放宽（除 §13.2 第 1 条 "0" 形态移除与 §13.2 第 2 条 D2 增补 (i) 的 xfail 装饰器删除外）、185 项基线失败或数量≠185、平台侧既有用例失败、必须扩展 §13.4 之外文件范围、安全/审批拒绝——均 STOP 留证上报，不换工具/解释器/执行器绕行。不 commit/push、不部署重启、不触碰缓存与数据库；本节实现完成后 G-01/G-03 状态不变、16 窗口研究锁不解除，16 窗口是否放行由后续卡按新契约另行评估。
+
+### 13.4 消费链 crypto.py v=0 放行的精确实现契约（D2 决策，t_b8db70b3；本节为剩余唯一实现增量）
+
+来源：RFC V1.8 §10.4（D2 契约决策）、SPEC V1.8 §11.2（V1.7-06/V1.8-01）/§11.4；F 卡实测 `data/tasks/active/2026-11-03-v0-zero-trade-bar-legalization/implement-handoff.md` §5。判定依据：§10.2 第 1 条合法零成交 bar 及其「该 bar 网格限价单不成交」研究语义要求 bar 穿过消费链；原 V1.6 §13.1 第 5 条「不动 crypto.py」与该语义构成内部矛盾，D2 按 D1 既有语义收窄修正，不扩权。
+
+1. **精确变更（`app/data_sources/crypto.py`，仅两处谓词字符变更）**：
+   - Site A（重采样路径，crypto.py:648）：`if not math.isfinite(candle[5]) or candle[5] <= 0:` → `if not math.isfinite(candle[5]) or candle[5] < 0:`。
+   - Site B（单 bar 路径，crypto.py:694-700 谓词）：`not math.isfinite(candle[5]) or candle[5] <= 0 or evidence["base_volume"] != candle[5]` → `not math.isfinite(candle[5]) or candle[5] < 0 or evidence["base_volume"] != candle[5]`。
+   - 两处 raise 的标识 `gate.swapVolumeInvalid` 与消息文本（`normalized volume must match positive native volume`）均不变：消息中 "positive" 描述残留拒绝语义（负值/非有限/证据不一致），上游按标识匹配的立即 re-raise 判定不受影响；不新增、不删除、不移动任何 raise/分支。
+2. **语义澄清（防误读）**：本变更是消费链数据有效性网关的放宽，不是 RFC §10.2 第 3 条禁止的「把 volume>0 作为前提的撮合可用性分支」——该分支指 runtime `_liquidity_cap` 等撮合语义；runtime 撮合器不动，R-01 披露全文（RFC §10.3）继续有效且差异未修复；不引入 epsilon。
+3. **精确 allowlist**：`backend_api_python/app/data_sources/crypto.py`（仅第 1 条两处谓词）与 `backend_api_python/tests/test_gate_swap_volume_units.py`（§13.2 第 2 条 D2 增补 (i)(ii)：xfail 装饰器整块删除 + 重采样 v=0 独立用例）；除此之外任何文件不动（含 native_crypto.py、runtime.py、factory.py、训练服务、主仓源码）。
+4. **验证**：§13.3 冻结 pytest 命令（Implement 自检一次、独立 Verify 一次）——预期平台侧全绿（passed，无 failed/xfailed/xpassed；原 1 xfailed 因 V1.8-01 转常规通过，新增 1 个重采样用例，实际总数以实跑为准，既有用例不得减少）；主仓 185 项冻结基线按 SPEC §11.3 重跑核对 185/OK/exit 0。无网络/凭据/数据库/缓存/服务动作，job/compile/backtest=0。
+5. **停止条件**沿用 §13.3；不 commit/push、不部署重启、不触碰缓存与数据库；完成后 16 窗口研究锁仍不解除，是否放行由后续卡按新契约评估。
+
 ## 版本记录
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.7 | 2026-11-03 | t_b8db70b3（E2/D2）：§13 状态更新——§13.1/13.2 的 native 层已由 t_aa056536 实现并通过平台侧验证（237 passed + 1 xfailed，xfail 为 §13.4 解除前阻断标记）；§13.1 第 5 条不动项清单将 crypto.py 改列「除 §13.4 外不动」；§13.2 第 2 条增补消费链测试增量（xfail 装饰器删除 + 重采样 v=0 用例）；§13.3 停止条件例外同步；新增 §13.4 消费链 crypto.py 两处谓词放宽（≤0→<0、保留 isfinite/证据一致性校验、标识与消息不变、R-01 不变）精确实现契约；指向 RFC/SPEC V1.8；仅文档，§13.4 实现/验证未发生，job 0、16 锁不解除 |
+| V1.6 | 2026-11-03 | t_e5ac39e6：按 Pascal 2026-11-03 D1 决策增 §13——§13.1 冻结 _gate_swap_volume_number 行为变更契约（合法化仅 raw_v 调用点、base_volume 乘积调用点零拒绝保留即下溢守卫、负零按数值相等归入零成交且禁符号位特判、校验顺序与五类错误/证据对象/sum 缺失 null 不变）；§13.2 受影响测试逐文件清单（test_native_crypto_public_client.py 拒绝参数表唯一删改="0" 移除 + 新增 5 组零成交/负零/顺序用例、test_gate_swap_volume_units.py 新增独立 v=0 消费链用例、training_ohlc/matrix 预期零变更）；§13.3 冻结 pytest 命令 + 主仓 185 项基线重跑核对 + R-01 披露载体（implement 移交物逐字含 RFC §10.3，缺失即 Verify 不通过）+ 停止条件；指向 RFC/SPEC V1.7；仅文档，实现/验证未发生，job 配额 0，16 窗口研究锁不解除 |
 | V1.5 | 2026-11-02 | 按 Pascal 决策增 §12，修订 §3.3 / G02-04，局部撤销公共 Gate 历史缺证和重采样阻断；保留单位精度/五项修复/训练和研究锁；指向 RFC/SPEC V1.6；离线实现与独立 Verify 已完成（t_8a23ea34），API 进程已受控重启并真实请求验证；研究准入仍未放行 |
 | V1.0 | 2026-10-31 | 基于RFC/SPEC V1.1给出B001最小设计及研究工具候选边界；既有70测试真实通过；明确G-01/G-02/G-03路径缺口，T2 BLOCKED，不实现/不释放T3 |
 | V1.1 | 2026-10-31 | 续接run3399：按Pascal离线授权分段修订，指向RFC/SPEC V1.2；T3当前仅B-001离线修复allowlist，§4-7薄层/研究/策略转未来未启用候选；G-01/02/03改列为线上/完整研究前置不阻塞离线；offline_design=PASS、full readiness=DEFERRED。主控读回同步校正§2.1四文件归属、当前B001/NonGate测试与未来CLI/杠杆测试边界、纯synthetic解析接缝及迁移表述；不新增业务语义或文件范围。主控二次同步（run3401交接后、Pascal「请继续」授权）：§2.2 crypto.py补齐_fetch_ohlcv两处catch与_fetch_ohlcv_fallback两处catch仅五类gate.swapVolume*单位错误立即re-raise的最小接缝及format_kline精度注意；§8定向pytest解释器改为backend_api_python自带.venv（不安装依赖）。§3.2行为契约、测试断言与§2.2文件边界不变 |

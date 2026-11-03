@@ -1,5 +1,3 @@
 {
-  "grid_count": 90,
-  "leverage": 10,
-  "initial_capital": 1000
+  "grid_count": 90
 }
