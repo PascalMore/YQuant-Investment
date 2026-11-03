@@ -15,7 +15,7 @@
 | `neutral-grid-aaveusdt-15m` | 研究类 | 未执行 | — | — | — |
 | `neutral-grid-jupusdt` | 研究类 | 已完成 | 平台原生网格回测跑通：总收益 +18.99%、年化 +19.12%、最大回撤 −5.86%、夏普 1.63，608 笔成交，相对基准信息比率 0.23。 | `strategies/neutral-grid-jupusdt/reports/agent-backtest.md` | +189.94% / MDD −33.73% ｜ 离线折算 |
 | `neutral-grid-jupusdt-5m` | 研究类 | 未执行 | — | — | — |
-| `neutral-grid-jupusdt-15m` | 研究类 | 已完成 | 15m 驱动、初始资金 1000 USDT 的平台回测：窗口内总收益 +11.03%、年化 +52.03%、最大回撤 −4.02%、夏普 3.46，610 笔成交；基准历史不足，未给出信息比率。 | `strategies/neutral-grid-jupusdt-15m/reports/agent-backtest.md` | +110.29% / MDD −23.82% ｜ 离线折算 |
+| `neutral-grid-jupusdt-15m` | 研究类 | 已完成 | 15m 驱动、初始资金 1000 USDT 的平台回测：窗口内总收益 +11.03%、年化 +52.03%、最大回撤 −4.02%、夏普 3.46，610 笔成交；基准历史不足，未给出信息比率。 | `strategies/neutral-grid-jupusdt-15m/reports/agent-backtest.md` | +110.53% / MDD −23.90% / 夏普 3.79 ｜ **原生实测 runId=40** |
 | `neutral-grid-pumpusdt` | 研究类 | 已完成 | 平台原生网格回测跑通：总收益 +16.71%、年化 +16.83%、最大回撤 −7.35%、夏普 1.27，715 笔成交；标的基准同期年化 +62.94%，信息比率 −0.40。 | `strategies/neutral-grid-pumpusdt/reports/agent-backtest.md` | +167.07% / MDD −51.78% ｜ 原生实测 runId=39 |
 | `neutral-grid-pumpusdt-5m` | 研究类 | 未执行 | — | — | — |
 | `neutral-grid-pumpusdt-15m` | 研究类 | 未执行 | — | — | — |
@@ -29,4 +29,4 @@
 2. `未执行` 仅指本实例目录内无报告文件；部分实例的历史回测原始证据只保存在 `data/reports/` 下，未登记为实例结论，需要时按该证据目录另行核对；表中数字一律取实例自身报告，聚合报告口径若有差异以实例报告为准。
 3. 本索引只登记结论摘要与证据路径，不复制报告内容、不新增指标、不重新评价；各实例的需求、参数与验收口径以各自 `spec.md` 及其引用的 SPEC/Design 为准。
 4. 表内路径基准为 `skills/strategies/strategy-lab/`，即 `strategies/<id>/reports/...` 自该基准目录解析。
-5. 「Path B 口径（10x）」列是**独立杠杆口径**的登记，不覆盖原 1x 结论：1x 结论（收益、回撤、成交数）本身有效且继续有效，Path B 只是同策略在保证金 1000 USDT、交易所杠杆 10x、名义敞口预算 10000 USDT 下的另一组数字。证据等级分两类：**原生实测**＝平台真实以 `leverageEnabled=true / leverage=10` 提交并读回断言通过的回测（当前仅 `neutral-grid-pumpusdt`，runId=39）；**离线折算**＝由 1x 权益曲线按 `E_B(t) = 1000 + (1000×10/cap) × (V_A(t) − cap)` 映射得到，**非平台原生 Path B 回测**，其前提（入场无 partial、名义按比例放大、权益风控关闭）已在 PUMP 1D 上被原生对拍实证，其余标的属外推。逐实例报告路径为 `strategies/<id>/reports/path-b-leverage-report.md`（1x 原始回执 `agent-backtest.md` 由 CLI 自动生成并覆盖，勿手工改写）。
+5. 「Path B 口径（10x）」列是**独立杠杆口径**的登记，不覆盖原 1x 结论：1x 结论（收益、回撤、成交数）本身有效且继续有效，Path B 只是同策略在保证金 1000 USDT、交易所杠杆 10x、名义敞口预算 10000 USDT 下的另一组数字。证据等级分两类：**原生实测**＝平台真实以 `leverageEnabled=true / leverage=10` 提交并读回断言通过的回测（当前 `neutral-grid-pumpusdt` runId=39、`neutral-grid-jupusdt-15m` runId=40）；**离线折算**＝由 1x 权益曲线按 `E_B(t) = 1000 + (1000×10/cap) × (V_A(t) − cap)` 映射得到，**非平台原生 Path B 回测**，其前提（入场无 partial、名义按比例放大、权益风控关闭）已在 PUMP 1D 上被原生对拍实证，其余标的属外推。逐实例报告路径为 `strategies/<id>/reports/path-b-leverage-report.md`（1x 原始回执 `agent-backtest.md` 由 CLI 自动生成并覆盖，勿手工改写）。
