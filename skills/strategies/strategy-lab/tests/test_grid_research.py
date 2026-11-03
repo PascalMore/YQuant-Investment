@@ -7,6 +7,7 @@ no network, no credentials, no strategy import/execution, no real report dirs.
 """
 
 import ast
+import csv
 import datetime as dt
 import hashlib
 import importlib.util
@@ -311,7 +312,7 @@ class MarginMetricsTests(unittest.TestCase):
 
 
     def test_metrics_1000_1200_900_frozen_example(self):
-        result = gr.margin_metrics(METRIC_ROWS)
+        result = gr.margin_metrics(METRIC_ROWS, frequency_seconds=900)
         self.assertEqual(-100.0, result["net_pnl"])
         self.assertAlmostEqual(-10.0, result["margin_return_pct"], places=10)
         self.assertAlmostEqual(1200.0, result["peak_equity"], places=10)
@@ -566,9 +567,14 @@ class SummarizeCellsTests(unittest.TestCase):
         self.assertEqual(1, summary[0]["windows_missing"])
 
 
-def audit_logs(seqs, bankruptcy_at=None):
-    """Build GRID_INIT/GRID_AUDIT/GRID_END controlled log lines (Design §6 fields)."""
+def audit_logs(seqs, bankruptcy_at=None, frequency_seconds=900):
+    """Build GRID_INIT/GRID_AUDIT/GRID_END controlled log lines (Design §6 fields).
+
+    The INIT record declares the bar frequency (D5-1/R-05): frequency travels
+    with the batch, so the reconciler never guesses it from a default.
+    """
     base = utc(2026, 1, 1, 10, 0)
+    minutes = frequency_seconds // 60
     entries = [
         {
             "kind": "init",
@@ -577,7 +583,8 @@ def audit_logs(seqs, bankruptcy_at=None):
             "params": {"N": 50, "g_pct": 1.2},
             "training_summary": {"L": 90.0, "U": 121.8},
             "start_utc": iso(base),
-            "end_utc": iso(base + dt.timedelta(minutes=15 * max(seqs))),
+            "end_utc": iso(base + dt.timedelta(minutes=minutes * max(seqs))),
+            "frequency_seconds": frequency_seconds,
         }
     ]
     prev = None
@@ -589,8 +596,8 @@ def audit_logs(seqs, bankruptcy_at=None):
                 "schema": "GRID_AUDIT_V1",
                 "cell": "PUMPUSDT-W1",
                 "seq": seq,
-                "bar_open": iso(base + dt.timedelta(minutes=15 * i)),
-                "bar_close": iso(base + dt.timedelta(minutes=15 * (i + 1))),
+                "bar_open": iso(base + dt.timedelta(minutes=minutes * i)),
+                "bar_close": iso(base + dt.timedelta(minutes=minutes * (i + 1))),
                 "ohlcv_units": {"price": "USDT", "volume": "base"},
                 "ohlcv": {"open": 100.0, "high": 101.0, "low": 99.0,
                           "close": 100.0, "volume": 10000.0},
@@ -1024,8 +1031,9 @@ class CarrierFormatTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
             summary = gr.summarize_cells(cell_rows())
-            gr.write_comparison_csv(summary, out / "comparison.csv")
-            gr.write_cells_csv(cell_rows(), out / "cells.csv")
+            anchor = dt.datetime(2026, 10, 31, tzinfo=gr.UTC)
+            gr.write_comparison_csv(summary, out / "comparison.csv", anchor_utc=anchor)
+            gr.write_cells_csv(cell_rows(), out / "cells.csv", anchor_utc=anchor)
             self.assertEqual(5, len(_read(out / "comparison.csv").strip().splitlines()))  # 4 + header
             self.assertEqual(17, len(_read(out / "cells.csv").strip().splitlines()))  # 16 + header
 
@@ -1381,7 +1389,8 @@ class StrategySourceGeneratorTests(unittest.TestCase):
         assert spec is not None and spec.loader is not None
         coordinator = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(coordinator)
-        plan = coordinator.describe_plan(contracts=["SYNTHETICUSDT"], now_utc=ANCHOR)
+        plan = coordinator.describe_plan(contracts=["SYNTHETICUSDT"], now_utc=ANCHOR,
+                                         anchor_utc=ANCHOR)
         self.assertEqual(4, len(plan["manifest"]["items"]))
         self.assertFalse(plan["submission_implemented"])
         self.assertEqual(["G-01", "G-02", "G-03"], plan["unresolved_gates"])
@@ -1408,14 +1417,18 @@ class StrategySourceGeneratorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             target = Path(temporary) / "synthetic-source.py"
             with mock.patch("builtins.print"):
-                self.assertEqual(0, coordinator.main(["--write-example", str(target)]))
+                self.assertEqual(0, coordinator.main(
+                    ["--anchor", "2026-10-31T00:00:00Z", "--frequency", "15m",
+                     "--write-example", str(target)]))
             self.assertEqual(_read(_STRATEGY_PATH), _read(target))
             with self.assertRaises(FileExistsError):
-                coordinator.main(["--write-example", str(target)])
+                coordinator.main(["--anchor", "2026-10-31T00:00:00Z", "--frequency", "15m",
+                                  "--write-example", str(target)])
             alternate = Path(temporary) / "alternate-source.py"
             with mock.patch("builtins.print"):
                 coordinator.main(["--contracts", "SYNTHETICUSDT", "--anchor",
-                                  "2026-08-31T00:00:00Z", "--write-example", str(alternate)])
+                                  "2026-08-31T00:00:00Z", "--frequency", "1h",
+                                  "--write-example", str(alternate)])
             constants = {node.targets[0].id: ast.literal_eval(node.value)
                          for node in ast.parse(_read(alternate)).body
                          if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)}
@@ -1517,15 +1530,22 @@ class AnchorTaskDateTest(unittest.TestCase):
 
     def test_explicit_anchor_derives_the_four_windows(self):
         anchor = dt.datetime(2026, 11, 3, tzinfo=gr.UTC)
-        cells = gr.build_cells(anchor_utc=anchor)
+        cells = gr.build_cells(anchor_utc=anchor, frequency_seconds=900)
         windows = {cell["window"]: cell for cell in cells}
         self.assertEqual("2026-08-03T00:00:00Z", gr._iso(windows["W1"]["start_utc"]))
         self.assertEqual("2026-11-03T00:00:00Z", gr._iso(windows["W1"]["end_utc"]))
         self.assertEqual("2026-05-03T00:00:00Z", gr._iso(windows["W2"]["start_utc"]))
         self.assertEqual("2026-02-03T00:00:00Z", gr._iso(windows["W3"]["start_utc"]))
         self.assertEqual("2025-11-03T00:00:00Z", gr._iso(windows["W4"]["start_utc"]))
-        self.assertEqual(8832, windows["W1"]["expected_15m_bars"])
-        self.assertEqual(8544, windows["W3"]["expected_15m_bars"])
+        self.assertEqual(8832, windows["W1"]["expected_bars"])
+        self.assertEqual(8544, windows["W3"]["expected_bars"])
+        # Frequency independence (D5-1): the same anchor at 1h yields the same
+        # boundaries with bar counts derived from the frequency parameter.
+        hourly = {cell["window"]: cell for cell in
+                  gr.build_cells(anchor_utc=anchor, frequency_seconds=3600)}
+        self.assertEqual("2026-08-03T00:00:00Z", gr._iso(hourly["W1"]["start_utc"]))
+        self.assertEqual(2208, hourly["W1"]["expected_bars"])
+        self.assertEqual(2136, hourly["W3"]["expected_bars"])
 
     def test_anchor_is_not_the_previous_batch_constant(self):
         # The previous-batch anchor is only a fallback, never the research default.
@@ -1536,3 +1556,121 @@ class AnchorTaskDateTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FrequencyParameterizationTest(unittest.TestCase):
+    """RFC-06-002 V1.11 D5-1: frequency is a research-instance parameter.
+
+    Changing the bar frequency must not require a contract or code change:
+    the same anchor yields the same boundaries and derived bar counts.
+    """
+
+    ANCHOR = dt.datetime(2026, 11, 3, tzinfo=gr.UTC)
+
+    def test_same_anchor_same_boundaries_across_frequencies(self):
+        hourly = {c["window"]: c for c in gr.build_cells(
+            anchor_utc=self.ANCHOR, frequency_seconds=3600)}
+        quarter = {c["window"]: c for c in gr.build_cells(
+            anchor_utc=self.ANCHOR, frequency_seconds=900)}
+        for window in ("W1", "W2", "W3", "W4"):
+            self.assertEqual(hourly[window]["start_utc"], quarter[window]["start_utc"])
+            self.assertEqual(hourly[window]["end_utc"], quarter[window]["end_utc"])
+
+    def test_expected_bars_follow_the_frequency_parameter(self):
+        cells = gr.build_cells(anchor_utc=self.ANCHOR, frequency_seconds=3600)
+        windows = {c["window"]: c for c in cells}
+        self.assertEqual(2208, windows["W1"]["expected_bars"])   # 92 days * 24
+        self.assertEqual(2208, windows["W2"]["expected_bars"])
+        self.assertEqual(2136, windows["W3"]["expected_bars"])   # 89 days * 24
+        self.assertEqual(2208, windows["W4"]["expected_bars"])
+        self.assertEqual(3600, windows["W1"]["frequency_seconds"])
+
+    def test_four_hour_sampling_is_frequency_independent(self):
+        cells = gr.build_cells(anchor_utc=self.ANCHOR, frequency_seconds=14400)
+        windows = {c["window"]: c for c in cells}
+        self.assertEqual(552, windows["W1"]["expected_bars"])    # 92 days * 6
+        self.assertEqual(14400, windows["W1"]["frequency_seconds"])
+
+    def test_annualization_factor_is_a_formula_not_a_constant(self):
+        rows = [{"time": iso(utc(2026, 1, 1) + dt.timedelta(hours=h)),
+                 "equity": e}
+                for h, e in ((1, 1100.0), (2, 1050.0), (3, 1150.0), (4, 1200.0))]
+        self.assertEqual(8760, gr.margin_metrics(rows, frequency_seconds=3600)
+                         ["periods_per_year"])
+        self.assertEqual(2190, gr.margin_metrics(rows, frequency_seconds=14400)
+                         ["periods_per_year"])  # 365 days * 6 bars/day
+
+    def test_window_coverage_preflight_is_frequency_aware(self):
+        # Gate swap retains 10000 bars: 1h covers ~417 days, 15m only ~104.
+        one_hour = gr.check_window_coverage(2208, 10000, 10000)
+        self.assertTrue(one_hour["ok"])
+        self.assertIsNone(one_hour["reason"])
+        quarter_hour = gr.check_window_coverage(8832, 10000, 10000)
+        self.assertTrue(quarter_hour["ok"])
+        minute = gr.check_window_coverage(525600, 10000, 10000)
+        self.assertFalse(minute["ok"])
+        self.assertIn("bars", minute["reason"])
+        # Listing history is the binding constraint when it is the smaller side.
+        listed_late = gr.check_window_coverage(2208, 10000, 500)
+        self.assertFalse(listed_late["ok"])
+        self.assertEqual(500, listed_late["effective_limit"])
+
+    def test_anchor_is_required_by_the_cell_carriers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            with self.assertRaises(ValueError):
+                gr.write_cells_csv([], out / "cells.csv")
+            with self.assertRaises(ValueError):
+                gr.write_comparison_csv([], out / "comparison.csv")
+
+    def test_task_date_and_anchor_land_in_the_cell_carrier(self):
+        anchor = dt.datetime(2026, 11, 3, tzinfo=gr.UTC)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            gr.write_cells_csv([], out / "cells.csv", anchor_utc=anchor,
+                               frequency_seconds=3600)
+            header = _read(out / "cells.csv").splitlines()[0].split(",")
+            self.assertIn("task_date", header)
+            self.assertIn("anchor_utc", header)
+            self.assertIn("expected_bars", header)
+            self.assertIn("frequency_seconds", header)
+            rows = list(csv.DictReader(_read(out / "cells.csv").splitlines()))
+            self.assertEqual(16, len(rows))
+            for row in rows:
+                self.assertEqual("2026-11-03", row["task_date"])
+                self.assertEqual("2026-11-03T00:00:00Z", row["anchor_utc"])
+
+    def test_placeholder_qualification_is_insufficient_evidence(self):
+        anchor = dt.datetime(2026, 11, 3, tzinfo=gr.UTC)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            gr.write_cells_csv([], out / "cells.csv", anchor_utc=anchor)
+            rows = list(csv.DictReader(_read(out / "cells.csv").splitlines()))
+            for row in rows:
+                self.assertIn(row["qualification"],
+                              ("qualified", "insufficient-evidence",
+                               "risk-breach", "failed"))
+                self.assertNotEqual("unknown", row["qualification"])
+
+    def test_liquidation_columns_stay_na_without_platform_mmr(self):
+        rules = {"amount_step": 1e-08, "min_amount": 0.0, "min_notional": 0.0,
+                 "price_tick": 0.0, "contract_size": 1.0}
+        snapshot = {"time": "2026-08-01T00:00:00Z", "value": 50.0, "cash": 20.0,
+                    "grossExposure": 5.0, "netExposure": 5.0,
+                    "positions": {"Crypto:JUP/USDT@swap::long": {
+                        "quantity": 1000.0, "averageCost": 0.25,
+                        "lastPrice": 0.25, "marketValue": 250.0}}}
+        result = gr.liquidation_price_range([snapshot], rules)
+        self.assertEqual(gr.NA, result["downward_liquidation_price"])
+        self.assertEqual(gr.NA, result["upward_liquidation_price"])
+        self.assertIn("MMR", result["reason"])
+
+    def test_gross_to_equity_uses_the_platform_ratio_without_redivision(self):
+        rules = {"maintenanceMarginRate": 0.005, "liquidationFeeRate": 0.0005}
+        snapshot = {"time": "2026-08-01T00:00:00Z", "value": 50.0, "cash": 20.0,
+                    "grossExposure": 5.0, "netExposure": 5.0,
+                    "positions": {"Crypto:JUP/USDT@swap::long": {
+                        "quantity": 1000.0, "averageCost": 0.25,
+                        "lastPrice": 0.25, "marketValue": 250.0}}}
+        result = gr.liquidation_price_range([snapshot], rules)
+        self.assertAlmostEqual(5.0, result["worst_gross_to_equity"], places=9)

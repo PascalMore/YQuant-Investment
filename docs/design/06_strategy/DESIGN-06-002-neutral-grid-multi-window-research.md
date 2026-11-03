@@ -704,7 +704,7 @@ qualification 枚举冻结：`qualified / insufficient-evidence / risk-breach / 
 
 - 新增：1h 窗口边界与 expected_bars（2208/2208/2136/2208）、K 公式（1h=8760）、4h 抽样（92d=552 根）频率无关性、强平价 N/A+固定原因、`liquidation_price_range` 被 evidence 路径消费、枚举收敛（无 unknown）、锚点必填、`task_date==anchor` 校验、覆盖率预检不足分支
 - 既有 185 项断言**零修改**；`cross_liquidation` / `margin_metrics` / `summarize_cells` / `METRIC_COLUMNS` 语义冻结
-- 冻结命令（预期 193 + 新增 = 全绿 exit 0）：
+- 冻结命令（预期既有 193 + 新增 11 = 204，全绿 exit 0）：
 ```bash
 PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m unittest discover -s skills/strategies/strategy-lab/tests -p 'test_*.py' -v
 ```

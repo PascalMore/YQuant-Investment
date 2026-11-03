@@ -176,6 +176,27 @@ def build_cells(contracts: list[str] | None = None,
     ]
 
 
+def check_window_coverage(bars_needed: int, venue_retained_bars: int,
+                          listed_since_bars: int) -> dict:
+    """Pre-flight the window coverage before any submission (D5-1/V1.11-09).
+
+    A research window is only executable when the bar count fits BOTH the
+    venue's retained history and the contract's own listing history. Frequency
+    changes the retained span (Gate swap keeps 10000 bars: 1m ~6.9 days,
+    15m ~104 days, 1h ~417 days), so this check is a frequency-aware
+    mechanism, not a per-batch constant.
+    """
+    needed = _integer(bars_needed, "bars_needed", 1)
+    retained = _integer(venue_retained_bars, "venue_retained_bars", 1)
+    listed = _integer(listed_since_bars, "listed_since_bars", 1)
+    limit = min(retained, listed)
+    if needed <= limit:
+        return {"ok": True, "bars_needed": needed, "effective_limit": limit,
+                "reason": None}
+    return {"ok": False, "bars_needed": needed, "effective_limit": limit,
+            "reason": f"window needs {needed} bars but venue/listing allows {limit}"}
+
+
 def validate_run_anchor(anchor_utc: Any, now_utc: Any) -> None:
     """Reject a not-yet-reached anchor at the coordinating boundary, clock injected."""
     if _midnight(anchor_utc) > _time(now_utc):
@@ -578,10 +599,9 @@ def reconcile_audit(logs: list[str], cell: dict | str) -> dict:
     Optional native_* totals on the cell are independently compared, not inferred.
     """
     cell_id = cell["cell_id"] if isinstance(cell, dict) else cell
-    # Frequency follows the batch parameter (D5-1); INIT may also carry it.
-    audit_frequency = int(
-        (cell.get("frequency_seconds") if isinstance(cell, dict) else None)
-        or DEFAULT_FREQUENCY_SECONDS)
+    # Frequency follows the batch parameter (D5-1/R-05): the authoritative
+    # source is the cell mapping, otherwise the INIT record must declare it.
+    cell_frequency = (cell.get("frequency_seconds") if isinstance(cell, dict) else None)
     entries = {prefix: [] for prefix in ("GRID_INIT_V1", "GRID_AUDIT_V1", "GRID_END_V1")}
     reasons = []
     for line in logs:
@@ -611,6 +631,10 @@ def reconcile_audit(logs: list[str], cell: dict | str) -> dict:
     init, end = initial[0], final[0]
     if not {"params", "training_summary"} <= init.keys():
         raise ValueError("missing INIT fields")
+    audit_frequency = int(cell_frequency or init.get("frequency_seconds")
+                          or DEFAULT_FREQUENCY_SECONDS)
+    if audit_frequency <= 0:
+        raise ValueError("invalid frequency_seconds")
     if not {"bars_total", "peak_equity", "net_pnl", "max_drawdown_pct", "return_count",
             "return_sum", "return_square_sum", "return_valid",
             "risk_breach_observed"} <= end.keys():
@@ -718,7 +742,7 @@ def reconcile_audit(logs: list[str], cell: dict | str) -> dict:
                            and "seq/previous_seq gap" not in reasons)
     bankrupt = any(row["equity"] <= 0 for row in rows)
     bankruptcy_skipped = bankrupt and incomplete
-    metrics = margin_metrics(rows)
+    metrics = margin_metrics(rows, frequency_seconds=audit_frequency)
     if rows:
         if not math.isclose(end["net_pnl"], metrics["net_pnl"],
                             abs_tol=ABS_TOL, rel_tol=REL_TOL):

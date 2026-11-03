@@ -267,7 +267,8 @@ def _load_calculations() -> Any:
 
 
 def generate_strategy_source(*, cell: str | dict, template_sha256: str,
-                             geometry: dict | None = None) -> str:
+                             geometry: dict | None = None,
+                             timeframe: str = "15m") -> str:
     """Generate sandbox source text, locked offline until evidence gates close.
 
     Defaults are explicitly synthetic examples, not inferred training history.
@@ -360,13 +361,18 @@ def generate_strategy_source(*, cell: str | dict, template_sha256: str,
     return source
 
 
+_FREQUENCY_SECONDS = {"1m": 60, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400}
+
+
 def describe_plan(*, contracts: list[str] | None = None, windows_spec: list[dict] | None = None,
-                  anchor_utc: Any = None, now_utc: Any = None) -> dict:
+                  anchor_utc: Any = None, now_utc: Any = None,
+                  frequency_seconds: int = 3600) -> dict:
     """Return an in-memory offline plan, retaining all unresolved evidence gates."""
     calculations = _load_calculations()
     anchor = calculations.DEFAULT_ANCHOR if anchor_utc is None else anchor_utc
     calculations.validate_run_anchor(anchor, dt.datetime.now(dt.timezone.utc) if now_utc is None else now_utc)
-    cells = calculations.build_cells(contracts, windows_spec, anchor)
+    cells = calculations.build_cells(contracts, windows_spec, anchor,
+                                   frequency_seconds=frequency_seconds)
     return {"mode": "offline_only", "submission_implemented": False,
             "runtime_loaded": "NOT_VERIFIED", "historical_evidence": "UNKNOWN",
             "full_research_status": "DEFERRED", "unresolved_gates": ["G-01", "G-02", "G-03"],
@@ -377,18 +383,29 @@ def main(argv: list[str] | None = None) -> int:
     """Describe the offline plan or write a locked example; reject all execution."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--contracts", nargs="+")
-    parser.add_argument("--anchor", default="2026-10-31T00:00:00Z")
+    parser.add_argument("--anchor",
+                        help="research task date anchor (UTC midnight, required "
+                             "for describe/write-example)")
+    parser.add_argument("--frequency", default="1h",
+                        help="bar frequency for the batch (1m/15m/1h/4h/1d)")
     action = parser.add_mutually_exclusive_group()
     action.add_argument("--describe", action="store_true")
     action.add_argument("--write-example", type=Path, help="static source; only own strategy.py may be refreshed")
     action.add_argument("--execute", action="store_true", help="unsupported: fail closed, zero requests")
     args = parser.parse_args(argv)
     if args.execute:
+        # Fail closed before any anchor validation: business execution stays
+        # disabled and the exit code keeps its frozen meaning (D5-3).
         parser.exit(3, "insufficient-evidence: G-01/G-02/G-03 unresolved; business execution disabled\n")
-    plan = describe_plan(contracts=args.contracts, anchor_utc=args.anchor)
+    if not args.anchor:
+        parser.error("--anchor is required (D5-3): pass the research task date")
+    frequency_seconds = _FREQUENCY_SECONDS.get(args.frequency, 3600)
+    plan = describe_plan(contracts=args.contracts, anchor_utc=args.anchor,
+                          frequency_seconds=frequency_seconds)
     if args.write_example:
         source = generate_strategy_source(cell=plan["manifest"]["items"][0],
-                                          template_sha256=TEMPLATE_SHA256)
+                                          template_sha256=TEMPLATE_SHA256,
+                                          timeframe=args.frequency)
         # Explicit caller-selected source output, never a business report/receipt.
         own_example = Path(__file__).resolve().with_name("strategy.py")
         mode = "w" if args.write_example.resolve() == own_example else "x"

@@ -461,7 +461,7 @@ G-02只有在独立Verify/Review确认实现与默认路径回归、主控确认
 | V1.11-09 | 覆盖率预检内建：`window_bars ≤ min(venue 保留根数, 上市以来根数)` 不满足 → insufficient-evidence + 披露；1h/365 天在 Gate 10000 根内通过 |
 | V1.11-10 | 锚点贯穿：`research.py --anchor` 必填、`grid_training.py` 训练/冻结通道显式传递（R-05 消解） |
 | V1.11-11 | 既有 185 项断言无修改删除；`cross_liquidation`/`margin_metrics`/`summarize_cells`/`METRIC_COLUMNS` 语义不变；15m 实例与历史 runId 29..40 冻结 |
-| V1.11-12 | 主仓 193 项 + 新增参数化用例（1h 边界/expected_bars/K、4h 抽样、强平 N/A、枚举收敛）全绿 exit 0；`git diff --check` 干净 |
+| V1.11-12 | 主仓既有 193 项 + 新增 11 项参数化用例（1h/4h 边界与 expected_bars、K 公式双频率、覆盖率预检、锚点必填、task_date/anchor 落盘、占位 qualification 枚举、强平 N/A、gross 比值语义）= **204 项全绿 exit 0**；`git diff --check` 干净 |
 
 #### R 层：研究验收（沿用 §11.6 R 层，以下仅列差异）
 

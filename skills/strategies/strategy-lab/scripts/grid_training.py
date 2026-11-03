@@ -971,7 +971,16 @@ def freeze_training(cells: list, responses: dict, *, output_dir: Path) -> dict:
     if len(cells) != 16:
         raise TrainingVerificationError(
             f"freeze requires exactly the 16 default targets, got {len(cells)}")
-    expected_cells = gr.build_cells()
+    # D5-3/R-05: the anchor travels with the batch cells; a default anchor must
+    # never define the frozen matrix (that was B-1).
+    anchors = {cell.get("anchor_utc") for cell in cells}
+    if len(anchors) != 1 or anchors == {None}:
+        raise TrainingVerificationError(
+            "cells must carry exactly one explicit anchor_utc (D5-3)")
+    batch_anchor = next(iter(anchors))
+    batch_frequency = cells[0].get("frequency_seconds") or 3600
+    expected_cells = gr.build_cells(anchor_utc=batch_anchor,
+                                    frequency_seconds=batch_frequency)
     expected_ids = [item["cell_id"] for item in expected_cells]
     ids = []
     for cell in cells:
@@ -1000,11 +1009,14 @@ def freeze_training(cells: list, responses: dict, *, output_dir: Path) -> dict:
         _cell_context(cell)["contract"] for cell in cells))
     windows = list(dict.fromkeys(_cell_context(cell)["window"] for cell in cells))
     anchor = expected_cells[0]["anchor_utc"]
+    task_date = anchor.date().isoformat()
     body = {
         "schema_version": FREEZE_SCHEMA_VERSION,
         "matrix": {
             "contracts": contracts, "windows": windows,
             "anchor_utc": _iso_utc(anchor),
+            "task_date": task_date,
+            "frequency_seconds": batch_frequency,
         },
         "items": items,
         "budget_ref": BUDGET_REF,
@@ -1063,7 +1075,13 @@ def verify_training_freeze(manifest_path: Path) -> dict:
     items = body.get("items")
     if not isinstance(items, list) or len(items) != 16:
         raise TrainingVerificationError("manifest must carry exactly 16 items")
-    default_cells = gr.build_cells()
+    matrix = body.get("matrix") if isinstance(body.get("matrix"), dict) else {}
+    manifest_anchor = matrix.get("anchor_utc")
+    if not manifest_anchor:
+        raise TrainingVerificationError("manifest matrix anchor_utc missing (D5-3)")
+    default_cells = gr.build_cells(
+        anchor_utc=manifest_anchor,
+        frequency_seconds=matrix.get("frequency_seconds") or 3600)
     default_index = {cell["cell_id"]: cell for cell in default_cells}
     if [item.get("cell_id") for item in items] != \
             [cell["cell_id"] for cell in default_cells]:
@@ -1265,7 +1283,9 @@ def collect_training(*, base_url: str, output_dir: Path,
                      agent_call: Callable,
                      resolve_agent_token: Callable,
                      now_utc: Callable,
-                     monotonic: Callable) -> dict:
+                     monotonic: Callable,
+                     anchor_utc: dt.datetime | None = None,
+                     frequency_seconds: int = 3600) -> dict:
     """Collect training responses cell by cell and freeze them locally.
 
     All dependencies are explicit: the Agent caller, the token resolver (its
