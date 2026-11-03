@@ -4,7 +4,7 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | V1.7 |
+| 版本 | V1.8 |
 | 日期 | 2026-11-03（V1.7；V1.6 为 2026-11-03 同日续修订），Asia/Shanghai（UTC+08:00） |
 | 阶段 | YQuant 按 Pascal 已确认决策同步契约：审计 D-01 局部撤销（V1.5 §12，已实现并独立 Verify）、v=0 零成交 bar 合法化实现契约（V1.6 §13，Pascal 2026-11-03 D1 决策）与消费链 crypto.py 放行契约（本版 §13.4，t_b8db70b3 D2 决策）；§13.1/13.2 的 native 层已由 t_aa056536 实现并通过平台侧验证，§13.4 待实现；历史 G-02 Design t_1f4c8c58 及旧验收记录保留，非本次重开 |
 | RFC / SPEC | [RFC-06-002 V1.8](../../rfc/06_strategy/RFC-06-002-neutral-grid-multi-window-research.md)，§9/§10 / [SPEC-06-002 V1.8](../../spec/06_strategy/SPEC-06-002-neutral-grid-multi-window-research.md)，§10/§11；D-01 撤销见 §12（对应 RFC/SPEC V1.6 §9/§10），v=0 合法化见 §13（§13.4 消费链 D2）；§11 训练通道保留 |
@@ -518,10 +518,32 @@ PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m pytest 
 4. **验证**：§13.3 冻结 pytest 命令（Implement 自检一次、独立 Verify 一次）——预期平台侧全绿（passed，无 failed/xfailed/xpassed；原 1 xfailed 因 V1.8-01 转常规通过，新增 1 个重采样用例，实际总数以实跑为准，既有用例不得减少）；主仓 185 项冻结基线按 SPEC §11.3 重跑核对 185/OK/exit 0。无网络/凭据/数据库/缓存/服务动作，job/compile/backtest=0。
 5. **停止条件**沿用 §13.3；不 commit/push、不部署重启、不触碰缓存与数据库；完成后 16 窗口研究锁仍不解除，是否放行由后续卡按新契约评估。
 
+## 14. Gate swap 证据多页累积契约（Pascal 2026-11-03 精简决策，本次唯一待实现增量）
+
+> 背景：V1.7 §13 修复 v=0 后，探针（job fe16b257，2026-11-03 20:09）暴露下一层缺口——92 天 15m 窗口需 10356 根 > Gate 单页 1000，`_parse_gate_swap_ohlcv` 每页重置 `state.bars`，致前 8 批约 9000 根 bar 证据丢失 → `gate.swapVolumeEvidenceMissing`。mock 两页实验已实证复现（failure-evidence.md）。本节按 Pascal「精简、不发散」指示一次定案，不铺陈备选方案。
+
+### 14.1 行为契约
+
+1. **累积语义**：`_parse_gate_swap_ohlcv` 同一请求线程内、identity（symbol/interval/native_contract）与上一批**完全相同**时，`state.bars` 按 bar 时间戳 merge（新批覆盖同 key 旧条目），`state.identity` 不重置；identity 任一字段变化（含换 symbol/timeframe）或线程更替 → 整体重置为当前批（`identity=None; bars={}` 前置行为保持）。
+2. **内存上界**：`state.bars` 容量上限 = 20000 条（约 2 倍 `_RECENT_CANDLE_LIMITS` 量级）；超限淘汰最旧条目（按 bar 时间戳）。证据对象结构（20 字段 canonical 集合）与 `get_gate_swap_volume_evidence` 签名、返回值语义**不变**。
+3. **消费端零改动**：`crypto.py` 单 bar 与重采样两条路径（§13.4 已定）不因本节改动；重采样聚合 bar 仍无逐根证据（applicability=unknown，不伪造）。
+4. **不变项**：五类 fail-closed 标识与语义、逐 bar 溯源能力、applicability 判定、v=0 合法零成交（§13）、R-01 披露（不修复）、185 项主仓基线——全部不变。
+
+### 14.2 实现清单（F3 卡精确范围）
+
+- `backend_api_python/app/data_sources/native_crypto.py`：仅 `_parse_gate_swap_ohlcv` 的 state 重置段（现为 `state.identity=None; state.bars={}`）与 `state.bars=page_evidence` 赋值段 → 条件 merge；约 10-30 行。**其余任何代码不动**。
+- `backend_api_python/tests/test_native_crypto_public_client.py`：新增多页累积测试（三批同 identity → 全部 bar 证据可查；换 symbol → 正确重置；容量上界淘汰最旧）。
+
+### 14.3 验证与停止
+
+- 冻结命令同 §13.3（平台 pytest 5 文件 + 主仓 185 基线）；预期平台侧全绿、185/OK/exit 0。
+- 本节实现不提交回测；探针重跑由独立执行卡承担。16 窗口研究锁不解除；G-01/G-03 维持 OPEN。
+
 ## 版本记录
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.8 | 2026-11-03 | 主控按 Pascal「精简」指示直接增 §14（原 E3 卡 t_20d5afbd 停止，无产出）：多页证据累积契约——同 identity 逐页 merge、容量 20000 淘汰最旧、消费端零改动、五类错误/v=0/R-01/185 基线不变；F3 范围=native_crypto.py 重置段+测试；指向 RFC/SPEC V1.9；仅文档 |
 | V1.7 | 2026-11-03 | t_b8db70b3（E2/D2）：§13 状态更新——§13.1/13.2 的 native 层已由 t_aa056536 实现并通过平台侧验证（237 passed + 1 xfailed，xfail 为 §13.4 解除前阻断标记）；§13.1 第 5 条不动项清单将 crypto.py 改列「除 §13.4 外不动」；§13.2 第 2 条增补消费链测试增量（xfail 装饰器删除 + 重采样 v=0 用例）；§13.3 停止条件例外同步；新增 §13.4 消费链 crypto.py 两处谓词放宽（≤0→<0、保留 isfinite/证据一致性校验、标识与消息不变、R-01 不变）精确实现契约；指向 RFC/SPEC V1.8；仅文档，§13.4 实现/验证未发生，job 0、16 锁不解除 |
 | V1.6 | 2026-11-03 | t_e5ac39e6：按 Pascal 2026-11-03 D1 决策增 §13——§13.1 冻结 _gate_swap_volume_number 行为变更契约（合法化仅 raw_v 调用点、base_volume 乘积调用点零拒绝保留即下溢守卫、负零按数值相等归入零成交且禁符号位特判、校验顺序与五类错误/证据对象/sum 缺失 null 不变）；§13.2 受影响测试逐文件清单（test_native_crypto_public_client.py 拒绝参数表唯一删改="0" 移除 + 新增 5 组零成交/负零/顺序用例、test_gate_swap_volume_units.py 新增独立 v=0 消费链用例、training_ohlc/matrix 预期零变更）；§13.3 冻结 pytest 命令 + 主仓 185 项基线重跑核对 + R-01 披露载体（implement 移交物逐字含 RFC §10.3，缺失即 Verify 不通过）+ 停止条件；指向 RFC/SPEC V1.7；仅文档，实现/验证未发生，job 配额 0，16 窗口研究锁不解除 |
 | V1.5 | 2026-11-02 | 按 Pascal 决策增 §12，修订 §3.3 / G02-04，局部撤销公共 Gate 历史缺证和重采样阻断；保留单位精度/五项修复/训练和研究锁；指向 RFC/SPEC V1.6；离线实现与独立 Verify 已完成（t_8a23ea34），API 进程已受控重启并真实请求验证；研究准入仍未放行 |

@@ -4,7 +4,7 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | V1.8 |
+| 版本 | V1.9 |
 | 状态 | 既有 B-001/杠杆/三件套/G-02 离线工程线及 F-01..F-05 已验收；审计 D-01 局部撤销（§9 / SPEC V1.6 §10 / Design V1.5 §12）已实现并通过独立 Verify（离线，335 passed，t_8a23ea34），主控离线签收；API 进程已受控重启并真实 HTTP 验证公共 Gate swap 读取与本地重采样（api_runtime_loaded=VERIFIED，见 data/reports/2026-11-02-quantdinger-d01-local-revert/runtime-verification.md）；G-01（缓存身份）、G-03（历史乘数适用性）仍 OPEN，historical_evidence=UNKNOWN、full_research_status=DEFERRED，后台角色未加载、16业务仍禁止；V1.7 按 Pascal 2026-11-03 D1 决策冻结 v=0 零成交 bar 合法化契约（§10），native 层已由 t_aa056536 实现并通过平台侧验证；V1.8 按 t_b8db70b3 契约决策（D2）将范围扩展至消费链 crypto.py 两处数据有效性谓词（§10.4），消费链放行待实现与独立 Verify |
 | 作者 | YQuant Principal / t_cfccfe2c / t_1af91929 / t_9fddffed / t_1b635d49 / t_22b3495f |
 | 日期 | 2026-11-03（V1.8；V1.7 为 2026-11-03 同日续修订），Asia/Shanghai（UTC+08:00） |
@@ -177,10 +177,15 @@ D1 第 1 条中"该 bar 网格限价单不成交"是研究语义声明；平台�
 
 **V1.8 授权范围**：实现文件仅两个——`app/data_sources/crypto.py`（仅上述两处谓词字符变更，文件其余部分不动）与 `tests/test_gate_swap_volume_units.py`（删除 `test_gate_zero_volume_bar_survives_the_consumer_chain` 之上的 `@pytest.mark.xfail(strict=True)` 整块装饰器（当前工作树 148-158 行），函数体不动；新增重采样路径 v=0 独立用例锁定 crypto.py:648 谓词；其余用例不动）。不改 native_crypto.py（本增量）、runtime 撮合器、训练服务、factory.py、主仓源码。验收：Design V1.7 §13.3/§13.4 冻结命令全绿（无 failed/xfailed/xpassed）+ 主仓 185 项基线重跑 185/OK/exit 0；SPEC V1.8 §11.2（V1.7-06 扩展、V1.8-01）。禁止消耗 QuantDinger job 配额、禁止解除 16 窗口研究锁；16 窗口是否放行由后续卡在消费链实现与独立 Verify 通过后按新契约另行评估。
 
+### 10.5 证据多页累积契约缺口（V1.9，主控按 Pascal 2026-11-03「精简、不发散」指示直接修订）
+
+**D3 契约决策**：v=0 修复（§10.2/§10.4）落地后，探针 job fe16b257（2026-11-03 20:09，单次提交无重试）暴露确定性缺口——92 天 15m 窗口（10356 根）超过 Gate 单页 1000 上限，`_parse_gate_swap_ohlcv` 每页重置证据状态，前 8 批约 9000 根 bar 证据丢失 → `gate.swapVolumeEvidenceMissing`（mock 实证复现，见 `data/tasks/active/2026-11-03-probe-rerun-fe16b257/failure-evidence.md`）。判定：DESIGN V1.1 §2.2/§3.2 逐 bar 证据契约未定义多页累积语义，属契约缺口而非实现错误。修订：同一请求线程内 identity（symbol/interval/native_contract）完全相同的多批拉取，证据按 bar 时间戳累积 merge（容量上界 20000、淘汰最旧）；identity 变化或线程更替仍整体重置。逐 bar 溯源、五类错误、applicability、v=0 合法零成交、R-01 披露（不修复）全部不变。行为契约全文见 Design V1.8 §14；本修订仅文档，实现归 F3 卡，探针重跑由独立执行卡承担，16 窗口研究锁不解除。
+
 ## 版本记录
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.9 | 2026-11-03 | 主控按 Pascal「精简、不发散」指示直接增 §10.5（原 E3 卡 t_20d5afbd 停止，无产出）：D3 契约决策——证据多页累积缺口定案，同 identity 逐页 merge（容量 20000 淘汰最旧）、identity 变化/线程更替仍整体重置；逐 bar 溯源/五类错误/applicability/v=0/R-01 不变；指向 Design V1.8 §14 / SPEC V1.9 §11.5；仅文档，实现归 F3 |
 | V1.8 | 2026-11-03 | t_b8db70b3（E2）：D2 契约决策消除 §10.4 内部矛盾——F 卡实测消费链 crypto.py 两处 volume>0 前提仍拒绝 v=0 bar（648-651 重采样、694-700 单 bar），按 D1 既有语义扩展范围至 crypto.py 两处谓词放宽（≤0→<0，保留 isfinite 与证据一致性校验、标识/消息不变）+ test_gate_swap_volume_units.py 的 xfail(strict) 装饰器删除与重采样 v=0 用例；对 v=0 增量替代 §5 旧阶段 volume 校验禁改条款；native 层已实现（t_aa056536，237 passed+1 xfail）、消费链放行待实现/独立 Verify；R-01 未修复；job 0、16 锁不解除；指向 SPEC V1.8 §11 / Design V1.7 §13.4 |
 | V1.7 | 2026-11-03 | t_e5ac39e6：按 Pascal 2026-11-03 D1 决策新增 §10，将真实零成交 bar（raw_v_contracts==0）从 fail-closed 拒绝网移出、定为合法市场状态（base_volume=0、quote_volume=0 当 sum==0、该 bar 网格限价单不成交）；保留五类拒绝语义、单次换算链、乘数校验、无 epsilon、证据对象 gate_swap_volume_v1、sum 缺失 null；新增 R-01 披露（平台 _liquidity_cap 对 volume<=0 返回 None 的现状与研究语义差异）；指向 SPEC V1.7 §11 / Design V1.6 §13；仅文档修订，实现/验证/运行加载未发生，16 业务锁不解除 |
 | V1.6 | 2026-11-02 | Pascal 同意审计 D-01 局部撤销；§9 将公共可读性与研究历史资格分开，保留单位/精度/五项修复和研究锁；指向 SPEC V1.6 §10 / Design V1.5 §12；撤销实施与独立验收已离线完成（t_8a23ea34，335 passed），API 进程已受控重启并真实请求验证；G-01/G-03 与历史证据仍未闭合 |
