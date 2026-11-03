@@ -23,6 +23,18 @@ BASE = "http://offline.invalid"
 PARAMS = {"ma_period": 50, "target_pct": 0.95}
 CODE = "context.params.get('ma_period', 50)\ncontext.params.get('target_pct', 0.95)"
 MANIFEST = {"markets": ["USStock"], "drivingFrequency": "1d", "directionMode": "long_only"}
+
+
+def execution_assumptions(capital=1000.0, leverage_enabled=False, leverage=1.0):
+    """The engine read-back the platform returns for one backtest run.
+
+    The platform reports ``leverage`` as 1 whenever leverage is disabled, so
+    the read-back mirrors the request and never carries a fabricated value.
+    """
+    return {"initialCapital": float(capital),
+            "leverageEnabled": bool(leverage_enabled),
+            "leverage": float(leverage if leverage_enabled else 1.0)}
+
 DECLARED = [
     {"name": "ma_period", "type": "integer", "min": 2, "max": 250,
      "step": 1, "default": 50, "optimizable": True},
@@ -883,7 +895,8 @@ class OfflineAgentChannel(unittest.TestCase):
             polled.append((operation, job_id))
             return {"status": "succeeded",
                     "result": {"runId": 42, "totalReturn": 1.5, "maxDrawdown": -2.0,
-                               "sharpeRatio": 0.8, "equityCurve": [1, 2, 3]}}
+                               "sharpeRatio": 0.8, "equityCurve": [1, 2, 3],
+                               "executionAssumptions": execution_assumptions(10000.0)}}
 
         with patch.object(qd, "agent_submit", side_effect=fake_submit), \
              patch.object(qd, "poll_job", side_effect=fake_poll):
@@ -1087,8 +1100,16 @@ class OfflineAgentLeverage(unittest.TestCase):
                            capital=1000, commission=0.0005, slippage=0.0005)
         self.manifest = dict(MANIFEST, leverageAllowed=True, maxLeverage=100)
         self.job = {"status": "succeeded", "result": {
-            "runId": 42, "totalReturn": 1.5, "equityCurve": [1, 2, 3]}}
+            "runId": 42, "totalReturn": 1.5, "equityCurve": [1, 2, 3],
+            "executionAssumptions": execution_assumptions(1000.0)}}
         self.submitted = []
+
+    def make_job(self, capital=1000.0, leverage_enabled=False, leverage=1.0):
+        """Build a terminal job whose read-back mirrors the request."""
+        return {"status": "succeeded", "result": {
+            "runId": 42, "totalReturn": 1.5, "equityCurve": [1, 2, 3],
+            "executionAssumptions": execution_assumptions(
+                capital, leverage_enabled, leverage)}}
 
     def fake_submit(self, operation, body, **kwargs):
         self.submitted.append((operation, copy.deepcopy(body)))
@@ -1099,8 +1120,11 @@ class OfflineAgentLeverage(unittest.TestCase):
 
     def run_flow(self, **overrides):
         inputs = dict(self.inputs, **overrides)
+        job = self.make_job(1000.0,
+                            bool(inputs.get("leverage_enabled", False)),
+                            float(inputs.get("leverage", 1)))
         with patch.object(qd, "agent_submit", side_effect=self.fake_submit), \
-             patch.object(qd, "poll_job", return_value=self.job) as poll:
+             patch.object(qd, "poll_job", return_value=job) as poll:
             payload = qd.agent_backtest(**inputs, base_url=BASE, token="offline-token",
                                       budget=qd.Budget())
         self.assertEqual([item[0] for item in self.submitted],
@@ -1109,9 +1133,12 @@ class OfflineAgentLeverage(unittest.TestCase):
         self.assertEqual(poll.call_args.args, ("agent_job", "offline-job"))
         self.assertTrue(payload["idempotentReplay"])
         self.assertEqual(payload["metrics"], {"totalReturn": 1.5})
-        self.assertEqual(payload["context"], {})  # Do not manufacture an engine receipt.
+        # The platform read-back is projected as-is, never manufactured locally.
+        self.assertEqual(payload["context"]["executionAssumptions"],
+                         job["result"]["executionAssumptions"])
         self.assertEqual(payload["sampledArrays"], {"equityCurve": 3})
         self.assertEqual(payload["billingStatus"], "absent")
+        self.assertEqual(payload["executionReadBack"]["verdict"], "consistent")
         return self.submitted[-1][1]
 
     def cli_case(self):
@@ -1217,8 +1244,9 @@ class OfflineAgentLeverage(unittest.TestCase):
                                          (["--leverage-enabled", "--leverage", "10"], True, 10)):
             with self.subTest(flags=flags):
                 self.submitted.clear()
+                job = self.make_job(1000.0, enabled, leverage)
                 with patch.object(qd, "agent_submit", side_effect=self.fake_submit), \
-                     patch.object(qd, "poll_job", return_value=self.job) as poll, \
+                     patch.object(qd, "poll_job", return_value=job) as poll, \
                      patch("sys.stdout", new_callable=io.StringIO) as stdout:
                     self.assertEqual(qd.main(argv + flags), qd.EXIT_OK)
                 self.assertEqual([item[0] for item in self.submitted],
@@ -1226,11 +1254,17 @@ class OfflineAgentLeverage(unittest.TestCase):
                 self.assert_body(self.submitted[-1][1], enabled, leverage)
                 poll.assert_called_once()
                 payload = json.loads(stdout.getvalue())
-                self.assertEqual(payload["context"], {})
+                self.assertEqual(payload["context"]["executionAssumptions"],
+                                 job["result"]["executionAssumptions"])
+                self.assertEqual(payload["executionReadBack"]["verdict"], "consistent")
                 self.assertNotIn("offline-token", stdout.getvalue())
                 report = (case / "reports" / "agent-backtest.md").read_text(encoding="utf-8")
                 self.assertIn("runId: 42", report)
                 self.assertNotIn("offline-token", report)
+                self.assertIn("## Leverage read-back", report)
+                self.assertIn("- requested: initialCapital=1000.0", report)
+                self.assertIn("- readBack: initialCapital=1000.0", report)
+                self.assertIn("- verdict: consistent", report)
         self.http.assert_not_called()
 
     def test_real_cli_rejects_invalid_text_nonfinite_range_and_conflict_without_requests(self):
@@ -1255,10 +1289,106 @@ class OfflineAgentLeverage(unittest.TestCase):
         self.http.assert_not_called()
         self.assertFalse((case / "reports").exists())
 
+    def make_raw_job(self, assumptions):
+        """Build a terminal job whose read-back is exactly as given.
+
+        ``assumptions=None`` means the platform returned no
+        ``executionAssumptions`` object at all.
+        """
+        result = {"runId": 42, "totalReturn": 1.5, "equityCurve": [1, 2, 3]}
+        if assumptions is not None:
+            result["executionAssumptions"] = assumptions
+        return {"status": "succeeded", "result": result}
+
+    def test_readback_mismatch_and_unknown_never_pass_and_never_backfill(self):
+        scenarios = [
+            ("enabledDowngraded",
+             dict(capital=1000.0, leverage_enabled=True, leverage=10),
+             {"initialCapital": 1000.0, "leverageEnabled": False, "leverage": 1.0},
+             {"initialCapital": 1000.0, "leverageEnabled": False, "leverage": 1.0},
+             qd.EXIT_CONTRACT, "agent.leverageReadbackMismatch"),
+            ("leverageMultipleDiffers",
+             dict(capital=1000.0, leverage_enabled=True, leverage=10),
+             {"initialCapital": 1000.0, "leverageEnabled": True, "leverage": 5.0},
+             {"initialCapital": 1000.0, "leverageEnabled": True, "leverage": 5.0},
+             qd.EXIT_CONTRACT, "agent.leverageReadbackMismatch"),
+            ("initialCapitalDiffers",
+             dict(capital=1000.0, leverage_enabled=True, leverage=10),
+             {"initialCapital": 10000.0, "leverageEnabled": True, "leverage": 10.0},
+             {"initialCapital": 10000.0, "leverageEnabled": True, "leverage": 10.0},
+             qd.EXIT_CONTRACT, "agent.leverageReadbackMismatch"),
+            ("executionAssumptionsMissing",
+             dict(capital=1000.0, leverage_enabled=True, leverage=10),
+             None,
+             {},
+             qd.EXIT_EVIDENCE, "agent.executionReadbackUnknown"),
+            ("leverageFieldMissing",
+             dict(capital=1000.0, leverage_enabled=True, leverage=10),
+             {"initialCapital": 1000.0, "leverageEnabled": True},
+             {"initialCapital": 1000.0, "leverageEnabled": True},
+             qd.EXIT_EVIDENCE, "agent.executionReadbackUnknown"),
+            ("leverageFieldNotFinite",
+             dict(capital=1000.0, leverage_enabled=True, leverage=10),
+             {"initialCapital": 1000.0, "leverageEnabled": True, "leverage": "10"},
+             {"initialCapital": 1000.0, "leverageEnabled": True},
+             qd.EXIT_EVIDENCE, "agent.executionReadbackUnknown"),
+            ("initialCapitalFieldNotFinite",
+             dict(capital=1000.0, leverage_enabled=True, leverage=10),
+             {"initialCapital": float("nan"), "leverageEnabled": True, "leverage": 10.0},
+             {"leverageEnabled": True, "leverage": 10.0},
+             qd.EXIT_EVIDENCE, "agent.executionReadbackUnknown"),
+            ("disabledRequestReadBackEnabled",
+             dict(capital=1000.0, leverage_enabled=False, leverage=1),
+             {"initialCapital": 1000.0, "leverageEnabled": True, "leverage": 10.0},
+             {"initialCapital": 1000.0, "leverageEnabled": True, "leverage": 10.0},
+             qd.EXIT_CONTRACT, "agent.leverageReadbackMismatch"),
+        ]
+        for label, overrides, assumptions, expected, exit_code, message in scenarios:
+            with self.subTest(scenario=label):
+                self.submitted.clear()
+                job = self.make_raw_job(assumptions)
+                budget = qd.Budget()
+                with patch.object(qd, "agent_submit", side_effect=self.fake_submit), \
+                     patch.object(qd, "poll_job", return_value=job):
+                    with self.assertRaises(qd.LabError) as caught:
+                        qd.agent_backtest(**dict(self.inputs, **overrides),
+                                          base_url=BASE, token="offline-token",
+                                          budget=budget)
+                self.assertEqual(caught.exception.exit_code, exit_code)
+                self.assertEqual(caught.exception.message, message)
+                # The verdict is decided after the outer job quota was spent.
+                self.assertEqual(budget.outer_jobs, 1)
+                # The reported read-back holds exactly what the platform sent:
+                # a field the platform did not return is never filled from the
+                # request, so no requested value can reappear as a read-back.
+                read_back = json.loads(caught.exception.details["readBack"])
+                self.assertEqual(read_back, expected)
+        self.http.assert_not_called()
+
+    def test_consistent_readback_with_requested_capital_passes(self):
+        """A faithful read-back of the requested capital and leverage passes."""
+        self.submitted.clear()
+        job = self.make_raw_job({"initialCapital": 1000.0, "leverageEnabled": True,
+                                 "leverage": 10.0})
+        budget = qd.Budget()
+        with patch.object(qd, "agent_submit", side_effect=self.fake_submit), \
+             patch.object(qd, "poll_job", return_value=job):
+            payload = qd.agent_backtest(**dict(self.inputs, capital=1000.0,
+                                               leverage_enabled=True, leverage=10),
+                                      base_url=BASE, token="offline-token",
+                                      budget=budget)
+        self.assertEqual(payload["executionReadBack"]["verdict"], "consistent")
+        self.assertEqual(payload["executionReadBack"]["mismatches"], [])
+        self.assertEqual(payload["executionReadBack"]["unknownFields"], [])
+        self.assertEqual(payload["executionReadBack"]["readBack"]["leverage"], 10.0)
+        self.assertEqual(budget.outer_jobs, 1)
+        self.http.assert_not_called()
+
     def test_late_http_and_agent_call_patches_reach_poll_fetch(self):
         self.assertIn("leverage", inspect.signature(qd.agent_backtest).parameters)
         responses = [
-            {"manifest": self.manifest}, {"job_id": "offline-job"}, self.job]
+            {"manifest": self.manifest}, {"job_id": "offline-job"},
+            self.make_job(1000.0, True, 10)]
         envelopes = [(200, json.dumps({"code": 0, "data": data}).encode(), {})
                      for data in responses]
         with patch.object(qd, "_http_send", side_effect=envelopes) as http, \
@@ -1297,7 +1427,8 @@ class OfflineAgentLeverage(unittest.TestCase):
                 helper = importlib.util.module_from_spec(helper_spec)
                 helper_spec.loader.exec_module(helper)
             with patch.object(module, "agent_submit", side_effect=self.fake_submit), \
-                 patch.object(module, "poll_job", return_value=self.job) as poll:
+                 patch.object(module, "poll_job",
+                              return_value=self.make_job(1000.0, True, 10)) as poll:
                 payload = module.agent_backtest(**self.inputs, base_url=BASE, token="offline-token",
                                                 budget=module.Budget(),
                                                 leverage_enabled=True, leverage=10)

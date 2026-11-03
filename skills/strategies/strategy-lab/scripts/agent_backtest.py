@@ -6,11 +6,18 @@ construct an HTTP client, or import the CLI in reverse.
 
 from __future__ import annotations
 
+import json
 import math
 import time
 from typing import Any, Callable, Optional
 
 PLATFORM_MAX_LEVERAGE = 100
+
+# Verdicts of the engine read-back against the requested execution facts.
+READBACK_CONSISTENT = "consistent"
+READBACK_MISMATCH = "mismatch"
+READBACK_UNKNOWN = "unknown"
+READBACK_FIELDS = ("initialCapital", "leverageEnabled", "leverage")
 
 
 def _validate_leverage(
@@ -78,6 +85,77 @@ def billing_contradiction(
     return None
 
 
+def _read_number(value: Any, finite: Callable[[Any], Optional[float]]) -> Optional[float]:
+    """Return a finite number for a readable numeric field, else None."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return finite(value)
+
+
+def read_back_execution_facts(
+    result: dict[str, Any],
+    *,
+    capital: float,
+    leverage_enabled: bool,
+    leverage: float,
+    finite: Callable[[Any], Optional[float]],
+) -> dict[str, Any]:
+    """Compare the engine read-back with the requested execution facts.
+
+    A field that is absent or cannot be read as a finite number / boolean
+    stays UNKNOWN.  It is never back-filled from the request, so a missing
+    read-back can never be reported as a consistent execution.
+    """
+    assumptions = result.get("executionAssumptions")
+    assumptions = assumptions if isinstance(assumptions, dict) else {}
+    requested = {
+        "initialCapital": float(capital),
+        "leverageEnabled": bool(leverage_enabled),
+        "leverage": float(leverage),
+    }
+    read_back: dict[str, Any] = {}
+    unknown: list[str] = []
+    mismatches: list[str] = []
+
+    value = _read_number(assumptions.get("initialCapital"), finite)
+    if value is None:
+        unknown.append("initialCapital")
+    else:
+        read_back["initialCapital"] = value
+        if value != requested["initialCapital"]:
+            mismatches.append("initialCapital")
+
+    enabled = assumptions.get("leverageEnabled")
+    if not isinstance(enabled, bool):
+        unknown.append("leverageEnabled")
+    else:
+        read_back["leverageEnabled"] = enabled
+        if enabled is not requested["leverageEnabled"]:
+            mismatches.append("leverageEnabled")
+
+    multiple = _read_number(assumptions.get("leverage"), finite)
+    if multiple is None:
+        unknown.append("leverage")
+    else:
+        read_back["leverage"] = multiple
+        if multiple != requested["leverage"]:
+            mismatches.append("leverage")
+
+    if mismatches:
+        verdict = READBACK_MISMATCH
+    elif unknown:
+        verdict = READBACK_UNKNOWN
+    else:
+        verdict = READBACK_CONSISTENT
+    return {
+        "verdict": verdict,
+        "requested": requested,
+        "readBack": read_back,
+        "mismatches": mismatches,
+        "unknownFields": unknown,
+    }
+
+
 def agent_backtest(
     *,
     code: str,
@@ -102,8 +180,10 @@ def agent_backtest(
     check_billing: Callable[[Any], Optional[str]],
     error_type: Callable[..., Exception],
     exit_contract: int,
+    exit_evidence: int = 3,
     as_dict: Callable[[Any], dict[str, Any]],
     scrub: Callable[[str], str],
+    finite: Callable[[Any], Optional[float]],
     metric_keys: tuple[str, ...],
     context_keys: tuple[str, ...],
     unsupported: tuple[str, ...],
@@ -112,6 +192,9 @@ def agent_backtest(
 
     Pure input checks precede even compile. Only a leveraged request requires
     explicit compile permission; legacy manifests remain valid at leverage 1.
+    The engine read-back is checked after the job reached a terminal state:
+    a contradiction with the request is a contract failure, a missing
+    read-back is insufficient evidence and never back-filled from the request.
     """
     body = build_body(
         code=code, start=start, end=end, capital=capital, commission=commission,
@@ -165,6 +248,27 @@ def agent_backtest(
     reason = check_billing(job_billing)
     if reason:
         raise error_type(exit_contract, "billing.contradiction", reason=reason, jobId=job_id)
+    read_back = read_back_execution_facts(
+        result,
+        capital=capital,
+        leverage_enabled=leverage_enabled,
+        leverage=leverage,
+        finite=finite,
+    )
+    if read_back["verdict"] == READBACK_MISMATCH:
+        raise error_type(
+            exit_contract, "agent.leverageReadbackMismatch", jobId=job_id,
+            mismatches=",".join(read_back["mismatches"]),
+            readBack=scrub(json.dumps(read_back["readBack"], ensure_ascii=False,
+                                       sort_keys=True))[:600],
+        )
+    if read_back["verdict"] == READBACK_UNKNOWN:
+        raise error_type(
+            exit_evidence, "agent.executionReadbackUnknown", jobId=job_id,
+            unknownFields=",".join(read_back["unknownFields"]),
+            readBack=scrub(json.dumps(read_back["readBack"], ensure_ascii=False,
+                                       sort_keys=True))[:600],
+        )
     return {
         "jobId": job_id,
         "status": state,
@@ -181,5 +285,6 @@ def agent_backtest(
         "billingStatus": "present" if (
             submit_billing is not None or job_billing is not None) else "absent",
         "sourceAssociation": "none: agent channel has no sourceId/run read-back route",
+        "executionReadBack": read_back,
         "unsupported": list(unsupported),
     }

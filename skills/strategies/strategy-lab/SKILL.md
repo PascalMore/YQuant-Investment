@@ -86,6 +86,7 @@ strategy-lab/                     # 只放研发工具资产
 | 数据形态 | 单页 ≤500；第 1 页无 before_time 时平台封顶 300；翻页收敛为 `--max-pages 2`；gate spot 单请求窗口 ≤999 天 | 显式设 `--max-pages 2`；超窗改窗口 |
 | 取数连通 | 直连需 `NO_PROXY` 含 `.gateio.ws`；直连不可用时代理须可达 | 先核对 env，再判定数据不可得 |
 | 未建模项 | 资金费、强平、成交量单位/适用性 | 必须写入报告局限；未知不得标通过 |
+| 杠杆口径 vs 回执读回 | 请求 `leverageEnabled=true` + `leverage=N` → 回执 `executionAssumptions` 必须读回 `initialCapital`（等于请求的初始资金）、`leverageEnabled=true`、`leverage=N`；`initialCapital` 是账户权益（初始投入），保证金为派生量（名义敞口 ÷ leverage），名义敞口 = `initialCapital` × 每格预算占比 × leverage；禁止把 `initialCapital` 调大来假装杠杆 | 不提交；已提交则判证据不足，不判通过 |
 | 预算 | 研究数据请求 ≤50、外层持久化回测 job ≤8、墙钟 ≤1800s、folds 固定 4 | 超限先缩范围，不加预算 |
 | 交付形态 | spec.md / 可复现脚本 / reports/ / 复现命令 | 缺一不算完成 |
 
@@ -185,6 +186,13 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/script
 `--leverage-enabled`（默认关）+ `--leverage`（默认 1，有限 1..100，关闭时必须为 1）在 compile
 等任何请求前校验；请求倍数 >1 时要求 compile manifest `leverageAllowed` 严格 True（否则 exit2
 且不发 backtest、不占 job 配额），默认/1 沿用旧 manifest 兼容，客户端不乘资本或订单。
+`--leverage-enabled` + `--leverage N` 是**唯一**能真正启用平台杠杆的写法；不传这两个参数时
+平台**静默按 1 倍执行且不报错**，回执不会给出任何降级提示，因此不得以「提交成功」推断杠杆已生效。
+回执读回核对是**必过项**：job 终态后必须读取 `executionAssumptions` 的
+`initialCapital`/`leverageEnabled`/`leverage` 并与请求逐项比对，缺失或不可读判 UNKNOWN（证据不足），
+**不得用请求参数代替回执**；不一致按契约失败处理，缺失按证据不足处理，两者都不静默放行。
+名义敞口 = `initialCapital` × 每格预算占比 × leverage，**只能有一个放大器**：禁止把 `initialCapital`
+调大后再乘 leverage（会得到远高于目标的敞口），也禁止同时用放大初始资金和调大每格占比两种方式叠加。
 流程实现位于 `scripts/agent_backtest.py`（builder/计费矛盾/Agent 流程三函数抽取），CLI 保留同名
 兼容壳并调用时注入依赖；该抽取属本地离线实现，不表示运行中引擎杠杆已验收。
 提交后状态未知（网络失败/超时）时以**同一** Idempotency-Key 重放恰好一次；两次均失败 → outcome-unknown、
@@ -224,6 +232,9 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
   首版交易闭环固定 Human JWT，缺 JWT 如实阻塞，不 mock 替代。
 - 报告只存明确业务字段，丢弃 headers/token/password 样式字段；不含凭据、账户或原始 HTTP 响应。
 - 研究类在证据不足时必须 fail closed：退出码 3、零业务请求、不产出完成报告；离线自检通过不等于独立 Verify/Review。
+- 杠杆请求后必须读回核对：回执 `executionAssumptions` 与请求不一致时按契约失败处理（不得静默放行、
+  不得改写请求或用请求值覆盖回执）；回执字段缺失或不可读时按证据不足处理，不得默认判通过、不得用
+  请求参数回填回执值。
 - 不修改 QuantDinger 子模块、不改部署/配置、不 commit/push、不做 Demo/Live 与调度。
 
 ## 维护提示：脚本已达拆分阈值

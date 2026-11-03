@@ -640,8 +640,9 @@ def agent_backtest(
         agent_submit=agent_submit, agent_call=agent_call, poll_job=poll_job,
         new_idempotency_key=new_idempotency_key,
         build_body=build_agent_backtest_body, check_billing=billing_contradiction,
-        error_type=LabError, exit_contract=EXIT_CONTRACT, as_dict=_as_dict,
-        scrub=_scrub, metric_keys=AGENT_METRIC_KEYS, context_keys=AGENT_CONTEXT_KEYS,
+        error_type=LabError, exit_contract=EXIT_CONTRACT, exit_evidence=EXIT_EVIDENCE,
+        as_dict=_as_dict, scrub=_scrub, finite=_finite,
+        metric_keys=AGENT_METRIC_KEYS, context_keys=AGENT_CONTEXT_KEYS,
         unsupported=AGENT_UNSUPPORTED,
     )
 
@@ -2278,6 +2279,48 @@ def run_trade(args: argparse.Namespace) -> int:
         raise
 
 
+def _agent_readback_value(read_back: dict[str, Any], key: str) -> str:
+    """Render one read-back field; a field the engine did not return is UNKNOWN."""
+    value = read_back.get(key)
+    if value is None:
+        return "UNKNOWN"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _agent_readback_verdict(read_back: dict[str, Any]) -> str:
+    """Render the read-back verdict with the mismatching or missing fields."""
+    verdict = str(read_back.get("verdict") or "unknown")
+    if verdict == "consistent":
+        return "consistent"
+    if verdict == "mismatch":
+        return "mismatch (" + ",".join(read_back.get("mismatches") or []) + ")"
+    return "UNKNOWN (missing fields: " + ",".join(read_back.get("unknownFields") or []) + ")"
+
+
+def _agent_readback_lines(read_back: dict[str, Any]) -> list[str]:
+    """Render the requested execution intent against the engine read-back."""
+    requested = _as_dict(read_back.get("requested"))
+    actual = _as_dict(read_back.get("readBack"))
+    lines = [
+        "",
+        "## Leverage read-back",
+        "",
+        "- requested: initialCapital="
+        + json.dumps(requested.get("initialCapital"), ensure_ascii=False)
+        + ", leverageEnabled="
+        + json.dumps(requested.get("leverageEnabled"), ensure_ascii=False)
+        + ", leverage="
+        + json.dumps(requested.get("leverage"), ensure_ascii=False),
+        "- readBack: initialCapital=" + _agent_readback_value(actual, "initialCapital")
+        + ", leverageEnabled=" + _agent_readback_value(actual, "leverageEnabled")
+        + ", leverage=" + _agent_readback_value(actual, "leverage"),
+        "- verdict: " + _agent_readback_verdict(read_back),
+    ]
+    return lines
+
+
 def _agent_report_lines(payload: dict[str, Any]) -> list[str]:
     """Render the Agent backtest receipt as a short markdown report."""
     lines = [
@@ -2300,6 +2343,7 @@ def _agent_report_lines(payload: dict[str, Any]) -> list[str]:
     lines += ["", "## Server injected context", ""]
     for key, value in sorted(_as_dict(payload.get("context")).items()):
         lines.append(f"- {key}: {json.dumps(value, ensure_ascii=False, sort_keys=True)}")
+    lines += _agent_readback_lines(_as_dict(payload.get("executionReadBack")))
     lines += ["", "## Sampled arrays (gateway bounded sample, not the full series)", ""]
     for key, value in sorted(_as_dict(payload.get("sampledArrays")).items()):
         lines.append(f"- {key}: {value} elements")
