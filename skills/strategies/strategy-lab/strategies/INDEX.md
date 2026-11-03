@@ -3,7 +3,7 @@
 本索引登记 `skills/strategies/strategy-lab/strategies/` 下的全部策略/研究实例，服务于「先查再研」：
 只登记实例状态、结论摘要与证据路径，不复制报告正文、不新增指标、不重新评价。
 
-生成日期：2026-11-02（Asia/Shanghai UTC+08:00）。实例数量以本目录下实际子目录为准（15 个）。
+生成日期：2026-11-04（Asia/Shanghai UTC+08:00）。实例数量以本目录下实际子目录为准（31 个）。
 
 | 实例 id | 类型 | 状态 | 结论一句话 | 报告/证据路径 | Path B 口径（10x） |
 |---|---|---|---|---|---|
@@ -22,6 +22,22 @@
 | `neutral-grid-suiusdt` | 研究类 | 已完成 | 平台原生网格回测跑通：总收益 +9.34%、年化 +9.40%、最大回撤 −8.99%、夏普 0.73，538 笔成交，相对基准信息比率 0.92。 | `strategies/neutral-grid-suiusdt/reports/agent-backtest.md` | +93.38% / MDD −55.78% ｜ 离线折算 |
 | `neutral-grid-suiusdt-5m` | 研究类 | 未执行 | — | — | — |
 | `neutral-grid-suiusdt-15m` | 研究类 | 已完成 | 15m 驱动、初始资金 10000 USDT 的平台回测：窗口内总收益 +2.96%、年化 +12.39%、最大回撤 −4.18%、夏普 1.22，452 笔成交，相对基准信息比率 −1.55。 | `strategies/neutral-grid-suiusdt-15m/reports/agent-backtest.md` | +29.61% / MDD −28.37% ｜ 离线折算 |
+| `neutral-grid-jupusdt-w1-1h` | 研究类 | 已完成 | 1h 驱动、Path B（1000 USDT 保证金 / 10x 杠杆）原生网格回测：N=114，窗口内总收益与年化见汇总；Sharpe 与 MDD 见逐 cell 表。 | `strategies/neutral-grid-jupusdt-w1-1h/reports/agent-backtest.md` | +17.33% / n=4/4 ｜ MDD -85.83% ｜ Sharpe 1.93 ｜ 合格 2/4 ｜ **原生实测 runId=41** |
+| `neutral-grid-jupusdt-w2-1h` | 研究类 | 已完成 | 1h 驱动、Path B（1000 USDT 保证金 / 10x 杠杆）原生网格回测：N=125，窗口内总收益与年化见汇总；Sharpe 与 MDD 见逐 cell 表。 | `strategies/neutral-grid-jupusdt-w2-1h/reports/agent-backtest.md` | +17.33% / n=4/4 ｜ MDD -85.83% ｜ Sharpe 1.93 ｜ 合格 2/4 ｜ **原生实测 runId=45** |
+| `neutral-grid-jupusdt-w3-1h` | 研究类 | 已完成 | 1h 驱动、Path B（1000 USDT 保证金 / 10x 杠杆）原生网格回测：N=155，窗口内总收益与年化见汇总；Sharpe 与 MDD 见逐 cell 表。 | `strategies/neutral-grid-jupusdt-w3-1h/reports/agent-backtest.md` | +17.33% / n=4/4 ｜ MDD -85.83% ｜ Sharpe 1.93 ｜ 合格 2/4 ｜ **原生实测 runId=49** |
+| `neutral-grid-jupusdt-w4-1h` | 研究类 | 已完成 | 1h 驱动、Path B（1000 USDT 保证金 / 10x 杠杆）原生网格回测：N=175，窗口内总收益与年化见汇总；Sharpe 与 MDD 见逐 cell 表。 | `strategies/neutral-grid-jupusdt-w4-1h/reports/agent-backtest.md` | +17.33% / n=4/4 ｜ MDD -85.83% ｜ Sharpe 1.93 ｜ 合格 2/4 ｜ **原生实测 runId=53** |
+| `neutral-grid-pumpusdt-w1-1h` | 研究类 | 已完成 | 1h 驱动、Path B（1000 USDT 保证金 / 10x 杠杆）原生网格回测：N=139，窗口内总收益与年化见汇总；Sharpe 与 MDD 见逐 cell 表。 | `strategies/neutral-grid-pumpusdt-w1-1h/reports/agent-backtest.md` | +43.69% / n=4/4 ｜ MDD -97.84% ｜ Sharpe 2.80 ｜ 合格 2/4 ｜ **原生实测 runId=42** |
+| `neutral-grid-pumpusdt-w2-1h` | 研究类 | 已完成 | 1h 驱动、Path B（1000 USDT 保证金 / 10x 杠杆）原生网格回测：N=122，窗口内总收益与年化见汇总；Sharpe 与 MDD 见逐 cell 表。 | `strategies/neutral-grid-pumpusdt-w2-1h/reports/agent-backtest.md` | +43.69% / n=4/4 ｜ MDD -97.84% ｜ Sharpe 2.80 ｜ 合格 2/4 ｜ **原生实测 runId=46** |
+| `neutral-grid-pumpusdt-w3-1h` | 研究类 | 已完成 | 1h 驱动、Path B（1000 USDT 保证金 / 10x 杠杆）原生网格回测：N=122，窗口内总收益与年化见汇总；Sharpe 与 MDD 见逐 cell 表。 | `strategies/neutral-grid-pumpusdt-w3-1h/reports/agent-backtest.md` | +43.69% / n=4/4 ｜ MDD -97.84% ｜ Sharpe 2.80 ｜ 合格 2/4 ｜ **原生实测 runId=50** |
+| `neutral-grid-pumpusdt-w4-1h` | 研究类 | 已完成 | 1h 驱动、Path B（1000 USDT 保证金 / 10x 杠杆）原生网格回测：N=122，窗口内总收益与年化见汇总；Sharpe 与 MDD 见逐 cell 表。 | `strategies/neutral-grid-pumpusdt-w4-1h/reports/agent-backtest.md` | +43.69% / n=4/4 ｜ MDD -97.84% ｜ Sharpe 2.80 ｜ 合格 2/4 ｜ **原生实测 runId=54** |
+| `neutral-grid-aaveusdt-w1-1h` | 研究类 | 已完成 | 1h 驱动、Path B（1000 USDT 保证金 / 10x 杠杆）原生网格回测：N=128，窗口内总收益与年化见汇总；Sharpe 与 MDD 见逐 cell 表。 | `strategies/neutral-grid-aaveusdt-w1-1h/reports/agent-backtest.md` | +2.61% / n=4/4 ｜ MDD -56.36% ｜ Sharpe 0.68 ｜ 合格 2/4 ｜ **原生实测 runId=43** |
+| `neutral-grid-aaveusdt-w2-1h` | 研究类 | 已完成 | 1h 驱动、Path B（1000 USDT 保证金 / 10x 杠杆）原生网格回测：N=106，窗口内总收益与年化见汇总；Sharpe 与 MDD 见逐 cell 表。 | `strategies/neutral-grid-aaveusdt-w2-1h/reports/agent-backtest.md` | +2.61% / n=4/4 ｜ MDD -56.36% ｜ Sharpe 0.68 ｜ 合格 2/4 ｜ **原生实测 runId=47** |
+| `neutral-grid-aaveusdt-w3-1h` | 研究类 | 已完成 | 1h 驱动、Path B（1000 USDT 保证金 / 10x 杠杆）原生网格回测：N=106，窗口内总收益与年化见汇总；Sharpe 与 MDD 见逐 cell 表。 | `strategies/neutral-grid-aaveusdt-w3-1h/reports/agent-backtest.md` | +2.61% / n=4/4 ｜ MDD -56.36% ｜ Sharpe 0.68 ｜ 合格 2/4 ｜ **原生实测 runId=51** |
+| `neutral-grid-aaveusdt-w4-1h` | 研究类 | 已完成 | 1h 驱动、Path B（1000 USDT 保证金 / 10x 杠杆）原生网格回测：N=108，窗口内总收益与年化见汇总；Sharpe 与 MDD 见逐 cell 表。 | `strategies/neutral-grid-aaveusdt-w4-1h/reports/agent-backtest.md` | +2.61% / n=4/4 ｜ MDD -56.36% ｜ Sharpe 0.68 ｜ 合格 2/4 ｜ **原生实测 runId=55** |
+| `neutral-grid-suiusdt-w1-1h` | 研究类 | 已完成 | 1h 驱动、Path B（1000 USDT 保证金 / 10x 杠杆）原生网格回测：N=137，窗口内总收益与年化见汇总；Sharpe 与 MDD 见逐 cell 表。 | `strategies/neutral-grid-suiusdt-w1-1h/reports/agent-backtest.md` | -16.51% / n=4/4 ｜ MDD -78.97% ｜ Sharpe 0.67 ｜ 合格 2/4 ｜ **原生实测 runId=44** |
+| `neutral-grid-suiusdt-w2-1h` | 研究类 | 已完成 | 1h 驱动、Path B（1000 USDT 保证金 / 10x 杠杆）原生网格回测：N=141，窗口内总收益与年化见汇总；Sharpe 与 MDD 见逐 cell 表。 | `strategies/neutral-grid-suiusdt-w2-1h/reports/agent-backtest.md` | -16.51% / n=4/4 ｜ MDD -78.97% ｜ Sharpe 0.67 ｜ 合格 2/4 ｜ **原生实测 runId=48** |
+| `neutral-grid-suiusdt-w3-1h` | 研究类 | 已完成 | 1h 驱动、Path B（1000 USDT 保证金 / 10x 杠杆）原生网格回测：N=141，窗口内总收益与年化见汇总；Sharpe 与 MDD 见逐 cell 表。 | `strategies/neutral-grid-suiusdt-w3-1h/reports/agent-backtest.md` | -16.51% / n=4/4 ｜ MDD -78.97% ｜ Sharpe 0.67 ｜ 合格 2/4 ｜ **原生实测 runId=52** |
+| `neutral-grid-suiusdt-w4-1h` | 研究类 | 已完成 | 1h 驱动、Path B（1000 USDT 保证金 / 10x 杠杆）原生网格回测：N=154，窗口内总收益与年化见汇总；Sharpe 与 MDD 见逐 cell 表。 | `strategies/neutral-grid-suiusdt-w4-1h/reports/agent-backtest.md` | -16.51% / n=4/4 ｜ MDD -78.97% ｜ Sharpe 0.67 ｜ 合格 2/4 ｜ **原生实测 runId=56** |
 
 说明：
 
@@ -29,4 +45,4 @@
 2. `未执行` 仅指本实例目录内无报告文件；部分实例的历史回测原始证据只保存在 `data/reports/` 下，未登记为实例结论，需要时按该证据目录另行核对；表中数字一律取实例自身报告，聚合报告口径若有差异以实例报告为准。
 3. 本索引只登记结论摘要与证据路径，不复制报告内容、不新增指标、不重新评价；各实例的需求、参数与验收口径以各自 `spec.md` 及其引用的 SPEC/Design 为准。
 4. 表内路径基准为 `skills/strategies/strategy-lab/`，即 `strategies/<id>/reports/...` 自该基准目录解析。
-5. 「Path B 口径（10x）」列是**独立杠杆口径**的登记，不覆盖原 1x 结论：1x 结论（收益、回撤、成交数）本身有效且继续有效，Path B 只是同策略在保证金 1000 USDT、交易所杠杆 10x、名义敞口预算 10000 USDT 下的另一组数字。证据等级分两类：**原生实测**＝平台真实以 `leverageEnabled=true / leverage=10` 提交并读回断言通过的回测（当前 `neutral-grid-pumpusdt` runId=39、`neutral-grid-jupusdt-15m` runId=40）；**离线折算**＝由 1x 权益曲线按 `E_B(t) = 1000 + (1000×10/cap) × (V_A(t) − cap)` 映射得到，**非平台原生 Path B 回测**，其前提（入场无 partial、名义按比例放大、权益风控关闭）已在 PUMP 1D 上被原生对拍实证，其余标的属外推。逐实例报告路径为 `strategies/<id>/reports/path-b-leverage-report.md`（1x 原始回执 `agent-backtest.md` 由 CLI 自动生成并覆盖，勿手工改写）。
+5. 「Path B 口径（10x）」列是**独立杠杆口径**的登记，不覆盖原 1x 结论：1x 结论（收益、回撤、成交数）本身有效且继续有效，Path B 只是同策略在保证金 1000 USDT、交易所杠杆 10x、名义敞口预算 10000 USDT 下的另一组数字。证据等级分两类：**原生实测**＝平台真实以 `leverageEnabled=true / leverage=10` 提交并读回断言通过的回测（当前 `neutral-grid-pumpusdt` runId=39、`neutral-grid-jupusdt-15m` runId=40，以及 1h 四窗口批次 runId 41–56）；**离线折算**＝由 1x 权益曲线按 `E_B(t) = 1000 + (1000×10/cap) × (V_A(t) − cap)` 映射得到，**非平台原生 Path B 回测**，其前提（入场无 partial、名义按比例放大、权益风控关闭）已在 PUMP 1D 上被原生对拍实证，其余标的属外推。逐实例报告路径为 `strategies/<id>/reports/path-b-leverage-report.md`（1x 原始回执 `agent-backtest.md` 由 CLI 自动生成并覆盖，勿手工改写）。
