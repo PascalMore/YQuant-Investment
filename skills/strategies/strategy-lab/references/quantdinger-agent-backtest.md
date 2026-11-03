@@ -31,6 +31,13 @@
 - 2026-10-31 本机恢复代理后，无 Key 的 Binance PUMPUSDT 永续行情已可取；最新已收盘 bar 成交额显著高于先前声称值，但不能用当前 bar 直接证明旧历史 bar 或引擎错误。
 - 诊断须使用同一交易所、同一永续合约、同一 UTC bar，对比官方 base/quote volume、本地原始字段、乘数转换及执行模型，不在单位和市场身份未定时解释为流动性问题。
 
+## 本地部署限制：无回测计费、无次数配额（2026-11-03 代码取证）
+- 本地 `.env` 未设 `BILLING_ENABLED`，`billing_config.py` 默认 `enabled=False`：backtest 不扣 credits、无累计次数限制。`BillingError`/credits 链路仅多租户计费模式生效。
+- 真实约束只有并发与限速：`AGENT_MAX_CONCURRENT_JOBS_PER_TENANT=4`、`PER_TOKEN=2`（同时 queued/running 上限，跑完即释放）、token 限速默认 60 req/min。均非累计配额。
+- `expire_agent_jobs` 只清理带 `__billing` 标记的孤儿 job，免费 job 不会被过期。
+- 禁止在任务卡、报告、回复中使用"配额/配额消耗"表述。重跑成本仅为执行时间；纪律用"提交纪律：单次提交、失败即停、先根因后重跑"表达。
+- 分页取证补充：strategy_v2 92 天 15m 窗口 limit≈10356 > Gate 单页 1000，`crypto.py:_fetch_ohlcv` 按 `_PAGINATION_BATCH_LIMITS['gate']=1000` 分 ~9 批；`native_crypto.py:_parse_gate_swap_ohlcv` 每页重置 `state.bars`，致前 8 页 bar 证据丢失 → `gate.swapVolumeEvidenceMissing`。任何 >1000 根的历史请求都会触发，与零成交无关（mock 实证复现，2026-11-03 job fe16b257）。
+
 ## 报告标准
 - 多窗口回测按父模块 `strategies` 的 `references/backtest-comparison-standard.md` 输出。历史结果保留；错误结论标记撤销，不用新口径覆盖原始证据。
 - 本地关闭计费必须逐任务记录实际 billing 字段；免费状态不等于行情、模型或业务验收通过。
