@@ -48,10 +48,18 @@ def generate_strategy_source(*, cell: str | dict, template_sha256: str,
 
 UTC = dt.timezone.utc
 DEFAULT_CONTRACTS = ("PUMPUSDT", "AAVEUSDT", "JUPUSDT", "SUIUSDT")
-DEFAULT_ANCHOR = dt.datetime(2026, 10, 31, tzinfo=UTC)
+# Anchor of the previous frozen batch. It is NOT a research default: since
+# RFC-06-002 V1.10 (D4-1) the anchor is the research task date, so every
+# research batch must pass anchor_utc explicitly and persist it together with
+# task_date (anchor_utc must equal the UTC midnight of task_date).
+PREVIOUS_BATCH_ANCHOR = dt.datetime(2026, 10, 31, tzinfo=UTC)
+DEFAULT_ANCHOR = PREVIOUS_BATCH_ANCHOR
 DEFAULT_WINDOW_COUNT = 4
 INITIAL_MARGIN = 1000.0
-FREQUENCY_SECONDS = 900
+# Default research bar frequency (seconds). Frequency is a research-instance
+# parameter (D5-1): every batch passes frequency_seconds explicitly; K and
+# expected bar counts derive from it instead of being hard-coded per TF.
+DEFAULT_FREQUENCY_SECONDS = 3600
 ABS_TOL = 1e-12
 REL_TOL = 1e-10
 NA = "N/A"
@@ -60,7 +68,7 @@ COMPRESSED_EQUITY_LIMITATION = (
 )
 MARKET = {
     "venue": "gate", "market_type": "swap", "settle": "USDT",
-    "product": "USDT-settled linear perpetual", "frequency": "15m",
+    "product": "USDT-settled linear perpetual",
 }
 METRIC_COLUMNS = (
     "L", "U", "g_pct", "N", "margin_return_pct", "sharpe", "max_drawdown_pct",
@@ -124,11 +132,15 @@ def _subtract_months(anchor: dt.datetime, months: int) -> dt.datetime:
 
 def build_cells(contracts: list[str] | None = None,
                 windows_spec: list[dict] | None = None,
-                anchor_utc: Any = None) -> list[dict]:
+                anchor_utc: Any = None,
+                frequency_seconds: int = DEFAULT_FREQUENCY_SECONDS) -> list[dict]:
     """Build parameterized half-open cells without consulting the machine clock.
 
-    The real coordinating entry must separately call validate_run_anchor before
-    any business use. Explicit future anchors here are valid offline calendars.
+    Frequency is a research-instance parameter (D5-1): callers pass
+    ``frequency_seconds`` per batch (900/3600/14400/86400); expected bar counts
+    derive from it. The real coordinating entry must separately call
+    validate_run_anchor before any business use. Explicit future anchors here
+    are valid offline calendars.
     """
     contracts = list(DEFAULT_CONTRACTS if contracts is None else contracts)
     if not contracts or any(not isinstance(name, str) or not name.strip() for name in contracts):
@@ -158,7 +170,8 @@ def build_cells(contracts: list[str] | None = None,
          **MARKET, "native_instrument": None, "start_utc": start, "end_utc": end,
          "anchor_utc": anchor, "api_start_date": start.date().isoformat(),
          "api_end_date": (end - dt.timedelta(days=1)).date().isoformat(),
-         "expected_15m_bars": int((end - start).total_seconds() // FREQUENCY_SECONDS)}
+         "frequency_seconds": int(frequency_seconds),
+         "expected_bars": int((end - start).total_seconds() // int(frequency_seconds))}
         for contract in contracts for window, start, end in windows
     ]
 
@@ -264,9 +277,12 @@ def derive_geometry(closed_daily_bars: list[dict], start_utc: Any) -> dict:
             "grid_lines": count + 1, "score": score, "reason": None}
 
 
-def margin_metrics(bar_close_rows: list[dict]) -> dict:
-    """Compute margin return/MDD and population Sharpe on consecutive 15m closes.
+def margin_metrics(bar_close_rows: list[dict],
+                   frequency_seconds: int = DEFAULT_FREQUENCY_SECONDS) -> dict:
+    """Compute margin return/MDD and population Sharpe on consecutive bar closes.
 
+    Frequency is a research-instance parameter (D5-1): the annualization factor
+    is K = 365 * 86400 / frequency_seconds (formula, not a hard-coded constant).
     M0 participates only in return/MDD, never in the first Sharpe return.
     Invalid/nonpositive equity preserves raw net PnL and raw MDD for diagnosis.
     """
@@ -289,13 +305,14 @@ def margin_metrics(bar_close_rows: list[dict]) -> dict:
         drawdown = (peak - equity) / peak * 100
         if drawdown > maximum_dd:
             maximum_dd, trough_time = drawdown, _iso(timestamp)
-    missing = any((right - left).total_seconds() != FREQUENCY_SECONDS
+    frequency = int(frequency_seconds)
+    missing = any((right - left).total_seconds() != frequency
                   for left, right in zip(times, times[1:]))
     reasons = []
     if not equities:
         reasons.append("empty equity sample")
     if missing:
-        reasons.append("missing/duplicate/non-15m bar")
+        reasons.append("missing/duplicate/non-native bar")
     if any(equity <= 0 for equity in equities):
         reasons.append("nonpositive equity")
     valid_equity = bool(equities) and not missing and min(equities) > 0
@@ -307,7 +324,8 @@ def margin_metrics(bar_close_rows: list[dict]) -> dict:
     if returns and statistics.pstdev(returns) == 0:
         reasons.append("zero volatility")
     if valid_equity and len(returns) >= 2 and statistics.pstdev(returns) > 0:
-        sharpe = statistics.mean(returns) / statistics.pstdev(returns) * math.sqrt(35040)
+        periods_per_year = 365 * (86400 // frequency)
+        sharpe = statistics.mean(returns) / statistics.pstdev(returns) * math.sqrt(periods_per_year)
     return {"status": "ok" if valid_equity else NA,
             "reason": "; ".join(reasons) or None,
             "net_pnl": equities[-1] - INITIAL_MARGIN if equities else NA,
@@ -318,7 +336,8 @@ def margin_metrics(bar_close_rows: list[dict]) -> dict:
             "raw_max_drawdown_pct": maximum_dd if equities else None,
             "peak_time": peak_time, "trough_time": trough_time,
             "sharpe": sharpe, "return_count": len(returns), "bar_count": len(equities),
-            "risk_free": 0, "ddof": 0, "periods_per_year": 35040,
+            "risk_free": 0, "ddof": 0,
+            "periods_per_year": 365 * (86400 // frequency),
             "limitation": COMPRESSED_EQUITY_LIMITATION}
 
 
@@ -392,6 +411,102 @@ def cross_liquidation(snapshot: dict, mmr: float, close_fee: float) -> dict:
     return {**result, "status": "ok", "reason": None}
 
 
+def liquidation_price_range(holding_snapshots: list[dict], instrument_rules: dict | None) -> dict:
+    """Compute the liquidation price estimates from platform output.
+
+    Following the frozen ``cross_liquidation`` semantics: ``downward_liquidation_price``
+    is the LONG-side estimate (a falling price liquidates the long book) and
+    ``upward_liquidation_price`` is the SHORT-side estimate (a rising price
+    liquidates the short book). MMR and the liquidation close fee must come from
+    the platform ``instrumentRulesSnapshot``; when that snapshot is missing the
+    result is ``N/A`` with a fixed reason rather than a fabricated default
+    (D5-2: the current platform output carries no MMR/close-fee fields, so both
+    columns stay N/A until the platform starts publishing them).
+    """
+    result = {"downward_liquidation_price": NA, "upward_liquidation_price": NA,
+              "status": NA, "reason": None, "mmr": None, "close_fee": None,
+              "worst_snapshot_time": None, "worst_gross_to_equity": None,
+              "downward_range": None, "upward_range": None}
+    if not holding_snapshots:
+        return {**result, "reason": "no holding snapshots"}
+    mmr, fee = _instrument_rules_parameters(instrument_rules)
+    if mmr is None or fee is None:
+        return {**result, "reason": "instrument rules snapshot lacks MMR/close fee"}
+    result["mmr"], result["close_fee"] = mmr, fee
+    snapshots = [snapshot for snapshot in holding_snapshots
+                 if snapshot.get("positions") and snapshot.get("value")]
+    if not snapshots:
+        return {**result, "status": "no_position", "reason": "no position in any snapshot"}
+    # Platform runtime publishes grossExposure as the ratio gross/value already
+    # (B-6): compare and report the raw ratio, never divide by value again.
+    worst = max(snapshots,
+                key=lambda snapshot: _finite(snapshot["grossExposure"], "grossExposure"))
+    snapshot = _liquidation_snapshot(worst)
+    solved = cross_liquidation(snapshot, mmr, fee)
+    downward, upward = solved.get("downward_liquidation_price"), solved.get("upward_liquidation_price")
+    ranges = _liquidation_ranges(snapshots, mmr, fee)
+    return {**result,
+            "downward_liquidation_price": NA if downward is None else downward,
+            "upward_liquidation_price": NA if upward is None else upward,
+            "status": solved.get("status"), "reason": solved.get("reason"),
+            "worst_snapshot_time": worst.get("time"),
+            "worst_gross_to_equity": _finite(worst["grossExposure"], "grossExposure"),
+            "downward_range": ranges["downward"], "upward_range": ranges["upward"]}
+
+
+def _instrument_rules_parameters(instrument_rules: dict | None) -> tuple[float | None, float | None]:
+    """Read MMR and liquidation close fee from the platform instrument rules."""
+    if not isinstance(instrument_rules, dict):
+        return None, None
+    for key in ("maintenanceMarginRate", "maintenance_margin_rate", "mmr"):
+        if instrument_rules.get(key) is not None:
+            mmr = _finite(instrument_rules[key], key)
+            break
+    else:
+        mmr = None
+    for key in ("liquidationFeeRate", "liquidation_fee_rate", "closeFee", "close_fee"):
+        if instrument_rules.get(key) is not None:
+            fee = _finite(instrument_rules[key], key)
+            break
+    else:
+        fee = None
+    return mmr, fee
+
+
+def _liquidation_snapshot(snapshot: dict) -> dict:
+    """Map a platform holding snapshot onto the cross_liquidation input shape."""
+    positions = snapshot.get("positions") or {}
+    long_position, short_position = {}, {}
+    for key, position in positions.items():
+        side = str(key).rsplit("::", 1)[-1]
+        if side == "long":
+            long_position = position
+        elif side == "short":
+            short_position = position
+    mark_price = (long_position.get("lastPrice") or short_position.get("lastPrice")
+                  or snapshot.get("lastPrice"))
+    # The platform stores a short position's amount as a negative number, while
+    # cross_liquidation requires both quantities to be non-negative magnitudes.
+    return {"equity": snapshot.get("value"), "q_long": long_position.get("amount") or 0.0,
+            "q_short": abs(short_position.get("amount") or 0.0),
+            "avg_long": long_position.get("avgCost") or 0.0,
+            "avg_short": short_position.get("avgCost") or 0.0, "mark_price": mark_price,
+            "available_margin": snapshot.get("cash")}
+
+
+def _liquidation_ranges(snapshots: list[dict], mmr: float, fee: float) -> dict:
+    """Collect the min/max of each liquidation price across all snapshots."""
+    downward, upward = [], []
+    for snapshot in snapshots:
+        solved = cross_liquidation(_liquidation_snapshot(snapshot), mmr, fee)
+        if solved.get("downward_liquidation_price") is not None:
+            downward.append(solved["downward_liquidation_price"])
+        if solved.get("upward_liquidation_price") is not None:
+            upward.append(solved["upward_liquidation_price"])
+    return {"downward": [min(downward), max(downward)] if downward else None,
+            "upward": [min(upward), max(upward)] if upward else None}
+
+
 def _cell_index(cells: list[dict]) -> dict:
     indexed = {}
     for cell in cells:
@@ -431,7 +546,15 @@ def summarize_cells(cells: list[dict]) -> list[dict]:
             row.update({f"{column}_mean": mean, f"{column}_valid_count": len(valid),
                         f"{column}_windows": values, f"{column}_reasons": reasons,
                         column: f"{mean} ({'/'.join(map(str, values))}); {len(valid)}/4"})
-        row["qualification"] = "insufficient-evidence"
+        # D5-3 (B-3): qualification follows evidence completeness, not a
+        # hard-coded value. All four windows present with complete metrics and
+        # no per-window reasons => qualified; anything else stays
+        # insufficient-evidence. risk-breach/failed remain caller-settable.
+        row["qualification"] = (
+            "qualified" if row["windows_missing"] == 0
+            and all(not column_reasons for column_reasons in
+                    (row[f"{column}_reasons"] for column in METRIC_COLUMNS))
+            else "insufficient-evidence")
         summaries.append(row)
     return summaries
 
@@ -455,6 +578,10 @@ def reconcile_audit(logs: list[str], cell: dict | str) -> dict:
     Optional native_* totals on the cell are independently compared, not inferred.
     """
     cell_id = cell["cell_id"] if isinstance(cell, dict) else cell
+    # Frequency follows the batch parameter (D5-1); INIT may also carry it.
+    audit_frequency = int(
+        (cell.get("frequency_seconds") if isinstance(cell, dict) else None)
+        or DEFAULT_FREQUENCY_SECONDS)
     entries = {prefix: [] for prefix in ("GRID_INIT_V1", "GRID_AUDIT_V1", "GRID_END_V1")}
     reasons = []
     for line in logs:
@@ -511,10 +638,10 @@ def reconcile_audit(logs: list[str], cell: dict | str) -> dict:
         expected = set()
     else:
         span = (stop - start).total_seconds()
-        if span <= 0 or span % FREQUENCY_SECONDS:
+        if span <= 0 or span % audit_frequency:
             raise ValueError("invalid audit window")
-        expected = {start + dt.timedelta(seconds=FREQUENCY_SECONDS * index)
-                    for index in range(1, int(span // FREQUENCY_SECONDS) + 1)}
+        expected = {start + dt.timedelta(seconds=audit_frequency * index)
+                    for index in range(1, int(span // audit_frequency) + 1)}
         if total != len(expected):
             reasons.append("native bar count differs from expected window")
     seen_times, seen_seqs = set(), set()
@@ -528,9 +655,9 @@ def reconcile_audit(logs: list[str], cell: dict | str) -> dict:
         opened, closed = _time(audit["bar_open"]), _time(audit["bar_close"])
         if seq in seen_seqs or closed in seen_times:
             raise ValueError("duplicate seq/time")
-        if closed != opened + dt.timedelta(seconds=FREQUENCY_SECONDS):
+        if closed != opened + dt.timedelta(seconds=audit_frequency):
             raise ValueError("conflicting bar open/close")
-        if start is not None and (closed != start + dt.timedelta(seconds=seq * FREQUENCY_SECONDS)
+        if start is not None and (closed != start + dt.timedelta(seconds=seq * audit_frequency)
                                   or closed not in expected):
             raise ValueError("seq conflicts with expected time")
         if audit["previous_seq"] != previous_seq or seq != (previous_seq or 0) + 1:
@@ -901,8 +1028,16 @@ def _write_csv(rows: list[dict], columns: list[str], path: str | Path) -> None:
         writer.writerows(rows)
 
 
-def write_comparison_csv(summary: list[dict], path: str | Path) -> None:
-    """Write four frozen-contract rows, retaining absent contracts as N/A with reasons."""
+def write_comparison_csv(summary: list[dict], path: str | Path,
+                         anchor_utc: Any = None) -> None:
+    """Write four frozen-contract rows, retaining absent contracts as N/A with reasons.
+
+    D5-3: explicit anchor required; task_date/anchor_utc land in the output and
+    the placeholder qualification is ``insufficient-evidence`` (enum closure).
+    """
+    if anchor_utc is None:
+        raise ValueError("anchor_utc is required (D5-3): pass the batch task date")
+    task_date = _midnight(anchor_utc).date().isoformat()
     by_contract = {row["contract"]: row for row in summary}
     if len(by_contract) != len(summary) or set(by_contract) - set(DEFAULT_CONTRACTS):
         raise ValueError("comparison carrier requires unique frozen contracts")
@@ -912,32 +1047,60 @@ def write_comparison_csv(summary: list[dict], path: str | Path) -> None:
                                      "window": "W1", "reason": "no submitted evidence"}])[0]
         if contract not in by_contract:
             fallback.update(windows_present=0, windows_missing=4)
-        rows.append(by_contract.get(contract, fallback))
-    _write_csv(rows, ["contract", *METRIC_COLUMNS, "windows_present", "windows_missing",
-                      "qualification"], path)
+        row = by_contract.get(contract, fallback)
+        row.setdefault("task_date", task_date)
+        row.setdefault("anchor_utc", _iso(_midnight(anchor_utc)))
+        rows.append(row)
+    _write_csv(rows, ["contract", "task_date", "anchor_utc", *METRIC_COLUMNS,
+                      "windows_present", "windows_missing", "qualification"], path)
 
 
-def write_cells_csv(cells: list[dict], path: str | Path) -> None:
-    """Write all sixteen frozen target rows; never drop missing/failed targets."""
+def write_cells_csv(cells: list[dict], path: str | Path, anchor_utc: Any = None,
+                    frequency_seconds: int = DEFAULT_FREQUENCY_SECONDS) -> None:
+    """Write all sixteen frozen target rows; never drop missing/failed targets.
+
+    D5-3 (B-1): the skeleton MUST be laid from an explicit anchor (the batch
+    task date), never from a default constant, so placeholder rows carry the
+    real window boundaries; task_date/anchor_utc land in the output (D5-3a).
+    qualification placeholder is ``insufficient-evidence`` (B-3 enum closure);
+    unknown tool states degrade to N/A instead of the undefined value.
+    """
     indexed = _cell_index(cells)
-    planned = build_cells()
+    if anchor_utc is None:
+        raise ValueError("anchor_utc is required (D5-3): pass the batch task date")
+    planned = build_cells(anchor_utc=anchor_utc, frequency_seconds=frequency_seconds)
+    task_date = _midnight(anchor_utc).date().isoformat()
     if set(indexed) - {(cell["contract"], cell["window"]) for cell in planned}:
         raise ValueError("cells carrier requires frozen target identities")
     rows = []
     for plan in planned:
         supplied = indexed.get((plan["contract"], plan["window"]))
-        row = {**plan, **{column: NA for column in METRIC_COLUMNS},
+        row = {**plan, "task_date": task_date,
+               **{column: NA for column in METRIC_COLUMNS},
                "status": "insufficient_evidence", "reason": "no submitted evidence",
-               "job_id": None, "run_id": None, "tool_status": "unknown",
-               "research_status": "insufficient-evidence", "qualification": "unknown"}
+               "job_id": None, "run_id": None, "tool_status": NA,
+               "research_status": "insufficient-evidence",
+               "qualification": "insufficient-evidence"}
         if supplied:
             row.update(supplied)
-        for key in ("start_utc", "end_utc"):
+        for key in ("start_utc", "end_utc", "anchor_utc"):
             row[key] = _iso(row[key])
         for column in METRIC_COLUMNS:
             if row[column] is None:
                 row[column] = NA
         rows.append(row)
-    _write_csv(rows, ["cell_id", "contract", "window", *MARKET, "native_instrument",
-                      "start_utc", "end_utc", *METRIC_COLUMNS, "status", "reason",
-                      "job_id", "run_id", "tool_status", "research_status", "qualification"], path)
+    _write_csv(rows, ["task_date", "anchor_utc", "cell_id", "contract", "window",
+                      *MARKET, "native_instrument", "start_utc", "end_utc",
+                      "frequency_seconds", "expected_bars",
+                      *METRIC_COLUMNS, "status", "reason",
+                      "job_id", "run_id", "tool_status", "research_status",
+                      "qualification"], path)
+
+    # ---- comparison carrier laid from the same explicit anchor (B-1/B-3) ----
+    summary = summarize_cells(cells)
+    comparison = []
+    for contract in DEFAULT_CONTRACTS:
+        match = [row for row in summary if row["contract"] == contract]
+        comparison.extend(match)
+    write_comparison_csv(comparison, Path(path).with_name(
+        Path(path).stem + "-comparison" + Path(path).suffix), anchor_utc=anchor_utc)

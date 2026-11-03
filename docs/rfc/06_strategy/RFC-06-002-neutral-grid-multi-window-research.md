@@ -4,7 +4,7 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | V1.9 |
+| 版本 | V1.10 |
 | 状态 | 既有 B-001/杠杆/三件套/G-02 离线工程线及 F-01..F-05 已验收；审计 D-01 局部撤销（§9 / SPEC V1.6 §10 / Design V1.5 §12）已实现并通过独立 Verify（离线，335 passed，t_8a23ea34），主控离线签收；API 进程已受控重启并真实 HTTP 验证公共 Gate swap 读取与本地重采样（api_runtime_loaded=VERIFIED，见 data/reports/2026-11-02-quantdinger-d01-local-revert/runtime-verification.md）；G-01（缓存身份）、G-03（历史乘数适用性）仍 OPEN，historical_evidence=UNKNOWN、full_research_status=DEFERRED，后台角色未加载、16业务仍禁止；V1.7 按 Pascal 2026-11-03 D1 决策冻结 v=0 零成交 bar 合法化契约（§10），native 层已由 t_aa056536 实现并通过平台侧验证；V1.8 按 t_b8db70b3 契约决策（D2）将范围扩展至消费链 crypto.py 两处数据有效性谓词（§10.4），消费链放行待实现与独立 Verify |
 | 作者 | YQuant Principal / t_cfccfe2c / t_1af91929 / t_9fddffed / t_1b635d49 / t_22b3495f |
 | 日期 | 2026-11-03（V1.8；V1.7 为 2026-11-03 同日续修订），Asia/Shanghai（UTC+08:00） |
@@ -181,10 +181,42 @@ D1 第 1 条中"该 bar 网格限价单不成交"是研究语义声明；平台�
 
 **D3 契约决策**：v=0 修复（§10.2/§10.4）落地后，探针 job fe16b257（2026-11-03 20:09，单次提交无重试）暴露确定性缺口——92 天 15m 窗口（10356 根）超过 Gate 单页 1000 上限，`_parse_gate_swap_ohlcv` 每页重置证据状态，前 8 批约 9000 根 bar 证据丢失 → `gate.swapVolumeEvidenceMissing`（mock 实证复现，见 `data/tasks/active/2026-11-03-probe-rerun-fe16b257/failure-evidence.md`）。判定：DESIGN V1.1 §2.2/§3.2 逐 bar 证据契约未定义多页累积语义，属契约缺口而非实现错误。修订：同一请求线程内 identity（symbol/interval/native_contract）完全相同的多批拉取，证据按 bar 时间戳累积 merge（容量上界 20000、淘汰最旧）；identity 变化或线程更替仍整体重置。逐 bar 溯源、五类错误、applicability、v=0 合法零成交、R-01 披露（不修复）全部不变。行为契约全文见 Design V1.8 §14；本修订仅文档，实现归 F3 卡，探针重跑由独立执行卡承担，16 窗口研究锁不解除。
 
+### 10.6 D4 决策：锚点任务日化 + G-01/G-03 合一取证 + 强平价口径 + 标准表结构（V1.10，Pascal 2026-11-03 裁定）
+
+**背景**：Pascal 裁定第 3 点是**研究对象**（用 Strategy Lab 研究其中性网格策略在近一年四窗口的表现），非看板任务、非 skill 开发优化。本节冻结该研究可执行的契约。
+
+**D4-1 锚点任务日化**。研究窗口锚点不再是固定历史常量，而是**提出研究任务的那一天**（UTC 午夜），四窗口随之滚动：`B(k) = A − 3k 日历月`（缺同日时月末截断），`Wk = [B(k), B(k-1))`，W1 最新、W4 最旧。本轮任务日 = **2026-11-03**，故 A = 2026-11-03T00:00:00Z，落盘四窗口：W1 [2026-08-03, 2026-11-03)、W2 [2026-05-03, 2026-08-03)、W3 [2026-02-03, 2026-05-03)、W4 [2025-11-03, 2026-02-03)，合计覆盖 2025-11-03 → 2026-11-02 收盘区间（365 天）。W1 的 end 为半开，故任务日当天未收盘 bar 不入窗。`build_cells()` 的 `anchor_utc` 参数由调用方显式传入并落盘为不可变研究输入；`DEFAULT_ANCHOR` 降级为「上一批次锚点」，不再是研究默认值。
+
+**D4-2 G-01/G-03 合一取证**。G-01（缓存身份）与 G-03（历史乘数适用性）**不再作为研究执行的前置门禁**，改为研究过程中必须产出的证据项：缺证据即该 cell 判 `insufficient-evidence`（不默认通过、不填 0、不降级宣称）。G-01 证据 = 该 cell 取数期的实际缓存命中审计，命中时须证明缓存内 K 线带已验证单位版本（base 币量语义），否则判证据不足；已具备的强证据为 JUP/USDT 15m 原生探针 runId=40（92 天 8928 根）与名义孪生 runId=37 逐笔 624/624 完全一致、amount 集合零差异，但其适用范围仅限同 worker、同代码版本、同窗口，不得外推。G-03 证据 = 逐 bar 证据链的 `multiplier`/`applicability` 按窗口汇总（取值分布 + verified/unknown 计数），并须在每窗口首尾各取一次合约 metadata，跨度内 multiplier 变化则标 `multiplier_changed_in_window` 判证据不足。已实测基线：Gate 四合约 `quanto_multiplier` 当前为 JUP=1、PUMP=1000、AAVE=0.01、SUI=1，上市日 2024-01-31 / 2025-07-10 / 2020-11-08 / 2023-05-03 均早于 W4 起点，无历史不足。Gate 15m API 单次 `from/to` 跨度上限 2000 根（超出 HTTP 400），92 天 8832 根必须分片——这是平台分页机制的来源。
+
+**D4-3 强平预估价格口径**。字段语义遵循既有冻结契约 `cross_liquidation`：**`downward_liquidation_price` = 多头强平预估价格**（价格下跌触发多头强平），**`upward_liquidation_price` = 空头强平预估价格**（价格上涨触发空头强平）。数据源为平台原生回测 `holdingSnapshots`（含 cash/value/netExposure/grossExposure/positions{side:{amount,avgCost,lastPrice,marketValue}}）+ `positions` 终态 + `instrumentRulesSnapshot`。MMR 与强平平仓费**必须取 `instrumentRulesSnapshot` 实际值**，缺该字段标 `unknown`，不得默认 0.005。状态语义沿用 `cross_liquidation` 冻结状态机（ok / no_position / already_breached / already_at_or_below_maintenance / no_finite_solution / no_positive_solution / NA），**不得伪造**、不得填 0。报告取窗口内持仓最不利快照（gross/equity 最大或最大回撤峰值区间），同时保留 min/max 区间。R-01（runtime 撮合器对 volume<=0 的 bar 不设流动性上限）**维持披露，不修**；资金费 `not_modeled` 不变。
+
+**D4-4 标准化输出表结构**。冻结表 A（逐 cell 明细，16 行，缺 cell 保留 N/A+原因不丢行）与表 B（合约汇总，4 行，指标为 `均值(W1/W2/W3/W4); n/4` 格式）；qualification 枚举冻结为 `qualified` / `insufficient-evidence` / `risk-breach` / `failed`，不得新增未定义值；N/A（未知缺失，带原因）与 0（实测为零）严格区分。完整列定义、均值格式与状态语义写入 `skills/strategies/strategy-lab/SKILL.md`「研究输出表结构标准」章节。
+
+**D4-5 批次预算**。既有 `BUDGET_LIMITS`（target_jobs=4 / outer_jobs=8 / data_requests=50 / elapsed_seconds=1800）为旧批次上限；本轮 16 cell 须按 **4 批次 × 4 窗口**（每批次 4 合约同窗口）逐批放行，每批独立核算预算，避免 `stop_decision` 拦停。提交纪律沿用 2026-11-03 确认口径：**单次提交、失败即停、先根因后重跑**（本地部署无计费、无次数配额，不得使用「配额」措辞）。
+
+**本节仅冻结契约**：不宣告执行放行，不提交任何回测作业，不改 `cross_liquidation` / `margin_metrics` / `summarize_cells` / `METRIC_COLUMNS` 的既有语义。实现归后续 Implement 卡，研究执行归后续执行卡。
+
+### 10.7 D5 决策：频率参数化 + 强平价降级 N/A + 独立验证缺口收敛（V1.11，Pascal 2026-11-04 裁定）
+
+**背景**：V10 独立验证（`t_a8b94af8`，报告 `data/reports/2026-11-04-d4-contract-verify/report.md`）结论 `OVERALL FAIL`：本仓 B-1..B-4（锚点/task_date 未落盘、表 A 列集三方不一致 22/21/27、qualification 枚举越界 `unknown`、SKILL.md 与实现语义冲突）+ 跨仓 B-5..B-7（平台持仓字段名 `quantity/averageCost` 与代码读取 `amount/avgCost` 不匹配→静默 `no_position`；`grossExposure` 已是比值被二次除→量纲错误；平台 `instrumentRulesSnapshot` 无 MMR/强平费字段→强平价无数据源）。同时 Pascal 裁定研究频率改为 **1h**（Gate 1h 保留窗口 10000 根≈417 天 > 365 天研究全程，单 venue 全覆盖无换源），并指出**频率不应固化在契约与代码中**——换频率不应再触发契约修订。本节一次性消解以上全部缺口。
+
+**D5-1 频率参数化（契约冻结机制，实例携带参数）**。频率从常量降级为研究参数：`build_cells()` 增加 `frequency_seconds` 显式参数（默认 3600，允许 900/3600/14400/86400 等平台支持值），`FREQUENCY_SECONDS` 常量删除、改为参数传递；`expected_15m_bars` 字段更名 `expected_bars`；年化因子公式化 `K = 365 × (86400 / frequency_seconds)`；连续性校验按参数频率执行；`MARKET.frequency` 随批次记录。**契约只写参数化公式与机制不变量（窗口滚动、连续性、证据、验收判据），不再写死频率专属数值**（8832/8544/35040 等）；后续换频率（1m/4h/1d 等）仅改实例参数，不再修订本契约。**覆盖率预检为频率相关真机制，必须内建**：执行前校验 `window_bars ≤ min(平台单 venue 保留根数, 合约上市以来根数)`，不满足则该 cell 判 `insufficient-evidence` 并披露原因（1m≈6.9 天、15m≈104 天、1h≈417 天）。本轮批次参数冻结：`frequency=1h, frequency_seconds=3600, anchor_utc=2026-11-03T00:00:00Z, windows=W1[2026-08-03,11-03)/W2[2026-05-03,08-03)/W3[2026-02-03,05-03)/W4[2025-11-03,2026-02-03), expected_bars=2208/2208/2136/2208`。
+
+**D5-2 强平预估价格降级为 N/A（数据缺失如实呈现）**。独立验证证明平台回测产物不含 MMR 与强平费（`instrumentRulesSnapshot` 仅有 amount_step/min_amount/min_notional/price_tick/contract_size），且持仓字段名不匹配会静默产出 `no_position`。裁定：表 A 的 `downward_liquidation_price` / `upward_liquidation_price` 两列**保留列位、值恒 `N/A` + 固定原因 `platform snapshot lacks MMR/close fee`**；`liquidation_price_range()` 函数保留（MMR 缺失分支如实返回 N/A 的既有语义不变），接入输出路径消费；删除对平台 `positions` 字段的静默映射消费（B-5 消解）；`worst_gross_to_equity` 列保留但按平台真实语义取 `grossExposure` 原值（已是 gross/value 比值，删除二次除法，B-6 消解）。**不在平台侧新增 MMR 采集**（平台功能扩展超出本轮范围）；未来平台补齐该字段后可按 D4-3 原口径恢复计算，两列语义解释不变。
+
+**D5-3 V10 验证缺口收敛（本仓 B-1..B-4 + R-05）**。(a) `task_date` 与 `anchor_utc` 作为不可变研究输入落盘进表 A/B 骨架与实例冻结文件（B-1）；占位行窗口边界必须由显式锚点推导，禁止默认锚点铺骨架。(b) 表 A 列集以 DESIGN §15.4 为唯一基准收敛，RFC/SPEC/SKILL.md 同步同一列清单（B-2）。(c) qualification 枚举严格收敛为 `qualified / insufficient-evidence / risk-breach / failed`，占位行缺证据用 `insufficient-evidence`，删除枚举外值 `unknown`（B-3）。(d) SKILL.md 状态语义与实现对齐：缺失一律 `N/A`（不再出现 `unknown`），表 B 几何列语义统一为逐窗口值格式（B-4）。(e) `research.py --anchor` 删除写死默认值改为必填，`grid_training.py` 训练/冻结通道锚点显式传递（R-05），保证锚点贯穿"契约→训练→冻结→执行→落盘"全通道。
+
+**D5-4 冻结边界**。既有 185 项测试断言无一修改删除（V1.10-10 已核）；`cross_liquidation` / `margin_metrics` / `summarize_cells` 冻结语义不变；`METRIC_COLUMNS` 列名不新增不删除（列集收敛指文档对齐，非改列）；既有 15m 实例（neutral-grid-*-15m）与历史 runId 29..40 结果冻结保留。测试基线维持 193 项全绿 + 新增参数化推导用例（1h 窗口边界/expected_bars/年化因子、4h 抽样断言）。执行顺序不变：实现 → 测试全绿 → JUP 1h 单 cell 原生冒烟 → W1→W4 逐批（每批 4 合约、逐批读回、G-01/G-03 合一取证）→ 真实数据填表 A（16 行）/表 B（4 行，`均值(W1/W2/W3/W4); n/4`）。
+
+**本节仅冻结契约**：实现归后续 Implement 阶段，研究执行归执行阶段；不提交任何回测作业。
+
 ## 版本记录
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.11 | 2026-11-04 | 主控直接增 §10.7（V10 独立验证 t_a8b94af8 OVERALL FAIL 后按 Pascal 2026-11-04 三项裁定）：D5 决策——D5-1 频率参数化（build_cells 增 frequency_seconds 参数、expected_bars 更名、年化因子公式化 K=365×86400/frequency_seconds、契约不再写死频率数值、覆盖率预检内建；本轮批次冻结 1h，expected_bars=2208/2208/2136/2208）；D5-2 强平价两列恒 N/A+原因 platform snapshot lacks MMR/close fee（V10 B-7 平台无 MMR 数据源，Pascal 裁定留空；B-5 静默映射删除、B-6 grossExposure 二次除修复；平台侧不加 MMR 采集）；D5-3 V10 缺口收敛（B-1 task_date/anchor_utc 落盘、B-2 列集以 DESIGN §15.4 收敛、B-3 qualification 枚举去 unknown、B-4 SKILL.md 语义对齐、R-05 锚点贯穿训练/冻结/执行通道）；D5-4 冻结边界（185 项断言不动、三函数语义不变、15m 实例与 runId 29..40 保留、193 基线+参数化新用例）；仅文档 |
+| V1.10 | 2026-11-03 | 主控直接增 §10.6（原 E4 卡 t_e2d45b81 因 provider 限流反复 rate-limited 空转，改主控直接修订）：D4 决策——D4-1 锚点任务日化（本轮 A=2026-11-03，四窗口落盘，合计满一年）；D4-2 G-01/G-03 由前置门禁改为合一取证（缺证据即 insufficient-evidence，含 JUP runId=40/37 逐笔对拍证据与四合约 multiplier 基线）；D4-3 强平价口径（空头/多头语义、MMR 取 instrumentRulesSnapshot 实际值、状态机不伪造、R-01 维持披露）；D4-4 标准表 A/B + qualification 枚举 + N/A vs 0 区分（同步 SKILL.md 新章节）；D4-5 批次预算 4 批×4 窗口；仅文档，实现归后续 Implement 卡，研究执行归执行卡 |
 | V1.9 | 2026-11-03 | 主控按 Pascal「精简、不发散」指示直接增 §10.5（原 E3 卡 t_20d5afbd 停止，无产出）：D3 契约决策——证据多页累积缺口定案，同 identity 逐页 merge（容量 20000 淘汰最旧）、identity 变化/线程更替仍整体重置；逐 bar 溯源/五类错误/applicability/v=0/R-01 不变；指向 Design V1.8 §14 / SPEC V1.9 §11.5；仅文档，实现归 F3 |
 | V1.8 | 2026-11-03 | t_b8db70b3（E2）：D2 契约决策消除 §10.4 内部矛盾——F 卡实测消费链 crypto.py 两处 volume>0 前提仍拒绝 v=0 bar（648-651 重采样、694-700 单 bar），按 D1 既有语义扩展范围至 crypto.py 两处谓词放宽（≤0→<0，保留 isfinite 与证据一致性校验、标识/消息不变）+ test_gate_swap_volume_units.py 的 xfail(strict) 装饰器删除与重采样 v=0 用例；对 v=0 增量替代 §5 旧阶段 volume 校验禁改条款；native 层已实现（t_aa056536，237 passed+1 xfail）、消费链放行待实现/独立 Verify；R-01 未修复；job 0、16 锁不解除；指向 SPEC V1.8 §11 / Design V1.7 §13.4 |
 | V1.7 | 2026-11-03 | t_e5ac39e6：按 Pascal 2026-11-03 D1 决策新增 §10，将真实零成交 bar（raw_v_contracts==0）从 fail-closed 拒绝网移出、定为合法市场状态（base_volume=0、quote_volume=0 当 sum==0、该 bar 网格限价单不成交）；保留五类拒绝语义、单次换算链、乘数校验、无 epsilon、证据对象 gate_swap_volume_v1、sum 缺失 null；新增 R-01 披露（平台 _liquidity_cap 对 volume<=0 返回 None 的现状与研究语义差异）；指向 SPEC V1.7 §11 / Design V1.6 §13；仅文档修订，实现/验证/运行加载未发生，16 业务锁不解除 |

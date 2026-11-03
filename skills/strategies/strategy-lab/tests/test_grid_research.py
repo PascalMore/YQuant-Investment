@@ -84,21 +84,22 @@ class BuildCellsTests(unittest.TestCase):
     def test_default_windows_match_spec_table(self):
         by_id = {c["cell_id"]: c for c in gr.build_cells()}
         spec_windows = {
-            "PUMPUSDT-W1": (utc(2026, 7, 31), utc(2026, 10, 31), 8832),
-            "PUMPUSDT-W2": (utc(2026, 4, 30), utc(2026, 7, 31), 8832),
-            "PUMPUSDT-W3": (utc(2026, 1, 31), utc(2026, 4, 30), 8544),
-            "PUMPUSDT-W4": (utc(2025, 10, 31), utc(2026, 1, 31), 8832),
+            "PUMPUSDT-W1": (utc(2026, 7, 31), utc(2026, 10, 31), 2208),
+            "PUMPUSDT-W2": (utc(2026, 4, 30), utc(2026, 7, 31), 2208),
+            "PUMPUSDT-W3": (utc(2026, 1, 31), utc(2026, 4, 30), 2136),
+            "PUMPUSDT-W4": (utc(2025, 10, 31), utc(2026, 1, 31), 2208),
         }
         for cell_id, (start, end, bars) in spec_windows.items():
             cell = by_id[cell_id]
             self.assertEqual(start, cell["start_utc"], cell_id)
             self.assertEqual(end, cell["end_utc"], cell_id)
-            self.assertEqual(bars, cell["expected_15m_bars"], cell_id)
+            self.assertEqual(bars, cell["expected_bars"], cell_id)
             self.assertEqual(
-                (end - start).total_seconds() / 900,
-                cell["expected_15m_bars"],
+                (end - start).total_seconds() / 3600,
+                cell["expected_bars"],
                 cell_id,
             )
+            self.assertEqual(3600, cell["frequency_seconds"], cell_id)
 
 
     def test_explicit_contracts_and_windows_not_default_hardcoded(self):
@@ -109,11 +110,13 @@ class BuildCellsTests(unittest.TestCase):
                 {"start_utc": utc(2024, 12, 1), "end_utc": utc(2025, 3, 1)},
             ],
             anchor_utc=utc(2025, 6, 1),
+            frequency_seconds=900,  # explicit 15m batch (frequency is a parameter)
         )
         self.assertEqual(["XYZUSDT-W1", "XYZUSDT-W2"], [c["cell_id"] for c in cells])
         self.assertEqual(utc(2025, 3, 1), cells[0]["start_utc"])
-        self.assertEqual(8832, cells[0]["expected_15m_bars"])  # 92 days * 96
-        self.assertEqual(8640, cells[1]["expected_15m_bars"])  # 90 days * 96
+        self.assertEqual(900, cells[0]["frequency_seconds"])
+        self.assertEqual(8832, cells[0]["expected_bars"])  # 92 days * 96
+        self.assertEqual(8640, cells[1]["expected_bars"])  # 90 days * 96
 
     def test_rejects_empty_duplicate_and_undropped_anchor(self):
         w = {"start_utc": utc(2026, 7, 31), "end_utc": utc(2026, 10, 31)}
@@ -339,13 +342,29 @@ class SharpeTests(unittest.TestCase):
         times = [iso(utc(2026, 1, 1) + dt.timedelta(minutes=m)) for m in (15, 30, 45, 60)]
         equities = [1100.0, 1050.0, 1150.0, 1200.0]
         rows = [{"time": t, "equity": e} for t, e in zip(times, equities)]
-        result = gr.margin_metrics(rows)
+        result = gr.margin_metrics(rows, frequency_seconds=900)
         returns = [
             equities[i] / equities[i - 1] - 1 for i in range(1, len(equities))
         ]
-        expected = statistics.mean(returns) / statistics.pstdev(returns) * math.sqrt(35040)
+        # K formula: 365 * 86400 / frequency_seconds (15m -> 35040, frozen invariant)
+        expected = statistics.mean(returns) / statistics.pstdev(returns) * math.sqrt(
+            365 * 86400 // 900)
         self.assertAlmostEqual(expected, result["sharpe"], places=8)
         self.assertEqual("ok", result["status"])
+        self.assertEqual(35040, result["periods_per_year"])
+
+    def test_sharpe_annualization_follows_frequency_parameter(self):
+        times = [iso(utc(2026, 1, 1) + dt.timedelta(hours=h)) for h in (1, 2, 3, 4)]
+        equities = [1100.0, 1050.0, 1150.0, 1200.0]
+        rows = [{"time": t, "equity": e} for t, e in zip(times, equities)]
+        result = gr.margin_metrics(rows, frequency_seconds=3600)
+        returns = [
+            equities[i] / equities[i - 1] - 1 for i in range(1, len(equities))
+        ]
+        expected = statistics.mean(returns) / statistics.pstdev(returns) * math.sqrt(
+            365 * 86400 // 3600)
+        self.assertAlmostEqual(expected, result["sharpe"], places=8)
+        self.assertEqual(8760, result["periods_per_year"])  # 1h -> K=8760
 
 
     def test_sharpe_anomaly_matrix_na_with_reasons(self):
@@ -1424,6 +1443,95 @@ class StrategySourceGeneratorTests(unittest.TestCase):
             budget={"remaining_outer_jobs": 3, "remaining_data_requests": 10, "remaining_seconds": 100},
         )
         self.assertFalse(charged["may_submit"])
+
+
+class LiquidationPriceRangeTest(unittest.TestCase):
+    """RFC-06-002 V1.10 D4-3: liquidation price range from platform output."""
+
+    RULES = {"maintenanceMarginRate": 0.005, "liquidationFeeRate": 0.0005}
+
+    def snapshot(self, **overrides):
+        # Equity 50 against 1000 units at 0.25 (250 notional): a falling price
+        # erodes the margin, so the long book does have a liquidation root.
+        # grossExposure mirrors the platform runtime shape (B-6): it is ALREADY
+        # the ratio gross/value (250/50 = 5.0), never a notional amount.
+        base = {"time": "2026-08-01T00:00:00Z", "value": 50.0, "cash": 20.0,
+                "grossExposure": 5.0, "netExposure": 5.0,
+                "positions": {"Crypto:JUP/USDT@swap::long": {
+                    "amount": 1000.0, "avgCost": 0.25, "lastPrice": 0.25,
+                    "marketValue": 250.0}}}
+        base.update(overrides)
+        return base
+
+    def test_downward_is_long_side_and_upward_is_short_side(self):
+        # Frozen cross_liquidation semantics: a long-only book liquidates on a
+        # price FALL, so downward_liquidation_price carries the long-side
+        # estimate; the short-side estimate stays N/A rather than fabricated.
+        result = gr.liquidation_price_range([self.snapshot()], self.RULES)
+        self.assertEqual("ok", result["status"])
+        self.assertIsNotNone(result["downward_liquidation_price"])
+        self.assertLess(result["downward_liquidation_price"], 0.25)
+        self.assertEqual(gr.NA, result["upward_liquidation_price"])
+
+    def test_short_book_produces_upward_estimate(self):
+        snapshot = self.snapshot(positions={"Crypto:JUP/USDT@swap::short": {
+            "amount": -1000.0, "avgCost": 0.25, "lastPrice": 0.25, "marketValue": -250.0}})
+        result = gr.liquidation_price_range([snapshot], self.RULES)
+        self.assertEqual("ok", result["status"])
+        self.assertIsNotNone(result["upward_liquidation_price"])
+        self.assertGreater(result["upward_liquidation_price"], 0.25)
+        self.assertEqual(gr.NA, result["downward_liquidation_price"])
+
+    def test_missing_instrument_rules_is_unknown_not_default(self):
+        # MMR must come from the platform snapshot; never default to 0.005.
+        result = gr.liquidation_price_range([self.snapshot()], None)
+        self.assertEqual(gr.NA, result["status"])
+        self.assertEqual(gr.NA, result["downward_liquidation_price"])
+        self.assertEqual(gr.NA, result["upward_liquidation_price"])
+        self.assertIsNone(result["mmr"])
+        self.assertIn("MMR", result["reason"])
+
+    def test_no_position_reports_no_position(self):
+        empty = self.snapshot(positions={}, grossExposure=0.0)
+        result = gr.liquidation_price_range([empty], self.RULES)
+        self.assertEqual("no_position", result["status"])
+        self.assertEqual(gr.NA, result["downward_liquidation_price"])
+
+    def test_worst_snapshot_is_the_highest_gross_to_equity(self):
+        # Platform grossExposure is the ratio gross/value already (B-6): the
+        # worst snapshot is the highest ratio, reported verbatim (no re-division).
+        calm = self.snapshot(grossExposure=2.0)
+        stressed = self.snapshot(grossExposure=18.0, time="2026-08-02T00:00:00Z")
+        result = gr.liquidation_price_range([calm, stressed], self.RULES)
+        self.assertEqual("2026-08-02T00:00:00Z", result["worst_snapshot_time"])
+        self.assertAlmostEqual(18.0, result["worst_gross_to_equity"], places=9)
+
+    def test_empty_snapshots_do_not_fabricate(self):
+        result = gr.liquidation_price_range([], self.RULES)
+        self.assertEqual(gr.NA, result["status"])
+        self.assertEqual(gr.NA, result["upward_liquidation_price"])
+
+
+class AnchorTaskDateTest(unittest.TestCase):
+    """RFC-06-002 V1.10 D4-1: the anchor is the research task date."""
+
+    def test_explicit_anchor_derives_the_four_windows(self):
+        anchor = dt.datetime(2026, 11, 3, tzinfo=gr.UTC)
+        cells = gr.build_cells(anchor_utc=anchor)
+        windows = {cell["window"]: cell for cell in cells}
+        self.assertEqual("2026-08-03T00:00:00Z", gr._iso(windows["W1"]["start_utc"]))
+        self.assertEqual("2026-11-03T00:00:00Z", gr._iso(windows["W1"]["end_utc"]))
+        self.assertEqual("2026-05-03T00:00:00Z", gr._iso(windows["W2"]["start_utc"]))
+        self.assertEqual("2026-02-03T00:00:00Z", gr._iso(windows["W3"]["start_utc"]))
+        self.assertEqual("2025-11-03T00:00:00Z", gr._iso(windows["W4"]["start_utc"]))
+        self.assertEqual(8832, windows["W1"]["expected_15m_bars"])
+        self.assertEqual(8544, windows["W3"]["expected_15m_bars"])
+
+    def test_anchor_is_not_the_previous_batch_constant(self):
+        # The previous-batch anchor is only a fallback, never the research default.
+        self.assertEqual(gr.PREVIOUS_BATCH_ANCHOR, gr.DEFAULT_ANCHOR)
+        self.assertNotEqual(gr.DEFAULT_ANCHOR,
+                            dt.datetime(2026, 11, 3, tzinfo=gr.UTC))
 
 
 if __name__ == "__main__":

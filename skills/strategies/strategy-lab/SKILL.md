@@ -219,6 +219,92 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 或其他与关闭计费前提矛盾的信号 → 停止后续提交并如实报告证据，交操作者裁定；
 不自动付费、不自动重试、不自动退款。
 
+## 研究输出表结构标准（2026-11-03 Pascal 裁定；V1.11 2026-11-04 频率参数化与强平价降级修订）
+
+本节是**研究类任务的统一输出格式契约**。任何多窗口/多合约研究都必须产出表 A 与表 B 两种载体，
+列名、均值格式与资格判定枚举以本节为准，不得各研究自行发明。列集以 DESIGN-06-002 V1.11 §16.4 为唯一基准。
+
+### 研究参数与频率（V1.11 D5-1）
+
+频率是**研究实例参数，不是系统常量**：换频率（1m/15m/1h/4h/1d）只改实例参数，不改本契约与脚本。
+- `build_cells(anchor_utc, frequency_seconds=3600)` 双参数；本轮批次 `frequency=1h`
+- Sharpe 年化因子按公式 `K = 365 × (86400 / frequency_seconds)`（1h → 8760）
+- **覆盖率预检**（执行前必过，不过则该 cell `insufficient-evidence`）：
+  `window_bars ≤ min(venue 单 venue 保留根数, 合约上市以来根数)`。
+  Gate swap 实测参考：1m≈6.9 天 / 15m≈104 天 / 1h≈417 天；1h 全年四窗口（365 天）在 Gate 覆盖内。
+
+### 表 A：逐 cell 明细表（每个 合约×窗口 一行；列集 = DESIGN §16.4，21 列）
+
+| 列 | 含义 |
+|---|---|
+| `task_date` / `anchor_utc` | 研究任务日 / 锚点（`anchor_utc == task_date 的 UTC 午夜`，可程序化核对） |
+| `cell_id` | `<CONTRACT>-<Wn>`，全局唯一 |
+| `contract` / `window` | 合约标识 / 窗口标识（W1 最新，W4 最旧） |
+| `start_utc` / `end_utc` | 窗口半开区间 `[start, end)`，UTC |
+| `expected_bars` | 窗口预期 bar 数 = span / frequency_seconds |
+| `L` / `U` | 网格下/上界（训练集 min(low)/max(high)） |
+| `g_pct` | 对数等距网格间距（%） |
+| `N` | 网格数量（格数，不含上下界 → 网格线 = N+1） |
+| `margin_return_pct` | 保证金口径收益率（%） |
+| `sharpe` | 逐 bar 收益的年化夏普（K=365×86400/frequency_seconds，ddof=0，rf=0） |
+| `max_drawdown_pct` | 峰值回撤（%） |
+| `worst_gross_to_equity` | 窗口内最不利 gross/equity（平台 `grossExposure` 原值，比值语义） |
+| `downward_liquidation_price` | **多头强平预估价格**（当前平台无 MMR 数据源 → 恒 `N/A`，见下方口径） |
+| `upward_liquidation_price` | **空头强平预估价格**（当前平台无 MMR 数据源 → 恒 `N/A`，见下方口径） |
+| `venue_disclosure` | 实际数据 venue 与换源披露（含 benchmark 通道；单 venue 时写 `gate`） |
+| `qualification` | 资格判定（见下方枚举） |
+| `reason` | 失败/证据不足/数据缺失原因（成功时为空） |
+
+`job_id`/`run_id`/`tool_status`/`research_status` 保留在 evidence 层 JSON（可回溯平台原生记录），不占表 A 列位。
+
+**缺行规则**：预定义矩阵中的每个 cell 必须出现在表中。缺证据/未执行的 cell 保留占位行，
+指标列填 N/A 并在 `reason` 写明原因，**不得丢行、不得留空、不得填 0**。
+
+### 表 B：合约汇总表（每个合约 一行；列集 = DESIGN §16.4，11 列）
+
+| 列 | 含义 |
+|---|---|
+| `contract` | 合约标识 |
+| `task_date` / `anchor_utc` | 同表 A |
+| `L` / `U` / `g_pct` / `N` | 网格几何，**逐窗口值格式** `<W1>/<W2>/<W3>/<W4>`（同窗几何一致，如实并列） |
+| `margin_return_pct` / `sharpe` / `max_drawdown_pct` | 四窗口均值 + 逐窗口值 |
+| `windows_present` / `windows_missing` | 有效窗口数 / 缺失窗口数 |
+| `qualification` | 资格判定（见下方枚举） |
+
+### 多窗口指标格式（四窗口均值 + 逐窗口值）
+
+每个多窗口指标单元格固定为：
+
+```
+<均值>(<W1值>/<W2值>/<W3值>/<W4值>); <有效窗口数>/4
+```
+
+例：`3.21(3.10/3.55/2.98/3.21); 4/4`
+
+- 均值只对**有效窗口**取算术平均；缺失窗口在括号段保留其原值（N/A 或原因占位）
+- 有效窗口数写明分母（`n/4`），缺失不得被静默剔除
+- 只有一个有效窗口时均值=该值，但格式仍保留 `/4` 分母
+
+### 强平预估价格口径（V1.11 D5-2 降级）
+
+- `downward_liquidation_price` = 多头强平预估价格（价格下跌触发多头强平）；`upward_liquidation_price` = 空头强平预估价格（价格上涨触发空头强平）
+- **当前平台回测产物不含 MMR 与强平费**（`instrumentRulesSnapshot` 仅有 amount_step/min_amount/min_notional/price_tick/contract_size，独立验证 t_a8b94af8 B-7 实证）→ 两列**当前恒 `N/A`**，`reason` 固定 `platform snapshot lacks MMR/close fee`
+- `liquidation_price_range()` 保留：快照带 MMR/费用时按原口径计算（`downward`=多头/`upward`=空头，`cross_liquidation` 状态机，不填 0 不猜测）；缺失时如实 N/A
+- **不做**平台侧 MMR 采集扩展；平台未来补齐字段后两列自动恢复计算，语义解释不变
+- `worst_gross_to_equity` 取平台 `grossExposure` 原值（runtime 已是 gross/value 比值）
+
+### 资格判定枚举（qualification）
+
+| 值 | 含义 |
+|---|---|
+| `qualified` | 全部窗口证据完整、指标齐全、风险约束未破 |
+| `insufficient-evidence` | 存在缺证据/缺指标/缺 bar/乘数适用性未知/覆盖率预检不过 |
+| `risk-breach` | 观测到风险约束突破（gross/equity > 2.5 或 drawdown > 35%） |
+| `failed` | 执行失败（作业失败、数据不可得、窗口不可达） |
+
+不得新增未定义值（含 `unknown`——占位行用 `insufficient-evidence`，状态缺失一律 `N/A`）。
+N/A（未知/缺失）与 0（实测为零）严格区分：前者带原因，后者是有效观测值。
+
 ## 安全边界
 
 - 凭据仅经进程环境注入：`QUANTDINGER_BASE_URL`（无 /api 后缀）、`QUANTDINGER_JWT`（Human）、

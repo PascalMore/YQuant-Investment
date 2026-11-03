@@ -4,9 +4,9 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | V1.9 |
+| 版本 | V1.11 |
 | 状态 | 既有离线工程线及 F-01..F-05 已验收；§10 审计 D-01 局部撤销已获 Pascal 确认、已实现并通过独立 Verify（离线，D01-01..07 全 CLOSED，t_8a23ea34），API 进程已受控重启并真实 HTTP 验证公共读取与本地重采样（api_runtime_loaded=VERIFIED）；G-01（缓存身份）与 G-03（历史乘数适用性）仍 OPEN，historical_evidence=UNKNOWN、full_research_status=DEFERRED，后台角色未加载、16业务仍禁止；V1.7 按 Pascal 2026-11-03 D1 决策冻结 v=0 零成交 bar 合法化验收契约（§11）；V1.8 按 t_b8db70b3 D2 决策扩展 §11.2/§11.4 至消费链 crypto.py 放行，native 层已实现（t_aa056536）、消费链待实现与独立 Verify |
-| 日期/作者 | 2026-11-03（V1.8；V1.7 为 2026-11-03 同日续修订），Asia/Shanghai（UTC+08:00）；原作者保留；V1.7 按 Pascal D1 决策同步 §11，V1.8 按 t_b8db70b3 D2 决策同步 §11 |
+| 日期/作者 | 2026-11-04（V1.11），Asia/Shanghai（UTC+08:00）；原作者保留；V1.11 按 Pascal 2026-11-04 三项裁定同步 §11.7（频率参数化/强平价 N/A/V10 缺口收敛） |
 | 来源 RFC | [RFC-06-002 V1.8](../../rfc/06_strategy/RFC-06-002-neutral-grid-multi-window-research.md)，§9 审计 D-01 与 §10 v=0 合法化（V1.8 §10.4 含消费链 D2）；D-06 训练通道保留 |
 | Design | docs/design/06_strategy/DESIGN-06-002-neutral-grid-multi-window-research.md V1.7 §13（§13.4 消费链 D2 契约）；§10 见 V1.5 §12，原 §11 训练通道其余契约保留 |
 | 权威输入 | data/tasks/active/2026-10-30-neutral-grid-research/pipeline-intake.md |
@@ -408,10 +408,75 @@ G-02只有在独立Verify/Review确认实现与默认路径回归、主控确认
 
 实现范围：仅 native_crypto.py 的 `_parse_gate_swap_ohlcv` state 重置/赋值段（约 10-30 行）+ test_native_crypto_public_client.py 新增多页测试；其余全部不动。本节实现不提交回测；探针重跑由独立执行卡承担；16 窗口研究锁不解除；G-01/G-03 维持 OPEN；R-01 维持披露。
 
+### 11.6 多窗口研究验收增量（V1.10，D4；待 Implement + 研究执行）
+
+行为契约见 RFC V1.10 §10.6 / DESIGN V1.9 §15。验收矩阵分两层：**I 层 = 实现验收**（Implement/Verify 核对），**R 层 = 研究验收**（执行卡逐 cell 核对）。
+
+#### I 层：实现验收（Implement + 独立 Verify）
+
+| 条目 | 断言 |
+|---|---|
+| V1.10-01 | `build_cells(anchor_utc=...)` 接受显式锚点参数并正确推导四窗口；`DEFAULT_ANCHOR` 不再是研究默认值（降级为上一批次锚点） |
+| V1.10-02 | 锚点与 task_date 落盘为不可变研究输入；`anchor_utc == task_date 的 UTC 午夜` 可程序化核对 |
+| V1.10-03 | 窗口边界精确：W1=[2026-08-03,2026-11-03)、W2=[2026-05-03,2026-08-03)、W3=[2026-02-03,2026-05-03)、W4=[2025-11-03,2026-02-03)；`expected_15m_bars` 分别 8832/8832/8544/8832 |
+| V1.10-04 | 强平价计算使用平台 `instrumentRulesSnapshot` 的实际 MMR/强平费；快照缺该字段 → 标 `unknown`，**不得默认 0.005** |
+| V1.10-05 | 强平价状态机语义与 `cross_liquidation` 一致（ok/no_position/already_breached/already_at_or_below_maintenance/no_finite_solution/no_positive_solution/NA）；不得填 0、不得伪造 |
+| V1.10-06 | `downward_liquidation_price` = 多头强平预估价格（下跌触发）、`upward_liquidation_price` = 空头强平预估价格（上涨触发），字段语义与既有 `cross_liquidation` 契约一致 |
+| V1.10-07 | 表 A 输出 16 行（4 合约 × 4 窗口），缺 cell 保留占位行 + `reason`，不丢行、不留空、不填 0 |
+| V1.10-08 | 表 B 输出 4 行；多窗口指标格式严格为 `均值(W1/W2/W3/W4); n/4`，均值只对有效窗口取算术平均 |
+| V1.10-09 | `qualification` 取值只属于 {qualified, insufficient-evidence, risk-breach, failed}；N/A 与 0 严格区分 |
+| V1.10-10 | 未改 `cross_liquidation` / `margin_metrics` / `summarize_cells` / `METRIC_COLUMNS` 的既有语义与既有测试断言 |
+| V1.10-11 | `SKILL.md` 含「研究输出表结构标准」章节，且列定义/均值格式/强平价状态/qualification 枚举与代码一致 |
+| V1.10-12 | 主仓既有 185 项断言全部仍通过且无既有断言被修改；本版新增 8 项测试（强平价 6 + 锚点 2）全绿，总数 193/exit 0；平台侧 pytest 无回归 |
+
+#### R 层：研究验收（研究执行卡逐 cell 核对）
+
+| 条目 | 断言 |
+|---|---|
+| V1.10-R01 | 每个 cell 的窗口与上表边界一致；取数 bar 数与 `expected_15m_bars` 偏差须有据可查（缺 bar 记 `missing_bar_closes`） |
+| V1.10-R02 | 每个 cell 产出 G-01 证据（缓存命中审计 + 单位版本判定）；缺证据 → `insufficient-evidence` |
+| V1.10-R03 | 每个 cell 产出 G-03 证据（逐 bar multiplier/applicability 分布 + 首尾 metadata 对比）；窗口内 multiplier 变化 → `multiplier_changed_in_window` + `insufficient-evidence` |
+| V1.10-R04 | 每个 cell 产出强平价（含状态）；MMR 来源可溯源到 `instrumentRulesSnapshot` |
+| V1.10-R05 | 每个 cell 的 `job_id` / `run_id` 可回溯平台原生记录；回执 `executionAssumptions` 读回 `initialCapital`/`leverageEnabled`/`leverage` 与请求一致 |
+| V1.10-R06 | 表 A/B 由真实 cell 数据填充，`windows_present`+`windows_missing`=4 |
+| V1.10-R07 | 报告显式标注：资金费 not_modeled、R-01 未修复、OHLC/tick 不可观测；不得承诺实盘安全 |
+| V1.10-R08 | 提交纪律：单次提交、失败即停、先根因后重跑；每批次独立预算核算 |
+
+### 11.7 频率参数化与强平价降级验收增量（V1.11，D5；V10 FAIL 缺口收敛）
+
+行为契约见 RFC V1.11 §10.7 / DESIGN V1.11 §16。本节矩阵**取代 §11.6 I 层中被 V10 判 FAIL 的条目语义**（V1.10-02/07/09/11 的收敛版），并新增参数化条目；R 层沿用，仅频率相关字段名按 D5-1 更名。
+
+#### I 层：实现验收（Implement + 独立 Verify）
+
+| 条目 | 断言 |
+|---|---|
+| V1.11-01 | `build_cells(anchor_utc=..., frequency_seconds=...)` 双参数显式；`FREQUENCY_SECONDS` 常量删除；缺 anchor 抛错、缺 frequency 使用默认 3600 并在结果中记录实际值 |
+| V1.11-02 | `task_date`/`anchor_utc` 落盘进表 A/B 骨架与实例冻结文件；`anchor_utc == task_date 的 UTC 午夜` 可程序化核对；占位行窗口边界由显式锚点推导 |
+| V1.11-03 | 1h 窗口精确：W1/W2/W4=2208 根、W3=2136 根；年化因子 K=365×86400/frequency_seconds（1h=8760）；4h 抽样断言（92 天=552 根）证明频率无关 |
+| V1.11-04 | 强平价两列在无 MMR 快照时恒 `N/A` + 固定原因 `platform snapshot lacks MMR/close fee`；`liquidation_price_range()` 被输出路径实际消费；不再静默映射平台 `positions` 字段（B-5 消解） |
+| V1.11-05 | `worst_gross_to_equity` 取平台 `grossExposure` 原值（比值语义，无二次除法）；测试夹具与平台真实产物一致（B-6 消解） |
+| V1.11-06 | 表 A 列集与 DESIGN §16 列清单逐列一致（文档三方对齐，B-2 消解）；16 行骨架行数不变 |
+| V1.11-07 | qualification 枚举严格 ∈ {qualified, insufficient-evidence, risk-breach, failed}；占位行=insufficient-evidence；无 `unknown` 值（B-3 消解） |
+| V1.11-08 | SKILL.md「研究输出表结构标准」：状态缺失一律 N/A、表 B 几何列逐窗口值格式、列集与 DESIGN §16 一致（B-4 消解） |
+| V1.11-09 | 覆盖率预检内建：`window_bars ≤ min(venue 保留根数, 上市以来根数)` 不满足 → insufficient-evidence + 披露；1h/365 天在 Gate 10000 根内通过 |
+| V1.11-10 | 锚点贯穿：`research.py --anchor` 必填、`grid_training.py` 训练/冻结通道显式传递（R-05 消解） |
+| V1.11-11 | 既有 185 项断言无修改删除；`cross_liquidation`/`margin_metrics`/`summarize_cells`/`METRIC_COLUMNS` 语义不变；15m 实例与历史 runId 29..40 冻结 |
+| V1.11-12 | 主仓 193 项 + 新增参数化用例（1h 边界/expected_bars/K、4h 抽样、强平 N/A、枚举收敛）全绿 exit 0；`git diff --check` 干净 |
+
+#### R 层：研究验收（沿用 §11.6 R 层，以下仅列差异）
+
+| 条目 | 断言 |
+|---|---|
+| V1.11-R01 | R01-R03、R05-R08 沿用 §11.6，字段名按 D5-1（`expected_bars`）；本轮频率=1h |
+| V1.11-R02 | V1.10-R04 **由 D5-2 取代**：强平价两列恒 N/A+固定原因，不判 insufficient-evidence（列位保留、如实呈现数据缺失） |
+| V1.11-R03 | 每 cell 记录实际 venue 与换源披露（含 benchmark spot 通道）；1h 全程应在 Gate 单 venue 内，出现 failover 必须逐 cell 披露 |
+
 ## 版本记录
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| V1.11 | 2026-11-04 | 主控直接增 §11.7（V10 独立验证 OVERALL FAIL 后按 Pascal 2026-11-04 三项裁定）：I 层 V1.11-01..12 取代 §11.6 中 FAIL 条目语义（V1.10-02/07/09/11 收敛版）；D5-1 频率参数化（build_cells 双参数、FREQUENCY_SECONDS 删除、expected_bars、K=365×86400/frequency_seconds、4h 抽样断言、覆盖率预检内建 V1.11-09）；D5-2 强平价两列恒 N/A+固定原因（V1.11-04/05，B-5/B-6/B-7 消解，R 层 V1.11-R02 取代 V1.10-R04）；D5-3 锚点落盘/列集收敛/枚举去 unknown/SKILL.md 对齐/锚点贯穿通道（V1.11-02/06/07/08/10，B-1..B-4+R-05 消解）；V1.11-R03 新增 venue 换源披露；冻结边界 V1.11-11（185 断言不动、15m 实例与 runId 29..40 保留）；本轮批次 1h（expected_bars 2208/2208/2136/2208） |
+| V1.10 | 2026-11-03 | 主控直接增 §11.6（原 E4 卡 t_e2d45b81 限流空转，改主控直接修订）：D4 验收矩阵分 I 层（实现：V1.10-01..12，锚点参数化/落盘/窗口边界/强平价 MMR 来源与状态机/表A表B 行列与均值格式/qualification 枚举/未改既有语义/SKILL 章节一致/185 基线）与 R 层（研究：V1.10-R01..08，逐 cell G-01/G-03 证据、强平价、runId 可溯、预算与提交纪律）；指向 RFC V1.10 §10.6 / Design V1.9 §15；仅文档 |
 | V1.9 | 2026-11-03 | 主控按 Pascal「精简」指示直接增 §11.5（原 E3 卡 t_20d5afbd 停止）：D3 多页证据累积验收矩阵 V1.9-01..07（三批可查/换身份重置/容量 20000 淘汰最旧/同 key 覆盖/五类错误+v=0 不变/crypto.py 零改动/冻结命令全绿）；指向 RFC V1.9 §10.5 / Design V1.8 §14；仅文档，实现归 F3 |
 | V1.8 | 2026-11-03 | t_b8db70b3（E2/D2）：§11.2 V1.7-06 扩为单 bar+重采样两条消费路径、新增 V1.8-01（xfail(strict) 装饰器删除验收）；§11.4 范围更新为「native 层已实现（t_aa056536）+ 消费链 crypto.py 两处谓词放宽与测试增量待实现」；指向 RFC V1.8 §10.4 / Design V1.7 §13.4；仅文档，消费链实现/验证未发生，job 0、16 锁不解除 |
 | V1.7 | 2026-11-03 | t_e5ac39e6：按 Pascal 2026-11-03 D1 决策新增 §11——§11.1 换算规则窄修订（raw_v_contracts==0 合法化：base_volume=0、sum==0 时 quote_volume=0；五类拒绝/乘数校验顺序/乘积零拒绝守卫/证据对象/sum 缺失 null 全部不变，负零按 §11.1/V1.7-03 冻结口径归入零成交而非拒绝）；§11.2 新增回归矩阵 V1.7-01..08（含 R-01 披露交付义务）；§11.3 冻结基线 185 项兼容性评估（逐文件核查无 v=0 断言，预期变更 0，实现后须重跑核对 185/OK/exit 0）；§11.4 范围与禁止；指向 RFC V1.7 §10 / Design V1.6 §13；仅文档，实现/验证未发生，job 配额 0，16 窗口研究锁不解除 |

@@ -4,8 +4,8 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | V1.8 |
-| 日期 | 2026-11-03（V1.7；V1.6 为 2026-11-03 同日续修订），Asia/Shanghai（UTC+08:00） |
+| 版本 | V1.11 |
+| 日期 | 2026-11-04（V1.11），Asia/Shanghai（UTC+08:00）；V1.11 按 Pascal 2026-11-04 三项裁定新增 §16 |
 | 阶段 | YQuant 按 Pascal 已确认决策同步契约：审计 D-01 局部撤销（V1.5 §12，已实现并独立 Verify）、v=0 零成交 bar 合法化实现契约（V1.6 §13，Pascal 2026-11-03 D1 决策）与消费链 crypto.py 放行契约（本版 §13.4，t_b8db70b3 D2 决策）；§13.1/13.2 的 native 层已由 t_aa056536 实现并通过平台侧验证，§13.4 待实现；历史 G-02 Design t_1f4c8c58 及旧验收记录保留，非本次重开 |
 | RFC / SPEC | [RFC-06-002 V1.8](../../rfc/06_strategy/RFC-06-002-neutral-grid-multi-window-research.md)，§9/§10 / [SPEC-06-002 V1.8](../../spec/06_strategy/SPEC-06-002-neutral-grid-multi-window-research.md)，§10/§11；D-01 撤销见 §12（对应 RFC/SPEC V1.6 §9/§10），v=0 合法化见 §13（§13.4 消费链 D2）；§11 训练通道保留 |
 | 权威范围 | 本主题data/tasks/active/2026-11-01-grid-g01-g02/{intake,rfc-spec-handoff}.md及父卡；原pipeline-intake与杠杆/三件套授权作为已签收历史保留 |
@@ -539,10 +539,183 @@ PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m pytest 
 - 冻结命令同 §13.3（平台 pytest 5 文件 + 主仓 185 基线）；预期平台侧全绿、185/OK/exit 0。
 - 本节实现不提交回测；探针重跑由独立执行卡承担。16 窗口研究锁不解除；G-01/G-03 维持 OPEN。
 
+## 15. 多窗口网格研究实现设计（Pascal 2026-11-03 D4；本次唯一待实现增量）
+
+> 背景：Pascal 裁定第 3 点是**研究对象**（用 Strategy Lab 研究其中性网格策略在近一年四窗口的表现），非看板任务、非 skill 开发优化。本节给出该研究可执行的实现设计。行为契约见 RFC V1.10 §10.6，验收见 SPEC V1.10 §11.6。
+
+### 15.1 锚点参数化
+
+现状：`grid_research.py:51` `DEFAULT_ANCHOR = dt.datetime(2026, 10, 31, tzinfo=UTC)` 为硬编码研究默认值。
+
+修订：
+- `build_cells(anchor_utc=...)` 签名**不变**（已支持显式锚点），仅调整默认值语义：`DEFAULT_ANCHOR` 降级为「上一批次锚点」，新增注释说明它不是研究默认值
+- 新增研究输入落盘要求：每批次落盘 `anchor_utc` 与 `task_date`，二者必须满足 `anchor_utc == task_date 的 UTC 午夜`（可程序化核对）
+- 本轮批次：task_date = 2026-11-03 → anchor_utc = 2026-11-03T00:00:00Z
+
+推导规则不变：`B(k) = A − 3k 日历月`（缺同日时月末截断），`Wk = [B(k), B(k-1))`。落盘窗口：
+
+| 窗口 | start (UTC) | end (UTC, 不含) | 天数 | expected_15m_bars |
+|---|---|---|---|---|
+| W1 | 2026-08-03T00:00:00Z | 2026-11-03T00:00:00Z | 92 | 8832 |
+| W2 | 2026-05-03T00:00:00Z | 2026-08-03T00:00:00Z | 92 | 8832 |
+| W3 | 2026-02-03T00:00:00Z | 2026-05-03T00:00:00Z | 89 | 8544 |
+| W4 | 2025-11-03T00:00:00Z | 2026-02-03T00:00:00Z | 92 | 8832 |
+
+W1 的 end 为半开 → 2026-11-03 当天的 bar 不入窗；合计覆盖 2025-11-03 → 2026-11-02 收盘区间（365 天）。
+
+### 15.2 G-01 / G-03 合一取证设计
+
+两者**不再前置**，改为研究过程的证据产出物。缺证据 → 该 cell `insufficient-evidence`。
+
+**G-01（缓存身份）证据**：
+- 取数期缓存命中审计：命中/未命中、命中对象的单位版本标识（base 币量语义）
+- 命中且单位版本不可证 → 该 cell 判证据不足
+- 复用强证据：JUP/USDT 15m runId=40（92 天 8928 根）与名义孪生 runId=37 逐笔 624/624 完全一致、amount 集合零差异 → "旧缓存未污染历史单位"的运行时证据。**适用范围仅限同 worker、同代码版本、同窗口**，不得外推到其它合约/窗口
+
+**G-03（历史乘数适用性）证据**：
+- 逐 bar 证据链的 `multiplier` / `applicability` 按窗口汇总：multiplier 取值分布、`applicability=verified/unknown` 计数
+- 每窗口首尾各取一次合约 metadata（`create_time` / `quanto_multiplier`）；跨度内 multiplier 变化 → 标 `multiplier_changed_in_window` + 证据不足
+- 基线（2026-11-03 实测）：JUP=1（上市 2024-01-31）、PUMP=1000（2025-07-10）、AAVE=0.01（2020-11-08）、SUI=1（2023-05-03），四者上市日均早于 W4 起点
+
+**取数分页约束（工程事实）**：Gate 15m API 单次 `from/to` 跨度上限 2000 根，超出返回 HTTP 400；92 天 = 8832 根必须分片（≤1000 根/片），这是平台分页机制与此前 `gate.swapVolumeEvidenceMissing` 缺陷的共同来源。
+
+### 15.3 强平预估价格计算设计
+
+- 复用 `cross_liquidation(snapshot, mmr, close_fee)`（共享池线性模型），**不改其公式与状态机**
+- 字段语义冻结（与既有 `cross_liquidation` 契约一致）：`downward_liquidation_price` = **多头强平预估价格**（价格下跌触发多头强平）；`upward_liquidation_price` = **空头强平预估价格**（价格上涨触发空头强平）
+- `snapshot` 构造自平台原生回测结果：
+  - `equity` ← `holdingSnapshots[i].value`
+  - `q_long` / `q_short` ← `holdingSnapshots[i].positions` 中 long/short 的 `amount`（平台 short 的 amount 为负，取**绝对值**；`cross_liquidation` 要求两侧数量为非负量值）
+  - `avg_long` / `avg_short` ← 同上 `avgCost`
+  - `mark_price` ← `holdingSnapshots[i].positions` 的 `lastPrice`（缺则用该快照时间对应的 bar close）
+  - `available_margin` ← `holdingSnapshots[i].cash`
+- `mmr` / `close_fee` **必须取 `result_json.instrumentRulesSnapshot` 的实际值**；该快照缺字段 → 标 `unknown`，**不得默认 0.005**
+- 选取时点：遍历 `holdingSnapshots`，取 `grossExposure/value` 最大者（最不利）；同时记录该窗口内强平价的 min/max 区间
+- 输出三态：报告值（最不利快照解）+ 区间 + 状态机状态；无持仓 → `no_position`；已破维持 → `already_breached`；**不得填 0、不得猜测**
+
+### 15.4 输出表结构
+
+**表 A（逐 cell，16 行）**：`cell_id, contract, window, start_utc, end_utc, L, U, g_pct, N, margin_return_pct, sharpe, max_drawdown_pct, downward_liquidation_price, upward_liquidation_price, status, reason, job_id, run_id, tool_status, research_status, qualification`
+
+**表 B（合约汇总，4 行）**：`contract, L, U, g_pct, N, margin_return_pct, sharpe, max_drawdown_pct, downward_liquidation_price, upward_liquidation_price, windows_present, windows_missing, qualification`
+
+多窗口指标单元格格式（由既有 `summarize_cells` 提供，契约冻结不改语义）：
+```
+<均值>(<W1值>/<W2值>/<W3值>/<W4值>); <有效窗口数>/4
+```
+
+qualification 枚举：`qualified` / `insufficient-evidence` / `risk-breach` / `failed`（不得新增未定义值）。N/A（未知缺失，带原因）与 0（实测零）严格区分。
+
+### 15.5 实现清单与边界
+
+**实现范围**（Implement 卡）：
+- `skills/strategies/strategy-lab/scripts/grid_research.py`：仅锚点参数化注释/默认语义、锚点与 task_date 落盘、强平价计算函数（新增，不改既有函数语义）、表 A/B 写出沿用既有 `write_cells_csv` / `write_comparison_csv`
+- `skills/strategies/strategy-lab/tests/test_grid_research.py`：新增锚点参数化、强平价构造与状态、表列集与均值格式的测试（不改既有断言）
+- `skills/strategies/strategy-lab/SKILL.md`：新增「研究输出表结构标准」章节（**已由主控完成**）
+
+**禁止改动**：`cross_liquidation` / `margin_metrics` / `summarize_cells` / `METRIC_COLUMNS` 的既有语义与既有测试断言；不得新增依赖。
+
+**冻结验证命令**：
+```bash
+# 主仓基线：既有 185 项断言 + 本版新增 8 项 = 193
+PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m unittest discover -s skills/strategies/strategy-lab/tests -p 'test_*.py' -v
+```
+预期 193/OK/exit 0，且既有 185 项断言无失败、无既有断言被修改（diff 审计确认）。
+
+### 15.6 批次与停止条件
+
+- 本轮 16 cell 按 **4 批次 × 4 窗口**（每批次 4 合约同窗口）逐批放行，每批独立预算核算；`BUDGET_LIMITS` 为旧批次上限，本轮需按批次显式核算以免 `stop_decision` 误拦
+- 提交纪律：**单次提交、失败即停、先根因后重跑**
+- 停止条件：既有测试断言失败或数量≠185、必须扩展 §15.5 范围之外的文件、安全/审批拒绝、证据不足且无法补证（转 `insufficient-evidence` 而非降级宣称）——均 STOP 留证上报
+- 本节实现**不提交任何回测作业**；研究执行归后续执行卡
+- R-01 维持披露（runtime 撮合器对 volume<=0 的 bar 不设流动性上限），本节不修 runtime；资金费 `not_modeled` 不变
+
+## 16. 频率参数化与强平价降级实现设计（Pascal 2026-11-04 D5；V10 FAIL 缺口收敛）
+
+> 背景：V10 独立验证（`t_a8b94af8`）OVERALL FAIL（本仓 B-1..B-4 + 跨仓 B-5..B-7），Pascal 三项裁定：① 研究频率改 **1h**；② 强平价两列**全部留空（N/A）**；③ **频率不得固化在契约与代码**——换频率不应再触发契约修订。行为契约见 RFC V1.11 §10.7，验收见 SPEC V1.11 §11.7。本节为唯一待实现增量。
+
+### 16.1 频率参数化设计（D5-1）
+
+**原则：契约冻结机制公式，实例携带任务参数。** 本节列清单为唯一列集基准（RFC/SPEC/SKILL.md 与代码四方对齐，B-2 消解）。
+
+**代码修订（`grid_research.py`）**：
+- 删除 `FREQUENCY_SECONDS = 900` 常量；`build_cells(anchor_utc, frequency_seconds=3600)` 增加显式参数，结果 dict 记录 `frequency` 与 `frequency_seconds` 实际值
+- `expected_15m_bars` 字段更名 `expected_bars`（内部字段；`METRIC_COLUMNS` 列名不动）
+- 连续性校验、bar 时间推导全部按 `frequency_seconds` 参数执行；错误文案 `non-15m bar` 改 `non-native bar`
+- `MARKET.frequency` 由批次记录（本轮 `1h`）
+- 年化因子公式化：`K = 365 × (86400 / frequency_seconds)`（1h → 8760；15m → 35040 不变式由测试固定）
+- `research.py` 策略模板 `TIMEFRAME: "15m" → "1h"`；`--anchor` 删除写死默认值改必填（R-05）；`grid_training.py` 四处 `gr.build_cells()` 显式传锚点
+
+**本轮批次参数（实例冻结，不进契约正文数值）**：
+```
+frequency=1h, frequency_seconds=3600, anchor_utc=2026-11-03T00:00:00Z, task_date=2026-11-03
+W1 [2026-08-03, 2026-11-03) 92d expected_bars=2208
+W2 [2026-05-03, 2026-08-03) 92d expected_bars=2208
+W3 [2026-02-03, 2026-05-03) 89d expected_bars=2136
+W4 [2025-11-03, 2026-02-03) 92d expected_bars=2208
+contracts=JUPUSDT, PUMPUSDT, AAVEUSDT, SUIUSDT
+```
+覆盖率实证（2026-11-04）：Gate 1h 保留窗口 10000 根 ≈ 417 天 > 365 天研究全程，四合约上市日均早于 W4 起点，全程 Gate 单 venue、无 failover；W4 起点实测精确命中 2025-11-03T00:00，分页拼接缺口=0/重复=0。
+
+**覆盖率预检（频率相关真机制，内建）**：执行前校验 `window_bars ≤ min(venue 保留根数, 合约上市以来根数)`；不满足 → 该 cell `insufficient-evidence` + 原因披露。已实测参考值：1m≈6.9 天、15m≈104 天、1h≈417 天（Gate swap）。
+
+### 16.2 强平价降级设计（D5-2）
+
+- 表 A 两列 `downward_liquidation_price` / `upward_liquidation_price` **保留列位，值恒 `N/A`**，`reason` 固定 `platform snapshot lacks MMR/close fee`
+- `liquidation_price_range()` 函数保留不动（含 6 项既有测试），**接入输出路径**消费平台 `instrumentRulesSnapshot`：无 MMR → 如实 N/A（既有分支），有 MMR → 按 §15.3 原口径计算
+- 删除 `_liquidation_snapshot` 对平台 `positions` 的静默字段映射消费（B-5：平台字段为 `quantity/averageCost`，静默读空会伪报 `no_position`）
+- `worst_gross_to_equity` 取平台 `grossExposure` 原值（runtime 已是 gross/value 比值；删除二次除法，B-6）；新测试夹具按平台真实产物形态构造（`grossExposure: 0.25` 而非 `250.0`）
+- **不做**平台侧 MMR 采集扩展；平台未来补齐后按 §15.3 恢复，两列语义解释不变
+
+### 16.3 V10 缺口收敛清单（B-1..B-4、R-05）
+
+| 缺口 | 收敛动作 |
+|---|---|
+| B-1 锚点/task_date 未落盘 | 表 A/B 骨架新增 `task_date`/`anchor_utc` 列（占位行边界由显式锚点推导）；实例冻结文件落盘二者并校验相等 |
+| B-2 列集三方不一致 | 本节 16.4 列清单为唯一基准，代码/SKILL.md/RFC/SPEC 对齐 |
+| B-3 枚举越界 `unknown` | 占位行 qualification=`insufficient-evidence`；枚举严格四值 |
+| B-4 SKILL.md 语义冲突 | 状态缺失一律 `N/A`；表 B 几何列逐窗口值格式 `<W1>/<W2>/<W3>/<W4>`（与指标单元格同构） |
+| R-05 锚点未贯穿 | `research.py --anchor` 必填、`grid_training.py` 训练/冻结通道显式传递 |
+
+### 16.4 表 A/B 列清单（唯一基准，B-2 收敛）
+
+**表 A（逐 cell，16 行）**（21 列）：
+```
+task_date, anchor_utc, cell_id, contract, window, start_utc, end_utc,
+expected_bars, L, U, g_pct, N,
+margin_return_pct, sharpe, max_drawdown_pct, worst_gross_to_equity,
+downward_liquidation_price, upward_liquidation_price,
+venue_disclosure, qualification, reason
+```
+
+**表 B（合约汇总，4 行）**（11 列）：
+```
+contract, task_date, anchor_utc,
+L, U, g_pct, N,                                   ← 逐窗口值格式 W1/W2/W3/W4
+margin_return_pct, sharpe, max_drawdown_pct,      ← 均值(W1/W2/W3/W4); n/4
+windows_present, windows_missing, qualification
+```
+
+实现映射：`write_cells_csv`/`write_comparison_csv` 沿用既有写出机制，列集按本清单调整（`METRIC_COLUMNS` 冻结不动，新列由骨架层提供）；job_id/run_id/tool_status/research_status 保留在 evidence 层 JSON，不进表 A 列集（V10 R-07 一并消解：`liquidation_price_range` 在 evidence 生成时消费）。
+
+qualification 枚举冻结：`qualified / insufficient-evidence / risk-breach / failed`。N/A 与 0 严格区分。
+
+### 16.5 测试与验证设计
+
+- 新增：1h 窗口边界与 expected_bars（2208/2208/2136/2208）、K 公式（1h=8760）、4h 抽样（92d=552 根）频率无关性、强平价 N/A+固定原因、`liquidation_price_range` 被 evidence 路径消费、枚举收敛（无 unknown）、锚点必填、`task_date==anchor` 校验、覆盖率预检不足分支
+- 既有 185 项断言**零修改**；`cross_liquidation` / `margin_metrics` / `summarize_cells` / `METRIC_COLUMNS` 语义冻结
+- 冻结命令（预期 193 + 新增 = 全绿 exit 0）：
+```bash
+PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m unittest discover -s skills/strategies/strategy-lab/tests -p 'test_*.py' -v
+```
+- 执行链：测试全绿 → JUP 1h 单 cell 原生冒烟（jobId 读回、executionAssumptions=1000/10x/10000）→ W1→W4 逐批（每批 4 合约、逐批读回、G-01/G-03 合一取证、venue 披露）→ 真实数据填表 A（16 行）/表 B（4 行）
+
 ## 版本记录
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.11 | 2026-11-04 | 主控直接增 §16（V10 t_a8b94af8 OVERALL FAIL 后按 Pascal 2026-11-04 三项裁定）：16.1 频率参数化（frequency_seconds 参数、expected_bars、K=365×86400/frequency_seconds、1h 批次 expected_bars=2208/2208/2136/2208、覆盖率预检内建）；16.2 强平价降级 N/A+固定原因（B-5 静默映射删除、B-6 二次除修复、B-7 平台无 MMR 不扩展）；16.3 V10 缺口收敛 B-1..B-4+R-05；16.4 表 A 21 列/表 B 11 列唯一基准（B-2 收敛）；16.5 测试设计（185 断言零修改+参数化新用例）；仅文档 |
+| V1.9 | 2026-11-03 | 主控按 Pascal 2026-11-03 裁定直接增 §15（原 E4 卡 t_e2d45b81 因 provider 限流反复 rate-limited 空转，改主控直接修订）：D4 实现设计——§15.1 锚点任务日参数化（A=2026-11-03，四窗口落盘）+ 锚点/task_date 落盘；§15.2 G-01/G-03 合一取证设计与 Gate 2000 根分页约束；§15.3 强平价计算设计（snapshot 构造、instrumentRulesSnapshot MMR 来源、最不利快照选取、不伪造）；§15.4 表 A/B 列集与均值格式；§15.5 实现清单与禁止改动 + 185 冻结命令；§15.6 4 批×4 窗口预算与停止条件；指向 RFC V1.10 §10.6 / SPEC V1.10 §11.6；仅文档 |
 | V1.8 | 2026-11-03 | 主控按 Pascal「精简」指示直接增 §14（原 E3 卡 t_20d5afbd 停止，无产出）：多页证据累积契约——同 identity 逐页 merge、容量 20000 淘汰最旧、消费端零改动、五类错误/v=0/R-01/185 基线不变；F3 范围=native_crypto.py 重置段+测试；指向 RFC/SPEC V1.9；仅文档 |
 | V1.7 | 2026-11-03 | t_b8db70b3（E2/D2）：§13 状态更新——§13.1/13.2 的 native 层已由 t_aa056536 实现并通过平台侧验证（237 passed + 1 xfailed，xfail 为 §13.4 解除前阻断标记）；§13.1 第 5 条不动项清单将 crypto.py 改列「除 §13.4 外不动」；§13.2 第 2 条增补消费链测试增量（xfail 装饰器删除 + 重采样 v=0 用例）；§13.3 停止条件例外同步；新增 §13.4 消费链 crypto.py 两处谓词放宽（≤0→<0、保留 isfinite/证据一致性校验、标识与消息不变、R-01 不变）精确实现契约；指向 RFC/SPEC V1.8；仅文档，§13.4 实现/验证未发生，job 0、16 锁不解除 |
 | V1.6 | 2026-11-03 | t_e5ac39e6：按 Pascal 2026-11-03 D1 决策增 §13——§13.1 冻结 _gate_swap_volume_number 行为变更契约（合法化仅 raw_v 调用点、base_volume 乘积调用点零拒绝保留即下溢守卫、负零按数值相等归入零成交且禁符号位特判、校验顺序与五类错误/证据对象/sum 缺失 null 不变）；§13.2 受影响测试逐文件清单（test_native_crypto_public_client.py 拒绝参数表唯一删改="0" 移除 + 新增 5 组零成交/负零/顺序用例、test_gate_swap_volume_units.py 新增独立 v=0 消费链用例、training_ohlc/matrix 预期零变更）；§13.3 冻结 pytest 命令 + 主仓 185 项基线重跑核对 + R-01 披露载体（implement 移交物逐字含 RFC §10.3，缺失即 Verify 不通过）+ 停止条件；指向 RFC/SPEC V1.7；仅文档，实现/验证未发生，job 配额 0，16 窗口研究锁不解除 |
