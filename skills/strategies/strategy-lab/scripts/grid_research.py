@@ -19,7 +19,8 @@ import statistics
 from typing import Any
 
 def generate_strategy_source(*, cell: str | dict, template_sha256: str,
-                             geometry: dict | None = None) -> str:
+                             geometry: dict | None = None,
+                             timeframe: str = "15m") -> str:
     """Compatibility entry to the instance's static text generator, never the strategy.
 
     Resolve by file path without sys.path changes or a reverse module import.
@@ -43,7 +44,8 @@ def generate_strategy_source(*, cell: str | dict, template_sha256: str,
     generator = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(generator)
     return generator.generate_strategy_source(
-        cell=cell, template_sha256=template_sha256, geometry=geometry)
+        cell=cell, template_sha256=template_sha256, geometry=geometry,
+        timeframe=timeframe)
 
 
 UTC = dt.timezone.utc

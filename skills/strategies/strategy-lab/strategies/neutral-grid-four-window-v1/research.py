@@ -304,7 +304,7 @@ def generate_strategy_source(*, cell: str | dict, template_sha256: str,
     # An unverified instrument is never inferred to be a verified Gate identity.
     constants = {
         "INSTRUMENT": cell.get("native_instrument") if isinstance(cell, dict) else None,
-        "TIMEFRAME": "15m", "CELL_LOWER": points[:-1], "CELL_UPPER": points[1:],
+        "TIMEFRAME": timeframe, "CELL_LOWER": points[:-1], "CELL_UPPER": points[1:],
         "CELL_ROLES": roles, "CELL_BUDGET_PCTS": weights, "ARM_ORDER": arm_order,
         "MAX_OPEN_ENTRY_ORDERS": min(4, count),
     }
