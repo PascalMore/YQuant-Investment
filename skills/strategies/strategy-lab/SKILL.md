@@ -257,18 +257,17 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 
 `job_id`/`run_id`/`tool_status`/`research_status` 保留在 evidence 层 JSON（可回溯平台原生记录），不占表 A 列位。
 
-**载体归档约定（2026-11-04 Pascal 裁定）**：研究完成后必须用既有 `write_cells_csv` / `write_comparison_csv` 产出契约载体 CSV 并随报告归档到 `data/reports/<topic>/evidence/`（`cells.csv` 21+列、`cells-comparison.csv` 19 列）。报告正文中的表是给人读的视图；**契约载体是给用户做分析与决策的数据基准**，两者都必须交付，缺载体视为研究未完成交付。
+**载体归档约定（2026-11-04 Pascal 裁定）**：研究完成后必须用既有 `write_cells_csv` / `write_comparison_csv` 产出契约载体 CSV 并随报告归档到 `data/reports/<topic>/evidence/`（`cells.csv` 21+列、`cells-comparison.csv` 13 列）。报告正文中的表是给人读的视图；**契约载体是给用户做分析与决策的数据基准**，两者都必须交付，缺载体视为研究未完成交付。
 
 **缺行规则**：预定义矩阵中的每个 cell 必须出现在表中。缺证据/未执行的 cell 保留占位行，
 指标列填 N/A 并在 `reason` 写明原因，**不得丢行、不得留空、不得填 0**。
 
-### 表 B：合约汇总表（每个合约 一行；列集 = DESIGN §16.4 修订版，19 列）
+### 表 B：合约汇总表（每个合约 一行；列集 = DESIGN §16.4 修订版，13 列）
 
 | 列 | 含义 |
 |---|---|
 | `contract` | 合约标识 |
-| `task_date` / `anchor_utc` | 同表 A |
-| `L` / `U` / `g_pct` / `N` | 网格几何，**逐窗口值格式** `<W1>/<W2>/<W3>/<W4>`（同窗几何一致，如实并列） |
+| `task_date` | 研究任务日（锚点当日；逐窗边界见表 A） |
 | `margin_return_pct` / `sharpe` / `max_drawdown_pct` | 四窗口均值 + 逐窗口值 |
 | `downward_liquidation_price` / `upward_liquidation_price` | 强平预估价格，恒 `N/A`（平台无 MMR 数据源） |
 | `grid_params` | 逐窗口网格参数，格式 `[L,U]:g_pct%` 逗号串联（W1→W4）|
@@ -277,12 +276,15 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 | `window_qualifications` | 逐窗口 qualification，格式 `Wn:枚举` 逗号串联 |
 | `qualification` | 资格判定（见下方枚举） |
 | `qualification_reasons` | 风险警示原因（中文简述），按窗口 `Wn: 原因` 用分号 `;` 分隔；无警示时为 `N/A`。原因枚举：`杠杆超限(敞口/权益 X > 2.5)`、`回撤超限(X% > 35.0%)` |
-| `metrics_caliber` | 指标口径自述常量（收益=区间收益非年化；Sharpe=算术均值口径）|
 
 **列序（2026-11-04 Pascal 确认的展示表为准，载体 CSV 与报告表必须同序）**：
-合约 / 任务日 / 锚点UTC / L下限 / U上限 / 格距% / 网格数量N / 区间收益率% / Sharpe / MDD% /
-多头强平价 / 空头强平价 / 网格参数[W1→W4] / 网格数量 / 总配对次数 /
-逐窗判定 / 合约判定 / 风险警示原因 / 指标口径。
+合约 / 任务日 / 区间收益率% / Sharpe / MDD% / 多头强平价 / 空头强平价 /
+网格参数[W1→W4] / 网格数量 / 总配对次数 / 逐窗判定 / 合约判定 / 风险警示原因。
+
+**已剔除的冗余列**（2026-11-04 Pascal 裁定）：`anchor_utc`（同 task_date）、
+`L`/`U`/`g_pct`/`N`（几何已在 `grid_params` 与 `grid_count` 中）、
+`metrics_caliber`（口径说明写在本节正文，不占数据列）。
+`METRIC_COLUMNS` 冻结集不变，仅收窄导出行集。
 
 ### 多窗口指标格式（四窗口均值 + 逐窗口值）
 

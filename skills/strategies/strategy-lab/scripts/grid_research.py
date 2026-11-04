@@ -1190,10 +1190,16 @@ def write_comparison_csv(summary: list[dict], path: str | Path,
         row["window_qualifications"] = _window_qualifications_field(row)
         row["metrics_caliber"] = METRICS_CALIBER
         rows.append(row)
-    _write_csv(rows, ["contract", "task_date", "anchor_utc", *METRIC_COLUMNS,
+    # Table B export shape (Pascal 2026-11-04): the standalone geometry columns
+    # (L, U, g_pct, N), the anchor and the caliber note are redundant against
+    # grid_params / grid_count / task_date and are not exported. The frozen
+    # METRIC_COLUMNS set stays unchanged; only the export list narrows.
+    _write_csv(rows, ["contract", "task_date",
+                      "margin_return_pct", "sharpe", "max_drawdown_pct",
+                      "downward_liquidation_price", "upward_liquidation_price",
                       "grid_params", "grid_count", "total_pairs",
                       "window_qualifications", "qualification",
-                      "qualification_reasons", "metrics_caliber"], path)
+                      "qualification_reasons"], path)
 
 
 def write_cells_csv(cells: list[dict], path: str | Path, anchor_utc: Any = None,
