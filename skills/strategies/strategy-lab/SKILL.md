@@ -257,6 +257,8 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 
 `job_id`/`run_id`/`tool_status`/`research_status` 保留在 evidence 层 JSON（可回溯平台原生记录），不占表 A 列位。
 
+**载体归档约定（2026-11-04 Pascal 裁定）**：研究完成后必须用既有 `write_cells_csv` / `write_comparison_csv` 产出契约载体 CSV 并随报告归档到 `data/reports/<topic>/evidence/`（`cells.csv` 21+列、`cells-comparison.csv` 11+列）。报告正文中的表是给人读的视图；**契约载体是给用户做分析与决策的数据基准**，两者都必须交付，缺载体视为研究未完成交付。
+
 **缺行规则**：预定义矩阵中的每个 cell 必须出现在表中。缺证据/未执行的 cell 保留占位行，
 指标列填 N/A 并在 `reason` 写明原因，**不得丢行、不得留空、不得填 0**。
 
@@ -298,6 +300,7 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 | 值 | 含义 |
 |---|---|
 | `qualified` | 全部窗口证据完整、指标齐全、风险约束未破 |
+| （合约级判定） | 表 B 合约级 qualification 由窗口级传导：证据缺口先门禁（`insufficient-evidence`）；任一窗口 `failed` → `failed`；任一窗口 `risk-breach` → `risk-breach`；否则 `qualified`。强平价两列是设计性 N/A（平台无 MMR/费用字段），其占位原因**不参与**证据门禁 |
 | `insufficient-evidence` | 存在缺证据/缺指标/缺 bar/乘数适用性未知/覆盖率预检不过 |
 | `risk-breach` | 观测到风险约束突破（gross/equity > 2.5 或 drawdown > 35%） |
 | `failed` | 执行失败（作业失败、数据不可得、窗口不可达） |
