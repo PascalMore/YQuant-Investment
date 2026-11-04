@@ -1148,6 +1148,21 @@ def _grid_params_field(row: dict) -> str:
     return ",".join(parts)
 
 
+# Display symbols for the qualification enum (Pascal 2026-11-04): the report
+# table reads as ticks and warnings, the carrier CSV keeps the machine enum.
+QUALIFICATION_SYMBOLS = {
+    "qualified": "\u2713",
+    "risk-breach": "\u26a0",
+    "failed": "\u2717",
+    "insufficient-evidence": "?",
+}
+
+
+def qualification_symbol(qualification: str) -> str:
+    """Symbol for a qualification verdict: tick, warning, cross or '?'."""
+    return QUALIFICATION_SYMBOLS.get(qualification, "?")
+
+
 def _window_qualifications_field(row: dict) -> str:
     """Per-window qualification list, W1..W4, from the source cells' rows."""
     indexed = row.get("_source_cells") or {}

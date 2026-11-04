@@ -561,6 +561,15 @@ class SummarizeCellsTests(unittest.TestCase):
 
 
 
+
+    def test_qualification_symbol_maps_the_frozen_enum(self):
+        """The report table shows ticks and warnings; the enum stays in the carrier."""
+        self.assertEqual("\u2713", gr.qualification_symbol("qualified"))
+        self.assertEqual("\u26a0", gr.qualification_symbol("risk-breach"))
+        self.assertEqual("\u2717", gr.qualification_symbol("failed"))
+        self.assertEqual("?", gr.qualification_symbol("insufficient-evidence"))
+        self.assertEqual("?", gr.qualification_symbol("unknown-enum"))
+
     def test_cell_qualification_derives_reasons_from_the_risk_envelope(self):
         """Risk qualification and reasons are derived from metrics, never hand
         filled: gross/equity above 2.5 or drawdown beyond 35% breach the frozen

@@ -273,7 +273,7 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 | `grid_params` | 逐窗口网格参数，格式 `[L,U]:g_pct%` 逗号串联（W1→W4）|
 | `grid_count` | 网格数量 N，均值格式 `均值(W1/W2/W3/W4); n/4` |
 | `total_pairs` | 网格配对成交总次数（平台 `gridMatchedTradeCount`），均值格式同上 |
-| `window_qualifications` | 逐窗口 qualification，格式 `Wn:枚举` 逗号串联 |
+| `window_qualifications` | 逐窗口 qualification，格式 `Wn:枚举` 逗号串联（载体 CSV 保留机器可读枚举；报告展示用符号） |
 | `qualification` | 资格判定（见下方枚举） |
 | `qualification_reasons` | 风险警示原因（中文简述），按窗口 `Wn: 原因` 用分号 `;` 分隔；无警示时为 `N/A`。原因枚举：`杠杆超限(敞口/权益 X > 2.5)`、`回撤超限(X% > 35.0%)` |
 
@@ -284,6 +284,11 @@ Sharpe / 多头强平价 / 空头强平价 / 逐窗判定 / 合约判定 / 风�
 列序按「收益 → 风险 → 策略规格 → 风险调整指标 → 判定」分组阅读：
 区间收益率与 MDD 相邻（收益与回撤同属结果解读），网格三列紧跟 MDD（策略规格），
 Sharpe 置于其后（风险调整后的衍生指标）。
+
+**报告展示符号**（Pascal 2026-11-04 裁定，报告表用符号、载体 CSV 保留枚举）：
+`✓` = qualified（合格）；`⚠` = risk-breach（风险突破）；`✗` = failed；`?` = insufficient-evidence。
+逐窗判定写作 `W1✓ W2⚠ W3✓ W4⚠`（W1→W4）。由 `qualification_symbol()` 统一映射，
+枚举未覆盖时落 `?`，不得凭空猜测符号。
 
 **已剔除的冗余列**（2026-11-04 Pascal 裁定）：`anchor_utc`（同 task_date）、
 `L`/`U`/`g_pct`/`N`（几何已在 `grid_params` 与 `grid_count` 中）、
