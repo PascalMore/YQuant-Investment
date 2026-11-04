@@ -559,6 +559,53 @@ class SummarizeCellsTests(unittest.TestCase):
         self.assertAlmostEqual((50 + 60 + 70 + 80) / 4.0, row["N_mean"], places=10)
 
 
+
+    def test_summary_qualification_follows_risk_and_evidence_semantics(self):
+        """RFC-06-002 V1.11 §16.4: contract-level qualification is derived, not
+        hard-coded. Any risk-breach window breaches the contract; evidence gaps
+        gate before risk; complete clean windows are qualified. The two
+        liquidation columns are a designed N/A degradation and never gate."""
+        complete = [
+            {"cell_id": f"PUMPUSDT-W{i}", "contract": "PUMPUSDT", "window": f"W{i}",
+             "margin_return_pct": 10.0, "sharpe": 1.0, "max_drawdown_pct": -5.0,
+             "L": 1.0, "U": 2.0, "g_pct": 1.0, "N": 10,
+             "downward_liquidation_price": gr.NA,
+             "upward_liquidation_price": gr.NA, "qualification": "qualified"}
+            for i in range(1, 5)]
+        self.assertEqual("qualified",
+                         gr.summarize_cells(complete)[0]["qualification"])
+
+        breached = [dict(cell, max_drawdown_pct=-50.0, qualification="risk-breach")
+                    if cell["window"] == "W2" else cell for cell in complete]
+        self.assertEqual("risk-breach",
+                         gr.summarize_cells(breached)[0]["qualification"])
+
+        failed = [dict(cell, qualification="failed")
+                  if cell["window"] == "W3" else cell for cell in complete]
+        self.assertEqual("failed",
+                         gr.summarize_cells(failed)[0]["qualification"])
+
+        missing = complete[:3]
+        self.assertEqual("insufficient-evidence",
+                         gr.summarize_cells(missing)[0]["qualification"])
+
+    def test_summary_reasons_bug_is_a_non_empty_list_not_its_content(self):
+        """Regression guard: gating inspects reason CONTENT, not the truthiness
+        of the reasons list (a non-empty [None, ...] list is always truthy and
+        used to force every summary into insufficient-evidence)."""
+        rows = [
+            {"cell_id": f"PUMPUSDT-W{i}", "contract": "PUMPUSDT", "window": f"W{i}",
+             "margin_return_pct": 10.0, "sharpe": 1.0, "max_drawdown_pct": -5.0,
+             "L": 1.0, "U": 2.0, "g_pct": 1.0, "N": 10,
+             "downward_liquidation_price": gr.NA,
+             "upward_liquidation_price": gr.NA, "qualification": "qualified"}
+            for i in range(1, 5)]
+        summary = gr.summarize_cells(rows)[0]
+        # Every reasons list is a non-empty list (four entries), yet the
+        # performance columns carry no actual reason strings.
+        self.assertEqual([None] * 4, summary["margin_return_pct_reasons"])
+        self.assertEqual("qualified", summary["qualification"])
+
     def test_summary_missing_cell_is_na_with_count(self):
         partial = [c for c in cell_rows() if c["window"] != "W3"]
         summary = gr.summarize_cells(partial)

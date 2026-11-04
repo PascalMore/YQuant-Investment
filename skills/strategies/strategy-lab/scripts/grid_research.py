@@ -569,15 +569,27 @@ def summarize_cells(cells: list[dict]) -> list[dict]:
             row.update({f"{column}_mean": mean, f"{column}_valid_count": len(valid),
                         f"{column}_windows": values, f"{column}_reasons": reasons,
                         column: f"{mean} ({'/'.join(map(str, values))}); {len(valid)}/4"})
-        # D5-3 (B-3): qualification follows evidence completeness, not a
-        # hard-coded value. All four windows present with complete metrics and
-        # no per-window reasons => qualified; anything else stays
-        # insufficient-evidence. risk-breach/failed remain caller-settable.
-        row["qualification"] = (
-            "qualified" if row["windows_missing"] == 0
-            and all(not column_reasons for column_reasons in
-                    (row[f"{column}_reasons"] for column in METRIC_COLUMNS))
-            else "insufficient-evidence")
+        # D5-3 (B-3): qualification follows evidence completeness and risk
+        # semantics, not a hard-coded value. The two liquidation columns are a
+        # designed N/A degradation (the platform publishes no MMR/close fee),
+        # so their reasons never gate evidence sufficiency; only the
+        # performance columns do. A failed window fails the contract, any
+        # risk-breach window breaches it, otherwise qualified.
+        window_qualifications = [
+            (cell or {}).get("qualification") for cell in windows if cell]
+        gating_reasons = any(
+            any(column_reasons) for column_reasons in
+            (row[f"{column}_reasons"] for column in METRIC_COLUMNS
+             if column not in ("downward_liquidation_price",
+                               "upward_liquidation_price")))
+        if row["windows_missing"] or gating_reasons:
+            row["qualification"] = "insufficient-evidence"
+        elif "failed" in window_qualifications:
+            row["qualification"] = "failed"
+        elif "risk-breach" in window_qualifications:
+            row["qualification"] = "risk-breach"
+        else:
+            row["qualification"] = "qualified"
         summaries.append(row)
     return summaries
 
