@@ -13,6 +13,7 @@ import csv
 import datetime as dt
 import hashlib
 import json
+import re
 import math
 from pathlib import Path
 import statistics
@@ -1112,9 +1113,49 @@ def cell_qualification(cell: dict | None) -> tuple[str, str]:
     return "qualified", NA
 
 
+def average_amount_per_grid(executions: list[dict] | None) -> tuple[float | None, int, int]:
+    """Mean quote notional per grid cell, from the platform's own order stream.
+
+    The platform encodes the grid cell in ``client_order_id`` (``grid-<n>-...``)
+    and the filled quote notional in ``executions[].notional``. Cells are
+    weighted equally: the mean is taken over per-cell means, so a cell traded
+    many times does not dominate the figure. Returns
+    ``(mean_notional, cells_traded, orders_counted)``.
+    """
+    if not executions:
+        return None, 0, 0
+    cells: dict[int, list[float]] = {}
+    for execution in executions:
+        match = re.match(r"grid-(\d+)-", str(execution.get("client_order_id") or ""))
+        if not match:
+            continue
+        notional = float(execution.get("notional") or 0.0)
+        cells.setdefault(int(match.group(1)), []).append(notional)
+    if not cells:
+        return None, 0, 0
+    per_cell = [sum(values) / len(values) for values in cells.values() if values]
+    if not per_cell:
+        return None, 0, 0
+    return sum(per_cell) / len(per_cell), len(per_cell), sum(len(v) for v in cells.values())
+
+
 def _grid_count_field(row: dict) -> str:
     """Grid count column: mean(N1/N2/N3/N4); n/4 (Pascal 2026-11-04 addendum)."""
     return row.get("N") or NA
+
+
+def _amount_per_grid_field(row: dict) -> str:
+    """Average amount per grid cell, mean(W1/W2/W3/W4); n/4 format."""
+    values = row.get("amount_per_grid_windows")
+    if not values:
+        return NA
+    valid = [value for value in values if isinstance(value, (int, float))]
+    count = len(valid)
+    mean = (sum(valid) / count) if count else NA
+    mean_s = f"{mean:.2f}" if isinstance(mean, float) else str(mean)
+    shown = "/".join(("-" if not isinstance(value, (int, float))
+                      else f"{value:.2f}") for value in values)
+    return f"{mean_s} ({shown}); {count}/4"
 
 
 def _total_pairs_field(row: dict) -> str:
@@ -1199,8 +1240,12 @@ def write_comparison_csv(summary: list[dict], path: str | Path,
                                 for window in ("W1", "W2", "W3", "W4")}
         row["pairs_windows"] = [(row["_source_cells"][window] or {}).get("pairs")
                                 for window in ("W1", "W2", "W3", "W4")]
+        row["amount_per_grid_windows"] = [
+            (row["_source_cells"][window] or {}).get("avg_grid_order_notional")
+            for window in ("W1", "W2", "W3", "W4")]
         row["grid_params"] = _grid_params_field(row)
         row["grid_count"] = _grid_count_field(row)
+        row["amount_per_grid"] = _amount_per_grid_field(row)
         row["total_pairs"] = _total_pairs_field(row)
         row["window_qualifications"] = _window_qualifications_field(row)
         row["metrics_caliber"] = METRICS_CALIBER
@@ -1211,7 +1256,7 @@ def write_comparison_csv(summary: list[dict], path: str | Path,
     # METRIC_COLUMNS set stays unchanged; only the export list narrows.
     _write_csv(rows, ["contract", "task_date",
                       "margin_return_pct", "max_drawdown_pct",
-                      "grid_params", "grid_count", "total_pairs",
+                      "grid_params", "grid_count", "amount_per_grid", "total_pairs",
                       "sharpe",
                       "downward_liquidation_price", "upward_liquidation_price",
                       "window_qualifications", "qualification",

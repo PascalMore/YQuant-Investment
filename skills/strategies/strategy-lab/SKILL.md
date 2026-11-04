@@ -257,12 +257,12 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 
 `job_id`/`run_id`/`tool_status`/`research_status` 保留在 evidence 层 JSON（可回溯平台原生记录），不占表 A 列位。
 
-**载体归档约定（2026-11-04 Pascal 裁定）**：研究完成后必须用既有 `write_cells_csv` / `write_comparison_csv` 产出契约载体 CSV 并随报告归档到 `data/reports/<topic>/evidence/`（`cells.csv` 21+列、`cells-comparison.csv` 13 列）。报告正文中的表是给人读的视图；**契约载体是给用户做分析与决策的数据基准**，两者都必须交付，缺载体视为研究未完成交付。
+**载体归档约定（2026-11-04 Pascal 裁定）**：研究完成后必须用既有 `write_cells_csv` / `write_comparison_csv` 产出契约载体 CSV 并随报告归档到 `data/reports/<topic>/evidence/`（`cells.csv` 21+列、`cells-comparison.csv` 14 列）。报告正文中的表是给人读的视图；**契约载体是给用户做分析与决策的数据基准**，两者都必须交付，缺载体视为研究未完成交付。
 
 **缺行规则**：预定义矩阵中的每个 cell 必须出现在表中。缺证据/未执行的 cell 保留占位行，
 指标列填 N/A 并在 `reason` 写明原因，**不得丢行、不得留空、不得填 0**。
 
-### 表 B：合约汇总表（每个合约 一行；列集 = DESIGN §16.4 修订版，13 列）
+### 表 B：合约汇总表（每个合约 一行；列集 = DESIGN §16.4 修订版，14 列）
 
 | 列 | 含义 |
 |---|---|
@@ -272,14 +272,15 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 | `downward_liquidation_price` / `upward_liquidation_price` | 强平预估价格，恒 `N/A`（平台无 MMR 数据源） |
 | `grid_params` | 逐窗口网格参数，格式 `[L,U]:g_pct%` 逗号串联（W1→W4）|
 | `grid_count` | 网格数量 N，均值格式 `均值(W1/W2/W3/W4); n/4` |
+| `amount_per_grid` | 平均每格挂单金额（USDT），平台成交流 `executions[].notional` 按格等权均值，均值格式同上 |
 | `total_pairs` | 网格配对成交总次数（平台 `gridMatchedTradeCount`），均值格式同上 |
 | `window_qualifications` | 逐窗口 qualification，格式 `Wn:枚举` 逗号串联（载体 CSV 保留机器可读枚举；报告展示用符号） |
 | `qualification` | 资格判定（见下方枚举） |
 | `qualification_reasons` | 风险警示原因（中文简述），按窗口 `Wn: 原因` 用分号 `;` 分隔；无警示时为 `N/A`。原因枚举：`杠杆超限(敞口/权益 X > 2.5)`、`回撤超限(X% > 35.0%)` |
 
 **列序（2026-11-04 Pascal 确认的展示表为准，载体 CSV 与报告表必须同序）**：
-合约 / 任务日 / 区间收益率% / MDD% / 网格参数[W1→W4] / 网格数量 / 总配对次数 /
-Sharpe / 多头强平价 / 空头强平价 / 逐窗判定 / 合约判定 / 风险警示原因。
+合约 / 任务日 / 区间收益率% / MDD% / 网格参数[W1→W4] / 网格数量 / 平均每格金额(USDT) /
+总配对次数 / Sharpe / 多头强平价 / 空头强平价 / 逐窗判定 / 合约判定 / 风险警示原因。
 
 列序按「收益 → 风险 → 策略规格 → 风险调整指标 → 判定」分组阅读：
 区间收益率与 MDD 相邻（收益与回撤同属结果解读），网格三列紧跟 MDD（策略规格），
@@ -308,6 +309,16 @@ Sharpe 置于其后（风险调整后的衍生指标）。
 - 均值只对**有效窗口**取算术平均；缺失窗口在括号段保留其原值（N/A 或原因占位）
 - 有效窗口数写明分母（`n/4`），缺失不得被静默剔除
 - 只有一个有效窗口时均值=该值，但格式仍保留 `/4` 分母
+
+### 平均每格金额口径
+
+- 来源：平台回测产物 `executions[].notional`（成交名义金额），格号由 `client_order_id`
+  的 `grid-<n>-` 前缀识别；无格号的订单（如手工单）不计入
+- 聚合方式：**格等权** —— 先算每格的挂单金额均值，再对所有成交过的格取均值；
+  成交次数多的格不因频次获得额外权重
+- 单位 USDT，名义口径（含杠杆放大），非保证金占用
+- 跨窗口按四窗口均值 + 逐窗口值展示，格式 `均值(W1/W2/W3/W4); n/4`
+- 自洽校验：每格名义 ≈ 名义敞口预算 / N（本批为 10000 / N）
 
 ### 强平预估价格口径（V1.11 D5-2 降级）
 

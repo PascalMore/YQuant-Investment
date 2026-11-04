@@ -562,6 +562,24 @@ class SummarizeCellsTests(unittest.TestCase):
 
 
 
+
+    def test_average_amount_per_grid_uses_cell_weighted_means(self):
+        """The per-grid amount comes from the platform order stream: cells are
+        weighted equally, so a cell traded many times does not dominate, and
+        orders without a grid cell identity are ignored."""
+        executions = [
+            {"client_order_id": "grid-1-long-entry-1", "notional": 100.0},
+            {"client_order_id": "grid-1-long-entry-2", "notional": 120.0},
+            {"client_order_id": "grid-2-short-entry-1", "notional": 50.0},
+            {"client_order_id": "manual-order-1", "notional": 999.0},
+        ]
+        mean, cells, orders = gr.average_amount_per_grid(executions)
+        self.assertEqual(80.0, mean)          # (110 + 50) / 2 cells
+        self.assertEqual(2, cells)
+        self.assertEqual(3, orders)
+        self.assertEqual((None, 0, 0), gr.average_amount_per_grid(None))
+        self.assertEqual((None, 0, 0), gr.average_amount_per_grid([]))
+
     def test_qualification_symbol_maps_the_frozen_enum(self):
         """The report table shows ticks and warnings; the enum stays in the carrier."""
         self.assertEqual("\u2713", gr.qualification_symbol("qualified"))
