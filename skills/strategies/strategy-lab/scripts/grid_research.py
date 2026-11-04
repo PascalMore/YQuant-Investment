@@ -65,6 +65,17 @@ DEFAULT_FREQUENCY_SECONDS = 3600
 ABS_TOL = 1e-12
 REL_TOL = 1e-10
 NA = "N/A"
+# Frozen risk envelope (RFC-06-002 V1.8 §51): gross/equity limit 2.5, and a
+# 35% peak-to-trough drawdown as a result filter (not a stop-loss promise).
+RISK_GROSS_TO_EQUITY_LIMIT = 2.5
+RISK_DRAWDOWN_LIMIT_PCT = 35.0
+# Fixed caliber disclosure so every carrier self-describes its metric
+# semantics (Pascal 2026-11-04: returns are per-window period returns,
+# NOT annualized; sharpe is per-bar-return annualized with the platform K).
+METRICS_CALIBER = ("margin_return_pct=period return over window (NOT annualized); "
+                   "sharpe=mean/std of per-bar equity returns x sqrt(periodsPerYear), "
+                   "arithmetic-mean based (ignores variance drag); "
+                   "max_drawdown_pct=peak-to-trough equity drawdown")
 COMPRESSED_EQUITY_LIMITATION = (
     "Compressed equity cannot independently verify full equal-frequency Sharpe or MDD."
 )
@@ -577,16 +588,24 @@ def summarize_cells(cells: list[dict]) -> list[dict]:
         # risk-breach window breaches it, otherwise qualified.
         window_qualifications = [
             (cell or {}).get("qualification") for cell in windows if cell]
+        window_reasons = []
+        for window, cell in zip(("W1", "W2", "W3", "W4"), windows):
+            _, reason = cell_qualification(cell)
+            if reason and reason != NA:
+                window_reasons.append(f"{window}: {reason}")
+        row["qualification_reasons"] = "; ".join(window_reasons) if window_reasons else NA
         gating_reasons = any(
             any(column_reasons) for column_reasons in
             (row[f"{column}_reasons"] for column in METRIC_COLUMNS
              if column not in ("downward_liquidation_price",
                                "upward_liquidation_price")))
+        derived = [cell_qualification(cell) for cell in windows]
         if row["windows_missing"] or gating_reasons:
             row["qualification"] = "insufficient-evidence"
         elif "failed" in window_qualifications:
             row["qualification"] = "failed"
-        elif "risk-breach" in window_qualifications:
+        elif any(qualification == "risk-breach"
+                 for qualification, _ in derived):
             row["qualification"] = "risk-breach"
         else:
             row["qualification"] = "qualified"
@@ -1066,8 +1085,80 @@ def _write_csv(rows: list[dict], columns: list[str], path: str | Path) -> None:
         writer.writerows(rows)
 
 
+def cell_qualification(cell: dict | None) -> tuple[str, str]:
+    """Derive a cell's qualification and its human-readable reasons.
+
+    Evidence gaps dominate first (missing window or missing metrics), then the
+    frozen risk envelope: gross/equity above 2.5 or peak-to-tround drawdown
+    beyond 35%. Reasons are semicolon-separated; N/A means no reason applies.
+    """
+    if not cell:
+        return "insufficient-evidence", "missing window/cell"
+    reasons = []
+    gross = cell.get("worst_gross_to_equity")
+    if isinstance(gross, (int, float)) and gross > RISK_GROSS_TO_EQUITY_LIMIT:
+        reasons.append(f"杠杆超限(敞口/权益 {gross:.2f} > {RISK_GROSS_TO_EQUITY_LIMIT})")
+    drawdown = cell.get("max_drawdown_pct")
+    if isinstance(drawdown, (int, float)) and abs(drawdown) > RISK_DRAWDOWN_LIMIT_PCT:
+        reasons.append(f"回撤超限({abs(drawdown):.1f}% > {RISK_DRAWDOWN_LIMIT_PCT}%)")
+    if reasons:
+        return "risk-breach", "; ".join(reasons)
+    for column in METRIC_COLUMNS:
+        value = cell.get(column)
+        if value is None or value == NA:
+            if column in ("downward_liquidation_price", "upward_liquidation_price"):
+                continue
+            return "insufficient-evidence", f"missing metric {column}"
+    return "qualified", NA
+
+
+def _grid_count_field(row: dict) -> str:
+    """Grid count column: mean(N1/N2/N3/N4); n/4 (Pascal 2026-11-04 addendum)."""
+    return row.get("N") or NA
+
+
+def _total_pairs_field(row: dict) -> str:
+    """Total matched-pair count column with the same mean(window) format."""
+    values = row.get("pairs_windows")
+    if not values:
+        return NA
+    valid = [value for value in values if isinstance(value, (int, float))]
+    count = len(valid)
+    mean = (sum(valid) / count) if count else NA
+    mean_s = f"{mean:.2f}".rstrip("0").rstrip(".") if isinstance(mean, float) else str(mean)
+    shown = "/".join(("-" if not isinstance(value, (int, float)) else
+                      (f"{value:.2f}".rstrip("0").rstrip(".")
+                       if isinstance(value, float) else str(int(value))))
+                     for value in values)
+    return f"{mean_s} ({shown}); {count}/4"
+
+
+def _grid_params_field(row: dict) -> str:
+    """Per-window ``[L,U]:g_pct%`` list, W1..W4 (Pascal 2026-11-04 carrier spec)."""
+    cells = row.get("_source_cells") or {}
+    parts = []
+    for window in ("W1", "W2", "W3", "W4"):
+        cell = cells.get(window)
+        if cell and cell.get("L") is not None and cell.get("U") is not None:
+            spacing = cell.get("g_pct")
+            spacing = f"{spacing:g}" if isinstance(spacing, (int, float)) else NA
+            parts.append(f"[{cell['L']:g},{cell['U']:g}]:{spacing}%")
+        else:
+            parts.append(f"[{NA},{NA}]:{NA}%")
+    return ",".join(parts)
+
+
+def _window_qualifications_field(row: dict) -> str:
+    """Per-window qualification list, W1..W4, from the source cells' rows."""
+    indexed = row.get("_source_cells") or {}
+    parts = [f"{window}:{cell_qualification(indexed.get(window))[0]}"
+             for window in ("W1", "W2", "W3", "W4")]
+    return ",".join(parts)
+
+
 def write_comparison_csv(summary: list[dict], path: str | Path,
-                         anchor_utc: Any = None) -> None:
+                         anchor_utc: Any = None,
+                         source_cells: list[dict] | None = None) -> None:
     """Write four frozen-contract rows, retaining absent contracts as N/A with reasons.
 
     D5-3: explicit anchor required; task_date/anchor_utc land in the output and
@@ -1088,9 +1179,21 @@ def write_comparison_csv(summary: list[dict], path: str | Path,
         row = by_contract.get(contract, fallback)
         row.setdefault("task_date", task_date)
         row.setdefault("anchor_utc", _iso(_midnight(anchor_utc)))
+        cells_index = _cell_index(source_cells or [])
+        row["_source_cells"] = {window: cells_index.get((contract, window))
+                                for window in ("W1", "W2", "W3", "W4")}
+        row["pairs_windows"] = [(row["_source_cells"][window] or {}).get("pairs")
+                                for window in ("W1", "W2", "W3", "W4")]
+        row["grid_params"] = _grid_params_field(row)
+        row["grid_count"] = _grid_count_field(row)
+        row["total_pairs"] = _total_pairs_field(row)
+        row["window_qualifications"] = _window_qualifications_field(row)
+        row["metrics_caliber"] = METRICS_CALIBER
         rows.append(row)
     _write_csv(rows, ["contract", "task_date", "anchor_utc", *METRIC_COLUMNS,
-                      "windows_present", "windows_missing", "qualification"], path)
+                      "grid_params", "grid_count", "total_pairs",
+                      "window_qualifications", "qualification",
+                      "qualification_reasons", "metrics_caliber"], path)
 
 
 def write_cells_csv(cells: list[dict], path: str | Path, anchor_utc: Any = None,

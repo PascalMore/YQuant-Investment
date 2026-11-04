@@ -560,6 +560,37 @@ class SummarizeCellsTests(unittest.TestCase):
 
 
 
+
+    def test_cell_qualification_derives_reasons_from_the_risk_envelope(self):
+        """Risk qualification and reasons are derived from metrics, never hand
+        filled: gross/equity above 2.5 or drawdown beyond 35% breach the frozen
+        envelope, and each breached constraint is reported separately."""
+        clean = {"margin_return_pct": 10.0, "sharpe": 1.0, "max_drawdown_pct": -5.0,
+                 "L": 1.0, "U": 2.0, "g_pct": 1.0, "N": 10,
+                 "worst_gross_to_equity": 2.0,
+                 "downward_liquidation_price": gr.NA,
+                 "upward_liquidation_price": gr.NA}
+        self.assertEqual(("qualified", gr.NA), gr.cell_qualification(clean))
+
+        drawn = dict(clean, max_drawdown_pct=-54.98)
+        qualification, reason = gr.cell_qualification(drawn)
+        self.assertEqual("risk-breach", qualification)
+        self.assertIn("回撤超限", reason)
+        self.assertIn("35.0%", reason)
+
+        levered = dict(clean, worst_gross_to_equity=3.15)
+        qualification, reason = gr.cell_qualification(levered)
+        self.assertEqual("risk-breach", qualification)
+        self.assertIn("杠杆超限", reason)
+        self.assertIn("2.5", reason)
+
+        both = dict(clean, max_drawdown_pct=-97.84, worst_gross_to_equity=64.77)
+        _, reason = gr.cell_qualification(both)
+        self.assertEqual(2, reason.count(";") + 1)
+
+        self.assertEqual("insufficient-evidence",
+                         gr.cell_qualification(None)[0])
+
     def test_summary_qualification_follows_risk_and_evidence_semantics(self):
         """RFC-06-002 V1.11 §16.4: contract-level qualification is derived, not
         hard-coded. Any risk-breach window breaches the contract; evidence gaps

@@ -245,8 +245,8 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 | `L` / `U` | 网格下/上界（训练集 min(low)/max(high)） |
 | `g_pct` | 对数等距网格间距（%） |
 | `N` | 网格数量（格数，不含上下界 → 网格线 = N+1） |
-| `margin_return_pct` | 保证金口径收益率（%） |
-| `sharpe` | 逐 bar 收益的年化夏普（K=365×86400/frequency_seconds，ddof=0，rf=0） |
+| `margin_return_pct` | 保证金口径**区间累计收益率**（%），覆盖整个窗口，**非年化** |
+| `sharpe` | 逐 bar 权益收益的年化夏普（K=365×86400/frequency_seconds，ddof=0，rf=0）。**算术均值口径**：负区间收益仍可为正（μ>0 但 μ−σ²/2<0），高杠杆高波动下严重失真，判定以 `max_drawdown_pct` 为准 |
 | `max_drawdown_pct` | 峰值回撤（%） |
 | `worst_gross_to_equity` | 窗口内最不利 gross/equity（平台 `grossExposure` 原值，比值语义） |
 | `downward_liquidation_price` | **多头强平预估价格**（当前平台无 MMR 数据源 → 恒 `N/A`，见下方口径） |
@@ -257,12 +257,12 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 
 `job_id`/`run_id`/`tool_status`/`research_status` 保留在 evidence 层 JSON（可回溯平台原生记录），不占表 A 列位。
 
-**载体归档约定（2026-11-04 Pascal 裁定）**：研究完成后必须用既有 `write_cells_csv` / `write_comparison_csv` 产出契约载体 CSV 并随报告归档到 `data/reports/<topic>/evidence/`（`cells.csv` 21+列、`cells-comparison.csv` 11+列）。报告正文中的表是给人读的视图；**契约载体是给用户做分析与决策的数据基准**，两者都必须交付，缺载体视为研究未完成交付。
+**载体归档约定（2026-11-04 Pascal 裁定）**：研究完成后必须用既有 `write_cells_csv` / `write_comparison_csv` 产出契约载体 CSV 并随报告归档到 `data/reports/<topic>/evidence/`（`cells.csv` 21+列、`cells-comparison.csv` 19 列）。报告正文中的表是给人读的视图；**契约载体是给用户做分析与决策的数据基准**，两者都必须交付，缺载体视为研究未完成交付。
 
 **缺行规则**：预定义矩阵中的每个 cell 必须出现在表中。缺证据/未执行的 cell 保留占位行，
 指标列填 N/A 并在 `reason` 写明原因，**不得丢行、不得留空、不得填 0**。
 
-### 表 B：合约汇总表（每个合约 一行；列集 = DESIGN §16.4，11 列）
+### 表 B：合约汇总表（每个合约 一行；列集 = DESIGN §16.4 修订版，19 列）
 
 | 列 | 含义 |
 |---|---|
@@ -270,8 +270,19 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 | `task_date` / `anchor_utc` | 同表 A |
 | `L` / `U` / `g_pct` / `N` | 网格几何，**逐窗口值格式** `<W1>/<W2>/<W3>/<W4>`（同窗几何一致，如实并列） |
 | `margin_return_pct` / `sharpe` / `max_drawdown_pct` | 四窗口均值 + 逐窗口值 |
-| `windows_present` / `windows_missing` | 有效窗口数 / 缺失窗口数 |
+| `downward_liquidation_price` / `upward_liquidation_price` | 强平预估价格，恒 `N/A`（平台无 MMR 数据源） |
+| `grid_params` | 逐窗口网格参数，格式 `[L,U]:g_pct%` 逗号串联（W1→W4）|
+| `grid_count` | 网格数量 N，均值格式 `均值(W1/W2/W3/W4); n/4` |
+| `total_pairs` | 网格配对成交总次数（平台 `gridMatchedTradeCount`），均值格式同上 |
+| `window_qualifications` | 逐窗口 qualification，格式 `Wn:枚举` 逗号串联 |
 | `qualification` | 资格判定（见下方枚举） |
+| `qualification_reasons` | 风险警示原因（中文简述），按窗口 `Wn: 原因` 用分号 `;` 分隔；无警示时为 `N/A`。原因枚举：`杠杆超限(敞口/权益 X > 2.5)`、`回撤超限(X% > 35.0%)` |
+| `metrics_caliber` | 指标口径自述常量（收益=区间收益非年化；Sharpe=算术均值口径）|
+
+**列序（2026-11-04 Pascal 确认的展示表为准，载体 CSV 与报告表必须同序）**：
+合约 / 任务日 / 锚点UTC / L下限 / U上限 / 格距% / 网格数量N / 区间收益率% / Sharpe / MDD% /
+多头强平价 / 空头强平价 / 网格参数[W1→W4] / 网格数量 / 总配对次数 /
+逐窗判定 / 合约判定 / 风险警示原因 / 指标口径。
 
 ### 多窗口指标格式（四窗口均值 + 逐窗口值）
 
@@ -302,7 +313,7 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 | `qualified` | 全部窗口证据完整、指标齐全、风险约束未破 |
 | （合约级判定） | 表 B 合约级 qualification 由窗口级传导：证据缺口先门禁（`insufficient-evidence`）；任一窗口 `failed` → `failed`；任一窗口 `risk-breach` → `risk-breach`；否则 `qualified`。强平价两列是设计性 N/A（平台无 MMR/费用字段），其占位原因**不参与**证据门禁 |
 | `insufficient-evidence` | 存在缺证据/缺指标/缺 bar/乘数适用性未知/覆盖率预检不过 |
-| `risk-breach` | 观测到风险约束突破（gross/equity > 2.5 或 drawdown > 35%） |
+| `risk-breach` | 观测到风险约束突破（gross/equity > 2.5 或 drawdown > 35%）。判定与原因由 `cell_qualification()` 从指标**自动推导**（不手填），合约级原因按窗口聚合、分号分隔 |
 | `failed` | 执行失败（作业失败、数据不可得、窗口不可达） |
 
 不得新增未定义值（含 `unknown`——占位行用 `insufficient-evidence`，状态缺失一律 `N/A`）。
