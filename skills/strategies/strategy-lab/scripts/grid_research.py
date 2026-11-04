@@ -66,9 +66,12 @@ DEFAULT_FREQUENCY_SECONDS = 3600
 ABS_TOL = 1e-12
 REL_TOL = 1e-10
 NA = "N/A"
-# Frozen risk envelope (RFC-06-002 V1.8 §51): gross/equity limit 2.5, and a
+# Frozen risk envelope (RFC-06-002 V1.8 §51): gross/equity limit, and a
 # 35% peak-to-trough drawdown as a result filter (not a stop-loss promise).
-RISK_GROSS_TO_EQUITY_LIMIT = 2.5
+# Pascal 2026-11-04 ruling: the gross/equity limit is tightened from 2.5 to
+# 2.0 (the original 2.5 is kept in the contract version history); the breach
+# semantics are unchanged - the limit triggers only when strictly greater.
+RISK_GROSS_TO_EQUITY_LIMIT = 2.0
 RISK_DRAWDOWN_LIMIT_PCT = 35.0
 # Fixed caliber disclosure so every carrier self-describes its metric
 # semantics (Pascal 2026-11-04: returns are per-window period returns,
@@ -757,7 +760,8 @@ def reconcile_audit(logs: list[str], cell: dict | str) -> dict:
             if not math.isclose(audit["gross"] / audit["equity"], ratio,
                                 abs_tol=ABS_TOL, rel_tol=REL_TOL):
                 reasons.append("gross/equity mismatch")
-            if ratio > 2.5 or audit["drawdown_pct"] > 35:
+            if (ratio > RISK_GROSS_TO_EQUITY_LIMIT
+                    or audit["drawdown_pct"] > RISK_DRAWDOWN_LIMIT_PCT):
                 risk_failed = True
         rows.append({"time": _iso(closed), "equity": audit["equity"]})
         seen_times.add(closed)
@@ -1090,7 +1094,7 @@ def cell_qualification(cell: dict | None) -> tuple[str, str]:
     """Derive a cell's qualification and its human-readable reasons.
 
     Evidence gaps dominate first (missing window or missing metrics), then the
-    frozen risk envelope: gross/equity above 2.5 or peak-to-tround drawdown
+    frozen risk envelope: gross/equity above 2.0 or peak-to-tround drawdown
     beyond 35%. Reasons are semicolon-separated; N/A means no reason applies.
     """
     if not cell:
@@ -1292,7 +1296,11 @@ TABLE_B_FOOTNOTES = [
     "逐窗判定按 W1→W4 排列（W1=最近三月）。",
     "指标口径：收益率 = 窗口区间累计收益（非年化，保证金口径）；Sharpe = 逐 bar 权益收益"
     "算术均值 × √periodsPerYear（不惩罚方差拖累，负区间收益可为正）；MDD = 权益峰谷回撤；"
-    "强平价恒 N/A（平台无 MMR/强平费字段）；平均每格金额 = 平台成交流中每个网格格子的"
+    "强平价 = 极端单边市场压力测试预估价（2026-11-04 Pascal 裁定）：从网格中线空仓出发，"
+    "单边下跌逐线买入下半区多头格 / 单边上涨逐线开空上半区空头格，解权益 ≤ 维持保证金的价格根；"
+    "不依赖回测成交数据，输入为该 cell 冻结几何 L/U/N + E0 + 名义预算 + MMR（Binance 公开档位接口，"
+    "不可达时冻结默认梯度 ≤20K 1.0% / >20K 1.5%）+ close fee taker 0.05%；"
+    "平均每格金额 = 平台成交流中每个网格格子的"
     "挂单名义金额均值（格等权，跨窗口再取均值），单位 USDT。括号内为逐窗口值。",
 ]
 
@@ -1320,6 +1328,29 @@ def format_summary_value(value: Any, digits: int = 2) -> str:
         return rendered.rstrip("0").rstrip(".") if "." in rendered else rendered
 
     return f"{render(mean)} ({'/'.join(render(part) for part in windows)})"
+
+
+def _liquidation_form(value: Any) -> str:
+    """Render a liquidation-price summary keeping significant digits.
+
+    ``format_summary_value`` rounds to 2 decimals, which collapses small-coin
+    prices (0.0008 -> "0"); liquidation estimates carry 6 significant digits
+    per window, and a window without a finite solution keeps its N/A marker.
+    """
+    if value is None or value == NA or str(value).startswith(NA):
+        return NA
+    body = str(value).split(";")[0].strip()
+    if "(" not in body:
+        return body
+    mean, rest = body.split("(", 1)
+
+    def render(part: str) -> str:
+        try:
+            return f"{float(part):.6g}"
+        except (TypeError, ValueError):
+            return part
+
+    return f"{render(mean)} ({'/'.join(render(p) for p in rest.rstrip(')').split('/'))})"
 
 
 def format_grid_params(value: Any) -> str:
@@ -1360,9 +1391,10 @@ def render_summary_markdown(rows: list[dict]) -> str:
             elif key in ("window_qualifications", "qualification"):
                 cells.append(_symbol_form(value))
             elif key in ("downward_liquidation_price", "upward_liquidation_price"):
-                # Design N/A: the platform exposes no MMR data source, so the
-                # report shows the marker, never the raw carrier string.
-                cells.append(NA)
+                # 2026-11-04 backfill: the carrier now carries solved estimates
+                # (external Binance MMR tiers / frozen defaults); significant
+                # digits preserved, N/A where a cell had no finite solution.
+                cells.append(_liquidation_form(value))
             else:
                 cells.append(str(value) if value is not None else NA)
         lines.append("| " + " | ".join(cells) + " |")
@@ -1438,3 +1470,21 @@ def write_cells_csv(cells: list[dict], path: str | Path, anchor_utc: Any = None,
         comparison.extend(match)
     write_comparison_csv(comparison, Path(path).with_name(
         Path(path).stem + "-comparison" + Path(path).suffix), anchor_utc=anchor_utc)
+
+
+def regen_carriers(anchor_utc: Any, cells: list[dict], evidence_dir: str | Path,
+                   frequency_seconds: int = DEFAULT_FREQUENCY_SECONDS) -> None:
+    """Regenerate the frozen carriers (table A + comparison) from one cell set.
+
+    Single entry point so the two carriers can never come from different
+    sources. The table-A carrier is written first (it also lays the comparison
+    skeleton), then the comparison carrier is rewritten with the source cells
+    attached, so its per-window columns stay populated. The summary markdown
+    of table B is written by ``write_comparison_csv`` as part of that pass.
+    """
+    evidence_dir = Path(evidence_dir)
+    write_cells_csv(cells, evidence_dir / "cells.csv", anchor_utc=anchor_utc,
+                    frequency_seconds=frequency_seconds)
+    summary = summarize_cells(cells)
+    write_comparison_csv(summary, evidence_dir / "cells-comparison.csv",
+                          anchor_utc=anchor_utc, source_cells=cells)

@@ -637,7 +637,7 @@ class SummarizeCellsTests(unittest.TestCase):
 
     def test_cell_qualification_derives_reasons_from_the_risk_envelope(self):
         """Risk qualification and reasons are derived from metrics, never hand
-        filled: gross/equity above 2.5 or drawdown beyond 35% breach the frozen
+        filled: gross/equity above 2.0 or drawdown beyond 35% breach the frozen
         envelope, and each breached constraint is reported separately."""
         clean = {"margin_return_pct": 10.0, "sharpe": 1.0, "max_drawdown_pct": -5.0,
                  "L": 1.0, "U": 2.0, "g_pct": 1.0, "N": 10,
@@ -656,7 +656,7 @@ class SummarizeCellsTests(unittest.TestCase):
         qualification, reason = gr.cell_qualification(levered)
         self.assertEqual("risk-breach", qualification)
         self.assertIn("杠杆超限", reason)
-        self.assertIn("2.5", reason)
+        self.assertIn("2.0", reason)
 
         both = dict(clean, max_drawdown_pct=-97.84, worst_gross_to_equity=64.77)
         _, reason = gr.cell_qualification(both)

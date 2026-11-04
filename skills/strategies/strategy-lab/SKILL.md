@@ -249,8 +249,8 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 | `sharpe` | 逐 bar 权益收益的年化夏普（K=365×86400/frequency_seconds，ddof=0，rf=0）。**算术均值口径**：负区间收益仍可为正（μ>0 但 μ−σ²/2<0），高杠杆高波动下严重失真，判定以 `max_drawdown_pct` 为准 |
 | `max_drawdown_pct` | 峰值回撤（%） |
 | `worst_gross_to_equity` | 窗口内最不利 gross/equity（平台 `grossExposure` 原值，比值语义） |
-| `downward_liquidation_price` | **多头强平预估价格**（当前平台无 MMR 数据源 → 恒 `N/A`，见下方口径） |
-| `upward_liquidation_price` | **空头强平预估价格**（当前平台无 MMR 数据源 → 恒 `N/A`，见下方口径） |
+| `downward_liquidation_price` | **多头强平预估价格**（MMR 按来源分层获取，见「强平预估价格口径」；全部来源失败时 `N/A`） |
+| `upward_liquidation_price` | **空头强平预估价格**（MMR 按来源分层获取，见「强平预估价格口径」；全部来源失败时 `N/A`） |
 | `venue_disclosure` | 实际数据 venue 与换源披露（含 benchmark 通道；单 venue 时写 `gate`） |
 | `qualification` | 资格判定（见下方枚举） |
 | `reason` | 失败/证据不足/数据缺失原因（成功时为空） |
@@ -294,14 +294,14 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 | `contract` | 合约标识 |
 | `task_date` | 研究任务日（锚点当日；逐窗边界见表 A） |
 | `margin_return_pct` / `sharpe` / `max_drawdown_pct` | 四窗口均值 + 逐窗口值 |
-| `downward_liquidation_price` / `upward_liquidation_price` | 强平预估价格，恒 `N/A`（平台无 MMR 数据源） |
+| `downward_liquidation_price` / `upward_liquidation_price` | 强平预估价格（MMR 来源分层，见「强平预估价格口径」；全部来源失败时 `N/A`） |
 | `grid_params` | 逐窗口网格参数，格式 `[L,U]:g_pct%` 逗号串联（W1→W4）|
 | `grid_count` | 网格数量 N，均值格式 `均值(W1/W2/W3/W4); n/4` |
 | `amount_per_grid` | 平均每格挂单金额（USDT），平台成交流 `executions[].notional` 按格等权均值，均值格式同上 |
 | `total_pairs` | 网格配对成交总次数（平台 `gridMatchedTradeCount`），均值格式同上 |
 | `window_qualifications` | 逐窗口 qualification，格式 `Wn:枚举` 逗号串联（载体 CSV 保留机器可读枚举；报告展示用符号） |
 | `qualification` | 资格判定（见下方枚举） |
-| `qualification_reasons` | 风险警示原因（中文简述），按窗口 `Wn: 原因` 用分号 `;` 分隔；无警示时为 `N/A`。原因枚举：`杠杆超限(敞口/权益 X > 2.5)`、`回撤超限(X% > 35.0%)` |
+| `qualification_reasons` | 风险警示原因（中文简述），按窗口 `Wn: 原因` 用分号 `;` 分隔；无警示时为 `N/A`。原因枚举：`杠杆超限(敞口/权益 X > 2.0)`、`回撤超限(X% > 35.0%)` |
 
 **列序（2026-11-04 Pascal 确认的展示表为准，载体 CSV 与报告表必须同序）**：
 合约 / 任务日 / 区间收益率% / MDD% / 网格参数[W1→W4] / 网格数量 / 平均每格金额(USDT) /
@@ -345,22 +345,36 @@ Sharpe 置于其后（风险调整后的衍生指标）。
 - 跨窗口按四窗口均值 + 逐窗口值展示，格式 `均值(W1/W2/W3/W4); n/4`
 - 自洽校验：每格名义 ≈ 名义敞口预算 / N（本批为 10000 / N）
 
-### 强平预估价格口径（V1.11 D5-2 降级）
+### 强平预估价格口径（2026-11-04 Pascal 裁定：极端单边市场压力测试）
 
-- `downward_liquidation_price` = 多头强平预估价格（价格下跌触发多头强平）；`upward_liquidation_price` = 空头强平预估价格（价格上涨触发空头强平）
-- **当前平台回测产物不含 MMR 与强平费**（`instrumentRulesSnapshot` 仅有 amount_step/min_amount/min_notional/price_tick/contract_size，独立验证 t_a8b94af8 B-7 实证）→ 两列**当前恒 `N/A`**，`reason` 固定 `platform snapshot lacks MMR/close fee`
-- `liquidation_price_range()` 保留：快照带 MMR/费用时按原口径计算（`downward`=多头/`upward`=空头，`cross_liquidation` 状态机，不填 0 不猜测）；缺失时如实 N/A
-- **不做**平台侧 MMR 采集扩展；平台未来补齐字段后两列自动恢复计算，语义解释不变
-- `worst_gross_to_equity` 取平台 `grossExposure` 原值（runtime 已是 gross/value 比值）
+- `downward_liquidation_price` = **单边下跌压力测试预估价**；`upward_liquidation_price` = **单边上涨压力测试预估价**。语义：假设从网格中线空仓状态出发，价格单边运动时网格逐线被动建仓（下跌逐线买入下半区多头格 / 上涨逐线开空上半区空头格），求解权益 ≤ 维持保证金的价格根。**不依赖回测成交与持仓数据**，输入仅为该 cell 冻结几何（L/U/N）+ 资金口径（E0、名义预算）+ MMR/费用
+- **MMR 来源分层（优先级从高到低，不得跳序）**：
+  1. **平台原生字段**（最高优先级）：`instrumentRulesSnapshot` 未来若带 MMR/强平费字段，直接使用，语义不变
+  2. **Binance 公开接口**：`GET https://www.binance.com/bapi/futures/v1/friendly/future/common/brackets?symbol=<SYM>`（官网 Leverage & Margin 参数页同源端点，免签名免 key，curl 直连实测可用 2026-11-04）。取目标合约按持仓名义价值对应档位的 `bracketMaintenanceMarginRate`（含 `cumFastMaintenanceAmount` 速算数），必须记录接口 URL、档位表 `updateTime`、抓取时间并归档证据文件（样例：`data/reports/2026-11-03-neutral-grid-1h-four-window/evidence/binance-mmr-brackets-2026-11-04.md`，实测 JUP/PUMP/AAVE/SUI 第 1 档 MMR 均 1.00%）；档位表会调整，每次研究重新抓取，不复用历史快照数值
+  3. **冻结默认梯度**（接口不可达时兜底：网络不通/超时/非 200/响应无 `riskBrackets`）：按持仓名义价值分档——名义 ≤ 20,000 USDT 用 MMR **1.0%**，> 20,000 USDT 用 MMR **1.5%**（对应 Binance 主流小币第 1/2 档实测结构）；使用时 `reason` 标 `default MMR tier (binance unreachable)` 并写入报告假设
+- **强平费（close fee）**：与 MMR 同源取用；来源 2/3 均不提供时用 taker 费率 **0.05%**（显式披露），禁止静默置 0
+- **旧快照口径废弃**（2026-11-04 Pascal 二次裁定后）：`liquidation_price_range()`/`cross_liquidation` 按 worst 持仓快照求解的历史口径已废弃，不再用于强平价两列；压力测试求解为唯一口径。快照伪影（多头簿负持仓）与压缩快照低估峰值（PUMP W4 54.49 vs 审计 64.77）仅作历史留档
+- **worst_gross_to_equity 口径不变**：仍取平台 `grossExposure` 原值（runtime 已是 gross/value 比值），只用于风险判定（杠杆超限），与强平价压力口径分离
+
+### 风险判定阈值（风险包络，判定参数标准）
+
+逐 cell 资格判定用两个数值阈值，冻结在 `grid_research.py` 常量（`RISK_GROSS_TO_EQUITY_LIMIT` / `RISK_DRAWDOWN_LIMIT_PCT`），`cell_qualification()` 自动推导、不手填：
+
+| 阈值 | 当前值 | 语义 |
+|---|---|---|
+| 敞口/权益（gross/equity） | **2.0**（2026-11-04 Pascal 裁定收紧，原 2.5；严格大于触发） | 窗口审计粒度 `worst_gross_to_equity` > 2.0 → 杠杆超限。分子是双侧名义绝对值之和（不得净额抵销），分母是含浮动盈亏的权益；与交易所 10x 授权上限是两个口径，这是研究风险包络 |
+| 最大回撤 MDD | **35%**（严格大于触发） | 结果筛选，不是止损承诺 |
+
+判定顺序：任一数值阈值触发即 `risk-breach`（两阈值"或"关系，原因分列）；指标缺失 → `insufficient-evidence`；作业失败 → `failed`。变更规则：阈值是研究标准语义，修改必须记录裁定人与日期（如本例"Pascal 2026-11-04 收紧 2.5→2.0"），判定属事后重算时回测数据不动，须在报告披露"事后重算、数据未变"；RFC/SPEC 契约文本同步修订另行批量处理。
 
 ### 资格判定枚举（qualification）
 
 | 值 | 含义 |
 |---|---|
 | `qualified` | 全部窗口证据完整、指标齐全、风险约束未破 |
-| （合约级判定） | 表 B 合约级 qualification 由窗口级传导：证据缺口先门禁（`insufficient-evidence`）；任一窗口 `failed` → `failed`；任一窗口 `risk-breach` → `risk-breach`；否则 `qualified`。强平价两列是设计性 N/A（平台无 MMR/费用字段），其占位原因**不参与**证据门禁 |
+| （合约级判定） | 表 B 合约级 qualification 由窗口级传导：证据缺口先门禁（`insufficient-evidence`）；任一窗口 `failed` → `failed`；任一窗口 `risk-breach` → `risk-breach`；否则 `qualified`。强平价两列无论取值或 N/A，其占位原因**不参与**证据门禁 |
 | `insufficient-evidence` | 存在缺证据/缺指标/缺 bar/乘数适用性未知/覆盖率预检不过 |
-| `risk-breach` | 观测到风险约束突破（gross/equity > 2.5 或 drawdown > 35%）。判定与原因由 `cell_qualification()` 从指标**自动推导**（不手填），合约级原因按窗口聚合、分号分隔 |
+| `risk-breach` | 观测到风险约束突破（gross/equity > 2.0（2026-11-04 Pascal 裁定收紧，原 2.5）或 drawdown > 35%）。判定与原因由 `cell_qualification()` 从指标**自动推导**（不手填），合约级原因按窗口聚合、分号分隔 |
 | `failed` | 执行失败（作业失败、数据不可得、窗口不可达） |
 
 不得新增未定义值（含 `unknown`——占位行用 `insufficient-evidence`，状态缺失一律 `N/A`）。
