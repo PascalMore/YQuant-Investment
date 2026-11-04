@@ -1195,9 +1195,10 @@ def write_comparison_csv(summary: list[dict], path: str | Path,
     # grid_params / grid_count / task_date and are not exported. The frozen
     # METRIC_COLUMNS set stays unchanged; only the export list narrows.
     _write_csv(rows, ["contract", "task_date",
-                      "margin_return_pct", "sharpe", "max_drawdown_pct",
-                      "downward_liquidation_price", "upward_liquidation_price",
+                      "margin_return_pct", "max_drawdown_pct",
                       "grid_params", "grid_count", "total_pairs",
+                      "sharpe",
+                      "downward_liquidation_price", "upward_liquidation_price",
                       "window_qualifications", "qualification",
                       "qualification_reasons"], path)
 
