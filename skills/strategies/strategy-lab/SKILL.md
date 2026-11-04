@@ -262,6 +262,31 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 **缺行规则**：预定义矩阵中的每个 cell 必须出现在表中。缺证据/未执行的 cell 保留占位行，
 指标列填 N/A 并在 `reason` 写明原因，**不得丢行、不得留空、不得填 0**。
 
+### 汇总表生成契约（表头与展示样式以代码为准）
+
+表 B 的**列序、中文表头、数值格式、判定符号、脚注**全部固化在
+`scripts/grid_research.py`，不允许手工维护：
+
+| 契约位置 | 内容 |
+|---|---|
+| `TABLE_B_HEADERS` | 列序 + 中文表头（CSV 载体列名 = 该表 key，顺序完全一致） |
+| `TABLE_B_FOOTNOTES` | 判定符号说明 + 指标口径说明（报告表下方脚注） |
+| `format_summary_value()` | 多窗口格式 `均值(W1/W2/W3/W4)`，缺失窗口显示 `-` |
+| `format_grid_params()` | 网格参数格式 `[L,U]:gap%`，多窗口以 ` · ` 分隔 |
+| `qualification_symbol()` | 枚举 → 符号（✓ ⚠ ✗ ?） |
+| `render_summary_markdown()` | 渲染 Markdown 表 |
+| `write_summary_markdown()` | 写 `table-b-summary.md` 副产物 |
+| `write_comparison_csv()` | 写 CSV 载体，并在同目录自动生成 `table-b-summary.md` |
+
+**同源约束**：报告表与 CSV 载体由**同一批行**渲染，列序、表头、格式无法漂移。
+载体目录固定产出三个文件：
+
+- `cells.csv`（表 A，逐 cell 明细）
+- `cells-comparison.csv`（表 B 数据，机器可读枚举）
+- `table-b-summary.md`（表 B 展示，符号化 + 脚注）
+
+报告正文中的表 B 应直接引用 `table-b-summary.md` 的内容，不重抄。
+
 ### 表 B：合约汇总表（每个合约 一行；列集 = DESIGN §16.4 修订版，14 列）
 
 | 列 | 含义 |

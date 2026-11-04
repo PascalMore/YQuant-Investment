@@ -563,6 +563,53 @@ class SummarizeCellsTests(unittest.TestCase):
 
 
 
+
+    def test_table_b_markdown_matches_the_frozen_column_contract(self):
+        """The report table is generated from the carrier rows, so headers,
+        order and formats cannot drift from the CSV contract."""
+        self.assertEqual(
+            ["合约", "任务日", "区间收益率%", "MDD%", "网格参数[W1→W4]", "网格数量",
+             "平均每格金额(USDT)", "总配对次数", "Sharpe", "多头强平价", "空头强平价",
+             "逐窗判定", "合约判定", "风险警示原因"],
+            [label for _, label in gr.TABLE_B_HEADERS])
+        self.assertEqual(
+            ["contract", "task_date", "margin_return_pct", "max_drawdown_pct",
+             "grid_params", "grid_count", "amount_per_grid", "total_pairs", "sharpe",
+             "downward_liquidation_price", "upward_liquidation_price",
+             "window_qualifications", "qualification", "qualification_reasons"],
+            [key for key, _ in gr.TABLE_B_HEADERS])
+
+    def test_format_summary_value_and_grid_params(self):
+        """Multi-window cells render as mean(W1/W2/W3/W4) and grid parameters
+        as [L,U]:gap% blocks."""
+        self.assertEqual("3.21 (3.1/3.55/2.98/3.21)",
+                         gr.format_summary_value("3.21(3.10/3.55/2.98/3.21); 4/4"))
+        self.assertEqual("N/A", gr.format_summary_value(None))
+        self.assertEqual(
+            "[0.1069, 0.578]:1.49143% · [0.1069, 0.6817]:1.4932%",
+            gr.format_grid_params(
+                "[0.1069,0.578]:1.49143%,[0.1069,0.6817]:1.4932%"))
+
+    def test_render_summary_markdown_uses_symbols(self):
+        """The rendered table shows the qualification symbols, not raw enums."""
+        row = {
+            "contract": "JUPUSDT", "task_date": "2026-11-03",
+            "margin_return_pct": "17.33(45.42/33.56/28.94/-38.59); 4/4",
+            "max_drawdown_pct": "-46.27(-15.87/-56.16/-27.21/-85.83); 4/4",
+            "grid_params": "[0.1069,0.578]:1.49143%",
+            "grid_count": "142.25(114/125/155/175); 4/4",
+            "amount_per_grid": "72.87(88.2/80.57/64.87/57.85); 4/4",
+            "total_pairs": "463.75(534/505/373/443); 4/4",
+            "sharpe": "1.93(3.59/1.52/1.77/0.82); 4/4",
+            "downward_liquidation_price": "N/A", "upward_liquidation_price": "N/A",
+            "window_qualifications": "W1:qualified,W2:risk-breach,W3:qualified,W4:risk-breach",
+            "qualification": "risk-breach", "qualification_reasons": "W2: 杠杆超限",
+        }
+        markdown = gr.render_summary_markdown([row])
+        self.assertIn("| 合约 | 任务日 | 区间收益率% | MDD% |", markdown)
+        self.assertIn("W1✓ W2⚠ W3✓ W4⚠", markdown)
+        self.assertIn("| ⚠ |", markdown)
+
     def test_average_amount_per_grid_uses_cell_weighted_means(self):
         """The per-grid amount comes from the platform order stream: cells are
         weighted equally, so a cell traded many times does not dominate, and

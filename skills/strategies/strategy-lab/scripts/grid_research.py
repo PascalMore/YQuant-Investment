@@ -1261,6 +1261,132 @@ def write_comparison_csv(summary: list[dict], path: str | Path,
                       "downward_liquidation_price", "upward_liquidation_price",
                       "window_qualifications", "qualification",
                       "qualification_reasons"], path)
+    # The Markdown table is rendered from the very same rows, so the report and
+    # the carrier cannot drift in order, headers or formats.
+    markdown_path = Path(path).with_name("table-b-summary.md")
+    write_summary_markdown(rows, markdown_path)
+
+
+# Table B presentation contract (Pascal 2026-11-04). The column order, the
+# Chinese headers and the number formats live here so that every research run
+# emits the same table without hand-writing headers or formats.
+TABLE_B_HEADERS = [
+    ("contract", "合约"),
+    ("task_date", "任务日"),
+    ("margin_return_pct", "区间收益率%"),
+    ("max_drawdown_pct", "MDD%"),
+    ("grid_params", "网格参数[W1→W4]"),
+    ("grid_count", "网格数量"),
+    ("amount_per_grid", "平均每格金额(USDT)"),
+    ("total_pairs", "总配对次数"),
+    ("sharpe", "Sharpe"),
+    ("downward_liquidation_price", "多头强平价"),
+    ("upward_liquidation_price", "空头强平价"),
+    ("window_qualifications", "逐窗判定"),
+    ("qualification", "合约判定"),
+    ("qualification_reasons", "风险警示原因"),
+]
+
+TABLE_B_FOOTNOTES = [
+    "判定符号：✓ = qualified（合格）；⚠ = risk-breach（风险突破）；✗ = failed；? = 证据不足。"
+    "逐窗判定按 W1→W4 排列（W1=最近三月）。",
+    "指标口径：收益率 = 窗口区间累计收益（非年化，保证金口径）；Sharpe = 逐 bar 权益收益"
+    "算术均值 × √periodsPerYear（不惩罚方差拖累，负区间收益可为正）；MDD = 权益峰谷回撤；"
+    "强平价恒 N/A（平台无 MMR/强平费字段）；平均每格金额 = 平台成交流中每个网格格子的"
+    "挂单名义金额均值（格等权，跨窗口再取均值），单位 USDT。括号内为逐窗口值。",
+]
+
+
+def format_summary_value(value: Any, digits: int = 2) -> str:
+    """Format one multi-window cell as ``mean (W1/W2/W3/W4)``.
+
+    Plain numbers keep their trailing zeros trimmed; a missing window shows
+    as a dash so the reader sees the gap instead of a silent omission.
+    """
+    if value is None or value == NA:
+        return NA
+    body = str(value).split(";")[0].strip()
+    if "(" not in body:
+        return body
+    mean, rest = body.split("(", 1)
+    windows = rest.rstrip(")").split("/")
+
+    def render(part: str) -> str:
+        try:
+            number = float(part)
+        except (TypeError, ValueError):
+            return part
+        rendered = f"{number:.{digits}f}"
+        return rendered.rstrip("0").rstrip(".") if "." in rendered else rendered
+
+    return f"{render(mean)} ({'/'.join(render(part) for part in windows)})"
+
+
+def format_grid_params(value: Any) -> str:
+    """Render the per-window grid parameters as ``[L,U]:gap%`` separated by ' · '."""
+    if not value or value == NA:
+        return NA
+    parts = []
+    for bounds, gap in re.findall(r"\[([^\]]*)\]:([^,\s]+)", str(value)):
+        rendered = []
+        for number in bounds.split(","):
+            number = number.strip()
+            try:
+                rendered.append(f"{float(number):.6g}")
+            except (TypeError, ValueError):
+                rendered.append(number)
+        parts.append(f"[{', '.join(rendered)}]:{gap}")
+    return " · ".join(parts)
+
+
+def render_summary_markdown(rows: list[dict]) -> str:
+    """Render table B as Markdown from the frozen column contract.
+
+    ``rows`` are the same dicts the CSV carrier writes, so the table and the
+    carrier cannot drift: one shape, one order, one set of headers.
+    """
+    header = [label for _, label in TABLE_B_HEADERS]
+    lines = ["| " + " | ".join(header) + " |",
+             "|" + "|".join(["---"] * len(header)) + "|"]
+    for row in rows:
+        cells = []
+        for key, _ in TABLE_B_HEADERS:
+            value = row.get(key)
+            if key == "grid_params":
+                cells.append(format_grid_params(value))
+            elif key in ("margin_return_pct", "max_drawdown_pct", "sharpe",
+                         "grid_count", "amount_per_grid", "total_pairs"):
+                cells.append(format_summary_value(value))
+            elif key in ("window_qualifications", "qualification"):
+                cells.append(_symbol_form(value))
+            elif key in ("downward_liquidation_price", "upward_liquidation_price"):
+                # Design N/A: the platform exposes no MMR data source, so the
+                # report shows the marker, never the raw carrier string.
+                cells.append(NA)
+            else:
+                cells.append(str(value) if value is not None else NA)
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)
+
+
+def _symbol_form(value: Any) -> str:
+    """Render a qualification enum as its display symbol."""
+    if not value or value == NA:
+        return NA
+    if isinstance(value, str) and "," in value:
+        parts = []
+        for chunk in value.split(","):
+            window, _, verdict = chunk.strip().partition(":")
+            parts.append(f"{window}{qualification_symbol(verdict)}")
+        return " ".join(parts)
+    return qualification_symbol(str(value))
+
+
+def write_summary_markdown(rows: list[dict], path: str | Path) -> None:
+    """Write table B as a Markdown fragment with the frozen headers and notes."""
+    body = render_summary_markdown(rows)
+    notes = "\n\n".join(TABLE_B_FOOTNOTES)
+    Path(path).write_text(body + "\n\n" + notes + "\n", encoding="utf-8")
 
 
 def write_cells_csv(cells: list[dict], path: str | Path, anchor_utc: Any = None,
