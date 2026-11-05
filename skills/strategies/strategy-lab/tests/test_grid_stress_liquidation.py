@@ -265,6 +265,50 @@ class SolveCellTests(unittest.TestCase):
                       close_fee_rate=0.0005)
         self.assertAlmostEqual(up["root"], result["up"]["root"], places=12)
 
+    def test_solve_cell_rejects_an_empty_symbol(self):
+        # The brackets tier is a per-symbol contract: an empty symbol must not
+        # silently query ``brackets?symbol=`` (an unrelated default table with
+        # a wrong tier) or fall through to the default gradient. Fail closed.
+        grid = synthetic_grid([1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7],
+                              [1.8, 1.9, 2.0, 2.1, 2.2, 2.3, 2.4, 2.5],
+                              ["long_entry"] * 4 + ["short_entry"] * 4,
+                              [0.125] * 8)
+        with self.assertRaises(ValueError) as caught:
+            gsl.solve_cell(grid, resolver=constant_resolver(0.01))
+        self.assertIn("symbol is required for MMR resolution", str(caught.exception))
+        with self.assertRaises(ValueError):
+            gsl.solve_cell(grid, symbol="   ", resolver=constant_resolver(0.01))
+        # The resolver entry points carry the same guard (no silent request,
+        # no default-gradient fallback on a missing key).
+        for symbol in ("", "   "):
+            with self.assertRaises(ValueError):
+                gsl.fetch_mmr(symbol, 100.0, resolver=constant_resolver(0.01))
+        with self.assertRaises(ValueError):
+            constant_resolver(0.01).candidates("")
+
+    def test_pure_long_grid_short_side_needs_no_mmr_request(self):
+        # AAVEUSDT-style full-window pure-long grid: every window cell is a
+        # long entry, so the short side holds no position and is solved as
+        # no_position without any MMR request.
+        grid = synthetic_grid([1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7],
+                              [1.8, 1.9, 2.0, 2.1, 2.2, 2.3, 2.4, 2.5],
+                              ["long_entry"] * 8, [0.125] * 8)
+
+        def exploding_fetcher(url):
+            raise AssertionError("no MMR request may be issued for an empty side")
+
+        resolver = gsl.MmrResolver(fetcher=exploding_fetcher)
+        result = gsl.solve_cell(grid, symbol="AAVEUSDT", resolver=resolver)
+        self.assertEqual(8, result["n_long"])
+        self.assertEqual(0, result["n_short"])
+        self.assertIsNone(result["up"]["root"])
+        self.assertEqual("no_position", result["up"]["zone"])
+        self.assertEqual(0, result["up"]["fills"])
+        self.assertIsNone(result["up"]["mmr"])
+        # The long side is still solved normally.
+        self.assertIn(result["down"]["zone"], ("in-ladder", "below-L"))
+        self.assertEqual(0.01, result["down"]["mmr"])
+
 
 class MmrResolverTests(unittest.TestCase):
 

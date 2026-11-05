@@ -4,10 +4,10 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | V1.10 |
+| 版本 | V1.14 |
 | 状态 | 既有 B-001/杠杆/三件套/G-02 离线工程线及 F-01..F-05 已验收；审计 D-01 局部撤销（§9 / SPEC V1.6 §10 / Design V1.5 §12）已实现并通过独立 Verify（离线，335 passed，t_8a23ea34），主控离线签收；API 进程已受控重启并真实 HTTP 验证公共 Gate swap 读取与本地重采样（api_runtime_loaded=VERIFIED，见 data/reports/2026-11-02-quantdinger-d01-local-revert/runtime-verification.md）；G-01（缓存身份）、G-03（历史乘数适用性）仍 OPEN，historical_evidence=UNKNOWN、full_research_status=DEFERRED，后台角色未加载、16业务仍禁止；V1.7 按 Pascal 2026-11-03 D1 决策冻结 v=0 零成交 bar 合法化契约（§10），native 层已由 t_aa056536 实现并通过平台侧验证；V1.8 按 t_b8db70b3 契约决策（D2）将范围扩展至消费链 crypto.py 两处数据有效性谓词（§10.4），消费链放行待实现与独立 Verify |
 | 作者 | YQuant Principal / t_cfccfe2c / t_1af91929 / t_9fddffed / t_1b635d49 / t_22b3495f |
-| 日期 | 2026-11-03（V1.8；V1.7 为 2026-11-03 同日续修订），Asia/Shanghai（UTC+08:00） |
+| 日期 | 2026-11-05（V1.14；V1.8 为 2026-11-03，V1.7 为 2026-11-03 同日续修订），Asia/Shanghai（UTC+08:00） |
 | 项目 | /home/pascal/workspace/yquant-investment |
 | 来源 | data/tasks/active/2026-10-30-neutral-grid-research/pipeline-intake.md |
 | 配套 | [SPEC-06-002](../../spec/06_strategy/SPEC-06-002-neutral-grid-multi-window-research.md) |
@@ -48,7 +48,7 @@ Gate、swap、USDT 结算和完整合约身份必须显式绑定；旧 gate spot
 
 API initialCapital=1000、leverageEnabled=true、leverage=10。生成器按 starting_cash*CELL_BUDGET_PCTS 传入 order_value，由原生 _target_quantity 唯一乘十；quantity 路径不再乘十。10000 是名义可分配预算，不是保证金、不是即刻已持仓，也不是强制全部花完。CLI 兼容默认仍 false/1，新实验显式启用。
 
-gross=sum(abs(多/空持仓名义))/实时保证金净值，限值 2.5，不能净额抵销；挂单不算已持仓，但必须预留潜在开仓容量、计入库存、部分成交和权益下降。35% MDD 是结果筛选，不是承诺所有基准合格，也不等于从初始资金止损 35%。只允许在明确采样粒度上给出合规结论，不声称 OHLC 证明逐 tick 永不越限。
+gross=sum(abs(多/空持仓名义))/实时保证金净值，限值 2.0，不能净额抵销；挂单不算已持仓，但必须预留潜在开仓容量、计入库存、部分成交和权益下降。35% MDD 是结果筛选，不是承诺所有基准合格，也不等于从初始资金止损 35%。只允许在明确采样粒度上给出合规结论，不声称 OHLC 证明逐 tick 永不越限。
 
 ### D-04 主指标与强平情景
 
@@ -215,6 +215,7 @@ D1 第 1 条中"该 bar 网格限价单不成交"是研究语义声明；平台�
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.12 | 2026-11-05 | Pascal 2026-11-04 裁定把 gross/equity 风险阈值由 2.5 收紧至 **2.0**（严格大于触发），MDD 35% 不变；本版仅同步 §3 D-03 限值文本 2.5→2.0，属**事后判定重算**（回测数据未变，判定结果随之重算）。契约文本同步不含实现、验证与研究执行；对应 SPEC V1.12 §3.5 / Design V1.12 §7；因不涉及交易/风控语义实现变更，按 strategy-lab 分工规则不触发独立 Reviewer |
 | V1.11 | 2026-11-04 | 主控直接增 §10.7（V10 独立验证 t_a8b94af8 OVERALL FAIL 后按 Pascal 2026-11-04 三项裁定）：D5 决策——D5-1 频率参数化（build_cells 增 frequency_seconds 参数、expected_bars 更名、年化因子公式化 K=365×86400/frequency_seconds、契约不再写死频率数值、覆盖率预检内建；本轮批次冻结 1h，expected_bars=2208/2208/2136/2208）；D5-2 强平价两列恒 N/A+原因 platform snapshot lacks MMR/close fee（V10 B-7 平台无 MMR 数据源，Pascal 裁定留空；B-5 静默映射删除、B-6 grossExposure 二次除修复；平台侧不加 MMR 采集）；D5-3 V10 缺口收敛（B-1 task_date/anchor_utc 落盘、B-2 列集以 DESIGN §15.4 收敛、B-3 qualification 枚举去 unknown、B-4 SKILL.md 语义对齐、R-05 锚点贯穿训练/冻结/执行通道）；D5-4 冻结边界（185 项断言不动、三函数语义不变、15m 实例与 runId 29..40 保留、193 基线+参数化新用例）；仅文档 |
 | V1.10 | 2026-11-03 | 主控直接增 §10.6（原 E4 卡 t_e2d45b81 因 provider 限流反复 rate-limited 空转，改主控直接修订）：D4 决策——D4-1 锚点任务日化（本轮 A=2026-11-03，四窗口落盘，合计满一年）；D4-2 G-01/G-03 由前置门禁改为合一取证（缺证据即 insufficient-evidence，含 JUP runId=40/37 逐笔对拍证据与四合约 multiplier 基线）；D4-3 强平价口径（空头/多头语义、MMR 取 instrumentRulesSnapshot 实际值、状态机不伪造、R-01 维持披露）；D4-4 标准表 A/B + qualification 枚举 + N/A vs 0 区分（同步 SKILL.md 新章节）；D4-5 批次预算 4 批×4 窗口；仅文档，实现归后续 Implement 卡，研究执行归执行卡 |
 | V1.9 | 2026-11-03 | 主控按 Pascal「精简、不发散」指示直接增 §10.5（原 E3 卡 t_20d5afbd 停止，无产出）：D3 契约决策——证据多页累积缺口定案，同 identity 逐页 merge（容量 20000 淘汰最旧）、identity 变化/线程更替仍整体重置；逐 bar 溯源/五类错误/applicability/v=0/R-01 不变；指向 Design V1.8 §14 / SPEC V1.9 §11.5；仅文档，实现归 F3 |

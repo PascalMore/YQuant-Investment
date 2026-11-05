@@ -4,10 +4,10 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | V1.11 |
-| 日期 | 2026-11-04（V1.11），Asia/Shanghai（UTC+08:00）；V1.11 按 Pascal 2026-11-04 三项裁定新增 §16 |
+| 版本 | V1.14 |
+| 日期 | 2026-11-05（V1.14），Asia/Shanghai（UTC+08:00）；V1.14 按 Pascal 2026-11-05 裁定修订 §17.1 搜索维度（间距为搜索维度、格数派生）、新增 §17.7 G7 搜索完成度门禁（既有 §7 风险阈值 2.0 不变，回测数据未变） |
 | 阶段 | YQuant 按 Pascal 已确认决策同步契约：审计 D-01 局部撤销（V1.5 §12，已实现并独立 Verify）、v=0 零成交 bar 合法化实现契约（V1.6 §13，Pascal 2026-11-03 D1 决策）与消费链 crypto.py 放行契约（本版 §13.4，t_b8db70b3 D2 决策）；§13.1/13.2 的 native 层已由 t_aa056536 实现并通过平台侧验证，§13.4 待实现；历史 G-02 Design t_1f4c8c58 及旧验收记录保留，非本次重开 |
-| RFC / SPEC | [RFC-06-002 V1.8](../../rfc/06_strategy/RFC-06-002-neutral-grid-multi-window-research.md)，§9/§10 / [SPEC-06-002 V1.8](../../spec/06_strategy/SPEC-06-002-neutral-grid-multi-window-research.md)，§10/§11；D-01 撤销见 §12（对应 RFC/SPEC V1.6 §9/§10），v=0 合法化见 §13（§13.4 消费链 D2）；§11 训练通道保留 |
+| RFC / SPEC | [RFC-06-002 V1.12](../../rfc/06_strategy/RFC-06-002-neutral-grid-multi-window-research.md)，§3 D-03 限值同步 + §9/§10 / [SPEC-06-002 V1.12](../../spec/06_strategy/SPEC-06-002-neutral-grid-multi-window-research.md)，§3.5 阈值同步 + §10/§11；D-01 撤销见 §12（对应 RFC/SPEC V1.6 §9/§10），v=0 合法化见 §13（§13.4 消费链 D2）；§11 训练通道保留 |
 | 权威范围 | 本主题data/tasks/active/2026-11-01-grid-g01-g02/{intake,rfc-spec-handoff}.md及父卡；原pipeline-intake与杠杆/三件套授权作为已签收历史保留 |
 | 当前判定 | 审计 D-01 局部 Implement→独立 Verify 已完成并通过（离线，D01-01..07 全 CLOSED，t_8a23ea34），主控离线签收，未另开 Review；API 进程已受控重启并真实 HTTP 验证公共 Gate swap 读取与本地重采样（api_runtime_loaded=VERIFIED）；既有 G-02 离线线和五项修复验收保留。G-01（缓存身份）与 G-03（历史乘数适用性）仍 OPEN；historical_evidence=UNKNOWN、full_research_status=DEFERRED，后台角色未加载、原T6仍blocked、16业务禁止 |
 
@@ -182,7 +182,7 @@ C-002旧结论保留：作业内多频history不能证明提交前冻结，也�
 
 组合情景：每窗最后完整可验证bar-close，同池E0与qL/qS，不向两腿重复分配1000。`A=qL-qS-mL*qL-mS*qS-f*(qL+qS)`，`B=E0-(qL-qS)*p0`，根 `p=-B/A`，按SPEC方向/无仓/无根/已越线状态输出。主mL=mS=0.005，敏感性0.004/0.006，f=0.0005，仅研究假设；可用保证金不明标UNKNOWN，p0可用close但标last_not_mark。
 
-浮点比较统一：数量/价格等使用abs_tol=1e-12与rel_tol=1e-10；A近零阈值 `1e-12*max(1,qL+qS)`，H近零与方程残差阈值 `1e-8*max(1,abs(E0),abs((qL+qS)*p0))` USDT。根与p0在对应价格容差内即already_breached；拒绝非有限输入。记录公式版本cross_linear_v1、实际残差/容差，不用四舍五入后判方向。风险2.5与MDD35的比较保留原始精度，容差仅用于数值核对，不作为放宽业务阈值。
+浮点比较统一：数量/价格等使用abs_tol=1e-12与rel_tol=1e-10；A近零阈值 `1e-12*max(1,qL+qS)`，H近零与方程残差阈值 `1e-8*max(1,abs(E0),abs((qL+qS)*p0))` USDT。根与p0在对应价格容差内即already_breached；拒绝非有限输入。记录公式版本cross_linear_v1、实际残差/容差，不用四舍五入后判方向。风险2.0与MDD35的比较保留原始精度，容差仅用于数值核对，不作为放宽业务阈值。
 
 四行汇总固定列遵循既有backtest-comparison-standard；数值格式“均值（W1/W2/W3/W4）；n/4”，缺失写N/A+原因，均值不剔除亏损/不合格窗。恰好16明细，主结论分别tool_status/research_status/qualification；不额外设正收益或Sharpe阈值。四个独立1000池不是连续复利年账。
 
@@ -710,10 +710,124 @@ PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m unittes
 ```
 - 执行链：测试全绿 → JUP 1h 单 cell 原生冒烟（jobId 读回、executionAssumptions=1000/10x/10000）→ W1→W4 逐批（每批 4 合约、逐批读回、G-01/G-03 合一取证、venue 披露）→ 真实数据填表 A（16 行）/表 B（4 行）
 
+## 17. 网格进化标准实现契约（Pascal 2026-11-05 裁定；本次唯一实现增量）
+
+> 背景：2026-11-03 的 16 窗口研究是**冻结几何**研究（每窗参数由训练段推导后冻结）。2026-11-05 追加原生进化时暴露三个结构性问题——① 等比下 gap 与 N 是同一自由度，此前同时暴露会产生物理矛盾组合且存在静默钳制（平台以为搜 0.45%、实际执行 0.86%）；② `initialize` 读 `context.params` 违反平台契约、且平台运行时不调用 `initialize`，导致搜索空转；③ 重建条件只比较格数，导致边界参数改动完全不生效（两组回测结果逐位相同）。本节为唯一实现增量，对应 RFC V1.13 / SPEC V1.13 §3.2.1–§3.2.2。
+
+### 17.1 约束唯一事实源与搜索维度
+
+`scripts/grid_evolution.py` 是间距约束 `[0.45, 1.5]`、格数约束 `[3, 200]`、等比模式的**唯一事实源**；策略源码生成器、研究脚本与验收均从它取常量，不得各自硬编码。
+
+等比下 `g_pct(N)=expm1(ln(U/L)/N)` 严格单调递减，搜索 N 与搜索 g_pct 等价 → 搜索空间固定为 `grid_lower` / `grid_upper` / `grid_gap_pct` 三项。
+
+**V1.14 修订：搜索维度是间距，格数是派生量。** V1.13 曾以格数为搜索维度，实测退化（见 §17.7）。
+
+**约束求解语义（间距优先）**：请求间距若导致派生格数越界，**移动间距**（间距是被请求的业务值），把格数解析进同时满足两约束的可行窗口，派生间距必然落回 `[0.45, 1.5]`；每次解析披露调整类型（`exact` / `gap_raised_to_n_max` / `gap_lowered_to_n_min`）与可行窗口。禁止只保 N 而静默改写 gap。
+
+**200 上限仍在运行时强制**：`N ∈ [3,200]` 由 `_evolve_resolve` 内部钳制，越界即调整并披露；格数不再交给采样器。
+
+平台约束表达能力受限：`@constraint` 编译器不支持 `ast.Call`（`log()/exp()` 不可用）且解析失败时静默跳过，故双约束由策略在几何解析阶段确定性保证，不伪装成平台能理解的跨参数约束。
+
+### 17.2 源码生成与参数消费
+
+`scripts/grid_evolve_source.py` 以已验证可编译的 `PUMPUSDT-W2-1h` 为基座（该模板无 discovery 期 `context.log`、无证据门禁），输出契约无关的参数化源码并附 `# @param` 声明。
+
+**参数消费位置**：几何重建必须在 `handle_data` 开头，用 `global` 重绑定格点常量，格数变化时重置 cell 状态数组。
+
+**重建触发条件必须比较完整几何签名**（格数 + 上下界）——仅比较格数会使边界参数改动完全不生效。此为已实测缺陷，需回归测试锁死。
+
+**生成基座更换须重新验证平台编译**（不得直接替换）。
+
+### 17.3 六道门禁与破产优先判据
+
+合格判据**不是平台分数**，而是六道门禁：G1 编译 / G2 参数空间（恰三项、`grid_count` integer [3,200]、无 gap 维度）/ G3 参数生效（两组参数产生不同执行几何）/ G4 进化终态 / G5 四窗验证 / G6 平台证据质量（`recommended=true` 且 `sampleSufficient=true` 且 `coveragePercent≥25%` 且剪枝率≤50%）。
+
+**破产优先于一切指标**：平台目标 `oosCompoundedReturn` 将破产与普通亏损等同——破产后权益曲线被截断，MDD 停在 -95%..-97% 而非 -100%，后续正收益折可与之复利成大正分数。2026-11-05 实测平台给出 OOS **+435.23%**、`blindPassed=true`、`robustnessGrade=A`，而四窗独立回测 **3/4 破产**。
+
+因此任一窗口 `liquidated=true` 即直接判不合格；`robustnessGrade` 与 `blindPassed` 在破产存在时是误导项，不得引用为质量证据；平台自报的 `recommended=false` / `sampleSufficient=false` / 低 `coveragePercent` / 高剪枝率必须原样记录进报告。
+
+平台侧破产机制（`strategy_v2/runtime.py::liquidate_if_insolvent`）：强制平仓 → 缺口由 `liquidation_adjustment` 吸收 → 权益归零 → **停止后续交易**。故破产窗口的 MDD 有界，不可由 MDD 单独识别，必须读 `result.liquidated`。
+
+### 17.4 复用契约
+
+`scripts/grid_evolve.py` 提供 `describe`（零网络干跑：几何计划 + 四窗切分 + 参数空间）与 `run`（一条命令跑完六道门禁）两个子命令。**换合约 = 改 `--instrument/--lower/--upper/--count` 四个参数，不改代码**；凭据仅经进程环境 `QUANTDINGER_JWT` 注入，不落盘、不入 argv。
+
+载体沿用 `grid_research.py` 既有 `regen_carriers` / `summarize_cells`（表 A `cells.csv`、表 B `cells-comparison.csv` + `table-b-summary.md`），**不另造格式**。
+
+### 17.5 实现清单与禁止改动
+
+新增（allowlist）：
+- `skills/strategies/strategy-lab/scripts/grid_evolution.py`
+- `skills/strategies/strategy-lab/scripts/grid_evolve_source.py`
+- `skills/strategies/strategy-lab/scripts/grid_evolve.py`
+- `skills/strategies/strategy-lab/tests/test_grid_evolution.py`
+- `skills/strategies/strategy-lab/tests/test_grid_evolve_source.py`
+
+修改：`skills/strategies/strategy-lab/SKILL.md`（新增标准工作流章节）；`skills/strategies/strategy-lab/strategies/PUMPUSDT-EVOLVE-1h/strategy.py`（由生成器产出的参数化源码，**不得手工编辑**）。
+
+禁止改动：既有 `grid_research.py` 的表 A/B 列集与口径；`grid_training.py` 的冻结几何推导；既有 16 窗口研究证据与载体。
+
+### 17.6 测试要求
+
+新增 39 项（约束包络、gap↔N 单调互逆、可行窗口紧致性、5 万次随机抽样零违规、数组与原生模板等价、**运行时块与库函数逐位对拍**、换合约零代码改动、四合约几何可行、`initialize` 不读 params、重建条件含上下界回归）。全量回归基线：既有 286 passed + 257 subtests。
+
+### 17.7 G7 搜索完成度门禁（V1.14 新增；§17.1 修订的配套）
+
+> **勘误（V1.15，2026-11-05）**：本节「间距 87.5% vs 格数 31.2%」的维度归因与 G7 门禁已被实测推翻并撤回。剪枝差异的真实原因是 v3/v4 生成器的重建条件 `upper0 != CELL_UPPER[-1]` 存在浮点误差，约 52% 的参数组合每根 K 线拆网格重建（配对 0 笔 vs 修复后 1278 笔），已改为按参数签名 `(L, U, N)` 重建并加回归测试；v3/v4 结果作废。G7 已从驱动中移除，候选筛选改为「qualified 窗口 ≥50% 且无破产窗口、取平均收益最高」，进化期 W2–W5、W1 留出。现行契约以 `skills/strategies/strategy-lab/SKILL.md`「网格进化标准工作流」为准。
+
+
+**为什么需要**：V1.13 的六道门禁没有一道能发现「搜索悄悄退化」。2026-11-05 的 v3 两轮在 G6 只有软告警，却已产出 3/4 破产的冠军——根因是 32 个 trial 里 22 个在找到任何有价值的几何之前就被丢弃了。
+
+**平台机制（源码级）**：`strategy_evolution/engine.py:352`
+
+```python
+pruned = pruned or components.get("validationActivity", 0) <= 0 or bool(overfit_reason)
+```
+
+**唯一实质剪枝判据是「验证折成交笔数为 0」。** 实测三轮剪枝原因分布为 100% `noActivity`，无一条来自早停（`autoPrune` 默认 False，从未被设置）或过拟合。
+
+**退化机制**：平台 evolution 的验证折是短窗口；网格价格区间若不覆盖该窗口的成交价范围 → 验证折零成交 → trial 被丢弃。格数维度 198 个离散档使 TPE 探索的几何间距远大于间距维度的 22 档，更多采样落入「不覆盖验证折」的组合。
+
+| 维度 | 离散档数 | 空间大小 | 搜索完成率 | 零成交剪枝率 |
+|---|---:|---:|---:|---:|
+| `grid_gap_pct` | 22 | 4,004 | 87.5% | 12.5% |
+| `grid_count` | 198 | 36,036 | 31.2% | 68.8% |
+
+**G7 判据**：`completedTrials / evaluatedTrials ≥ 60%` **且** 零成交剪枝率 `prunedTrials / evaluatedTrials ≤ 40%`。阈值由 2026-11-05 的三轮数据标定（v2 87.5% 过 / v3-10x 31.2% 不过 / v3-5x 62.5% 勉强过）；样本量仅 3，须持续校准。
+
+**G7 失败的后果**：合约级判定降为 `insufficient-evidence`（即使四窗看起来可接受），因为冠军不可信。
+
+**G7 不解决**：目标函数缺陷（平台仍会给破产冠军高分）、冠军几何合理性（完成率高不代表 L 不会低于成交价）、覆盖率口径（`coveragePercent` 是百分数，v2 0.7992% / v3 0.0888%，两者都很低，故只作披露项不设阈值）。
+
+**实现位置**：`scripts/grid_evolve.py` 的 `SEARCH_COMPLETION_FLOOR` / `SEARCH_ZERO_FILL_CEILING` 常量与 `run_evolution` 的 G7 段；归因工具 `scripts/grid_evolution_diagnosis.py::describe_run`。
+
+### 17.8 V1.14 修订的实现清单增量
+
+新增（相对 §17.5 的 allowlist 增量）：
+
+- `skills/strategies/strategy-lab/scripts/grid_evolution_audit.py`
+- `skills/strategies/strategy-lab/scripts/grid_evolution_diagnosis.py`
+- `skills/strategies/strategy-lab/tests/test_grid_evolution_audit.py`
+- `skills/strategies/strategy-lab/tests/test_grid_evolution_diagnosis.py`
+
+修改：
+
+- `scripts/grid_evolution.py`：新增 `ResolvedSpacing` 与 `resolve_from_gap`（间距优先语义）；`resolve_geometry` 保留（格数优先语义）
+- `scripts/grid_evolve_source.py`：`PARAM_DECLARATIONS` 的第三维改为 `grid_gap_pct`（采样域 = 约束域）；运行时 `_evolve_resolve` 改为按间距解析；生成函数入参 `count` 改 `gap_pct`
+- `scripts/grid_evolve.py`：CLI `--count` 改 `--gap-pct`；G2 门禁改为校验 `grid_gap_pct` 的 min/max；G3 探针改用间距上下界并断言两者解析出不同格数；新增 G7 段
+- `skills/strategies/strategy-lab/SKILL.md`：标准工作流章节同步（搜索维度、七道门禁、命令）
+
+禁止改动：既有 `grid_research.py` 的表 A/B 列集与口径；`grid_training.py` 的冻结几何推导；既有 16 窗口研究证据与载体。
+
+**G3 探针的坑（已实测并修复）**：首版 v4 运行时 G3 用了 `gap_pct=1.5` 与 `gap_pct=gap_max`，但对 PUMP 两者都解析成 N=122（gap 1.4948%），几何相同 → 门禁正确地失败。修正为用间距上下界并**先断言两者解析出不同格数**，若相同则门禁直接失败而非放行。
+
 ## 版本记录
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
+| V1.14 | 2026-11-05 | Pascal 2026-11-05 裁定修订 §17.1 搜索维度（间距为搜索维度、格数派生；V1.13 的格数维度实测退化：搜索完成率 31.2% vs 间距维度 87.5%）；新增 §17.7 G7 搜索完成度门禁（平台唯一实质剪枝判据是「验证折零成交」，engine.py:352；三轮实测剪枝 100% 为 noActivity）；新增 §17.8 实现清单增量（含 G3 探针同几何的实测坑与修复）；§17.3/§17.5 相应同步。对应 RFC V1.14 / SPEC V1.14 §3.2.1–§3.2.3。既有 §7 风险阈值 2.0 不变，回测数据未变 |
+| V1.13 | 2026-11-05 | Pascal 2026-11-05 裁定新增 §17 网格进化标准实现契约：17.1 约束唯一事实源与搜索维度（gap 与 N 同一自由度→仅 grid_count 为几何自由度、gap 派生、禁止静默钳制）；17.2 源码生成与参数消费（基座 PUMPUSDT-W2-1h、handle_data 内消费、重建须比较完整几何签名）；17.3 六道门禁与破产优先判据（平台目标把破产等同亏损的实测证据：OOS +435.23% vs 四窗 3/4 破产）；17.4 复用契约（describe/run 两子命令、换合约只改参数、载体沿用既有 regen_carriers）；17.5 实现清单与禁止改动；17.6 测试要求（新增 39 项、全量基线 286+257）；对应 RFC V1.13 / SPEC V1.13 §3.2.1–§3.2.2。既有 §7 风险阈值 2.0 不变，回测数据未变 |
+| V1.12 | 2026-11-05 | Pascal 2026-11-04 裁定把 gross/equity 风险阈值由 2.5 收紧至 **2.0**（严格大于触发），MDD 35% 不变；本版同步 §7 浮点比较段「风险2.5」→「风险2.0」，属**事后判定重算**（回测数据未变，判定结果随之重算）。仅契约文本同步，不含实现、验证与研究执行；对应 RFC V1.12 §3 D-03 / SPEC V1.12 §3.5；因不涉及交易/风控语义实现变更，按 strategy-lab 分工规则不触发独立 Reviewer |
 | V1.11 | 2026-11-04 | 主控直接增 §16（V10 t_a8b94af8 OVERALL FAIL 后按 Pascal 2026-11-04 三项裁定）：16.1 频率参数化（frequency_seconds 参数、expected_bars、K=365×86400/frequency_seconds、1h 批次 expected_bars=2208/2208/2136/2208、覆盖率预检内建）；16.2 强平价降级 N/A+固定原因（B-5 静默映射删除、B-6 二次除修复、B-7 平台无 MMR 不扩展）；16.3 V10 缺口收敛 B-1..B-4+R-05；16.4 表 A 21 列/表 B 11 列唯一基准（B-2 收敛）；16.5 测试设计（185 断言零修改+参数化新用例）；仅文档 |
 | V1.9 | 2026-11-03 | 主控按 Pascal 2026-11-03 裁定直接增 §15（原 E4 卡 t_e2d45b81 因 provider 限流反复 rate-limited 空转，改主控直接修订）：D4 实现设计——§15.1 锚点任务日参数化（A=2026-11-03，四窗口落盘）+ 锚点/task_date 落盘；§15.2 G-01/G-03 合一取证设计与 Gate 2000 根分页约束；§15.3 强平价计算设计（snapshot 构造、instrumentRulesSnapshot MMR 来源、最不利快照选取、不伪造）；§15.4 表 A/B 列集与均值格式；§15.5 实现清单与禁止改动 + 185 冻结命令；§15.6 4 批×4 窗口预算与停止条件；指向 RFC V1.10 §10.6 / SPEC V1.10 §11.6；仅文档 |
 | V1.8 | 2026-11-03 | 主控按 Pascal「精简」指示直接增 §14（原 E3 卡 t_20d5afbd 停止，无产出）：多页证据累积契约——同 identity 逐页 merge、容量 20000 淘汰最旧、消费端零改动、五类错误/v=0/R-01/185 基线不变；F3 范围=native_crypto.py 重置段+测试；指向 RFC/SPEC V1.9；仅文档 |

@@ -380,6 +380,143 @@ Sharpe 置于其后（风险调整后的衍生指标）。
 不得新增未定义值（含 `unknown`——占位行用 `insufficient-evidence`，状态缺失一律 `N/A`）。
 N/A（未知/缺失）与 0（实测为零）严格区分：前者带原因，后者是有效观测值。
 
+## 研究验收标准与角色分工（2026-11-04 Pascal 裁定）
+
+研究类产出（表 A / 表 B / 载体 CSV / 报告正文）必须过独立验收。分工按**角色职责不同**划分，不为研究场景额外增加角色。
+
+### 角色分工
+
+| 角色 | profile | 职责 | 启用条件 |
+|---|---|---|---|
+| 实现 | `yquantdeveloper` | 按已冻结契约做最小实现、补测试 | 有代码改动 |
+| 研究验收 | `yquanttester` | 独立重算对拍 + 载体同源核对（+ 口径/范围一致性，见下触发条件） | 研究类产出后**必过** |
+| 契约复审 | `yquantreviewer` | 只审契约文档与实现/报告三处一致性、审 diff 范围、出通过/退回决定 | **仅**同时满足：改了 `docs/{rfc,spec,design}/` 三层契约 **且** 变更涉及交易/风控语义 |
+
+研究验收归 Light Flow 的 Verify 阶段（单角色 tester），不另开 reviewer 卡。
+独立性来自「实现者不是验证者」+「验证者不用实现者的算法」，**不来自角色数量**——同一数值用同法重算两次不构成额外独立性。纯数值研究（换合约/换窗口/加 cell）不触发 reviewer；阈值、展示口径、列序类调整也不触发。
+
+### 验收检查项（3 项，判据必须可证伪）
+
+| # | 检查 | 判据 | 触发条件 |
+|---|---|---|---|
+| 1 | **独立重算对拍** | 验证者**不使用实现的函数**，用另一条路径重算同一数值；相对差 ≤ 1e-9；判定类列 drift = 0/N | 始终 |
+| 2 | **载体同源核对** | 表 A / 表 B / CSV / 正文逐值相等（数值 rel ≤ 1e-12、判定逐格相等、drift=0/N）；列序 == `TABLE_B_HEADERS`；脚注 == `TABLE_B_FOOTNOTES`；均值格须用 `format_summary_value` **重算后**比对，不得用字符串相等代替 | 始终 |
+| 3 | **口径/范围一致性** | 实现常量与公式 ↔ SKILL/RFC 冻结条款逐条有代码行号对应；阈值在代码 / SKILL / 报告三处一致；diff 仅落在任务 allowlist 内，无 reset/stash/清理 | 口径、阈值、契约或公式语义变更时 |
+
+原「首次穿越语义专项扫描」「档位固定点自洽」「正文残留扫描」「范围归属审计」等独立检查项**并入上表**：前两项并入第 1 项（扫描即重算的一种实现）、后两项并入第 2/3 项，不单列检查项、不单独计时。
+
+### 对拍基准生成规则
+
+- 基准必须由**非实现者**预先独立算好，把**具体数值 + 容差**写进验收任务书；验收者只负责比对，不现算基准
+- 基准必须**双路径交叉**（如闭式解 + 暴力扫描/网格逼近），不能只有一条——单条基准若本身有误，会与实现「一致地错」
+- 基准与实现不一致时，先判定是「实现错」还是「基准错」，两者都可能；不得默认以实现为准
+
+### 验收者纪律
+
+1. **只读**：不改实现、不改断言、不重算覆盖已发布数值
+2. **只报证据**：发现分歧只记录证据与期望/实际，不动手修（修复另起任务）
+3. **指令与数学/验收标准冲突时否决指令并留证说明**——以验收标准为准，不以卡面修法为准
+
+### 结论格式
+
+```
+结论：PASS / FAIL（二值）
+证据：对拍结果一行 + 同源核对一行（命令 + 输出摘要）
+未覆盖：一句话
+```
+
+存在未闭合的 FAIL / major 一律 FAIL；PASS = 第 1、2 项通过，且触发了第 3 项时第 3 项亦通过。
+
+## 网格进化标准工作流（2026-11-05 Pascal 裁定）
+
+网格策略的原生进化走**唯一标准化路径**，换合约只改参数、不改代码。本节是该路径的契约。
+
+### 冻结约束（两个同时满足，任一不得单方面放宽）
+
+| 约束 | 含义 | 常量位置 |
+|---|---|---|
+| gap ∈ [0.45%, 1.5%] | 网格间距（等比模式下的百分比间距） | `scripts/grid_evolution.py::GAP_MIN_PCT/GAP_MAX_PCT` |
+| N ∈ [3, 200] | 网格格数 | `scripts/grid_evolution.py::GRID_MIN_COUNT/GRID_MAX_COUNT` |
+| 等比（geometric）模式 | 格点按等比分布 | `scripts/grid_evolution.py::GRID_MODE` |
+
+`scripts/grid_evolution.py` 是这两个约束的**唯一事实源**；策略源码生成器、研究脚本与验收都从它取常量，不得各自硬编码。
+
+### 搜索维度
+
+搜索空间固定三项：`grid_lower` / `grid_upper` / `grid_gap_pct`；格数由间距派生，不是搜索维度。`grid_gap_pct` 的采样域就是冻结业务带 [0.45, 1.5]；`grid_lower`/`grid_upper` 的采样区间是**按合约传入的参数**（`--lower-range` / `--upper-range`）。
+
+- **约束求解（间距优先）**：派生格数越出可行窗口时移动间距并披露（`exact` / `gap_raised_to_n_max` / `gap_lowered_to_n_min`），执行间距必落在 [0.45%, 1.5%]、格数必在 [3, 200]；禁止静默钳制。
+- **搜索范围按固定规则生成，不人工判断**：默认取平台自己的规则「基准值 × [0.5, 1.5]」（`parameter_space._infer_numeric_range`），20 步。平台只有在 4 个验证折**全部**零成交时才剪枝，单折零成交不会剪掉整个 trial，所以不需要为"避免剪枝"去收窄 L。2026-11-05 曾把 L 上限人工压到 0.0016，结果把合格区域（L≈0.0019）排除在外。
+- **平台不做风险约束**：排名就是 `score = oosReturn`；`weights` 只影响展示用的 qualityScore，驱动不传；`@constraint` 只能约束参数之间的关系，不能约束回测结果。G/E、MDD、破产只能在 G5 事后筛选。
+
+### 标准资产
+
+| 文件 | 职责 |
+|---|---|
+| `scripts/grid_evolution.py` | 约束唯一事实源：可行窗口、`resolve_from_gap`、数组构建、独立复核器 |
+| `scripts/grid_evolve_source.py` | 契约无关的策略源码生成器 + 参数声明（`# @param` 与 parameter-space 同源） |
+| `scripts/grid_evolve.py` | 标准 CLI（`describe` 干跑 / `run` 正式）：门禁、候选筛选规则、留出窗口 |
+| `tests/test_grid_evolution.py` / `test_grid_evolve_source.py` / `test_grid_evolve.py` | 约束语义、生成器与运行时对拍、判定与选择规则 |
+
+### 标准命令
+
+```text
+# 干跑（零网络）：基准几何、选择窗口、留出窗口、所需回测数
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/grid_evolve.py describe \
+  --contract <SYM> --instrument "Crypto:<SYM>/USDT@swap" --lower <L> --upper <U> --gap-pct <G> \
+  --lower-range <min:max:step> --upper-range <min:max:step> \
+  --evolve-start <YYYY-MM-DD> --evolve-end <YYYY-MM-DD> \
+  --holdout-start <YYYY-MM-DD> --holdout-end <YYYY-MM-DD>
+
+# 正式执行：把 describe 换成 run，并以环境变量注入 QUANTDINGER_JWT
+# 可选：--lower-range/--upper-range <min:max:step>（默认基准 ×[0.5,1.5]，20 步）--trials 32 --top 5 --seed 42
+#       --leverage 10 --fallback-leverages 8,6,4,3 --capital 1000 --budget 500 --evidence-dir <path>
+```
+
+进化区间必须是整季度；选择窗口按季度切分并从 W2 起编号（最近一季为 W2），留出窗口固定为 W1。
+
+### 流程门禁（任一失败立即停）
+
+| 门禁 | 判据 |
+|---|---|
+| G1 编译 | 平台 compile 成功并创建私有源码 |
+| G2 参数空间 | 恰为 `grid_lower/grid_upper/grid_gap_pct`，且平台读回的 min/max/step 与声明一致 |
+| G3 参数生效 | 两个间距在最近选择窗口产生不同回测（收益或配对数不同） |
+| G4 原生进化 | evolution job `succeeded`，取平台 top-N 作**候选**；`recommended` / `sampleSufficient` / 剪枝率原样记录 |
+| G5 候选筛选 | 每个候选逐个跑全部选择窗口并判定，按下方规则选出胜者 |
+| G5b 杠杆兜底 | 仅当 G5 无胜者：同一批候选按 `--fallback-leverages`（默认 8/6/4/3x）逐档降杠杆重判，首个出现胜者的档位即停；候选几何不变 |
+| G6 留出检验 | 胜者以其档位杠杆只跑一次 W1，结果只报告，**不回头参与选择** |
+
+### 判定与选择规则（Pascal 2026-11-05 冻结）
+
+- **单窗 qualified**：G/E ≤ 2.0 且 MDD ≤ 35% 且指标齐全（严格大于才算超限；G/E 取 `equityCurve` 中 max |grossExposure|）。
+- **候选入选**：qualified 窗口数 ≥ 选择窗口的 50%，且**任何窗口都没有破产**（平台回测 `liquidated=true`）。
+- **胜者**：入选候选中选择窗口平均区间收益最高者；无入选者 → 报告「无合格候选」，不放宽约束。
+- 平台分数只是候选生成器：`oosCompoundedReturn` 不惩罚破产（权益截断后仍可复利成高分），`robustnessGrade` / `blindPassed` 不得引用为质量证据。
+- 极端单边压力测试强平价（`grid_stress_liquidation.py`）只计算并在表 B 披露，不作为候选筛选硬条件。
+
+### 平台契约要点（各自有一次失败教训）
+
+- `context.params` 只在可执行 handler 内可见，平台运行时不调用 `initialize` → 几何在 `handle_data` 开头重建。
+- 重建条件只比较已应用参数签名 `(L, U, N)`；**禁止与重建后的浮点数组比较**——`L·exp(span/N·N)` 对约一半组合不逐位等于 U，曾导致每根 K 线都拆网格重置状态（配对 0 笔 vs 正常 1278 笔）。
+
+- `# @param ... range=a:b:c` 只接受定点小数（正则 `-?\d+(\.\d+)?`）：`7.35e-05` 会被读成 `7.35`，整个维度静默坍缩成一个值，进化报 `parameterRangeOutsideDeclaration`。生成器统一输出定点格式，G2 读回比对。
+- 平台沙箱的安全内置清单**没有 `getattr`**（compile 报 `strategyV2.apiCallInvalid:getattr:undefinedGlobal`）；跨 bar 状态用模块级全局变量（`global` 重绑定）。
+
+### G/E 由网格下界决定，不由杠杆单独决定
+
+单格名义 = 资金 × 杠杆 / N。价格在中线下方单边下跌时只有多头格成交，峰值敞口约等于「从高点跌到低点穿过的格子数 × 单格名义」。所以 G/E 主要由**下跌段落在网格内的对数跨度占 ln(U/L) 的比例**决定：L 设得高，价格跌破 L 后就不再买入，G/E 被封顶；U/L 越宽，单格越小。2026-11-05 PUMP 实测：同为 10x，L=0.0019 在 W2/W3/W5 的 G/E 为 0.86/1.54/1.45；L=0.0011–0.0013 在同样窗口为 2.1–5.0。
+
+由此有一个取舍：`--lower-range` 压低，平台验证折更容易成交、剪枝更少；但 L 越低，单边下跌时接货越深，G/E 越高。设 `--lower-range` 时两头都要看，**不要只按"验证折不零成交"一个条件去压低 L 的上界**。
+
+### 换合约复用清单
+
+1. 取目标合约冻结基准几何 `L/U/gap`，读取进化窗口各验证折价格区间定 `--lower-range`
+2. `describe` 干跑，核对可行窗口、选择窗口与回测预算
+3. `run` 正式执行；证据落 `data/reports/<YYYY-MM-DD>-<topic>/evidence/`
+4. 表 A / 表 B 用 `grid_research.regen_carriers` 生成，不另造格式
+5. 报告披露：请求与执行间距、调整类型、平台自报质量项、每个候选的逐窗判定、胜者与留出结果
+
 ## 安全边界
 
 - 凭据仅经进程环境注入：`QUANTDINGER_BASE_URL`（无 /api 后缀）、`QUANTDINGER_JWT`（Human）、

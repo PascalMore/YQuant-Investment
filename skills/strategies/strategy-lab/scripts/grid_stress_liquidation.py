@@ -41,6 +41,13 @@ The tier depends on the open notional and the root depends on the tier, so
 the tier is resolved as a fixed point against the notional at the root.
 Binance brackets are a proxy for the venue's own tier table, so the report
 must disclose that substitution.
+
+The brackets tier is a per-symbol contract, so every MMR path demands the
+symbol explicitly: an empty symbol raises ``ValueError`` (fail-closed) instead
+of silently querying ``brackets?symbol=`` and picking a tier from an unrelated
+default table. A side with no ladder orders (a pure-long grid has no short
+cells) is solved without touching the resolver at all: there is no position,
+so no MMR is needed and the side returns the ``no_position`` zone.
 """
 
 from __future__ import annotations
@@ -217,6 +224,20 @@ def walk(entries: list[tuple[float, float]], descending: bool, *,
                                            else highest_entry)}
 
 
+def _require_symbol(symbol: str) -> str:
+    """Fail closed when the symbol is missing (2026-11-05 minimal repair).
+
+    The brackets tier is a per-symbol contract: ``brackets?symbol=`` with an
+    empty symbol returns an unrelated default bracket table whose tier would
+    be picked silently (measured mmr 0.025 vs the correct 0.01). Skipping the
+    layering and falling back to the default gradient is equally wrong: the
+    tier must be resolved from evidence, not from a missing key.
+    """
+    if not str(symbol or "").strip():
+        raise ValueError("symbol is required for MMR resolution")
+    return str(symbol)
+
+
 def _solve_side(entries: list[tuple[float, float]], descending: bool, *,
                 equity0: float, close_fee: float, resolver: "MmrResolver",
                 symbol: str) -> dict:
@@ -225,6 +246,14 @@ def _solve_side(entries: list[tuple[float, float]], descending: bool, *,
     The tier is selected by the notional open at the root, and the root
     depends on the tier, so the tier is iterated until it is self-consistent.
     """
+    if not entries:
+        # A side with no ladder orders (e.g. a pure-long grid) holds no
+        # position, so no MMR request is needed: solve it as no_position.
+        return {"root": None, "fills": 0, "zone": "no_position",
+                "filled_notional": 0.0, "filled_qty": 0.0,
+                "mark_notional": 0.0, "mmr": None, "mmr_source": "none",
+                "mmr_reason": "no ladder orders on this side"}
+    symbol = _require_symbol(symbol)
     candidates = resolver.candidates(symbol)
     index = 0
     result: dict = {}
@@ -253,9 +282,17 @@ def solve_cell(grid: dict, *, symbol: str = "",
                leverage: float = DEFAULT_LEVERAGE,
                close_fee: float = DEFAULT_CLOSE_FEE,
                resolver: "MmrResolver | None" = None) -> dict:
-    """Solve both sides of one frozen grid cell."""
+    """Solve both sides of one frozen grid cell.
+
+    ``symbol`` feeds the MMR tier resolution and must be a non-empty contract
+    id whenever at least one side carries ladder orders; an empty or blank
+    symbol raises ``ValueError`` (fail-closed, no silent MMR request). A side
+    without ladder orders (pure-long / pure-short grid) is solved as
+    ``no_position`` without any MMR request.
+    """
     resolver = resolver or default_resolver()
     longs, shorts = side_entries(grid, equity0=equity0, leverage=leverage)
+    _require_symbol(symbol)
     down = _solve_side(longs, True, equity0=equity0, close_fee=close_fee,
                        resolver=resolver, symbol=symbol)
     up = _solve_side(shorts, False, equity0=equity0, close_fee=close_fee,
@@ -317,6 +354,7 @@ class MmrResolver:
 
     def candidates(self, symbol: str) -> list[dict]:
         """Ordered candidate tiers for ``symbol`` (lowest notional first)."""
+        symbol = _require_symbol(symbol)
         if self.native and self.native.get("maintenanceMarginRate") is not None:
             return [{"mmr": float(self.native["maintenanceMarginRate"]),
                      "cum": float(self.native.get("cumFastMaintenanceAmount", 0.0) or 0.0),
@@ -374,9 +412,14 @@ def default_resolver() -> MmrResolver:
 
 def fetch_mmr(symbol: str, notional: float = 0.0, *,
               resolver: MmrResolver | None = None) -> dict:
-    """Maintenance margin rate for one symbol at the given open notional."""
+    """Maintenance margin rate for one symbol at the given open notional.
+
+    The symbol must be a non-empty contract id: the brackets tier is a
+    per-symbol contract, so a missing symbol raises ``ValueError`` instead of
+    silently querying an unrelated default table.
+    """
     resolver = resolver or default_resolver()
-    return resolver.select(symbol, notional)
+    return resolver.select(_require_symbol(symbol), notional)
 
 
 # -------------------------------------------------------------- the carriers
