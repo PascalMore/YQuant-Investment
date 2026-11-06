@@ -3,7 +3,7 @@
 本索引登记 `skills/strategies/strategy-lab/strategies/` 下的全部策略/研究实例，服务于「先查再研」：
 只登记实例状态、结论摘要与证据路径，不复制报告正文、不新增指标、不重新评价。
 
-生成日期：2026-11-05（Asia/Shanghai UTC+08:00）。实例数量以本目录下实际子目录为准（32 个）。
+生成日期：2026-11-05（Asia/Shanghai UTC+08:00），2026-11-06 补登网格进化 1 条。实例数量以本目录下实际子目录为准（32 个）；网格进化不建实例目录，其证据只在 `data/reports/` 下，路径以仓库根为基准。
 
 | 实例 id | 类型 | 状态 | 结论一句话 | 报告/证据路径 | Path B 口径（10x） |
 |---|---|---|---|---|---|
@@ -38,6 +38,7 @@
 | `neutral-grid-suiusdt-w2-1h` | 研究类 | 已完成 | 1h 驱动、Path B（1000 USDT 保证金 / 10x 杠杆）原生网格回测：N=141，窗口内总收益与年化见汇总；Sharpe 与 MDD 见逐 cell 表。 | `strategies/neutral-grid-suiusdt-w2-1h/reports/agent-backtest.md` | -16.51% / n=4/4 ｜ MDD -78.97% ｜ Sharpe 0.67 ｜ 合格 2/4 ｜ **原生实测 runId=48** |
 | `neutral-grid-suiusdt-w3-1h` | 研究类 | 已完成 | 1h 驱动、Path B（1000 USDT 保证金 / 10x 杠杆）原生网格回测：N=141，窗口内总收益与年化见汇总；Sharpe 与 MDD 见逐 cell 表。 | `strategies/neutral-grid-suiusdt-w3-1h/reports/agent-backtest.md` | -16.51% / n=4/4 ｜ MDD -78.97% ｜ Sharpe 0.67 ｜ 合格 2/4 ｜ **原生实测 runId=52** |
 | `neutral-grid-suiusdt-w4-1h` | 研究类 | 已完成 | 1h 驱动、Path B（1000 USDT 保证金 / 10x 杠杆）原生网格回测：N=154，窗口内总收益与年化见汇总；Sharpe 与 MDD 见逐 cell 表。 | `strategies/neutral-grid-suiusdt-w4-1h/reports/agent-backtest.md` | -16.51% / n=4/4 ｜ MDD -78.97% ｜ Sharpe 0.67 ｜ 合格 2/4 ｜ **原生实测 runId=56** |
+| `pumpusdt-grid-evolve-w2w5-v2`（`grid_evolve.py run`，sourceId=15） | 研究类（网格原生进化） | 已完成 | 胜者几何 L=0.0008085 / U=0.0116792 / N=200 / 间距 1.3441%（10x），W1 留出 +56.32% / MDD -16.94% ✓，选择窗合格 2/4。 | `data/reports/2026-11-05-pump-evolve-w2w5-v2/report.md`（tester 验收 PASS `t_427dd408`） | 原生实测 runId 177–181 |
 
 说明：
 

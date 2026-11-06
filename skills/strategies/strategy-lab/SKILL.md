@@ -248,16 +248,18 @@ billing 缺失记 `absent`，**不推断为 free**。出现 `status:"charged"`�
 | `margin_return_pct` | 保证金口径**区间累计收益率**（%），覆盖整个窗口，**非年化** |
 | `sharpe` | 逐 bar 权益收益的年化夏普（K=365×86400/frequency_seconds，ddof=0，rf=0）。**算术均值口径**：负区间收益仍可为正（μ>0 但 μ−σ²/2<0），高杠杆高波动下严重失真，判定以 `max_drawdown_pct` 为准 |
 | `max_drawdown_pct` | 峰值回撤（%） |
-| `worst_gross_to_equity` | 窗口内最不利 gross/equity（平台 `grossExposure` 原值，比值语义） |
+| `worst_gross_to_equity` | 窗口内最不利 gross/equity（平台 `grossExposure` 原值，比值语义）；风险判定 G/E 的依据，载体常量 `grid_research.GROSS_TO_EQUITY_COLUMN`，缺值写 `N/A`、不得写 0（2026-11-06 起写入 `cells.csv`，此前的载体无此列） |
 | `downward_liquidation_price` | **多头强平预估价格**（MMR 按来源分层获取，见「强平预估价格口径」；全部来源失败时 `N/A`） |
 | `upward_liquidation_price` | **空头强平预估价格**（MMR 按来源分层获取，见「强平预估价格口径」；全部来源失败时 `N/A`） |
 | `venue_disclosure` | 实际数据 venue 与换源披露（含 benchmark 通道；单 venue 时写 `gate`） |
 | `qualification` | 资格判定（见下方枚举） |
 | `reason` | 失败/证据不足/数据缺失原因（成功时为空） |
 
-`job_id`/`run_id`/`tool_status`/`research_status` 保留在 evidence 层 JSON（可回溯平台原生记录），不占表 A 列位。
+`job_id`/`run_id`/`tool_status`/`research_status` 保留在 evidence 层 JSON（可回溯平台原生记录），不占表 A 契约列位。
 
-**载体归档约定（2026-11-04 Pascal 裁定）**：研究完成后必须用既有 `write_cells_csv` / `write_comparison_csv` 产出契约载体 CSV 并随报告归档到 `data/reports/<topic>/evidence/`（`cells.csv` 21+列、`cells-comparison.csv` 14 列）。报告正文中的表是给人读的视图；**契约载体是给用户做分析与决策的数据基准**，两者都必须交付，缺载体视为研究未完成交付。
+**载体 `cells.csv` 实际列（以 `write_cells_csv` 为准，共 31 列）**：上表 21 列中 `venue_disclosure` 落为 `venue`/`market_type`/`settle`/`product`/`native_instrument` 五列，另含 `frequency_seconds`、`status` 与上述 `job_id`/`run_id`/`tool_status`/`research_status` 回溯列；`worst_gross_to_equity` 紧随两列强平价之后。
+
+**载体归档约定（2026-11-04 Pascal 裁定）**：研究完成后必须用既有 `write_cells_csv` / `write_comparison_csv` 产出契约载体 CSV 并随报告归档到 `data/reports/<topic>/evidence/`（`cells.csv` 31 列、`cells-comparison.csv` 14 列）。报告正文中的表是给人读的视图；**契约载体是给用户做分析与决策的数据基准**，两者都必须交付，缺载体视为研究未完成交付。
 
 **缺行规则**：预定义矩阵中的每个 cell 必须出现在表中。缺证据/未执行的 cell 保留占位行，
 指标列填 N/A 并在 `reason` 写明原因，**不得丢行、不得留空、不得填 0**。
@@ -451,7 +453,7 @@ N/A（未知/缺失）与 0（实测为零）严格区分：前者带原因，�
 
 ### 搜索维度
 
-搜索空间固定三项：`grid_lower` / `grid_upper` / `grid_gap_pct`；格数由间距派生，不是搜索维度。`grid_gap_pct` 的采样域就是冻结业务带 [0.45, 1.5]；`grid_lower`/`grid_upper` 的采样区间是**按合约传入的参数**（`--lower-range` / `--upper-range`）。
+搜索空间固定三项：`grid_lower` / `grid_upper` / `grid_gap_pct`；格数由间距派生，不是搜索维度。`grid_gap_pct` 的采样域就是冻结业务带 [0.45, 1.5]；`grid_lower`/`grid_upper` 的采样区间**默认按固定规则生成**（见下条），确有需要时可用 `--lower-range` / `--upper-range` 覆盖，覆盖须在报告披露。
 
 - **约束求解（间距优先）**：派生格数越出可行窗口时移动间距并披露（`exact` / `gap_raised_to_n_max` / `gap_lowered_to_n_min`），执行间距必落在 [0.45%, 1.5%]、格数必在 [3, 200]；禁止静默钳制。
 - **搜索范围按固定规则生成，不人工判断**：默认取平台自己的规则「基准值 × [0.5, 1.5]」（`parameter_space._infer_numeric_range`），20 步。平台只有在 4 个验证折**全部**零成交时才剪枝，单折零成交不会剪掉整个 trial，所以不需要为"避免剪枝"去收窄 L。2026-11-05 曾把 L 上限人工压到 0.0016，结果把合格区域（L≈0.0019）排除在外。
@@ -472,13 +474,13 @@ N/A（未知/缺失）与 0（实测为零）严格区分：前者带原因，�
 # 干跑（零网络）：基准几何、选择窗口、留出窗口、所需回测数
 PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/scripts/grid_evolve.py describe \
   --contract <SYM> --instrument "Crypto:<SYM>/USDT@swap" --lower <L> --upper <U> --gap-pct <G> \
-  --lower-range <min:max:step> --upper-range <min:max:step> \
   --evolve-start <YYYY-MM-DD> --evolve-end <YYYY-MM-DD> \
   --holdout-start <YYYY-MM-DD> --holdout-end <YYYY-MM-DD>
 
 # 正式执行：把 describe 换成 run，并以环境变量注入 QUANTDINGER_JWT
 # 可选：--lower-range/--upper-range <min:max:step>（默认基准 ×[0.5,1.5]，20 步）--trials 32 --top 5 --seed 42
 #       --leverage 10 --fallback-leverages 8,6,4,3 --capital 1000 --budget 500 --evidence-dir <path>
+#       --baseline-dir <基准载体 evidence 目录>（G7 同时写出进化 vs 基准对比表；G1 前校验目录/三载体/该合约行，无效则不发起任何平台调用）
 ```
 
 进化区间必须是整季度；选择窗口按季度切分并从 W2 起编号（最近一季为 W2），留出窗口固定为 W1。平台把 `endDate` 当作包含当天（进化计划最后一根 K 线是 `evolve_end` 23:00），所以 `--holdout-start` 等于 `--evolve-end` 时会有 1 天重叠，驱动会告警；要彻底隔离，进化期结束日应设为留出期开始日的前一天。
@@ -494,6 +496,7 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/script
 | G5 候选筛选 | 每个候选逐个跑全部选择窗口并判定，按下方规则选出胜者 |
 | G5b 杠杆兜底 | 仅当 G5 无胜者：同一批候选按 `--fallback-leverages`（默认 8/6/4/3x）逐档降杠杆重判，首个出现胜者的档位即停；候选几何不变 |
 | G6 留出检验 | 胜者以其档位杠杆只跑一次 W1，结果只报告，**不回头参与选择** |
+| G7 载体生成 | 用胜者 W1（留出）+ W2–W4 已读回的 run 构造 cells（含 G/E、配对数、平均每格金额；强平价由 `grid_stress_liquidation.solve_cell` 按胜者几何求解），`grid_research.regen_carriers` 写出 `cells.csv`/`cells-comparison.csv`/`table-b-summary.md` 到 `--evidence-dir`（四个冻结合约沿用 4 合约载体；其他合约生成单合约载体：cells 4 行、表 B 1 行）；传 `--baseline-dir` 时再由 `compare_table_b` 写 `table-b-evolved-vs-baseline.md`。**不发起新回测**；无胜者时跳过并记录 `g7.skipped` |
 
 ### 判定与选择规则（Pascal 2026-11-05 冻结）
 
@@ -522,7 +525,7 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/script
 1. 取目标合约冻结基准几何 `L/U/gap`；搜索范围默认按固定规则（基准 ×[0.5, 1.5]，见「搜索维度」），不人工判断
 2. `describe` 干跑，核对可行窗口、选择窗口与回测预算
 3. `run` 正式执行；证据落 `data/reports/<YYYY-MM-DD>-<topic>/evidence/`
-4. 表 A / 表 B 用 `grid_research.regen_carriers` 生成，不另造格式
+4. 表 A / 表 B 载体由 G7 自动生成（`grid_research.regen_carriers`），传 `--baseline-dir` 时同时生成进化 vs 基准对比表（`compare_table_b`）；不另造格式、不用一次性脚本拼表
 5. 报告披露：请求与执行间距、调整类型、平台自报质量项、每个候选的逐窗判定、胜者与留出结果
 6. 研究验收：按「研究验收标准与角色分工」执行；本轮改了选择规则、阈值或搜索范围规则时触发第 3 项
 
@@ -542,7 +545,7 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/script
 - 杠杆请求后必须读回核对：回执 `executionAssumptions` 与请求不一致时按契约失败处理（不得静默放行、
   不得改写请求或用请求值覆盖回执）；回执字段缺失或不可读时按证据不足处理，不得默认判通过、不得用
   请求参数回填回执值。
-- 不修改 QuantDinger 子模块、不改部署/配置、不 commit/push、不做 Demo/Live 与调度。
+- 不修改 QuantDinger 子模块、不改部署/配置、不做 Demo/Live 与调度；提交/推送须经 Pascal 授权。
 
 ## 维护提示：脚本已达拆分阈值
 
@@ -559,5 +562,6 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/script
 - 正式证据：[T4验证报告](../../../data/reports/2026-10-29-strategy-lab-verify/report.md)、[T5签收报告（最终第6节）](../../../data/reports/2026-10-30-strategy-lab-final-review/report.md)。报告位于Git忽略的本地data目录，不代表已提交、推送或远程备份。
 - 2026-10-31 Agent 通道 V1.5 完成：T4 真实四步验收 PASS（whoami/行情/compile/backtest，runId=25）、T5 独立审查 APPROVE（open_findings=0）、T6 Closeout PASS（[closeout.md](../../../data/reports/2026-10-30-strategy-lab-agent-token/closeout.md)）。六卡全 done，工程线收口。
 - 2026-10-31 行情取数契约实测沉淀（见上方「行情取数契约」节）：CLI 分页上限 500、`--max-pages 2` 纪律、本机 gate.io 直连 env 口径。
+- 2026-11-05/06 PUMP W2–W5 v2 网格进化完成（胜者 #5，W1 留出 +56.32% / MDD -16.94% ✓，合格窗 2/4），tester 验收 PASS（`t_427dd408`）；报告 [2026-11-05-pump-evolve-w2w5-v2](../../../data/reports/2026-11-05-pump-evolve-w2w5-v2/report.md)。2026-11-06 起表 A/B 载体与对比表由驱动 G7 自动生成。
 - 2026-11-01 起的具体研究任务记录见 `data/tasks/active/2026-11-01-grid-g01-g02/` 与实例 `strategies/neutral-grid-four-window-v1/README.md`——本平台的一次具体研究任务记录，非平台契约。
 - 此处仅同步已验收状态，不改变业务契约、代码、样例参数或原始证据；未执行Demo/Live、发单、部署、调度或生产配置变更。

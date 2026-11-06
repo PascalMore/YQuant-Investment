@@ -1826,3 +1826,199 @@ class FrequencyParameterizationTest(unittest.TestCase):
                         "lastPrice": 0.25, "marketValue": 250.0}}}
         result = gr.liquidation_price_range([snapshot], rules)
         self.assertAlmostEqual(5.0, result["worst_gross_to_equity"], places=9)
+
+
+class GrossToEquityCarrierTest(unittest.TestCase):
+    """R1 (2026-11-06): cells.csv carries the G/E input of the risk judgement."""
+
+    def _write(self, cells):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / "cells.csv"
+        gr.write_cells_csv(cells, path, anchor_utc=ANCHOR)
+        with path.open(newline="", encoding="utf-8") as stream:
+            return list(csv.DictReader(stream)), path
+
+    def test_column_is_written_and_missing_value_is_na(self):
+        cells = cell_rows()
+        cells[0]["worst_gross_to_equity"] = 1.75
+        rows, _ = self._write(cells)
+        self.assertIn(gr.GROSS_TO_EQUITY_COLUMN, rows[0])
+        by_id = {row["cell_id"]: row for row in rows}
+        self.assertEqual("1.75", by_id["PUMPUSDT-W1"]["worst_gross_to_equity"])
+        # Supplied without G/E, explicit None and placeholder rows: N/A, never 0.
+        self.assertEqual(gr.NA, by_id["PUMPUSDT-W2"]["worst_gross_to_equity"])
+        cells[1]["worst_gross_to_equity"] = None
+        rows, _ = self._write(cells)
+        by_id = {row["cell_id"]: row for row in rows}
+        self.assertEqual(gr.NA, by_id["PUMPUSDT-W2"]["worst_gross_to_equity"])
+        self.assertEqual(gr.NA, by_id["AAVEUSDT-W1"]["worst_gross_to_equity"])
+
+    def test_comparison_carrier_and_qualification_are_unchanged(self):
+        cells = cell_rows()
+        cells[3]["worst_gross_to_equity"] = 2.5
+        before = [gr.cell_qualification(cell) for cell in cells]
+        _, path = self._write(cells)
+        header = path.with_name("cells-comparison.csv").read_text(
+            encoding="utf-8").splitlines()[0].split(",")
+        self.assertEqual([key for key, _ in gr.TABLE_B_HEADERS], header)
+        self.assertNotIn(gr.GROSS_TO_EQUITY_COLUMN, gr.METRIC_COLUMNS)
+        self.assertEqual(before, [gr.cell_qualification(cell) for cell in cells])
+        self.assertEqual("risk-breach", before[3][0])
+
+
+def _full_cells(ret_shift, ge_values):
+    """Four complete PUMPUSDT cells; ``ge_values`` None omits the G/E key."""
+    cells = []
+    for index, window in enumerate(("W1", "W2", "W3", "W4")):
+        cell = {"cell_id": f"PUMPUSDT-{window}", "contract": "PUMPUSDT", "window": window,
+                "L": 0.001, "U": 0.01, "g_pct": 1.2, "N": 100,
+                "margin_return_pct": 10.0 + ret_shift + index, "sharpe": 1.5,
+                "max_drawdown_pct": -20.0 - index,
+                "downward_liquidation_price": 0.0008, "upward_liquidation_price": 0.012,
+                "pairs": 100 + index, "avg_grid_order_notional": 50.0 + index}
+        if ge_values is not None:
+            cell["worst_gross_to_equity"] = ge_values[index]
+        cell["qualification"], cell["reason"] = gr.cell_qualification(cell)
+        cells.append(cell)
+    return cells
+
+
+class CompareTableBTest(unittest.TestCase):
+    """R2 (2026-11-06): the evolved-vs-baseline table reads carriers only."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.base, self.evo = self.root / "base", self.root / "evo"
+        self.base.mkdir()
+        self.evo.mkdir()
+        gr.regen_carriers(ANCHOR, _full_cells(0.0, None), self.base)
+        gr.regen_carriers(ANCHOR, _full_cells(5.0, [0.9, 2.6, 1.512345, 7.2]), self.evo)
+        self.out = self.root / "compare.md"
+        self.text = gr.compare_table_b(self.base, self.evo, "PUMPUSDT", self.out)
+        self.lines = self.text.splitlines()
+
+    def test_table_b_rows_are_verbatim_copies_of_the_summaries(self):
+        self.assertEqual(self.text, _read(self.out))
+        header = "| " + " | ".join(label for _, label in gr.TABLE_B_HEADERS) + " |"
+        self.assertIn(header, self.lines)
+        for side, label in ((self.base, "基准"), (self.evo, "进化")):
+            original = next(line for line in _read(side / "table-b-summary.md").splitlines()
+                            if line.startswith("| PUMPUSDT |"))
+            relabelled = next(line for line in self.lines
+                              if line.startswith(f"| PUMPUSDT {label} |"))
+            self.assertEqual(original.split(" | ", 1)[1], relabelled.split(" | ", 1)[1])
+        for note in gr.TABLE_B_FOOTNOTES:
+            self.assertIn(note, self.text)
+        self.assertIn(str(self.base), self.lines[2])
+        self.assertIn(str(self.evo), self.lines[3])
+
+    def test_window_rows_read_ge_from_cells_csv_and_keep_na(self):
+        rows = {line.split(" | ")[0][2:]: line.strip("| ").split(" | ")
+                for line in self.lines if line.startswith("| W")}
+        self.assertEqual(["W1", "W2", "W3", "W4"], list(rows))
+        # columns: window, ret b/e, mdd b/e, G/E b/e, verdict b/e
+        self.assertEqual(["W3", "12.00", "17.00", "-22.00", "-22.00", "N/A", "1.51", "✓", "✓"],
+                         rows["W3"])
+        self.assertEqual(["N/A", "2.60"], rows["W2"][5:7])
+        self.assertEqual(["✓", "⚠"], rows["W2"][7:9])
+
+    def test_ge_follows_the_carrier_not_any_other_file(self):
+        (self.evo / "ge-limit.md").write_text("| PUMPUSDT-W1 | 99.0 |\n", encoding="utf-8")
+        cells_csv = self.evo / "cells.csv"
+        text = _read(cells_csv).replace("0.9,", "0.25,", 1)
+        cells_csv.write_text(text, encoding="utf-8")
+        rendered = gr.compare_table_b(self.base, self.evo, "PUMPUSDT", self.out)
+        w1 = next(line for line in rendered.splitlines() if line.startswith("| W1 |"))
+        self.assertIn("| 0.25 |", w1)
+        self.assertNotIn("99.00", rendered)
+
+
+def _xrp_cells():
+    """``_full_cells`` relabelled to a contract outside the frozen four."""
+    cells = _full_cells(0.0, [1.0, 1.1, 1.2, 1.3])
+    for cell in cells:
+        cell["contract"] = "XRPUSDT"
+        cell["cell_id"] = cell["cell_id"].replace("PUMPUSDT", "XRPUSDT")
+    return cells
+
+
+class CarrierContractsTest(unittest.TestCase):
+    """Fix (2026-11-06): carriers follow an explicit contract list."""
+
+    CARRIERS = ("cells.csv", "cells-comparison.csv", "table-b-summary.md")
+
+    def _regen(self, cells, **kwargs):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name)
+        gr.regen_carriers(ANCHOR, cells, out, **kwargs)
+        return out
+
+    def test_default_equals_explicit_frozen_contracts_byte_for_byte(self):
+        cells = _full_cells(0.0, [0.9, 2.6, 1.5, 7.2])
+        default = self._regen(cells)
+        explicit = self._regen(cells, contracts=gr.DEFAULT_CONTRACTS)
+        for name in self.CARRIERS:
+            self.assertEqual((default / name).read_bytes(), (explicit / name).read_bytes(), name)
+        with (default / "cells.csv").open(newline="", encoding="utf-8") as stream:
+            self.assertEqual(16, len(list(csv.DictReader(stream))))
+
+    def test_single_non_frozen_contract_carrier(self):
+        out = self._regen(_xrp_cells(), contracts=("XRPUSDT",))
+        with (out / "cells.csv").open(newline="", encoding="utf-8") as stream:
+            rows = list(csv.DictReader(stream))
+        self.assertEqual(["XRPUSDT"] * 4, [row["contract"] for row in rows])
+        self.assertEqual(["W1", "W2", "W3", "W4"], [row["window"] for row in rows])
+        self.assertEqual("1.2", rows[2]["worst_gross_to_equity"])
+        with (out / "cells-comparison.csv").open(newline="", encoding="utf-8") as stream:
+            comparison = list(csv.DictReader(stream))
+        self.assertEqual(["XRPUSDT"], [row["contract"] for row in comparison])
+        self.assertEqual([key for key, _ in gr.TABLE_B_HEADERS], list(comparison[0]))
+        summary = _read(out / "table-b-summary.md").splitlines()
+        self.assertEqual(1, sum(line.startswith("| XRPUSDT |") for line in summary))
+        self.assertEqual(3, sum(line.startswith("|") for line in summary))  # header+rule+row
+
+    def test_cells_outside_the_contract_list_are_rejected(self):
+        with self.assertRaises(ValueError):
+            self._regen(_xrp_cells())  # the default frozen four exclude XRPUSDT
+
+
+class ValidateBaselineDirTest(unittest.TestCase):
+    """Fix (2026-11-06): the baseline carrier set is checked before any platform call."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.base = Path(tmp.name) / "base"
+        self.base.mkdir()
+        gr.regen_carriers(ANCHOR, _full_cells(0.0, None), self.base)
+
+    def _error(self, base_dir, contract="PUMPUSDT"):
+        with self.assertRaises(ValueError) as caught:
+            gr.validate_baseline_dir(base_dir, contract)
+        return str(caught.exception)
+
+    def test_valid_baseline_passes(self):
+        self.assertIsNone(gr.validate_baseline_dir(self.base, "PUMPUSDT"))
+
+    def test_missing_directory(self):
+        self.assertIn("baseline directory not found", self._error(self.base / "nope"))
+
+    def test_each_missing_carrier_file_is_named(self):
+        for name in gr.BASELINE_CARRIERS:
+            with self.subTest(name=name):
+                path = self.base / name
+                saved = path.read_bytes()
+                path.unlink()
+                self.assertIn(name, self._error(self.base))
+                path.write_bytes(saved)
+
+    def test_missing_contract_row(self):
+        self.assertIn("XRPUSDT not found", self._error(self.base, "XRPUSDT"))
+        # Present in the CSV but absent from the summary markdown.
+        summary = self.base / "table-b-summary.md"
+        summary.write_text(_read(summary).replace("| PUMPUSDT |", "| OTHER |"), encoding="utf-8")
+        self.assertIn("PUMPUSDT row not found", self._error(self.base))

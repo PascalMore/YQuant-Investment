@@ -22,6 +22,10 @@ Sequence (each gate stops the run on failure):
       with a winner stops the descent
   G6  the winner is backtested once on the held-out window at its own
       leverage (reported only, never fed back into the selection)
+  G7  the table-A/B carriers (cells.csv, cells-comparison.csv,
+      table-b-summary.md) are written from the winner's W1 + W2..W4 runs
+      already read back (no new backtest); with --baseline-dir the
+      evolved-vs-baseline table is written too. Skipped without a winner.
 
 Search ranges are mechanical, never hand-tuned: unless overridden, the
 grid_lower / grid_upper ranges are the platform's own default
@@ -232,7 +236,8 @@ def judge_candidate(platform: Platform, source_id: int, candidate: dict,
     for label, start, end in windows:
         metrics = platform.backtest(source_id, start, end, candidate["params"], run,
                                     leverage=leverage)
-        metrics.pop("executions")
+        # Kept for the G7 table-A/B carriers, so they need no extra reads.
+        metrics["average_amount_per_grid"] = _mean_cell_notional(metrics.pop("executions"))
         metrics["qualification"], metrics["reasons"] = judge_window(metrics)
         metrics.update({"window": label, "start": start, "end": end})
         judged["windows"].append(metrics)
@@ -249,8 +254,16 @@ def run_evolution(*, contract: str, instrument: str, lower: float, upper: float,
                   holdout_end: str, platform: Platform, evidence: Path,
                   timeframe: str = "1h", trials: int = 32, folds: int = 4, seed: int = 42,
                   top: int = 5, run: dict,
-                  fallback_leverages: tuple[float, ...] = FALLBACK_LEVERAGES) -> dict:
+                  fallback_leverages: tuple[float, ...] = FALLBACK_LEVERAGES,
+                  baseline_dir: Path | None = None) -> dict:
     """Run the full gated grid-evolution sequence for one contract."""
+    # G0: a bad --baseline-dir must fail before any paid platform call.
+    if baseline_dir is not None:
+        import grid_research as gr
+        try:
+            gr.validate_baseline_dir(baseline_dir, contract)
+        except ValueError as error:
+            raise EvolutionError(f"G0 baseline-dir invalid: {error}") from error
     source, manifest = ges.generate_evolve_source(
         instrument=instrument, timeframe=timeframe, lower=lower, upper=upper, gap_pct=gap_pct,
         search_ranges={"grid_lower": lower_range, "grid_upper": upper_range},
@@ -361,9 +374,11 @@ def run_evolution(*, contract: str, instrument: str, lower: float, upper: float,
         print(f"G5 no qualified candidate at {leverage}x", flush=True)
     record["winner_rank"] = winner["rank"] if winner else None
     record["winner_leverage"] = winner["leverage"] if winner else None
+    if winner is None:
+        record["g7"] = {"skipped": "no winner"}
     save()
     if winner is None:
-        print("G5 no qualified candidate at any leverage tier", flush=True)
+        print("G5 no qualified candidate at any leverage tier; G7 skipped", flush=True)
         return record
     print(f"G5 winner: #{winner['rank']} {winner['params']} at {winner['leverage']}x "
           f"mean={winner['mean_return_pct']:.2f}%", flush=True)
@@ -379,7 +394,90 @@ def run_evolution(*, contract: str, instrument: str, lower: float, upper: float,
     save()
     print(f"G6 holdout W1 run{holdout['runId']} ret={holdout['margin_return_pct']:.2f}% "
           f"mdd={holdout['max_drawdown_pct']:.2f}% -> {holdout['qualification']}", flush=True)
+
+    # G7 table-A/B carriers (+ optional baseline comparison); no new backtest
+    record["g7"] = write_table_carriers(record, evidence, task_date=date.today().isoformat(),
+                                        baseline_dir=baseline_dir,
+                                        frequency_seconds=_frequency_seconds(timeframe))
+    save()
+    print(f"G7 {record['g7']}", flush=True)
     return record
+
+
+# Bar size of the evolution timeframe, for the carriers' expected-bar column.
+TIMEFRAME_SECONDS = {"15m": 900, "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400}
+CARRIER_WINDOWS = ("W1", "W2", "W3", "W4")
+
+
+def _frequency_seconds(timeframe: str) -> int:
+    if timeframe not in TIMEFRAME_SECONDS:
+        raise EvolutionError(f"unsupported timeframe {timeframe!r}")
+    return TIMEFRAME_SECONDS[timeframe]
+
+
+def winner_of(record: dict) -> dict | None:
+    """The judged winner candidate of an evolution record, or ``None``."""
+    for tier in record.get("leverage_tiers") or []:
+        if (tier.get("winner_rank") is not None and tier["winner_rank"] == record.get("winner_rank")
+                and tier["leverage"] == record.get("winner_leverage")):
+            return next(c for c in tier["candidates"] if c["rank"] == tier["winner_rank"])
+    return None
+
+
+def write_table_carriers(record: dict, evidence: Path, *, task_date: str,
+                         baseline_dir: Path | None = None,
+                         frequency_seconds: int = 3600, resolver=None) -> dict:
+    """G7: write the table-A/B carriers of the winner into ``evidence``.
+
+    Cells are the held-out W1 plus the W2..W4 selection windows (table B is
+    frozen at four windows; W5 stays in the record only). Every value comes
+    from the already-judged runs in ``record``; the stress liquidation prices
+    are solved from the winner geometry. When ``baseline_dir`` is given the
+    evolved-vs-baseline comparison is written as well. Returns a status dict
+    (``skipped`` with a reason, or the written file names).
+    """
+    import grid_research as gr
+    import grid_stress_liquidation as gsl
+    contract, winner = record["contract"], winner_of(record)
+    if winner is None or not record.get("holdout"):
+        return {"skipped": "no winner"}
+    # A frozen contract keeps the four-contract carrier (v2-compatible bytes);
+    # any other contract gets its own single-contract carrier.
+    contracts = gr.DEFAULT_CONTRACTS if contract in gr.DEFAULT_CONTRACTS else (contract,)
+    geometry, leverage = winner["geometry"], record["winner_leverage"]
+    arrays = ge.build_geometry_arrays(geometry["L"], geometry["U"], geometry["N"])
+    stress = gsl.solve_cell({"name": f"{contract}-EVOLVE", **{key: arrays[key] for key in (
+        "lower", "upper", "roles", "pcts")}}, symbol=contract,
+        equity0=record["run"]["capital"], leverage=leverage, resolver=resolver)
+    windows = {w["window"]: w for w in winner["windows"]}
+    windows["W1"] = record["holdout"]
+    cells = []
+    for label in CARRIER_WINDOWS:
+        window = windows[label]
+        cells.append({
+            "task_date": task_date, "cell_id": f"{contract}-{label}", "contract": contract,
+            "window": label, "native_instrument": "",
+            "start_utc": window["start"] + "T00:00:00Z", "end_utc": window["end"] + "T00:00:00Z",
+            "L": geometry["L"], "U": geometry["U"], "g_pct": geometry["g_pct"],
+            "N": geometry["N"], "margin_return_pct": window["margin_return_pct"],
+            "sharpe": window["sharpe"], "max_drawdown_pct": window["max_drawdown_pct"],
+            "downward_liquidation_price": stress["down"]["root"],
+            "upward_liquidation_price": stress["up"]["root"],
+            "worst_gross_to_equity": window["worst_gross_to_equity"],
+            "pairs": window["pairs"],
+            "avg_grid_order_notional": window.get("average_amount_per_grid"),
+            "status": "completed", "reason": window["reasons"], "job_id": "",
+            "run_id": window["runId"], "tool_status": "backtest_succeeded",
+            "research_status": "completed", "qualification": window["qualification"]})
+    anchor = record["holdout_period"][1] + "T00:00:00Z"
+    gr.regen_carriers(anchor, cells, evidence, frequency_seconds=frequency_seconds,
+                      contracts=contracts)
+    written = ["cells.csv", "cells-comparison.csv", "table-b-summary.md"]
+    if baseline_dir is not None:
+        gr.compare_table_b(baseline_dir, evidence, contract,
+                           evidence / "table-b-evolved-vs-baseline.md")
+        written.append("table-b-evolved-vs-baseline.md")
+    return {"written": written}
 
 
 def _mean_cell_notional(executions: list[dict]) -> float | None:
@@ -416,6 +514,8 @@ def main(argv: list[str] | None = None) -> int:
         cmd.add_argument("--budget", type=int, default=BACKTEST_BUDGET)
         cmd.add_argument("--base-url", default=DEFAULT_BASE_URL)
         cmd.add_argument("--evidence-dir", type=Path)
+        cmd.add_argument("--baseline-dir", type=Path,
+                         help="baseline carrier dir; G7 then writes the comparison table")
     args = parser.parse_args(argv)
     args.lower_range = args.lower_range or default_range(args.lower)
     args.upper_range = args.upper_range or default_range(args.upper)
@@ -462,7 +562,7 @@ def main(argv: list[str] | None = None) -> int:
             evolve_end=args.evolve_end, holdout_start=args.holdout_start,
             holdout_end=args.holdout_end, trials=args.trials, seed=args.seed, top=args.top,
             platform=Platform(token, args.base_url, args.budget), evidence=evidence,
-            fallback_leverages=fallback,
+            fallback_leverages=fallback, baseline_dir=args.baseline_dir,
             run={"capital": args.capital, "commission": 0.0005, "slippage": 0.0005,
                  "leverage": args.leverage})
     except EvolutionError as error:

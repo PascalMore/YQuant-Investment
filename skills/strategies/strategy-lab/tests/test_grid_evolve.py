@@ -142,5 +142,212 @@ class TestWindowMetrics(unittest.TestCase):
         self.assertEqual((metrics["runId"], metrics["pairs"]), (7, 40))
 
 
+import csv  # noqa: E402
+import tempfile  # noqa: E402
+from unittest import mock  # noqa: E402
+
+import grid_evolve_source as ges  # noqa: E402
+import grid_research as gr  # noqa: E402
+import grid_stress_liquidation as gsl  # noqa: E402
+
+
+class _FakeEvolutionPlatform:
+    """Offline stand-in for the whole G1..G6 platform surface."""
+
+    def __init__(self, declarations, candidates):
+        self.declarations, self.candidates = declarations, candidates
+        self.backtests, self.budget, self.paths = 0, 500, []
+
+    def call(self, method, path, body=None, params=None):
+        self.paths.append(path)
+        if path.endswith("/compile"):
+            return {"code": 1}
+        if path.endswith("/create"):
+            return {"code": 1, "data": {"id": 99}}
+        if path.endswith("/parameter-space"):
+            return {"data": {"parameters": [dict(spec, name=name)
+                                            for name, spec in self.declarations.items()]}}
+        if path.endswith("/strategy-evolution/run"):
+            return {"data": {"jobId": "evo-1"}}
+        raise AssertionError(f"unexpected platform call {method} {path}")
+
+    def wait(self, path, *, poll_seconds, max_polls):
+        return {"status": "succeeded", "result": {
+            "summary": {}, "selection": {"recommended": True},
+            "topCandidates": self.candidates}}
+
+    def backtest(self, source_id, start, end, params, run, leverage=None):
+        self.backtests += 1
+        gap = params["grid_gap_pct"]
+        breach = start.startswith("2025-11")  # W4 breaches, the others qualify
+        return {"runId": 100 + self.backtests, "margin_return_pct": 10.0 + gap + self.backtests,
+                "max_drawdown_pct": -50.0 if breach else -20.0, "sharpe": 1.5,
+                "worst_gross_to_equity": 3.0 if breach else 1.0 + self.backtests / 100,
+                "pairs": 40 + self.backtests, "liquidated": False,
+                "executions": [{"client_order_id": f"grid-{cell}-x", "notional": 50.0 + cell}
+                               for cell in (1, 2)]}
+
+
+class TestG7Carriers(unittest.TestCase):
+    ARGS = dict(contract="PUMPUSDT", instrument="Crypto:PUMP/USDT@swap", lower=0.00147,
+                upper=0.008984, gap_pct=1.5, evolve_start="2025-08-03",
+                evolve_end="2026-08-03", holdout_start="2026-08-03",
+                holdout_end="2026-11-03")
+    CANDIDATES = [{"number": 1, "score": 1.0, "params": {
+        "grid_lower": 0.0015, "grid_upper": 0.009, "grid_gap_pct": 1.5}}]
+
+    def _run(self, platform_candidates, baseline_dir=None, contract="PUMPUSDT"):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        evidence = Path(tmp.name) / "evidence"
+        ranges = {"lower_range": ev.default_range(0.00147),
+                  "upper_range": ev.default_range(0.008984)}
+        _, manifest = ges.generate_evolve_source(
+            instrument=self.ARGS["instrument"], lower=0.00147, upper=0.008984, gap_pct=1.5,
+            search_ranges={"grid_lower": ranges["lower_range"],
+                           "grid_upper": ranges["upper_range"]}, cell_id="PUMPUSDT-EVOLVE")
+        platform = _FakeEvolutionPlatform(manifest["parameter_declarations"],
+                                          platform_candidates)
+        with mock.patch.object(gsl, "_curl_json", side_effect=RuntimeError("offline")):
+            record = ev.run_evolution(**dict(self.ARGS, contract=contract), **ranges,
+                                      platform=platform,
+                                      evidence=evidence, top=1, fallback_leverages=(),
+                                      baseline_dir=baseline_dir,
+                                      run={"capital": 1000.0, "commission": 0.0005,
+                                           "slippage": 0.0005, "leverage": 10})
+        return record, platform, evidence
+
+    def test_g7_writes_the_three_carriers_without_extra_backtests(self):
+        record, platform, evidence = self._run(self.CANDIDATES)
+        self.assertEqual(record["g7"]["written"],
+                         ["cells.csv", "cells-comparison.csv", "table-b-summary.md"])
+        for name in record["g7"]["written"]:
+            self.assertTrue((evidence / name).is_file(), name)
+        # G3 two probes + one candidate x four windows + G6 holdout; G7 adds none.
+        self.assertEqual(2 + 4 + 1, platform.backtests)
+        with (evidence / "cells.csv").open(newline="", encoding="utf-8") as stream:
+            rows = {row["cell_id"]: row for row in csv.DictReader(stream)}
+        winner = ev.winner_of(record)
+        by_window = {w["window"]: w for w in winner["windows"]}
+        by_window["W1"] = record["holdout"]
+        for label in ("W1", "W2", "W3", "W4"):
+            row = rows[f"PUMPUSDT-{label}"]
+            self.assertEqual(str(by_window[label]["runId"]), row["run_id"])
+            self.assertAlmostEqual(by_window[label]["worst_gross_to_equity"],
+                                   float(row["worst_gross_to_equity"]), places=12)
+            self.assertNotEqual("N/A", row["downward_liquidation_price"])
+        self.assertEqual("N/A", rows["AAVEUSDT-W1"]["worst_gross_to_equity"])
+        summary = (evidence / "table-b-summary.md").read_text(encoding="utf-8")
+        self.assertIn("51.5 (51.5/51.5/51.5/51.5)", summary)  # per-grid amount from executions
+        self.assertIn("W1✓ W2✓ W3✓ W4⚠", summary)
+
+    def test_g7_with_baseline_writes_the_comparison(self):
+        _, _, baseline = self._run(self.CANDIDATES)
+        record, _, evidence = self._run(self.CANDIDATES, baseline_dir=baseline)
+        self.assertIn("table-b-evolved-vs-baseline.md", record["g7"]["written"])
+        text = (evidence / "table-b-evolved-vs-baseline.md").read_text(encoding="utf-8")
+        self.assertIn("| PUMPUSDT 基准 |", text)
+        self.assertIn("| PUMPUSDT 进化 |", text)
+
+    def test_g7_is_skipped_without_a_winner(self):
+        record = {"contract": "PUMPUSDT", "winner_rank": None, "winner_leverage": None,
+                  "leverage_tiers": [{"leverage": 10, "candidates": [], "winner_rank": None}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            status = ev.write_table_carriers(record, Path(tmp), task_date="2026-11-06")
+            self.assertEqual({"skipped": "no winner"}, status)
+            self.assertEqual([], list(Path(tmp).iterdir()))
+
+    def test_run_without_a_winner_records_no_g7_and_no_holdout(self):
+        losing = [{"number": 1, "score": 1.0, "params": {
+            "grid_lower": 0.0015, "grid_upper": 0.009, "grid_gap_pct": 1.5}}]
+        with mock.patch.object(ev, "select_candidate", return_value=None):
+            record, platform, evidence = self._run(losing)
+        self.assertIsNone(record["winner_rank"])
+        self.assertNotIn("holdout", record)
+        self.assertEqual({"skipped": "no winner"}, record["g7"])
+        self.assertEqual(2 + 4, platform.backtests)
+        self.assertFalse((evidence / "cells.csv").exists())
+
+    def test_non_frozen_contract_writes_a_single_contract_carrier(self):
+        record, platform, evidence = self._run(self.CANDIDATES, contract="XRPUSDT")
+        self.assertNotIn("skipped", record["g7"])
+        self.assertEqual(["cells.csv", "cells-comparison.csv", "table-b-summary.md"],
+                         record["g7"]["written"])
+        with (evidence / "cells.csv").open(newline="", encoding="utf-8") as stream:
+            rows = list(csv.DictReader(stream))
+        self.assertEqual(["XRPUSDT"] * 4, [row["contract"] for row in rows])
+        with (evidence / "cells-comparison.csv").open(newline="", encoding="utf-8") as stream:
+            self.assertEqual(["XRPUSDT"], [row["contract"] for row in csv.DictReader(stream)])
+        summary = (evidence / "table-b-summary.md").read_text(encoding="utf-8")
+        self.assertEqual(1, sum(line.startswith("| XRPUSDT |") for line in summary.splitlines()))
+        self.assertEqual(2 + 4 + 1, platform.backtests)
+
+    def test_non_frozen_contract_with_baseline_writes_the_comparison(self):
+        _, _, baseline = self._run(self.CANDIDATES, contract="XRPUSDT")
+        record, _, evidence = self._run(self.CANDIDATES, baseline_dir=baseline,
+                                        contract="XRPUSDT")
+        self.assertIn("table-b-evolved-vs-baseline.md", record["g7"]["written"])
+        text = (evidence / "table-b-evolved-vs-baseline.md").read_text(encoding="utf-8")
+        self.assertIn("| XRPUSDT 基准 |", text)
+        self.assertIn("| XRPUSDT 进化 |", text)
+        self.assertEqual(4, sum(line.startswith("| W") for line in text.splitlines()))
+
+
+class TestBaselineDirPrecheck(unittest.TestCase):
+    """A bad --baseline-dir fails at G0, before any platform call."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.baseline = Path(tmp.name) / "baseline"
+        self.baseline.mkdir()
+        # Placeholder four-contract carriers: valid files with a PUMPUSDT row.
+        gr.regen_carriers("2026-11-03T00:00:00Z", [], self.baseline)
+        self.assertIsNone(gr.validate_baseline_dir(self.baseline, "PUMPUSDT"))
+
+    def _assert_rejected(self, baseline_dir, contract="PUMPUSDT"):
+        platform = _FakeEvolutionPlatform({}, [])
+        with tempfile.TemporaryDirectory() as tmp:
+            evidence = Path(tmp) / "evidence"
+            with self.assertRaises(ev.EvolutionError) as caught:
+                ev.run_evolution(**dict(TestG7Carriers.ARGS, contract=contract),
+                                 lower_range=ev.default_range(0.00147),
+                                 upper_range=ev.default_range(0.008984), platform=platform,
+                                 evidence=evidence, top=1, fallback_leverages=(),
+                                 baseline_dir=baseline_dir,
+                                 run={"capital": 1000.0, "commission": 0.0005,
+                                      "slippage": 0.0005, "leverage": 10})
+            self.assertFalse(evidence.exists())  # no source generated or written
+        self.assertTrue(str(caught.exception).startswith("G0 baseline-dir invalid: "))
+        self.assertEqual(([], 0), (platform.paths, platform.backtests))
+        return str(caught.exception)
+
+    def test_missing_directory(self):
+        self.assertIn("not found", self._assert_rejected(self.baseline / "nope"))
+
+    def test_missing_carrier_file(self):
+        (self.baseline / "table-b-summary.md").unlink()
+        self.assertIn("table-b-summary.md", self._assert_rejected(self.baseline))
+
+    def test_missing_contract_row(self):
+        self.assertIn("XRPUSDT", self._assert_rejected(self.baseline, contract="XRPUSDT"))
+
+    def test_cli_returns_nonzero_on_g0_failure(self):
+        args = ["run", "--contract", "PUMPUSDT", "--instrument", "Crypto:PUMP/USDT@swap",
+                "--lower", "0.00147", "--upper", "0.008984", "--gap-pct", "1.5",
+                "--evolve-start", "2025-08-03", "--evolve-end", "2026-08-03",
+                "--holdout-start", "2026-08-04", "--holdout-end", "2026-11-03",
+                "--top", "1", "--fallback-leverages", "",
+                "--baseline-dir", str(self.baseline / "nope")]
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.dict(ev.os.environ, {"QUANTDINGER_JWT": "offline-test"}), \
+                mock.patch.object(ev.Platform, "call",
+                                  side_effect=AssertionError("platform called")), \
+                mock.patch.object(ev.Platform, "backtest",
+                                  side_effect=AssertionError("platform called")):
+            code = ev.main(args + ["--evidence-dir", str(Path(tmp) / "evidence")])
+        self.assertEqual(2, code)
+
+
 if __name__ == "__main__":
     unittest.main()

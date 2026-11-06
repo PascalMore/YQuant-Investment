@@ -17,7 +17,7 @@ import re
 import math
 from pathlib import Path
 import statistics
-from typing import Any
+from typing import Any, Sequence
 
 def generate_strategy_source(*, cell: str | dict, template_sha256: str,
                              geometry: dict | None = None,
@@ -91,6 +91,11 @@ METRIC_COLUMNS = (
     "L", "U", "g_pct", "N", "margin_return_pct", "sharpe", "max_drawdown_pct",
     "downward_liquidation_price", "upward_liquidation_price",
 )
+# Table-A carrier column (2026-11-06): the G/E input of the risk judgement is
+# written into cells.csv so downstream tables read it from the carrier. It is
+# kept outside METRIC_COLUMNS so summary and qualification semantics are
+# unchanged; a missing value is written as N/A, never 0.
+GROSS_TO_EQUITY_COLUMN = "worst_gross_to_equity"
 TRANSITIONS = {
     "planned": {"prechecked", "history_insufficient", "insufficient_evidence", "failed",
                 "not_submitted_due_to_stop"},
@@ -1218,20 +1223,24 @@ def _window_qualifications_field(row: dict) -> str:
 
 def write_comparison_csv(summary: list[dict], path: str | Path,
                          anchor_utc: Any = None,
-                         source_cells: list[dict] | None = None) -> None:
-    """Write four frozen-contract rows, retaining absent contracts as N/A with reasons.
+                         source_cells: list[dict] | None = None,
+                         contracts: Sequence[str] | None = None) -> None:
+    """Write one row per contract, retaining absent contracts as N/A with reasons.
 
+    ``contracts`` defaults to the four frozen contracts; a G7 run on another
+    contract passes its own single-contract list.
     D5-3: explicit anchor required; task_date/anchor_utc land in the output and
     the placeholder qualification is ``insufficient-evidence`` (enum closure).
     """
     if anchor_utc is None:
         raise ValueError("anchor_utc is required (D5-3): pass the batch task date")
+    contracts = tuple(DEFAULT_CONTRACTS if contracts is None else contracts)
     task_date = _midnight(anchor_utc).date().isoformat()
     by_contract = {row["contract"]: row for row in summary}
-    if len(by_contract) != len(summary) or set(by_contract) - set(DEFAULT_CONTRACTS):
+    if len(by_contract) != len(summary) or set(by_contract) - set(contracts):
         raise ValueError("comparison carrier requires unique frozen contracts")
     rows = []
-    for contract in DEFAULT_CONTRACTS:
+    for contract in contracts:
         fallback = summarize_cells([{"cell_id": f"{contract}-W1", "contract": contract,
                                      "window": "W1", "reason": "no submitted evidence"}])[0]
         if contract not in by_contract:
@@ -1422,8 +1431,11 @@ def write_summary_markdown(rows: list[dict], path: str | Path) -> None:
 
 
 def write_cells_csv(cells: list[dict], path: str | Path, anchor_utc: Any = None,
-                    frequency_seconds: int = DEFAULT_FREQUENCY_SECONDS) -> None:
-    """Write all sixteen frozen target rows; never drop missing/failed targets.
+                    frequency_seconds: int = DEFAULT_FREQUENCY_SECONDS,
+                    contracts: Sequence[str] | None = None) -> None:
+    """Write every target row (contracts x four windows); never drop missing targets.
+
+    ``contracts`` defaults to the four frozen contracts (sixteen rows).
 
     D5-3 (B-1): the skeleton MUST be laid from an explicit anchor (the batch
     task date), never from a default constant, so placeholder rows carry the
@@ -1434,7 +1446,9 @@ def write_cells_csv(cells: list[dict], path: str | Path, anchor_utc: Any = None,
     indexed = _cell_index(cells)
     if anchor_utc is None:
         raise ValueError("anchor_utc is required (D5-3): pass the batch task date")
-    planned = build_cells(anchor_utc=anchor_utc, frequency_seconds=frequency_seconds)
+    contracts = tuple(DEFAULT_CONTRACTS if contracts is None else contracts)
+    planned = build_cells(contracts=list(contracts), anchor_utc=anchor_utc,
+                          frequency_seconds=frequency_seconds)
     task_date = _midnight(anchor_utc).date().isoformat()
     if set(indexed) - {(cell["contract"], cell["window"]) for cell in planned}:
         raise ValueError("cells carrier requires frozen target identities")
@@ -1442,7 +1456,7 @@ def write_cells_csv(cells: list[dict], path: str | Path, anchor_utc: Any = None,
     for plan in planned:
         supplied = indexed.get((plan["contract"], plan["window"]))
         row = {**plan, "task_date": task_date,
-               **{column: NA for column in METRIC_COLUMNS},
+               **{column: NA for column in (*METRIC_COLUMNS, GROSS_TO_EQUITY_COLUMN)},
                "status": "insufficient_evidence", "reason": "no submitted evidence",
                "job_id": None, "run_id": None, "tool_status": NA,
                "research_status": "insufficient-evidence",
@@ -1451,29 +1465,31 @@ def write_cells_csv(cells: list[dict], path: str | Path, anchor_utc: Any = None,
             row.update(supplied)
         for key in ("start_utc", "end_utc", "anchor_utc"):
             row[key] = _iso(row[key])
-        for column in METRIC_COLUMNS:
+        for column in (*METRIC_COLUMNS, GROSS_TO_EQUITY_COLUMN):
             if row[column] is None:
                 row[column] = NA
         rows.append(row)
     _write_csv(rows, ["task_date", "anchor_utc", "cell_id", "contract", "window",
                       *MARKET, "native_instrument", "start_utc", "end_utc",
                       "frequency_seconds", "expected_bars",
-                      *METRIC_COLUMNS, "status", "reason",
+                      *METRIC_COLUMNS, GROSS_TO_EQUITY_COLUMN, "status", "reason",
                       "job_id", "run_id", "tool_status", "research_status",
                       "qualification"], path)
 
     # ---- comparison carrier laid from the same explicit anchor (B-1/B-3) ----
     summary = summarize_cells(cells)
     comparison = []
-    for contract in DEFAULT_CONTRACTS:
+    for contract in contracts:
         match = [row for row in summary if row["contract"] == contract]
         comparison.extend(match)
     write_comparison_csv(comparison, Path(path).with_name(
-        Path(path).stem + "-comparison" + Path(path).suffix), anchor_utc=anchor_utc)
+        Path(path).stem + "-comparison" + Path(path).suffix), anchor_utc=anchor_utc,
+        contracts=contracts)
 
 
 def regen_carriers(anchor_utc: Any, cells: list[dict], evidence_dir: str | Path,
-                   frequency_seconds: int = DEFAULT_FREQUENCY_SECONDS) -> None:
+                   frequency_seconds: int = DEFAULT_FREQUENCY_SECONDS,
+                   contracts: Sequence[str] | None = None) -> None:
     """Regenerate the frozen carriers (table A + comparison) from one cell set.
 
     Single entry point so the two carriers can never come from different
@@ -1481,10 +1497,108 @@ def regen_carriers(anchor_utc: Any, cells: list[dict], evidence_dir: str | Path,
     skeleton), then the comparison carrier is rewritten with the source cells
     attached, so its per-window columns stay populated. The summary markdown
     of table B is written by ``write_comparison_csv`` as part of that pass.
+    ``contracts`` (default: the four frozen contracts) sets the carrier rows.
     """
     evidence_dir = Path(evidence_dir)
     write_cells_csv(cells, evidence_dir / "cells.csv", anchor_utc=anchor_utc,
-                    frequency_seconds=frequency_seconds)
+                    frequency_seconds=frequency_seconds, contracts=contracts)
     summary = summarize_cells(cells)
     write_comparison_csv(summary, evidence_dir / "cells-comparison.csv",
-                          anchor_utc=anchor_utc, source_cells=cells)
+                          anchor_utc=anchor_utc, source_cells=cells, contracts=contracts)
+
+
+def _contract_row(path: Path, contract: str) -> dict:
+    with path.open(newline="", encoding="utf-8") as stream:
+        for row in csv.DictReader(stream):
+            if row["contract"] == contract:
+                return row
+    raise ValueError(f"{contract} not found in {path}")
+
+
+def _contract_cells(path: Path, contract: str) -> dict[str, dict]:
+    with path.open(newline="", encoding="utf-8") as stream:
+        return {row["window"]: row for row in csv.DictReader(stream)
+                if row["contract"] == contract}
+
+
+def _summary_line(path: Path, contract: str) -> str:
+    prefix = f"| {contract} |"
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith(prefix):
+            return line
+    raise ValueError(f"{contract} row not found in {path}")
+
+
+BASELINE_CARRIERS = ("cells.csv", "cells-comparison.csv", "table-b-summary.md")
+
+
+def validate_baseline_dir(base_dir: str | Path, contract: str) -> None:
+    """Fail fast unless ``base_dir`` holds a usable baseline carrier set for ``contract``.
+
+    Checks the directory, the three carrier files and the contract's row in the
+    comparison CSV and in the table-B summary; raises ``ValueError`` naming the
+    missing item. Meant to run before any platform call, so a wrong path costs
+    no backtest budget.
+    """
+    base_dir = Path(base_dir)
+    if not base_dir.is_dir():
+        raise ValueError(f"baseline directory not found: {base_dir}")
+    missing = [name for name in BASELINE_CARRIERS if not (base_dir / name).is_file()]
+    if missing:
+        raise ValueError(f"baseline carrier file(s) missing in {base_dir}: {', '.join(missing)}")
+    _contract_row(base_dir / "cells-comparison.csv", contract)
+    _summary_line(base_dir / "table-b-summary.md", contract)
+
+
+def _two_decimals(value: Any) -> str:
+    """Carrier value as 2 decimals; absent or N/A stays N/A (never 0)."""
+    if value in (None, "", NA):
+        return NA
+    return f"{float(value):.2f}"
+
+
+def compare_table_b(base_dir: str | Path, evo_dir: str | Path, contract: str,
+                    out_path: str | Path) -> str:
+    """Write the "evolved vs baseline" table-B comparison for one contract.
+
+    Reads only the two carrier sets (``cells-comparison.csv``,
+    ``table-b-summary.md``, ``cells.csv``) of each directory. The two table-B
+    rows are copied verbatim from each ``table-b-summary.md`` (only the first
+    cell is relabelled); the per-window rows read return, MDD and G/E from
+    each ``cells.csv`` and the verdicts from ``window_qualifications``. A
+    carrier without the G/E column shows N/A; no value is ever filled in.
+    Returns the written Markdown.
+    """
+    base_dir, evo_dir = Path(base_dir), Path(evo_dir)
+    sides = {"base": base_dir, "evo": evo_dir}
+    rows = {name: _summary_line(path / "table-b-summary.md", contract)
+            for name, path in sides.items()}
+    cells = {name: _contract_cells(path / "cells.csv", contract) for name, path in sides.items()}
+    verdicts = {name: dict(chunk.split(":", 1) for chunk in _contract_row(
+        path / "cells-comparison.csv", contract)["window_qualifications"].split(","))
+        for name, path in sides.items()}
+    prefix = f"| {contract} |"
+    header = [label for _, label in TABLE_B_HEADERS]
+    lines = [f"# 表 B 对比：{contract} 进化 vs 基准", "",
+             f"- 基准载体：`{base_dir}`",
+             f"- 进化载体：`{evo_dir}`", "",
+             "## 表 B 原表", "",
+             "| " + " | ".join(header) + " |",
+             "|" + "|".join(["---"] * len(header)) + "|",
+             rows["base"].replace(prefix, f"| {contract} 基准 |", 1),
+             rows["evo"].replace(prefix, f"| {contract} 进化 |", 1), "",
+             "\n\n".join(TABLE_B_FOOTNOTES), "",
+             "## 逐窗对比", "",
+             "| 窗口 | 基准收益% | 进化收益% | 基准 MDD% | 进化 MDD% | 基准 G/E | 进化 G/E "
+             "| 基准判定 | 进化判定 |",
+             "|---|---:|---:|---:|---:|---:|---:|---|---|"]
+    for window in ("W1", "W2", "W3", "W4"):
+        values = []
+        for column in ("margin_return_pct", "max_drawdown_pct", GROSS_TO_EQUITY_COLUMN):
+            values += [_two_decimals((cells[name].get(window) or {}).get(column))
+                       for name in sides]
+        values += [qualification_symbol(verdicts[name].get(window, "")) for name in sides]
+        lines.append(f"| {window} | " + " | ".join(values) + " |")
+    text = "\n".join(lines) + "\n"
+    Path(out_path).write_text(text, encoding="utf-8")
+    return text
