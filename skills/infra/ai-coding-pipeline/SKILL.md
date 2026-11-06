@@ -131,6 +131,25 @@ find /home/pascal/.hermes/profiles /home/pascal/workspace/yquant-investment \
 
 ### Kanban 创建规则
 
+#### 墙钟上限 `--max-runtime`（每张卡必填，2026-11-06 Pascal 拍板）
+
+`agent.max_turns` 管的是轮数，各 profile 统一为 150，修改方式见 `config.yaml`。`--max-runtime` 管的是墙钟时间，**没有默认值**：不传就不设上限，dispatcher 只对设了值的卡执行超时终止。超时后，dispatcher 先 SIGTERM，再 SIGKILL，然后把卡重新排队。因此，每次 `hermes kanban create` / `kanban_create` 都**必须**显式传入：
+
+| 阶段 / assignee | `--max-runtime` | `--max-retries` |
+|---|---|---|
+| RFC/SPEC、Design（`yquantprincipal`） | `60m` | `1` |
+| Implement（`yquantdeveloper`） | `75m` | `1` |
+| Verify（`yquanttester`） | `45m` | `1` |
+| Review（`yquantreviewer`） | `60m` | `1` |
+| Closeout / 主控代执行（`yquant`、`yinglong`） | `30m` | `1` |
+
+- 默认值依据 2026-09 以来已完成 run 的实际时长：各角色 p95 都不超过 37 分钟（reviewer 37.0、principal 25.2、developer 21.6、tester 17.4）。默认值是 p95 的 1.6–3.5 倍，绝大多数卡不会被误杀。历史上最长的几次超过了默认值（principal 74.5、reviewer 70.4），这类长任务应在 body 里写明理由并调大上限。过去出现过 20 次 `elapsed > limit`，原因都是当时手填的 10–30 分钟太紧。
+- 只在两种情况下偏离默认值：
+  - 卡片 body 写明了理由，例如"长回测轮询""大批量迁移"，可以调大；
+  - 范围很窄的续接卡或行政卡，可以调小，例如 `20m`。
+- 偏离默认值时，必须在 body 里写明实际值和原因。
+- 超时属于 dispatcher 的调度事实，不等于工作失败。恢复处理按 `worker-budget-recovery` skill：先看已落盘的产物，再决定是行政收尾还是收窄后续接，不要盲目重跑。
+
 完整流程必须创建依赖链：
 
 ```text
@@ -191,6 +210,7 @@ grep -RIn "<规则短语>" /home/pascal/.hermes/profiles /home/pascal/workspace 
 
 每个 `kanban_create` 的 body 必须包含：
 
+- 本卡的 `--max-runtime` 取值。按上文"墙钟上限"表的默认值；偏离默认值时写明原因。
 - 用户目标和当前阶段。
 - 相关文件、目录、RFC/SPEC/DESIGN 路径。
 - 允许修改的范围和禁止事项。
