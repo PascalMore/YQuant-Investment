@@ -436,6 +436,13 @@ def main(argv: list[str] | None = None) -> int:
             "backtests_needed_worst_case": needed, "budget": args.budget},
             ensure_ascii=False, indent=1))
         return 0
+    # The platform treats endDate as inclusive (the evolution plan's last bar
+    # is evolve_end 23:00), so a held-out window starting on evolve_end
+    # shares that day with the evolution data.
+    if args.holdout_start <= args.evolve_end:
+        print(f"warning: holdout starts {args.holdout_start}, the platform includes "
+              f"evolve_end {args.evolve_end} in the evolution data; the held-out "
+              "window overlaps it by one day", file=sys.stderr)
     if needed > args.budget:
         print(f"budget {args.budget} < worst case {needed}; lower --top or tiers",
               file=sys.stderr)
