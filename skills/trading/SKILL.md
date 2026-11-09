@@ -1,6 +1,6 @@
 ---
 name: trading
-description: "YQuant 交易业务与运行模块：用于自动化交易、策略交易、智能交易的规划、运行编排、授权风控、执行对账与复盘反馈；当前仅规划，未启用交易。"
+description: "YQuant 交易业务与运行模块：用于自动化交易、策略交易、智能交易的规划、运行编排、授权风控、执行对账与复盘反馈；当前仅规划，已登记第三方交易源码但未启用任何交易运行。"
 ---
 
 # Trading Module
@@ -11,11 +11,17 @@ description: "YQuant 交易业务与运行模块：用于自动化交易、策�
 
 **当前仅有规划与文档入口。没有可调用的交易引擎、交易所适配器、账户连接、模拟或实盘能力；技能可发现不代表交易就绪。** 不把本技能当作下单工具，也不要从其他模块已有源码推断当前可运行。
 
-2026-10-22：OctoBot submodule 已按用户决定移除，不默认重新引入。QuantDinger 仅为后续候选，拟议源码归属 `skills/trading/auto_trading/QuantDinger/`；当前尚未创建该目录、添加子模块或批准部署。
+已登记的第三方交易源码（均以 submodule 方式接入，只读保留原版；接入不等于运行许可，本模块未新增任何模拟/实盘、账户或运行控制授权）：
+
+- QuantDinger 源码已登记：`skills/trading/auto-trading/quantdinger/QuantDinger`、`QuantDinger-Vue`、`QuantDinger-Mobile`（`.gitmodules` 中三条 `branch=main` 条目）。本次未核验其功能、构建或交易能力。
+- Prediction-Markets-Trading-Bot-Toolkits 已接入：`skills/trading/auto-trading/prediction-markets/Prediction-Markets-Trading-Bot-Toolkits`（fork `PascalMore/Prediction-Markets-Trading-Bot-Toolkits`，`branch=main`，实际 SHA `71c0e4ff9e299f9a4d81757fd6b15cf54da69b38`）。Implement 原版构建及安全离线测试通过（见本契约集证据）；联网与交易路径未验证，待独立 Verify/Review。
+
+2026-10-22：OctoBot submodule 已按用户决定移除，不默认重新引入。
 
 ## 正式来源
 
 - [模块规划 RFC-26-072](../../docs/rfc/07_trading/RFC-26-072-trading-intelligent-trading-framework.md)：业务范围、整体框架、职责与闭环的唯一模块规划正文，当前为 Draft。
+- [Predict.fun BTC5m M1 契约集](../../docs/rfc/07_trading/RFC-07-001-predictfun-btc5m.md)（RFC V1.1）、[SPEC](../../docs/spec/07_trading/SPEC-07-001-predictfun-btc5m.md)（V1.1）、[Design](../../docs/design/07_trading/DESIGN-07-001-predictfun-btc5m.md)（V1.0）：Toolkits fork 接入与原版基线的来源、范围与验收口径。
 - [全局总纲](../../docs/rfc/00_project_overview/RFC-00-001-yquant-investment-global-architecture.md)：既有 07_trading 编号与跨模块关系。
 - [AGENTS](../../AGENTS.md)、[SOUL](../../SOUL.md)：授权、工程流程与能力边界；本技能不扩大权限。
 - [目录说明](README.md)：实际文件与后续扩展规则。
@@ -42,7 +48,7 @@ Trading 不只是下单通道，而是“获准的交易方案如何持续运行
 
 ## 处理方法
 
-1. 先辨明请求是研究/规划、只读查询、离线验证、模拟运行，还是实盘操作；本模块当前仅支持规划说明，未启用其他运行路径。
+1. 先辨明请求是研究/规划、只读查询、离线验证、模拟运行，还是实盘操作；本模块当前仅支持规划说明，未启用其他运行路径。已登记的第三方源码只读保留原版：QuantDinger 未核验构建与测试能力；Prediction-Markets-Trading-Bot-Toolkits 的原版构建与安全离线测试已在 Implement 轮次通过，仍不代表联网/交易路径已验证。
 2. 说明决策来源、策略/模型版本、目标/预算、账户能力和拟用模式；缺少上下文时不猜测账户、接口或数据库集合。
 3. 将获准意图与订单、成交、费用、对账、组合表现串联；业务事件反馈不等于代码循环依赖。
 4. 做开发前重新确认对应任务流程、SPEC/Design 和授权；本次文档更新的流水线豁免不延伸到开发或交易。
@@ -62,7 +68,11 @@ Trading 不只是下单通道，而是“获准的交易方案如何持续运行
 ```text
 skills/trading/
 ├── SKILL.md
-└── README.md
+├── README.md
+└── auto-trading/
+    ├── quantdinger/            # QuantDinger / -Vue / -Mobile 源码（submodule，已登记）
+    └── prediction-markets/
+        └── Prediction-Markets-Trading-Bot-Toolkits   # Toolkits fork 源码（submodule，已接入）
 ```
 
 不预建空引擎、适配器、运行脚本或配置；后续能力按具体场景和验证结果增量建设。

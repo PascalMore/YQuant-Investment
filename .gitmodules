@@ -18,3 +18,7 @@
 	path = skills/trading/auto-trading/quantdinger/QuantDinger-Mobile
 	url = git@github.com:PascalMore/QuantDinger-Mobile.git
 	branch = main
+[submodule "skills/trading/auto-trading/prediction-markets/Prediction-Markets-Trading-Bot-Toolkits"]
+	path = skills/trading/auto-trading/prediction-markets/Prediction-Markets-Trading-Bot-Toolkits
+	url = https://github.com/PascalMore/Prediction-Markets-Trading-Bot-Toolkits
+	branch = main
