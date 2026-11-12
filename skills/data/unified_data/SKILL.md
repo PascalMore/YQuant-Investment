@@ -16,6 +16,14 @@ YQuant Unified Data Layer 的入口说明（Phase 0 骨架 + Phase 1A TA-CN 只�
 
 > 架构基线（SPEC/Design-03-018 supersede）：TA-CN 原始只读源固定 `tradingagents`，UD 自有物化、缓存、审计、质量汇总、ranking 与历史目标固定 `yquant-data`，保留集合名与 ownership 前缀。双库共用原连接；认证来源不变，不修改共享 `MONGODB_DATABASE`，sector `ConnLoader.load_source_db()` / `load_ud_db()` 显式选源/目标，audit 保留独立 writer/reader AUTH_DB，既有身份仅验证新 resource/action，不自动创建用户或角色。参见 `docs/spec/03_data/SPEC-03-018-yquant-data-history.md` §3–4 与 `docs/design/03_data/DESIGN-03-018-yquant-data-history.md` §4/5；该覆盖只替换旧同库/认证耦合，不重开其他冻结门禁。权威读取路径仍为 internal-first：TA-CN 既有 → UD 物化 → Query Cache → 外部 Provider；外部刷新失败不阻断内部已有数据读取，不回落旧库写入。DSA 仅作为分析/参考上下文，不实现 DSA adapter，不出现在 `external_fallback_chains` 中。
 
+## 迁移后旧 UD 集合清理
+
+- 将迁移与旧副本删除分为独立授权动作。仅允许清理已核定的 `tradingagents.03_data_ud_*` 显式清单；不按前缀通配删除，不删除整个源库，TA-CN 原始与 portfolio/交易集合仍保留。
+- 复用 `storage.open_databases()` 及迁移工具的 `canonical_digest` / `index_signature`：删除前逐 typed ID 全内容比对源/目标，核对 options 与索引语义，备份 BSON 和 metadata 并完整解码读回；空集合同样保存索引，metadata 序列化不得重排复合索引键。备份私有、校验和可核，不能把离线解码核验称作已做生产恢复演练。
+- 首次删除前复核全清单，每个 drop 前复核对应源/目标无漂移；每次删除后读取集合清单确认消失，再以新连接验证目标摘要不变和 UD 真实只读路径。发生部分删除或权限失败立即停止，不盲重试、不升权、不自动恢复源集合。
+- 清理完成后，旧迁移 manifest 属历史证据；依赖源仍存在的迁移 verify/重放不再适合作为常规健康检查。恢复旧 namespace 必须另行授权，不以重跑迁移隐式重建。
+- BTC5m facade 冒烟的 features 同时包含秒线和轮次 strike：一个完整五分钟窗口可能是 300 条行情特征 + 1 条 strike 特征，metadata 和 labels 另流计数；按真实行类型验证，不把 301 条 features 误判为重复行情或清理损伤。
+
 ## 模块定位
 
 `skills/data/unified_data/` 是 YQuant 的全局统一数据访问层（来自 RFC §1）：
