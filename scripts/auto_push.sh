@@ -24,13 +24,23 @@ push_repo() {
     cd "$repo_path"
 
     # ── Submodules: initialize BEFORE iterating .gitmodules ──
-    # Required so each submodule working tree starts at the committed gitlink,
-    # not whatever the parent's working tree currently has checked out.
+    # Initialize ONLY submodules that are not yet populated. A blanket
+    # `git submodule update --init` resets EVERY populated submodule's working
+    # tree back to the gitlink recorded in the parent, which silently discards
+    # submodule commits made after the last parent commit and aborts outright
+    # when the submodule has uncommitted changes. Populated submodules are
+    # left exactly as they are; the loop below commits and pushes them first.
     # Fail fast if a submodule is broken — do NOT use `|| true` here, otherwise
     # the next loop would silently work on a half-initialized tree.
     if [ -f "$repo_path/.gitmodules" ]; then
-        git submodule update --init
-        echo "[$TIMESTAMP] $prefix: submodules initialized" >> "$log_file"
+        while IFS= read -r submod; do
+            [ -z "$submod" ] && continue
+            if [ ! -e "$repo_path/$submod/.git" ]; then
+                git submodule update --init -- "$submod"
+                echo "[$TIMESTAMP] $prefix: initialized submodule $submod" >> "$log_file"
+            fi
+        done < <(git config -f "$repo_path/.gitmodules" --get-regexp '\.path$' | awk '{print $2}')
+        echo "[$TIMESTAMP] $prefix: submodules checked" >> "$log_file"
     fi
 
     # ── Submodules (auto-detect from .gitmodules) ──

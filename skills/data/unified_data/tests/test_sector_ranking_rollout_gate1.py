@@ -688,4 +688,5 @@ class _ClientShim:
         self._db = db
 
     def get_database(self, name: str):
+        assert name == "tradingagents", "Gate1 may only select the TA-CN source"
         return self._db

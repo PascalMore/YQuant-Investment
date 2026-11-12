@@ -22,6 +22,7 @@ from datetime import datetime
 from typing import Any
 
 from ..models import DataResult
+from ..storage import assert_ud_database
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,12 @@ class AuditLogger:
         self._mongo_db = mongo_db
         self._collection_name = collection_name
         self._ttl_days = ttl_days
+        # 03-018 §3.1: the audit resource must live in the UD business
+        # database. The guard only applies to a real, non-empty handle —
+        # ``None`` keeps the noop mode and mongomock handles keep the
+        # offline tests working.
+        if mongo_db is not None:
+            assert_ud_database(mongo_db)
 
     @property
     def collection_name(self) -> str:
@@ -161,7 +168,8 @@ class AuditLogger:
             self._mongo_db[self._collection_name].insert_one(doc)
         except Exception as exc:
             logger.warning(
-                "AuditLogger.log failed (catch-and-log): %s", exc
+                "AuditLogger.log failed (catch-and-log, %s)",
+                type(exc).__name__,
             )
 
     def _build_document(

@@ -1,4 +1,7 @@
-"""audit_rollout 单元测试（DESIGN-03-011 §8.9 / §14.1，SPEC-03-011 §8）。
+"""audit_rollout 单元测试（03-018 覆盖同库与自动身份写契约）。
+
+当前 apply 使用预置身份，只验证新库 resource/action；旧 helper 的离线
+密码/脱敏安全回归仍保留，不表示生产入口允许调用身份写函数。
 
 覆盖矩阵（reviewer t_c051239d REVISE 后重写 + A1-A10 acceptance）：
 
@@ -44,7 +47,14 @@ from unittest.mock import patch
 import mongomock
 import pytest
 
-ROOT = Path(__file__).resolve().parents[2]
+@pytest.fixture(autouse=True)
+def _isolated_audit_environment(monkeypatch):
+    for kind in ("DDL", "WRITER", "READER"):
+        for field in ("URI", "USERNAME", "PASSWORD", "AUTH_DB"):
+            monkeypatch.delenv(f"YQUANT_UD_AUDIT_{kind}_MONGO_{field}", raising=False)
+
+
+ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS_DIR = ROOT / "scripts"
 SCRIPT = SCRIPTS_DIR / "unified_data" / "audit_rollout.py"
 
@@ -70,7 +80,9 @@ def _load_module():
 # ---------------------------------------------------------------------------
 
 
-def _run_cli(*args: str, env_overrides: dict | None = None) -> subprocess.CompletedProcess:
+def _run_cli(
+    *args: str, env_overrides: dict | None = None, module: bool = False, cwd: Path = ROOT,
+) -> subprocess.CompletedProcess:
     env = {**__import__("os").environ}
     # 显式覆盖：测试不被父进程残留凭证影响
     for k in (
@@ -90,10 +102,56 @@ def _run_cli(*args: str, env_overrides: dict | None = None) -> subprocess.Comple
         env.pop(k, None)
     if env_overrides:
         env.update(env_overrides)
+    entry = ["-m", "scripts.unified_data.audit_rollout"] if module else [str(SCRIPT)]
     return subprocess.run(
-        [sys.executable, str(SCRIPT), *args],
-        capture_output=True, text=True, cwd=str(ROOT), env=env,
+        [sys.executable, *entry, *args],
+        capture_output=True, text=True, cwd=str(cwd), env=env,
     )
+
+
+@pytest.mark.parametrize("args, expected", [
+    ((), 0), (("--evil-flag",), 2), (("--apply", "--verify"), 2),
+    (("--apply",), 3), (("--verify",), 3),
+])
+def test_file_and_module_entry_parity(args, expected):
+    file_result = _run_cli(*args)
+    module_result = _run_cli(*args, module=True)
+    assert file_result.returncode == module_result.returncode == expected
+    assert file_result.stdout == module_result.stdout
+    assert file_result.stderr == module_result.stderr
+    output = file_result.stdout + file_result.stderr
+    assert "Traceback" not in output
+    assert "mongodb://" not in output
+    if expected == 0:
+        assert file_result.stdout.count("no side effects will be performed.") == 1
+        assert file_result.stdout.count("[DRY-RUN] done.") == 1
+        assert file_result.stderr == ""
+    else:
+        assert file_result.stdout == ""
+        assert ("error:" if expected == 2 else "credentials:") in file_result.stderr
+
+
+def test_file_entry_from_other_cwd(tmp_path):
+    result = _run_cli(cwd=tmp_path)
+    reference = _run_cli(module=True)
+    assert result.returncode == reference.returncode == 0
+    assert (result.stdout, result.stderr) == (reference.stdout, reference.stderr)
+
+
+def test_file_entry_delegates_once_to_canonical_main(monkeypatch):
+    import runpy
+    from scripts.unified_data import ud_lock
+
+    canonical = _load_module()
+    assert canonical.acquire_ud_lock is ud_lock.acquire_ud_lock
+    assert canonical.UDLockBusy is ud_lock.UDLockBusy
+    calls = []
+    monkeypatch.setattr(canonical, "main", lambda: calls.append(canonical.__name__) or 17)
+    monkeypatch.setattr(sys, "path", sys.path.copy())
+    with pytest.raises(SystemExit) as exc:
+        runpy.run_path(str(SCRIPT), run_name="__main__")
+    assert exc.value.code == 17
+    assert calls == ["scripts.unified_data.audit_rollout"]
 
 
 class TestDryRun:
@@ -208,7 +266,7 @@ class _FakeDdlClient:
 
     def __getitem__(self, name):
         # script 内只读 ALLOWED_DATABASE，但保留显式断言以防误改
-        assert name == "tradingagents", f"unexpected database access: {name}"
+        assert name in {"yquant-data", "admin", "tradingagents"}, name
         return self._db
 
     def close(self):
@@ -302,9 +360,20 @@ class _DuplicateKey(Exception):
     "已存在 → 精确比对"分支。"""
 
 
+def _seed_identities(ar, admin_db):
+    """Pre-existing identities: role DB stays old, privileges target only new DB."""
+    for user, role, privileges in (
+        (ar.WRITER_USER_NAME, ar.WRITER_ROLE_NAME, ar.WRITER_ROLE_PRIVILEGES),
+        (ar.READER_USER_NAME, ar.READER_ROLE_NAME, ar.READER_ROLE_PRIVILEGES),
+    ):
+        admin_db._users[user] = {"roles": [{"role": role, "db": "tradingagents"}]}
+        admin_db._roles[role] = {"privileges": privileges, "roles": []}
+
+
 def _install_fake_ddl(monkeypatch, ar, fake_db):
-    """把 DDL client 替换为 fake admin，并设置 createUser 测试密码。"""
+    """Inject existing identities and business DB; no real environment or client."""
     admin_db = _FakeAdminDb(fake_db)
+    _seed_identities(ar, admin_db)
     monkeypatch.setattr(ar, "_open_ddl_client", lambda: _FakeDdlClient(admin_db))
     monkeypatch.setenv("YQUANT_UD_AUDIT_WRITER_MONGO_PASSWORD", "writer-test-password")
     monkeypatch.setenv("YQUANT_UD_AUDIT_READER_MONGO_PASSWORD", "reader-test-password")
@@ -461,48 +530,25 @@ class TestVerifyWithMongomock:
 class TestAcceptanceA1_A10:
     """对应 DESIGN-03-011 §14.1 / RFC-03-011 §14 的 A1-A10 acceptance。"""
 
-    def test_a1_ensure_functions_exist_and_run_apply_calls_them(self, monkeypatch):
-        """A1: 四个 _ensure_* 函数存在，run_apply 调用链覆盖。"""
+    def test_ut05_apply_never_calls_identity_writers(self, monkeypatch):
+        """03-018 replaces A1 auto-provisioning with zero identity writes."""
         ar = _load_module()
-        # 静态函数存在性
-        for fn_name in (
-            "_ensure_write_role",
-            "_ensure_read_role",
-            "_ensure_write_user",
-            "_ensure_read_user",
-        ):
-            assert hasattr(ar, fn_name), f"missing {fn_name}"
-            assert callable(getattr(ar, fn_name)), f"{fn_name} not callable"
-
-        # run_apply 调用链覆盖：通过 mock 让每个 _ensure_* 都触发计数
         fake_db = mongomock.MongoClient().db
-        _install_fake_ddl(monkeypatch, ar, fake_db)
-        calls: list[str] = []
+        admin_db = _install_fake_ddl(monkeypatch, ar, fake_db)
         for fn_name in (
-            "_ensure_write_role",
-            "_ensure_read_role",
-            "_ensure_write_user",
-            "_ensure_read_user",
+            "_ensure_write_role", "_ensure_read_role", "_ensure_write_user",
+            "_ensure_read_user", "_ensure_role", "_ensure_user", "_preflight_runtime_users",
         ):
-            original = getattr(ar, fn_name)
-            def _make_recorder(orig, name):
-                def _wrapped(db):
-                    calls.append(name)
-                    return orig(db)
-                return _wrapped
-            monkeypatch.setattr(
-                ar, fn_name, _make_recorder(original, fn_name)
-            )
+            monkeypatch.setattr(ar, fn_name, lambda *a, **kw: pytest.fail("identity writer called"))
+        command = admin_db.command
 
-        rc = ar.run_apply()
-        assert rc == 0
-        # 调用链顺序：先 roles 再 users
-        assert calls == [
-            "_ensure_write_role",
-            "_ensure_read_role",
-            "_ensure_write_user",
-            "_ensure_read_user",
-        ]
+        def readonly_command(cmd, *args, **kwargs):
+            assert set(cmd) & {"usersInfo", "rolesInfo"}, "identity write forbidden"
+            return command(cmd, *args, **kwargs)
+
+        monkeypatch.setattr(admin_db, "command", readonly_command)
+        assert ar.run_apply() == 0
+        assert ar.run_verify() == 0
 
     def test_a2_identity_constants_have_yquant_prefix(self):
         """A2: WRITER_ROLE_NAME / READER_ROLE_NAME / WRITER_USER_NAME /
@@ -526,14 +572,14 @@ class TestAcceptanceA1_A10:
         # writer：actions == ["insert"]，resource 唯一且仅 audit collection
         assert len(ar.WRITER_ROLE_PRIVILEGES) == 1
         wp = ar.WRITER_ROLE_PRIVILEGES[0]
-        assert wp["resource"]["db"] == "tradingagents"
+        assert wp["resource"]["db"] == "yquant-data"
         assert wp["resource"]["collection"] == "03_data_ud_query_audit"
         assert set(wp["actions"]) == {"insert"}
 
         # reader：actions == ["find"]
         assert len(ar.READER_ROLE_PRIVILEGES) == 1
         rp = ar.READER_ROLE_PRIVILEGES[0]
-        assert rp["resource"]["db"] == "tradingagents"
+        assert rp["resource"]["db"] == "yquant-data"
         assert rp["resource"]["collection"] == "03_data_ud_query_audit"
         assert set(rp["actions"]) == {"find"}
 
@@ -774,6 +820,7 @@ class TestCreateUserPasswordContract:
     def test_t_pwd_2_missing_pwd_allows_only_users_info_precheck(
         self, monkeypatch, capsys
     ):
+        """Existing identities need no runtime password; apply only checks roles/users."""
         ar = _load_module()
         fake_db = mongomock.MongoClient().db
         admin_db = _install_fake_ddl(monkeypatch, ar, fake_db)
@@ -793,12 +840,12 @@ class TestCreateUserPasswordContract:
         rc = ar.run_apply()
         captured = capsys.readouterr()
 
-        assert rc == 3
+        assert rc == 0
         assert admin_db.commands
-        assert all("usersInfo" in cmd for cmd in admin_db.commands)
-        assert not admin_db._roles
-        assert not admin_db._users
-        assert ar.ALLOWED_COLLECTION not in fake_db.list_collection_names()
+        assert all(set(cmd) & {"usersInfo", "rolesInfo"} for cmd in admin_db.commands)
+        assert admin_db._roles
+        assert admin_db._users
+        assert ar.ALLOWED_COLLECTION in fake_db.list_collection_names()
         assert "pwd" not in captured.out.lower()
         assert "password" not in captured.out.lower()
 
@@ -858,12 +905,10 @@ class TestCreateUserPasswordContract:
         captured = capsys.readouterr()
 
         assert rc == 4
-        assert admin_db.commands == [
-            {"usersInfo": ar.WRITER_USER_NAME, "showPrivileges": False}
-        ]
-        assert not admin_db._roles
+        assert all(set(cmd) & {"usersInfo", "rolesInfo"} for cmd in admin_db.commands)
+        assert admin_db._roles
         assert ar.ALLOWED_COLLECTION not in fake_db.list_collection_names()
-        assert "mismatch" in captured.err.lower() or "does not match" in captured.err.lower()
+        assert "permission" in captured.err.lower()
 
     def test_t_pwd_5_create_user_exception_does_not_leak_secret(
         self, monkeypatch, capsys
@@ -903,6 +948,48 @@ class TestCreateUserPasswordContract:
 
 
 class TestCredentialLoaders:
+    @pytest.mark.parametrize("missing", [False, True])
+    def test_ut05_auth_role_resource_databases_are_independent(self, monkeypatch, capsys, missing):
+        ar = _load_module()
+        client = mongomock.MongoClient()
+        writer_auth = _FakeAdminDb(client["writer-auth"])
+        reader_auth = _FakeAdminDb(client["reader-auth"])
+        roles = _FakeAdminDb(client["legacy-role-db"])
+        _seed_identities(ar, roles)
+        writer_auth._users[ar.WRITER_USER_NAME] = {
+            "roles": [{"role": ar.WRITER_ROLE_NAME, "db": "legacy-role-db"}]}
+        reader_auth._users[ar.READER_USER_NAME] = {
+            "roles": [{"role": ar.READER_ROLE_NAME, "db": "legacy-role-db"}]}
+        if missing:
+            roles._roles.pop(ar.WRITER_ROLE_NAME)
+        visited = []
+
+        class Client:
+            def __getitem__(self, name):
+                visited.append(name)
+                return {"writer-auth": writer_auth, "reader-auth": reader_auth,
+                        "legacy-role-db": roles, "yquant-data": client["yquant-data"]}[name]
+
+            def close(self):
+                pass
+
+        monkeypatch.setenv("YQUANT_UD_AUDIT_WRITER_MONGO_AUTH_DB", "writer-auth")
+        monkeypatch.setenv("YQUANT_UD_AUDIT_READER_MONGO_AUTH_DB", "reader-auth")
+        monkeypatch.setattr(ar, "_open_ddl_client", Client)
+        assert ar.run_apply() == (4 if missing else 0)
+        assert ar.run_verify() == (1 if missing else 0)
+        for db in (writer_auth, reader_auth, roles):
+            assert db.commands
+            assert all(set(cmd) & {"rolesInfo", "usersInfo"} for cmd in db.commands)
+        assert "tradingagents" not in visited
+        assert client["tradingagents"].list_collection_names() == []
+        output = capsys.readouterr()
+        if missing:
+            assert "yquant-data.03_data_ud_query_audit:insert" in output.err
+            assert client["yquant-data"].list_collection_names() == []
+        assert "writer-auth" not in output.out + output.err
+        assert "legacy-role-db" not in output.out + output.err
+
     """DESIGN §8.5.2 / SPEC §8.3：runtime writer/reader 凭证独立加载。"""
 
     def test_load_ddl_credentials_missing_uri(self, monkeypatch):
@@ -1013,6 +1100,7 @@ class TestVerifyRolesInfoShowPrivileges:
         ar = _load_module()
         fake_db = mongomock.MongoClient().db
         admin_db = _Mongo7FakeAdminDb(fake_db)
+        _seed_identities(ar, admin_db)
         monkeypatch.setattr(ar, "_open_ddl_client", lambda: _FakeDdlClient(admin_db))
         monkeypatch.setenv("YQUANT_UD_AUDIT_WRITER_MONGO_PASSWORD", "writer-test-password")
         monkeypatch.setenv("YQUANT_UD_AUDIT_READER_MONGO_PASSWORD", "reader-test-password")
@@ -1049,6 +1137,7 @@ class TestVerifyRolesInfoShowPrivileges:
         ar = _load_module()
         fake_db = mongomock.MongoClient().db
         admin_db = _Mongo7FakeAdminDb(fake_db)
+        _seed_identities(ar, admin_db)
         monkeypatch.setattr(ar, "_open_ddl_client", lambda: _FakeDdlClient(admin_db))
         monkeypatch.setenv("YQUANT_UD_AUDIT_WRITER_MONGO_PASSWORD", "writer-test-password")
         monkeypatch.setenv("YQUANT_UD_AUDIT_READER_MONGO_PASSWORD", "reader-test-password")

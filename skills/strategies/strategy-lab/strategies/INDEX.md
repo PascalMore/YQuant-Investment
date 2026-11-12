@@ -3,10 +3,11 @@
 本索引登记 `skills/strategies/strategy-lab/strategies/` 下的全部策略/研究实例，服务于「先查再研」：
 只登记实例状态、结论摘要与证据路径，不复制报告正文、不新增指标、不重新评价。
 
-生成日期：2026-11-05（Asia/Shanghai UTC+08:00），2026-11-06 补登网格进化 1 条。实例数量以本目录下实际子目录为准（32 个）；网格进化不建实例目录，其证据只在 `data/reports/` 下，路径以仓库根为基准。
+生成日期：2026-11-05（Asia/Shanghai UTC+08:00），2026-11-06 补登网格进化 1 条；2026-11-10 补登 BTC5m 代理研究（待独立验收）。实例数量以本目录下实际子目录为准（2026-11-05 历史快照为32个）；网格进化不建实例目录，其证据只在 `data/reports/` 下，路径以仓库根为基准。
 
 | 实例 id | 类型 | 状态 | 结论一句话 | 报告/证据路径 | Path B 口径（10x） |
 |---|---|---|---|---|---|
+| `predict-btc5m-btc-arb` | 研究类（Rust同核心代理） | 已完成（代理研究；待独立验收） | 归档真实OHLC离线研究外层exit3，IS144/OOS143；venue/product未知、真实收益N/A，不代表可交易回测或实盘就绪。 | `strategies/predict-btc5m-btc-arb/reports/report.md`；`data/reports/2026-11-10-predict-btc5m-m2/evidence/recovery-01/` | 不适用 |
 | `spy-close-research` | 研究类 | 已完成 | 平台真实取数两次重跑结果一致：2024 年 SPY 日收益均值 0.000889、样本标准差 0.007934、年化波动率 0.1259，样本 252 根日线。 | `strategies/spy-close-research/reports/report.md`（附 `reports/replay-check.md`、`reports/latest.csv`） | — |
 | `spy-ma-smoke` | 交易类 | 已完成 | 真实闭环跑通并选定进化候选 `ma_period=80`：全段总收益 +103.53%、年化 +8.63%、最大回撤 −16.65%、夏普 0.83（基准 run20 → 最终 run24，MDD≤50% 硬约束合格）。 | `strategies/spy-ma-smoke/reports/report.md`（附 `reports/comparison.csv`、`reports/agent-backtest.md`） | — |
 | `neutral-grid-four-window-v1` | 研究类 | 未执行 | — | — | — |

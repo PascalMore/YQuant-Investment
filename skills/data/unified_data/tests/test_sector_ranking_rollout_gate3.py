@@ -58,7 +58,8 @@ class _ClientShim:
         self._db = db
 
     def get_database(self, name: str):
-        return self._db
+        assert name in {"tradingagents", "yquant-data"}
+        return self._db if name == "tradingagents" else self._db.client["yquant-data"]
 
 
 def _fresh_db() -> Any:
@@ -1055,11 +1056,29 @@ class TestGate3Main:
         assert factory.calls == 0
         assert not (tmp_path / "out" / "gate3-report.json").exists()
 
-    def test_canary_success_writes_report_and_materializes_day(self, tmp_path):
+    def test_canary_success_writes_report_and_materializes_day(self, tmp_path, monkeypatch):
+        from scripts.unified_data.sector_ranking_rollout import gate3_backfill as gate3
         from scripts.unified_data.sector_ranking_rollout.gate3_backfill import main
 
         report_path = make_gate1_report(tmp_path, universe=EXPECTED_UNIVERSE_SI)
         db = _gate3_db()
+        original_process = gate3.process_day
+        original_budget = gate3.BudgetReader
+        calls = []
+
+        def process(*args, **kwargs):
+            assert kwargs["db"] is db
+            assert kwargs["writer"]._db is db.client["yquant-data"]
+            calls.append("process")
+            return original_process(*args, **kwargs)
+
+        def budget(source, **kwargs):
+            assert source is db
+            calls.append("budget")
+            return original_budget(source, **kwargs)
+
+        monkeypatch.setattr(gate3, "process_day", process)
+        monkeypatch.setattr(gate3, "BudgetReader", budget)
         out = tmp_path / "out"
         rc = main(
             [
@@ -1073,7 +1092,9 @@ class TestGate3Main:
             updated_at="2026-07-31T12:00:00Z",
         )
         assert rc == EXIT_OK
-        rows = db[DATASET_COLLECTION].find({"trade_date": "2026-07-14"})
+        assert calls == ["budget", "process"]
+        assert db[DATASET_COLLECTION].count_documents({}) == 0
+        rows = db.client["yquant-data"][DATASET_COLLECTION].find({"trade_date": "2026-07-14"})
         assert len(list(rows)) == 3
         payload = json.loads((out / "gate3-report.json").read_text())
         assert payload["stop_conditions_hit"] == []
@@ -1098,10 +1119,10 @@ class TestGate3Main:
             updated_at="2026-07-31T12:00:00Z",
         )
         assert rc == EXIT_OK
-        assert db[DATASET_COLLECTION].count_documents({"dataset": "sw2021_ta_cn"}) == 6
-        dates = sorted(
-            {d["trade_date"] for d in db[DATASET_COLLECTION].find({})}
-        )
+        assert db[DATASET_COLLECTION].count_documents({}) == 0
+        target = db.client["yquant-data"][DATASET_COLLECTION]
+        assert target.count_documents({"dataset": "sw2021_ta_cn"}) == 6
+        dates = sorted({d["trade_date"] for d in target.find({})})
         assert dates == ["2026-07-13", "2026-07-14"]  # 07-10 被默认排除
         payload = json.loads((out / "gate3-report.json").read_text())
         assert payload["range"]["excluded_first"] == "2026-07-10"

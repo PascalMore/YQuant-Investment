@@ -90,6 +90,16 @@ from .services import (
 from .audit import AuditLogger
 from .client import UnifiedDataClient
 from .config import UnifiedDataConfig
+from .history_types import (
+    HistoryError,
+    HistoryRequest,
+    HistoryWindow,
+)
+from .storage import (
+    TA_CN_DATABASE,
+    UD_DATABASE,
+    UDDatabases,
+)
 from .quality import (
     QualityScorer,
     QualityScorerConfig,
@@ -151,4 +161,11 @@ __all__ = [
     "ScoredResult",
     "QualitySummary",
     "AuditLogger",
+    # 03-018 — UD business database boundary + narrow history read facade
+    "UD_DATABASE",
+    "TA_CN_DATABASE",
+    "UDDatabases",
+    "HistoryError",
+    "HistoryRequest",
+    "HistoryWindow",
 ]

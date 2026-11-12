@@ -72,6 +72,14 @@ class UnifiedDataClient:
         p3_writer: Any | None = None,
         historical_ranking_db: Any | None = None,
         historical_ranking_expected_universe: Mapping[str, frozenset[str]] | None = None,
+        # 03-018 §3.1：既有 router 持久化/缓存/审计/质量槽位此前未透传，
+        # 现在以 keyword-only 方式显式注入（默认 None → 旧行为不变）。
+        local_mongo_adapter: Any | None = None,
+        cache_manager: Any | None = None,
+        quality_scorer: Any | None = None,
+        audit_logger: Any | None = None,
+        # 03-018 §3.1：窄历史只读 facade（可选注入）。
+        history_reader: Any | None = None,
     ) -> None:
         self._registry = registry if registry is not None else ProviderRegistry()
         self._config = config or UnifiedDataConfig.minimal()
@@ -92,6 +100,13 @@ class UnifiedDataClient:
             # it as a read cache (M1 read-only guard still prevents
             # the writer from being mutated on the read path).
             p3_writer=p3_writer,
+            # 03-018 §3.1: forward the persistence / cache / quality /
+            # audit slots to the router so the actual read-write calls
+            # land in the injected database instead of being dropped.
+            local_mongo_adapter=local_mongo_adapter,
+            cache_manager=cache_manager,
+            quality_scorer=quality_scorer,
+            audit_logger=audit_logger,
         )
         self._market_data_service: MarketDataService | None = None
         self._fundamental_service: FundamentalService | None = None
@@ -127,6 +142,10 @@ class UnifiedDataClient:
             for dataset, codes in (historical_ranking_expected_universe or {}).items()
         }
         self._historical_sector_service: HistoricalSectorService | None = None
+        # 03-018 §3.1: narrow read-only BTC5m history facade (optional).
+        # ``None`` means the facade is not configured; reads then fail
+        # explicitly instead of silently returning an empty result.
+        self._history_reader = history_reader
 
     # ------------------------------------------------------------------
     # Convenience
@@ -605,6 +624,61 @@ class UnifiedDataClient:
         )
 
     # ------------------------------------------------------------------
+    # 03-018 §8 — narrow BTC5m history read facade
+    # ------------------------------------------------------------------
+
+    def read_btc5m_history(
+        self,
+        start_utc: Any,
+        end_utc: Any,
+        *,
+        warmup_seconds: int = 0,
+        as_of_utc: Any,
+        availability_mode: str = "observed",
+        expected_manifest: Any | None = None,
+    ) -> Any:
+        """Read the persisted BTC5m history window.
+
+        The call is forwarded verbatim to the injected history reader.
+        It bypasses the router / cache / audit chain entirely: no audit
+        write, no cache write, no provider fallback, no index creation
+        and no network access happen on this path (SPEC-03-018 §8).
+
+        Args:
+            start_utc: Main-window lower bound (inclusive), explicit UTC.
+            end_utc: Main-window upper bound (exclusive), explicit UTC.
+            warmup_seconds: Warm-up seconds before the main window.
+            as_of_utc: Availability cut-off (required, explicit UTC).
+            availability_mode: ``observed`` (default) or
+                ``event-time-proxy``.
+            expected_manifest: Previous business content manifest (or its
+                sha256) for equivalence checking.
+
+        Returns:
+            :class:`~skills.data.unified_data.history_types.HistoryWindow`.
+
+        Raises:
+            HistoryError: ``HISTORY_NOT_CONFIGURED`` when no reader was
+                injected, plus the reader's own argument / manifest errors.
+        """
+        from .history_types import HistoryError
+
+        if self._history_reader is None:
+            raise HistoryError(
+                "HISTORY_NOT_CONFIGURED",
+                "UnifiedDataClient was constructed without a history_reader; "
+                "pass `history_reader=...` to enable read_btc5m_history().",
+            )
+        return self._history_reader.read(
+            start_utc,
+            end_utc,
+            warmup_seconds=warmup_seconds,
+            as_of_utc=as_of_utc,
+            availability_mode=availability_mode,
+            expected_manifest=expected_manifest,
+        )
+
+    # ------------------------------------------------------------------
     # Construction helpers
     # ------------------------------------------------------------------
 
@@ -618,6 +692,11 @@ class UnifiedDataClient:
         freshness: FreshnessPolicy | None = None,
         external_fallback_chains: dict[str, list[str]] | None = None,
         p3_writer: Any | None = None,
+        local_mongo_adapter: Any | None = None,
+        cache_manager: Any | None = None,
+        quality_scorer: Any | None = None,
+        audit_logger: Any | None = None,
+        history_reader: Any | None = None,
     ) -> "UnifiedDataClient":
         """Build a client pre-populated with ``providers``.
 
@@ -627,6 +706,11 @@ class UnifiedDataClient:
         domain-specific entry methods, a Phase 1B-A ``freshness``
         policy and / or ``external_fallback_chains`` overrides, or a
         Phase 3 P3 P3PersistenceWriter for the refresh path.
+
+        03-018 §3.1: the persistence / cache / quality / audit slots and
+        the narrow history reader are forwarded verbatim so the factory
+        in ``services/storage_composition.py`` can build a fully wired
+        production client through this single entry point.
         """
         client = cls(
             config=config,
@@ -634,6 +718,11 @@ class UnifiedDataClient:
             freshness=freshness,
             external_fallback_chains=external_fallback_chains,
             p3_writer=p3_writer,
+            local_mongo_adapter=local_mongo_adapter,
+            cache_manager=cache_manager,
+            quality_scorer=quality_scorer,
+            audit_logger=audit_logger,
+            history_reader=history_reader,
         )
         for provider in providers:
             client.register_provider(provider)

@@ -509,7 +509,7 @@ def main(
 
     try:
         conn = ConnLoader(env=env, client_factory=client_factory)
-        db = conn.load_db()
+        db = conn.load_source_db()
     except MissingConnectionKeyError as exc:
         print(f"[{TOOL}] EXIT_CONN: {exc}", file=sys.stderr)
         return EXIT_CONN

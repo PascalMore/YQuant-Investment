@@ -43,6 +43,7 @@ from typing import Any, Mapping
 
 from .freshness import FreshnessPolicy
 from .models import DataResult, SecurityId
+from .storage import assert_ud_database
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,11 @@ class LocalMongoAdapter:
         # silences linters that flag unused kwargs while keeping the
         # SPEC-03-009 §4.2 signature aligned.
         _ = collection_prefix
+        # 03-018 §3.1: a real legacy-database handle must fail fast at
+        # construction time — the guard sits *before* any catch-and-log
+        # path so a mis-wired handle can never silently write back to
+        # the old database.
+        assert_ud_database(mongo_db)
 
     # ------------------------------------------------------------------
     # Public API
@@ -150,7 +156,9 @@ class LocalMongoAdapter:
                 )}
             )
         except Exception as exc:  # catch-and-log (LM-104)
-            logger.warning("LocalMongoAdapter.get failed: %s", exc)
+            logger.warning(
+                "LocalMongoAdapter.get failed (%s)", type(exc).__name__
+            )
             return None
 
         if doc is None:
@@ -226,7 +234,9 @@ class LocalMongoAdapter:
                 upsert=True,
             )
         except Exception as exc:
-            logger.warning("LocalMongoAdapter.put failed: %s", exc)
+            logger.warning(
+                "LocalMongoAdapter.put failed (%s)", type(exc).__name__
+            )
 
     def invalidate(
         self,
@@ -270,7 +280,9 @@ class LocalMongoAdapter:
                     result = collection.delete_many({})
                 total_deleted += result.deleted_count
         except Exception as exc:
-            logger.warning("LocalMongoAdapter.invalidate failed: %s", exc)
+            logger.warning(
+                "LocalMongoAdapter.invalidate failed (%s)", type(exc).__name__
+            )
             return 0
 
         return total_deleted

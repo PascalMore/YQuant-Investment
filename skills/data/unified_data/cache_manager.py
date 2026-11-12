@@ -48,6 +48,7 @@ from typing import Any, Mapping
 
 from .freshness import FreshnessPolicy
 from .models import DataResult, SecurityId
+from .storage import assert_ud_database
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,9 @@ class CacheManager:
         self._prefix = _DEFAULT_COLLECTION_PREFIX
         self._freshness = freshness if freshness is not None else FreshnessPolicy()
         _ = collection_prefix  # keep kw-arg in public signature
+        # 03-018 §3.1: fail fast on a real legacy-database handle,
+        # before any catch-and-log path could hide the mis-wiring.
+        assert_ud_database(mongo_db)
 
     # ------------------------------------------------------------------
     # Public API
@@ -144,7 +148,9 @@ class CacheManager:
             )
             doc = collection.find_one({"cache_key": cache_key})
         except Exception as exc:
-            logger.warning("CacheManager.get failed: %s", exc)
+            logger.warning(
+                "CacheManager.get failed (%s)", type(exc).__name__
+            )
             return None
 
         if doc is None:
@@ -214,7 +220,9 @@ class CacheManager:
                 upsert=True,
             )
         except Exception as exc:
-            logger.warning("CacheManager.put failed: %s", exc)
+            logger.warning(
+                "CacheManager.put failed (%s)", type(exc).__name__
+            )
 
     def invalidate(
         self,
@@ -254,7 +262,9 @@ class CacheManager:
                     result = collection.delete_many({})
                 total_deleted += result.deleted_count
         except Exception as exc:
-            logger.warning("CacheManager.invalidate failed: %s", exc)
+            logger.warning(
+                "CacheManager.invalidate failed (%s)", type(exc).__name__
+            )
             return 0
 
         return total_deleted

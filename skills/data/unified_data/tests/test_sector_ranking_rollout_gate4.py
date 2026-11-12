@@ -64,6 +64,7 @@ class _ClientShim:
         self._db = db
 
     def get_database(self, name: str):
+        assert name == "yquant-data", "Gate4 reader must only target UD"
         return self._db
 
 
@@ -81,7 +82,7 @@ class _ForbiddenClientFactory:
 
 
 def _fresh_db() -> Any:
-    return mongomock.MongoClient().get_database("tradingagents")
+    return mongomock.MongoClient().get_database("yquant-data")
 
 
 def _utc(year, month, day, hour=0, minute=0, second=0):
@@ -121,12 +122,20 @@ def _gate4_db(*, materialize: bool = True) -> Any:
         make_index_basic_docs,
     )
 
-    db = make_mongomock_db(
+    source = make_mongomock_db(
         index_daily=make_sw_index_docs(),
         index_basic=make_index_basic_docs(),
     )
+    db = source.client["yquant-data"]
     if materialize:
-        _materialize_canary(db)
+        from scripts.unified_data.sector_ranking_rollout.gate3_backfill import process_day
+        from scripts.unified_data.sector_ranking_rollout.prod_repository import ProdRankingWriter
+
+        process_day(
+            "2026-07-14", prev_date="2026-07-13",
+            expected_codes=sorted(EXPECTED_UNIVERSE), expected_names=EXPECTED_UNIVERSE,
+            db=source, writer=ProdRankingWriter(db), updated_at="2026-07-31T12:00:00Z",
+        )
     return db
 
 

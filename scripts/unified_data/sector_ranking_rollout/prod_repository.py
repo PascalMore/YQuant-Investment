@@ -27,6 +27,8 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from skills.data.unified_data.adapters.p3_persistence_writer import UpsertOutcome
 from skills.data.unified_data.models.domain.sector_ranking import is_valid_trade_date
 
+from skills.data.unified_data.storage import assert_ud_database
+
 from .common import PolicyUnavailableError
 
 
@@ -64,6 +66,7 @@ class ProdRankingWriter:
     def __init__(self, db: Any) -> None:
         if db is None:
             raise TypeError("ProdRankingWriter requires a db (pymongo / mongomock)")
+        assert_ud_database(db)
         self._db = db
 
     def _assert_namespace(self, collection: str | None) -> None:
@@ -217,6 +220,7 @@ class ProdRankingReader:
         binding: Callable[[], bool],
         policy: Any | None = None,
     ) -> None:
+        assert_ud_database(db)
         self._db = db
         self._binding = binding
         self._policy = policy

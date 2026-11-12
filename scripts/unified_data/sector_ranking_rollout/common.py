@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
+from skills.data.unified_data.storage import TA_CN_DATABASE, UD_DATABASE
 from skills.data.unified_data.models.domain.sector_ranking import (
     is_valid_trade_date,
 )
@@ -89,6 +90,7 @@ class ConnLoader:
         client_factory: Callable[..., Any] | None = None,
     ) -> None:
         self._env: Mapping[str, str] = env if env is not None else os.environ
+        self._client: Any | None = None
         self._client_factory: Callable[..., Any] = (
             client_factory if client_factory is not None else self._default_client
         )
@@ -140,10 +142,13 @@ class ConnLoader:
     # ------------------------------------------------------------------
 
     def load_client(self) -> Any:
+        """Build one client with the original five-component authentication."""
+        if self._client is not None:
+            return self._client
         missing = self.describe_missing()
         if missing:
             raise MissingConnectionKeyError(missing)
-        return self._client_factory(
+        self._client = self._client_factory(
             host=self._env["MONGODB_HOST"],
             port=int(self._env["MONGODB_PORT"]),
             username=self._env["MONGODB_USERNAME"],
@@ -152,10 +157,19 @@ class ConnLoader:
             serverSelectionTimeoutMS=_CLIENT_TIMEOUT_MS,
             connectTimeoutMS=_CLIENT_TIMEOUT_MS,
         )
+        return self._client
+
+    def load_source_db(self) -> Any:
+        """Select the fixed read-only TA-CN source, without changing authSource."""
+        return self.load_client().get_database(TA_CN_DATABASE)
+
+    def load_ud_db(self) -> Any:
+        """Select the fixed UD target on the same authenticated client."""
+        return self.load_client().get_database(UD_DATABASE)
 
     def load_db(self) -> Any:
-        client = self.load_client()
-        return client.get_database(self._env["MONGODB_DATABASE"])
+        """Legacy source alias; UD gates must use the explicit selectors."""
+        return self.load_source_db()
 
 
 class MissingConnectionKeyError(Exception):

@@ -472,7 +472,7 @@ def main(
     # ---- S1 CONN（连接/认证失败 → G4-S-001，退出码 3）----
     try:
         conn = ConnLoader(env=env, client_factory=client_factory)
-        db = conn.load_db()
+        db = conn.load_ud_db()
         # pymongo 惰性连接：真实连接/认证失败发生在首次操作；此处显式 ping
         # 使 S1 CONN 阶段即捕获 → G4-S-001（契约 B 顺序，不落入 G4-S-008）
         db.command("ping")

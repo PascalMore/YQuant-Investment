@@ -12,7 +12,7 @@ t_188225f4 选择方案 A：本文件是新增的正式、可复用的 audit smo
 * 真实 smoke 必须由显式 ``--apply`` 才执行。
 * 仅使用 ``YQUANT_UD_AUDIT_WRITER_MONGO_*`` 与 ``YQUANT_UD_AUDIT_READER_MONGO_*``
   两组运行时凭证建立两个独立 client；不重用 DDL/root/业务身份。
-* 目标硬编码：DB ``tradingagents``、collection ``03_data_ud_query_audit``；
+* 目标硬编码：DB ``yquant-data``、collection ``03_data_ud_query_audit``；
   拒绝越界（QualitySummary、portfolio、Smart Money、交易、缓存）。
 * ``--apply`` writer ``insert_one`` 一条最小、可识别、无业务敏感字段的 event；
   reader 必须用该 event 的精确 ``_id`` ``find_one`` 读回，并验证标识字段一致。
@@ -58,7 +58,15 @@ import argparse
 import os
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
+
+# 文件入口与包入口共用 canonical 模块和 main，不从 cwd 推断项目根。
+if __name__ == "__main__" and not __package__:
+    import importlib
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    raise SystemExit(importlib.import_module("scripts.unified_data.audit_smoke").main())
 
 
 # ---------------------------------------------------------------------------
@@ -66,7 +74,9 @@ from typing import Any
 # 与 audit_rollout 共用同一组常量定义；这里以独立常量实现以避免私有副作用耦合
 # ---------------------------------------------------------------------------
 
-ALLOWED_DATABASE: str = "tradingagents"
+from scripts.unified_data.ud_lock import UDLockBusy, acquire_ud_lock
+
+ALLOWED_DATABASE: str = "yquant-data"
 ALLOWED_COLLECTION: str = "03_data_ud_query_audit"
 
 # Smoke 显式禁用任何 QualitySummary / portfolio / Smart Money / 交易 / 缓存 /
@@ -220,10 +230,11 @@ def _build_smoke_event() -> dict[str, Any]:
     标识字段 ``event_type`` / ``source`` 与 ``_id`` 在 ``_write_then_read``
     中再次断言一致（fail-closed）。
     """
+    fetched_at = datetime.now(timezone.utc)
     return {
         "event_type": SMOKE_EVENT_TYPE,
         "source": SMOKE_EVENT_SOURCE,
-        "fetched_at": datetime.now(timezone.utc),
+        "fetched_at": fetched_at.replace(microsecond=(fetched_at.microsecond // 1000) * 1000),
     }
 
 
@@ -398,9 +409,11 @@ def _write_then_read() -> dict[str, Any]:
     try:
         reader_client = _open_reader_client()
     except SmokeError:
+        writer_client.close()
         raise
     except Exception:
-        raise ReaderRuntimeError("reader client open failed (see logs without secrets)")
+        writer_client.close()
+        raise ReaderRuntimeError("reader client open failed (see logs without secrets)") from None
     try:
         writer_db = writer_client[ALLOWED_DATABASE]
         reader_db = reader_client[ALLOWED_DATABASE]
@@ -427,13 +440,19 @@ def _write_then_read() -> dict[str, Any]:
         # 标识字段与 _id 一致：smoke 标记用于人工/自动定位
         # 注：_id 是 ObjectId，不含 event_type/source；这里校验的是插入的 doc
         # 与 _id 字典映射一致（实际为 fetched_doc 自身字段）。
+        if fetched_doc.get("_id") != inserted_id:
+            raise EventContractViolation("reader _id mismatch")
+        actual_time = fetched_doc.get("fetched_at")
+        if not isinstance(actual_time, datetime):
+            raise EventContractViolation("reader fetched_at missing or invalid")
+        if actual_time.tzinfo is None:
+            actual_time = actual_time.replace(tzinfo=timezone.utc)  # BSON naive decode is UTC.
+        if actual_time != event["fetched_at"]:
+            raise EventContractViolation("reader fetched_at mismatch")
         for marker_key in ("event_type", "source"):
             marker_value = fetched_doc.get(marker_key)
             if marker_value != event[marker_key]:
-                raise EventContractViolation(
-                    f"smoke marker {marker_key!r} mismatch: "
-                    f"inserted={event[marker_key]!r}, fetched={marker_value!r}"
-                )
+                raise EventContractViolation("reader smoke marker mismatch")
 
         # Reader 返回 doc 必须仍在 ALLOWED_EVENT_FIELDS 内（防越权写入扩散）
         fetched_extras = sorted(set(fetched_doc) - ALLOWED_EVENT_FIELDS)
@@ -450,6 +469,16 @@ def _write_then_read() -> dict[str, Any]:
 
 
 def run_apply() -> int:
+    """Serialize the exact smoke round trip with other UD writes."""
+    try:
+        with acquire_ud_lock():
+            return _run_apply_unlocked()
+    except UDLockBusy:
+        print("[APPLY] BUSY: UD lock held", file=sys.stderr)
+        return 4
+
+
+def _run_apply_unlocked() -> int:
     """执行 smoke：writer insert + reader find_one({_id})；任一失败 fail-closed。
 
     返回值（直接被 main() 调用或单元测试断言）：

@@ -1,0 +1,115 @@
+evidence_type,partition,n,metric,value,unit,caliber,reason,research_verdict
+fixture,IS,0,sample_count,N/A,count,not_applicable,not_applicable,insufficient-evidence
+fixture,IS,0,tie_count,N/A,count,not_applicable,not_applicable,insufficient-evidence
+fixture,IS,0,p_up_mean,N/A,probability,not_applicable,not_applicable,insufficient-evidence
+fixture,IS,0,p_up_min,N/A,probability,not_applicable,not_applicable,insufficient-evidence
+fixture,IS,0,p_up_max,N/A,probability,not_applicable,not_applicable,insufficient-evidence
+fixture,IS,0,sigma_min,N/A,second^-0.5,not_applicable,not_applicable,insufficient-evidence
+fixture,IS,0,sigma_max,N/A,second^-0.5,not_applicable,not_applicable,insufficient-evidence
+fixture,IS,0,brier,N/A,score,not_applicable,not_applicable,insufficient-evidence
+fixture,IS,0,baseline_brier,N/A,score,not_applicable,not_applicable,insufficient-evidence
+fixture,IS,0,candidate_count,N/A,count,not_applicable,not_applicable,insufficient-evidence
+fixture,IS,0,trade_count,N/A,count,not_applicable,not_applicable,insufficient-evidence
+fixture,IS,0,net_pnl,N/A,USDT,not_applicable,not_applicable,insufficient-evidence
+fixture,IS,0,interval_return_pct,N/A,percent,not_applicable,not_applicable,insufficient-evidence
+fixture,IS,0,annualized_return_pct,N/A,percent,not_applicable,not_applicable,insufficient-evidence
+fixture,IS,0,sharpe,N/A,ratio,not_applicable,not_applicable,insufficient-evidence
+fixture,IS,0,max_drawdown_pct,N/A,percent,not_applicable,not_applicable,insufficient-evidence
+fixture,IS,0,calmar,N/A,ratio,not_applicable,not_applicable,insufficient-evidence
+fixture,IS,0,turnover_pct,N/A,percent,not_applicable,not_applicable,insufficient-evidence
+fixture,IS,0,information_ratio,N/A,ratio,not_applicable,not_applicable,insufficient-evidence
+fixture,OOS,0,sample_count,N/A,count,not_applicable,not_applicable,insufficient-evidence
+fixture,OOS,0,tie_count,N/A,count,not_applicable,not_applicable,insufficient-evidence
+fixture,OOS,0,p_up_mean,N/A,probability,not_applicable,not_applicable,insufficient-evidence
+fixture,OOS,0,p_up_min,N/A,probability,not_applicable,not_applicable,insufficient-evidence
+fixture,OOS,0,p_up_max,N/A,probability,not_applicable,not_applicable,insufficient-evidence
+fixture,OOS,0,sigma_min,N/A,second^-0.5,not_applicable,not_applicable,insufficient-evidence
+fixture,OOS,0,sigma_max,N/A,second^-0.5,not_applicable,not_applicable,insufficient-evidence
+fixture,OOS,0,brier,N/A,score,not_applicable,not_applicable,insufficient-evidence
+fixture,OOS,0,baseline_brier,N/A,score,not_applicable,not_applicable,insufficient-evidence
+fixture,OOS,0,candidate_count,N/A,count,not_applicable,not_applicable,insufficient-evidence
+fixture,OOS,0,trade_count,N/A,count,not_applicable,not_applicable,insufficient-evidence
+fixture,OOS,0,net_pnl,N/A,USDT,not_applicable,not_applicable,insufficient-evidence
+fixture,OOS,0,interval_return_pct,N/A,percent,not_applicable,not_applicable,insufficient-evidence
+fixture,OOS,0,annualized_return_pct,N/A,percent,not_applicable,not_applicable,insufficient-evidence
+fixture,OOS,0,sharpe,N/A,ratio,not_applicable,not_applicable,insufficient-evidence
+fixture,OOS,0,max_drawdown_pct,N/A,percent,not_applicable,not_applicable,insufficient-evidence
+fixture,OOS,0,calmar,N/A,ratio,not_applicable,not_applicable,insufficient-evidence
+fixture,OOS,0,turnover_pct,N/A,percent,not_applicable,not_applicable,insufficient-evidence
+fixture,OOS,0,information_ratio,N/A,ratio,not_applicable,not_applicable,insufficient-evidence
+real-proxy,IS,144,sample_count,144,count,paired proxy samples in this partition,none,insufficient-evidence
+real-proxy,IS,144,tie_count,0,count,proxy labels that tied,none,insufficient-evidence
+real-proxy,IS,144,p_up_mean,0.4997163711240713,probability,mean of the model probability over the samples,proxy_only,insufficient-evidence
+real-proxy,IS,144,p_up_min,0.49890436648714376,probability,smallest model probability over the samples,proxy_only,insufficient-evidence
+real-proxy,IS,144,p_up_max,0.49982725130171191,probability,largest model probability over the samples,proxy_only,insufficient-evidence
+real-proxy,IS,144,sigma_min,5.0000000000000002e-05,second^-0.5,smallest per-root-second volatility over the samples,proxy_only,insufficient-evidence
+real-proxy,IS,144,sigma_max,0.00031711898730187613,second^-0.5,largest per-root-second volatility over the samples,proxy_only,insufficient-evidence
+real-proxy,IS,144,brier,0.24997683887740946,score,mean((p_up - proxy_label)^2) over the samples,proxy_only,insufficient-evidence
+real-proxy,IS,144,baseline_brier,0.25,score,mean((0.5 - proxy_label)^2) over the same samples,proxy_only,insufficient-evidence
+real-proxy,IS,0,candidate_count,N/A,count,not_applicable,proxy_only,insufficient-evidence
+real-proxy,IS,0,trade_count,N/A,count,not_applicable,proxy_only,insufficient-evidence
+real-proxy,IS,0,net_pnl,N/A,USDT,not_applicable,no_real_account_equity,insufficient-evidence
+real-proxy,IS,0,interval_return_pct,N/A,percent,not_applicable,no_real_account_equity,insufficient-evidence
+real-proxy,IS,0,annualized_return_pct,N/A,percent,not_applicable,no_real_account_equity,insufficient-evidence
+real-proxy,IS,0,sharpe,N/A,ratio,not_applicable,no_real_account_equity,insufficient-evidence
+real-proxy,IS,0,max_drawdown_pct,N/A,percent,not_applicable,no_real_account_equity,insufficient-evidence
+real-proxy,IS,0,calmar,N/A,ratio,not_applicable,no_real_account_equity,insufficient-evidence
+real-proxy,IS,0,turnover_pct,N/A,percent,not_applicable,no_real_account_equity,insufficient-evidence
+real-proxy,IS,0,information_ratio,N/A,ratio,not_applicable,no_real_account_equity,insufficient-evidence
+real-proxy,OOS,143,sample_count,143,count,paired proxy samples in this partition,none,insufficient-evidence
+real-proxy,OOS,143,tie_count,0,count,proxy labels that tied,none,insufficient-evidence
+real-proxy,OOS,143,p_up_mean,0.49979213675851836,probability,mean of the model probability over the samples,proxy_only,insufficient-evidence
+real-proxy,OOS,143,p_up_min,0.49925199905259154,probability,smallest model probability over the samples,proxy_only,insufficient-evidence
+real-proxy,OOS,143,p_up_max,0.49982725130171191,probability,largest model probability over the samples,proxy_only,insufficient-evidence
+real-proxy,OOS,143,sigma_min,5.0000000000000002e-05,second^-0.5,smallest per-root-second volatility over the samples,proxy_only,insufficient-evidence
+real-proxy,OOS,143,sigma_max,0.00021650038366830771,second^-0.5,largest per-root-second volatility over the samples,proxy_only,insufficient-evidence
+real-proxy,OOS,143,brier,0.25001520446485653,score,mean((p_up - proxy_label)^2) over the samples,proxy_only,insufficient-evidence
+real-proxy,OOS,143,baseline_brier,0.25,score,mean((0.5 - proxy_label)^2) over the same samples,proxy_only,insufficient-evidence
+real-proxy,OOS,0,candidate_count,N/A,count,not_applicable,proxy_only,insufficient-evidence
+real-proxy,OOS,0,trade_count,N/A,count,not_applicable,proxy_only,insufficient-evidence
+real-proxy,OOS,0,net_pnl,N/A,USDT,not_applicable,no_real_account_equity,insufficient-evidence
+real-proxy,OOS,0,interval_return_pct,N/A,percent,not_applicable,no_real_account_equity,insufficient-evidence
+real-proxy,OOS,0,annualized_return_pct,N/A,percent,not_applicable,no_real_account_equity,insufficient-evidence
+real-proxy,OOS,0,sharpe,N/A,ratio,not_applicable,no_real_account_equity,insufficient-evidence
+real-proxy,OOS,0,max_drawdown_pct,N/A,percent,not_applicable,no_real_account_equity,insufficient-evidence
+real-proxy,OOS,0,calmar,N/A,ratio,not_applicable,no_real_account_equity,insufficient-evidence
+real-proxy,OOS,0,turnover_pct,N/A,percent,not_applicable,no_real_account_equity,insufficient-evidence
+real-proxy,OOS,0,information_ratio,N/A,ratio,not_applicable,no_real_account_equity,insufficient-evidence
+real-market,IS,0,sample_count,N/A,count,not_applicable,not_applicable,insufficient-evidence
+real-market,IS,0,tie_count,N/A,count,not_applicable,not_applicable,insufficient-evidence
+real-market,IS,0,p_up_mean,N/A,probability,not_applicable,not_applicable,insufficient-evidence
+real-market,IS,0,p_up_min,N/A,probability,not_applicable,not_applicable,insufficient-evidence
+real-market,IS,0,p_up_max,N/A,probability,not_applicable,not_applicable,insufficient-evidence
+real-market,IS,0,sigma_min,N/A,second^-0.5,not_applicable,not_applicable,insufficient-evidence
+real-market,IS,0,sigma_max,N/A,second^-0.5,not_applicable,not_applicable,insufficient-evidence
+real-market,IS,0,brier,N/A,score,not_applicable,not_applicable,insufficient-evidence
+real-market,IS,0,baseline_brier,N/A,score,not_applicable,not_applicable,insufficient-evidence
+real-market,IS,0,candidate_count,N/A,count,not_applicable,not_applicable,insufficient-evidence
+real-market,IS,0,trade_count,N/A,count,not_applicable,not_applicable,insufficient-evidence
+real-market,IS,0,net_pnl,N/A,USDT,not_applicable,not_applicable,insufficient-evidence
+real-market,IS,0,interval_return_pct,N/A,percent,not_applicable,not_applicable,insufficient-evidence
+real-market,IS,0,annualized_return_pct,N/A,percent,not_applicable,not_applicable,insufficient-evidence
+real-market,IS,0,sharpe,N/A,ratio,not_applicable,not_applicable,insufficient-evidence
+real-market,IS,0,max_drawdown_pct,N/A,percent,not_applicable,not_applicable,insufficient-evidence
+real-market,IS,0,calmar,N/A,ratio,not_applicable,not_applicable,insufficient-evidence
+real-market,IS,0,turnover_pct,N/A,percent,not_applicable,not_applicable,insufficient-evidence
+real-market,IS,0,information_ratio,N/A,ratio,not_applicable,not_applicable,insufficient-evidence
+real-market,OOS,0,sample_count,N/A,count,not_applicable,not_applicable,insufficient-evidence
+real-market,OOS,0,tie_count,N/A,count,not_applicable,not_applicable,insufficient-evidence
+real-market,OOS,0,p_up_mean,N/A,probability,not_applicable,not_applicable,insufficient-evidence
+real-market,OOS,0,p_up_min,N/A,probability,not_applicable,not_applicable,insufficient-evidence
+real-market,OOS,0,p_up_max,N/A,probability,not_applicable,not_applicable,insufficient-evidence
+real-market,OOS,0,sigma_min,N/A,second^-0.5,not_applicable,not_applicable,insufficient-evidence
+real-market,OOS,0,sigma_max,N/A,second^-0.5,not_applicable,not_applicable,insufficient-evidence
+real-market,OOS,0,brier,N/A,score,not_applicable,not_applicable,insufficient-evidence
+real-market,OOS,0,baseline_brier,N/A,score,not_applicable,not_applicable,insufficient-evidence
+real-market,OOS,0,candidate_count,N/A,count,not_applicable,not_applicable,insufficient-evidence
+real-market,OOS,0,trade_count,N/A,count,not_applicable,not_applicable,insufficient-evidence
+real-market,OOS,0,net_pnl,N/A,USDT,not_applicable,not_applicable,insufficient-evidence
+real-market,OOS,0,interval_return_pct,N/A,percent,not_applicable,not_applicable,insufficient-evidence
+real-market,OOS,0,annualized_return_pct,N/A,percent,not_applicable,not_applicable,insufficient-evidence
+real-market,OOS,0,sharpe,N/A,ratio,not_applicable,not_applicable,insufficient-evidence
+real-market,OOS,0,max_drawdown_pct,N/A,percent,not_applicable,not_applicable,insufficient-evidence
+real-market,OOS,0,calmar,N/A,ratio,not_applicable,not_applicable,insufficient-evidence
+real-market,OOS,0,turnover_pct,N/A,percent,not_applicable,not_applicable,insufficient-evidence
+real-market,OOS,0,information_ratio,N/A,ratio,not_applicable,not_applicable,insufficient-evidence

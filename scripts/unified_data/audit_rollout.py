@@ -16,12 +16,12 @@ t_c051239d REVISE 意见完整重写。新增要点：
   阶段固化具体键列表，初始化后不可变。脚本本身不使用（审计写入由
   AuditLogger 负责），但按 RFC/SPEC/DESIGN 要求在此模块显式导出。
 * ``_ensure_write_role`` / ``_ensure_read_role`` / ``_ensure_write_user``
-  / ``_ensure_read_user`` —— 幂等创建/校验 role 与 user，对已存在的
-  role/user 做**精确** privileges / role-binding 比对，任何不匹配一律
-  fail-fast（DESIGN §8.9.3 退出码 4；reviewer REVISE issue 3）。
-* ``run_apply`` 现在做：collection（仅 audit）→ 3 indexes（TTL=31536000 +
-  两个二级索引，逐条精确比对，缺失或定义不符 fail-fast；reviewer REVISE
-  issue 7）→ 2 roles → 2 users。``QualitySummary`` 集合**全程不创建**。
+  / ``_ensure_read_user`` 是保留的旧部署 helper；03-018 的生产 apply/verify
+  均不调用它们（离线密码/脱敏安全回归继续保留）。
+* 当前 ``run_apply`` 先在原 AUTH_DB 读取既有用户、在实际 role binding 库
+  校验新 ``yquant-data.03_data_ud_query_audit`` resource/action，缺失即 STOP，
+  再创建/校验 audit collection 与原 3 indexes；绝不自动创建用户或角色。
+  ``QualitySummary`` 集合仍全程不创建。
 * 移除 ``--writer-role`` / ``--reader-role`` CLI 参数 —— 它们在 apply 模式下
   实际无效，改为模块级不可变常量；reviewer REVISE issue 6。
 * ``--verify`` 现在做完整 DDL 结果验证（collection + 3 indexes + 2 roles +
@@ -55,13 +55,23 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from pathlib import Path
 from typing import Any
+
+# 文件入口与包入口共用 canonical 模块和 main，不从 cwd 推断项目根。
+if __name__ == "__main__" and not __package__:
+    import importlib
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    raise SystemExit(importlib.import_module("scripts.unified_data.audit_rollout").main())
 
 # ---------------------------------------------------------------------------
 # 静态 allow-list 与正式命名（DESIGN §8.5.1, SPEC §8.2, RFC §8.4/§8.5）
 # ---------------------------------------------------------------------------
 
-ALLOWED_DATABASE: str = "tradingagents"
+from scripts.unified_data.ud_lock import UDLockBusy, acquire_ud_lock
+
+ALLOWED_DATABASE: str = "yquant-data"
 ALLOWED_COLLECTION: str = "03_data_ud_query_audit"
 FORBIDDEN_COLLECTIONS: frozenset[str] = frozenset({
     "03_data_ud_quality_summary",  # Phase 1 不启用（DESIGN §6, SPEC §8.6）
@@ -664,7 +674,7 @@ def _describe_plan() -> list[str]:
             f"{k}={v}" for k, v in opts.items() if k != "name"
         )
         lines.append(f"  - {name} on ({keys_repr}) [{opts_repr}]")
-    lines.append("Plan: ensure custom roles (idempotent, exact-match verify):")
+    lines.append("Plan: validate existing custom roles read-only (never create/grant):")
     lines.append(
         f"  - {WRITER_ROLE_NAME}: insert on "
         f"{ALLOWED_DATABASE}.{ALLOWED_COLLECTION}"
@@ -673,7 +683,7 @@ def _describe_plan() -> list[str]:
         f"  - {READER_ROLE_NAME}: find on "
         f"{ALLOWED_DATABASE}.{ALLOWED_COLLECTION}"
     )
-    lines.append("Plan: ensure runtime users (idempotent, role-binding verify):")
+    lines.append("Plan: validate existing runtime users in original AUTH_DB (never create/update):")
     lines.append(f"  - {WRITER_USER_NAME} ← {WRITER_ROLE_NAME}")
     lines.append(f"  - {READER_USER_NAME} ← {READER_ROLE_NAME}")
     lines.append("Plan: QualitySummary collection MUST NOT be created (Phase 1).")
@@ -694,6 +704,41 @@ def run_dry_run() -> int:
     return 0
 
 
+def _identity_problems(client: Any) -> list[str]:
+    """Read existing identities in AUTH_DB and roles in their actual binding DB.
+
+    03-018 supersedes automatic identity provisioning. Missing/unreadable or
+    broader privileges stop the rollout; messages expose only resource/action.
+    """
+    problems = []
+    for kind, user, role, expected in (
+        ("WRITER", WRITER_USER_NAME, WRITER_ROLE_NAME, WRITER_ROLE_PRIVILEGES),
+        ("READER", READER_USER_NAME, READER_ROLE_NAME, READER_ROLE_PRIVILEGES),
+    ):
+        gap = f"{ALLOWED_DATABASE}.{ALLOWED_COLLECTION}:{expected[0]['actions'][0]}"
+        auth_db = os.environ.get(f"YQUANT_UD_AUDIT_{kind}_MONGO_AUTH_DB", "admin")
+        auth_db = auth_db.strip() or "admin"
+        try:
+            users = client[auth_db].command({"usersInfo": user}).get("users") or []
+            bindings = users[0].get("roles") if len(users) == 1 else None
+            if (not isinstance(bindings, list) or len(bindings) != 1
+                    or not isinstance(bindings[0], dict)
+                    or bindings[0].get("role") != role
+                    or not isinstance(bindings[0].get("db"), str)
+                    or not bindings[0]["db"]):
+                problems.append(f"permission unavailable: {gap}")
+                continue
+            role_db = client[bindings[0]["db"]]
+            roles = role_db.command({"rolesInfo": role, "showPrivileges": True}).get("roles") or []
+            if (len(roles) != 1
+                    or not _role_privileges_match(roles[0].get("privileges"), expected)
+                    or not _role_inherited_roles_match(roles[0].get("roles"), [])):
+                problems.append(f"permission mismatch: {gap}")
+        except Exception:
+            problems.append(f"permission unverifiable: {gap}")
+    return problems
+
+
 def run_verify() -> int:
     """只读验证：检查 collection / 3 indexes / 2 roles / 2 users 是否符合契约。
 
@@ -708,6 +753,9 @@ def run_verify() -> int:
     except MissingCredentialError as exc:
         print(f"[VERIFY] cannot connect without credentials: {exc}", file=sys.stderr)
         return 3
+    except Exception:
+        print("[VERIFY] ERROR: connection failed (details suppressed)", file=sys.stderr)
+        return 4
 
     try:
         db = client[ALLOWED_DATABASE]
@@ -741,56 +789,7 @@ def run_verify() -> int:
                 "exist in Phase 1"
             )
 
-        # 3. roles 存在且 privileges / inherited roles 精确匹配
-        # 注意：Mongo 7 在 ``rolesInfo`` 按名字查单个 role 时，默认不返回
-        # privileges 字段（即 ``privileges=None``），必须显式传
-        # ``showPrivileges: True``，否则 ``_role_privileges_match`` 会把
-        # ``None`` 与期望列表比成 False，导致 verify 在合法状态下退出 1。
-        for role_name, expected_privs, expected_roles in (
-            (WRITER_ROLE_NAME, WRITER_ROLE_PRIVILEGES, WRITER_ROLE_ROLES),
-            (READER_ROLE_NAME, READER_ROLE_PRIVILEGES, READER_ROLE_ROLES),
-        ):
-            info = db.command({"rolesInfo": role_name, "showPrivileges": True})
-            roles_block = info.get("roles") or []
-            if not roles_block:
-                problems.append(f"role {role_name!r} missing")
-                continue
-            rinfo = roles_block[0]
-            if not _role_privileges_match(rinfo.get("privileges"), expected_privs):
-                problems.append(
-                    f"role {role_name!r} privileges mismatch "
-                    f"(expected={expected_privs}, got={rinfo.get('privileges')})"
-                )
-            if not _role_inherited_roles_match(rinfo.get("roles"), expected_roles):
-                problems.append(
-                    f"role {role_name!r} inherited roles mismatch "
-                    f"(expected={expected_roles}, got={rinfo.get('roles')})"
-                )
-
-        # 4. users 存在且 role binding 一致
-        for user_name, expected_role_binding in (
-            (WRITER_USER_NAME, [{"role": WRITER_ROLE_NAME, "db": ALLOWED_DATABASE}]),
-            (READER_USER_NAME, [{"role": READER_ROLE_NAME, "db": ALLOWED_DATABASE}]),
-        ):
-            info = db.command({"usersInfo": user_name})
-            users_block = info.get("users") or []
-            if not users_block:
-                problems.append(f"user {user_name!r} missing")
-                continue
-            uinfo = users_block[0]
-
-            def _verify_user_role_key(item: Any) -> str:
-                if isinstance(item, dict):
-                    return f"{item.get('role', '')}@{item.get('db', '')}"
-                return str(item)
-
-            actual_roles = sorted(uinfo.get("roles") or [], key=_verify_user_role_key)
-            expected_sorted = sorted(expected_role_binding, key=_verify_user_role_key)
-            if actual_roles != expected_sorted:
-                problems.append(
-                    f"user {user_name!r} role binding mismatch "
-                    f"(expected={expected_sorted}, got={actual_roles})"
-                )
+        problems.extend(_identity_problems(client))
 
         if problems:
             print(f"[VERIFY] FAIL: {len(problems)} issue(s):")
@@ -804,15 +803,25 @@ def run_verify() -> int:
         return 0
     except ScopeViolation:
         raise
-    except Exception as exc:
-        print(f"[VERIFY] ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
+    except Exception:
+        print("[VERIFY] ERROR: operation failed (details suppressed)", file=sys.stderr)
         return 4
     finally:
         client.close()
 
 
 def run_apply() -> int:
-    """执行 DDL：创建/校验 collection、3 indexes、2 roles、2 users（全部幂等）。"""
+    """Serialize audit business DDL with all other UD apply entry points."""
+    try:
+        with acquire_ud_lock():
+            return _run_apply_unlocked()
+    except UDLockBusy:
+        print("[APPLY] BUSY: UD lock held", file=sys.stderr)
+        return 4
+
+
+def _run_apply_unlocked() -> int:
+    """执行/校验 audit collection 与索引；身份只读核验，不自动创建或提权。"""
     _validate_targets(ALLOWED_DATABASE, ALLOWED_COLLECTION)
     for name in (WRITER_ROLE_NAME, READER_ROLE_NAME, WRITER_USER_NAME, READER_USER_NAME):
         _validate_identity_name(name, kind="identity")
@@ -822,13 +831,16 @@ def run_apply() -> int:
     except MissingCredentialError as exc:
         print(f"[APPLY] missing credentials: {exc}", file=sys.stderr)
         return 3
+    except Exception:
+        print("[APPLY] ERROR: connection failed (details suppressed)", file=sys.stderr)
+        return 4
 
     try:
         db = client[ALLOWED_DATABASE]
 
-        # 0. 只读 user 预检。缺失 runtime 密码或 binding 不匹配时，在任何
-        # collection/index/role/user 写 DDL 前退出；预检始终使用 DDL identity。
-        _preflight_runtime_users(db)
+        problems = _identity_problems(client)
+        if problems:
+            raise IdentityPrivilegeMismatch("; ".join(problems))
 
         # 1. collection（仅 audit；QualitySummary 永不创建）
         try:
@@ -852,20 +864,11 @@ def run_apply() -> int:
                 f"index definition mismatch: {idx['mismatched']}"
             )
 
-        # 3. 2 roles（精确 privileges 比对）
-        writer_role_state = _ensure_write_role(db)
-        reader_role_state = _ensure_read_role(db)
-
-        # 4. 2 users（精确 role binding 比对）
-        writer_user_state = _ensure_write_user(db)
-        reader_user_state = _ensure_read_user(db)
-
+        # Existing identities were checked before any business DDL; never ensure them.
         print(
             f"[APPLY] OK: collection {ALLOWED_DATABASE!r}.{ALLOWED_COLLECTION!r} ready. "
             f"indexes created={idx['created']} skipped={idx['skipped']} "
-            f"mismatched={idx['mismatched']}; "
-            f"writer_role={writer_role_state}; reader_role={reader_role_state}; "
-            f"writer_user={writer_user_state}; reader_user={reader_user_state}"
+            f"mismatched={idx['mismatched']}; identities verified read-only"
         )
         return 0
     except ScopeViolation:
@@ -876,12 +879,8 @@ def run_apply() -> int:
     except MissingCredentialError as exc:
         print(f"[APPLY] missing credentials: {exc}", file=sys.stderr)
         return 3
-    except Exception as exc:
-        # 注意：绝不打 URI / user / password / token
-        print(
-            f"[APPLY] ERROR: {type(exc).__name__}: {exc}",
-            file=sys.stderr,
-        )
+    except Exception:
+        print("[APPLY] ERROR: operation failed (details suppressed)", file=sys.stderr)
         return 4
     finally:
         client.close()

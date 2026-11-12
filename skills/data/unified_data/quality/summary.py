@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..models import DataResult
+from ..storage import assert_ud_database
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,10 @@ class QualitySummary:
     ) -> None:
         self._mongo_db = mongo_db
         self._collection_name = collection_name
+        # 03-018 §3.1: same business-database guard as the other UD
+        # persistence components (real handles only).
+        if mongo_db is not None:
+            assert_ud_database(mongo_db)
 
     def update(
         self,
@@ -90,7 +95,8 @@ class QualitySummary:
                 )
         except Exception as exc:
             logger.warning(
-                "QualitySummary.update failed (catch-and-log): %s", exc
+                "QualitySummary.update failed (catch-and-log, %s)",
+                type(exc).__name__,
             )
 
     def get_summary(
@@ -124,7 +130,8 @@ class QualitySummary:
             )
         except Exception as exc:
             logger.warning(
-                "QualitySummary.get_summary failed (catch-and-log): %s", exc
+                "QualitySummary.get_summary failed (catch-and-log, %s)",
+                type(exc).__name__,
             )
             return []
 

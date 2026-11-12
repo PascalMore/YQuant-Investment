@@ -49,11 +49,12 @@ class _ClientShim:
         self._db = db
 
     def get_database(self, name: str):
+        assert name == "yquant-data", "Gate2 DDL must only target UD"
         return self._db
 
 
 def _fresh_db() -> Any:
-    return mongomock.MongoClient().get_database("tradingagents")
+    return mongomock.MongoClient().get_database("yquant-data")
 
 
 class TestIndexSpec:

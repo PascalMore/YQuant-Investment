@@ -810,9 +810,9 @@ Hermes `execute_code` 工具使用自己的 venv（无 pandas），**禁止**用
 ### Hermes 工具阻塞与 Python 执行路径
 
 - **`execute_code`** 工具使用 Hermes Agent 自己的 venv（无 pandas / openpyxl / pymongo），**禁止**用于执行 pipeline 和验证 MongoDB 入库
-- 完整 Python path 命令（如 `.venv/bin/python ...`）**不触发** Hermes 安全审批，可直接执行
-- 脚本通过 `-e`/`-c` 参数注入代码时会触发审批，**不要**依赖这种方式
-- 若 pipeline 执行被安全策略拦截，切换 `terminal(background=true)` + `notify_on_complete=true` 提交后台任务
+- 使用项目实际解释器（如 `.venv/bin/python ...`），但任何命令形状都可能触发当前安全策略；以工具真实返回为准，不承诺免审批。
+- `-e`/`-c` 内联代码可能需要审批，优先已审的显式入口；不要用动态执行器包装业务CLI或重试被拒动作。
+- 遇到安全策略拒绝或审批超时，停止该动作并保留原命令/错误，按 `hermes-approval-gated-terminal` 获取拒绝后的明确新授权；不得切换后台、工具或执行器绕过。普通文件前置校验按提示正常恢复。
 
 ### Pitfall — "主 venv" 必须实证探测，不要凭名字猜（2026-06-28 实战）
 
@@ -1024,6 +1024,17 @@ OCR 输出的资产名称有 2 类常见错误，**永久映射**应写入 `scri
 **已写**（2026-06-29 当日加入 `stock_name_corrections.py`）：
 - `688246.SH → 嘉和美康`
 - `000725.SZ → 京东方Ａ`
+
+### BTC5m 历史同步完整性审计
+
+用户询问官方 Predict/Binance 历史同步还缺什么、多个批次是否遗漏时，使用 `references/btc5m-history-audit.md`。对齐批次summary、真实UTC槽、日账/原档和恢复分支，分开报告数据缺口与未闭合状态；不凭空results、旧错误码或planner为空判断完成。
+
+### API 原文与内部 envelope 的边界
+
+- 使用已归档、checksum可核的官方原文确认字段层级，再建立API替身；不要把内部 `category + markets` envelope 当作官方 `data[]` 本身的响应结构。
+- 外部形状只在采集/原始重放边界薄适配为既有内部契约，原始响应字节与hash保持不变；同时核首采、分页/续跑、按ID补齐、raw重放和只读核验，避免只修第一处报错。
+- 首次真实页失败时，先以原始字节和status日志离线重现，不重复HTTP/生产apply。把缺字段造成的错误与真正乱序/冲突分开取证；不放宽身份、排序、Decimal、标签或水位规则来接受输入。
+- 真实原文的最小可复现样本应覆盖实际Extractor到转换/验证/假库存储及raw再读回；测试全绿不等于官方接口端到端可用。样本回放与真实生产覆盖分别报告，已归档的窗口外页面不计入目标窗覆盖。
 
 ### Pitfall — "已归档" ≠ "已跑过 pipeline"（2026-06-27 实测）
 

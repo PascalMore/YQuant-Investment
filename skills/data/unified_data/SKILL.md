@@ -14,7 +14,7 @@ metadata:
 
 YQuant Unified Data Layer 的入口说明（Phase 0 骨架 + Phase 1A TA-CN 只读适配器已交付）。来源 RFC-03-007 / SPEC-03-007 / DESIGN-03-007。
 
-> **架构基线（Pascal 确认，2026-07-14 / V0.2 同步）**：Unified Data 与 TA-CN 共用同一物理 MongoDB `tradingagents`，依赖**集合命名空间前缀**（TA-CN 无前缀 / `03_data_ud_*` 物化 / `03_data_ud_cache_*` QueryCache）实现 ownership，不依赖物理库隔离。权威读取路径为 **internal-first**：TA-CN 既有 → UD 物化 → Query Cache → 外部 Provider；外部刷新失败不阻断内部已有数据读取。DSA 仅作为分析/参考上下文出现，不实现任何 DSA adapter，不出现在 `external_fallback_chains` 中。
+> 架构基线（SPEC/Design-03-018 supersede）：TA-CN 原始只读源固定 `tradingagents`，UD 自有物化、缓存、审计、质量汇总、ranking 与历史目标固定 `yquant-data`，保留集合名与 ownership 前缀。双库共用原连接；认证来源不变，不修改共享 `MONGODB_DATABASE`，sector `ConnLoader.load_source_db()` / `load_ud_db()` 显式选源/目标，audit 保留独立 writer/reader AUTH_DB，既有身份仅验证新 resource/action，不自动创建用户或角色。参见 `docs/spec/03_data/SPEC-03-018-yquant-data-history.md` §3–4 与 `docs/design/03_data/DESIGN-03-018-yquant-data-history.md` §4/5；该覆盖只替换旧同库/认证耦合，不重开其他冻结门禁。权威读取路径仍为 internal-first：TA-CN 既有 → UD 物化 → Query Cache → 外部 Provider；外部刷新失败不阻断内部已有数据读取，不回落旧库写入。DSA 仅作为分析/参考上下文，不实现 DSA adapter，不出现在 `external_fallback_chains` 中。
 
 ## 模块定位
 

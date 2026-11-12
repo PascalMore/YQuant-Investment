@@ -715,7 +715,7 @@ def _build_report_payload(
     }
 
 
-def main(
+def _main_unlocked(
     argv: list[str] | None = None,
     *,
     client_factory: Callable[..., Any] | None = None,
@@ -755,7 +755,8 @@ def main(
 
     try:
         conn = ConnLoader(env=env, client_factory=client_factory)
-        db = conn.load_db()
+        db = conn.load_source_db()
+        ud_db = conn.load_ud_db()
     except MissingConnectionKeyError as exc:
         print(f"[{TOOL}] EXIT_CONN: {exc}", file=sys.stderr)
         return EXIT_CONN
@@ -767,7 +768,7 @@ def main(
         return EXIT_CONN
 
     secret_entries = conn.secret_entries()
-    writer = ProdRankingWriter(db)
+    writer = ProdRankingWriter(ud_db)
     expected_codes = [str(c) for c in report.get("expected_sector_codes", [])]
     expected_names = {
         str(k): str(v) for k, v in (report.get("expected_sector_names") or {}).items()
@@ -945,6 +946,21 @@ def main(
         )
         return EXIT_STOP
     return EXIT_OK
+
+
+def main(argv: list[str] | None = None, **kwargs: Any) -> int:
+    """Keep the old gate exit codes; serialize apply before any connection."""
+    from scripts.unified_data.ud_lock import UDLockBusy, acquire_ud_lock
+
+    args = build_parser().parse_args(argv)
+    if not (args.apply and args.yes):
+        return _main_unlocked(argv, **kwargs)
+    try:
+        with acquire_ud_lock():
+            return _main_unlocked(argv, **kwargs)
+    except UDLockBusy:
+        print(f"[{TOOL}] STOP: UD lock held", file=sys.stderr)
+        return EXIT_STOP
 
 
 if __name__ == "__main__":

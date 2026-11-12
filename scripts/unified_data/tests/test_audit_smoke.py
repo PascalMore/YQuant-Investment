@@ -15,7 +15,7 @@ Pascal 已确认方案 A：新增 ``scripts/unified_data/audit_smoke.py``，作�
 * SMOKE-106: ``--apply`` 经 mongomock fake Mongo：writer insert 一条最小
               event + reader 用其 ``_id`` find_one 读回，标识字段一致
 * SMOKE-107: ``--apply`` 拒绝越界 collection（任何非 ``03_data_ud_query_audit``）
-* SMOKE-108: ``--apply`` 拒绝越界 database（任何非 ``tradingagents``）
+* SMOKE-108: ``--apply`` 拒绝越界 database（任何非 ``yquant-data``）
 * SMOKE-109: 事件无敏感字段（不含 param / account / secret）
 * SMOKE-110: writer / reader 使用不同 client / 不同凭证配置
 * SMOKE-111: 任何失败 fail-closed：rc ∈ {2, 3, 4}，绝不 rc=0
@@ -39,7 +39,14 @@ from unittest.mock import patch
 import mongomock
 import pytest
 
-ROOT = Path(__file__).resolve().parents[2]
+@pytest.fixture(autouse=True)
+def _isolated_audit_environment(monkeypatch):
+    for kind in ("DDL", "WRITER", "READER"):
+        for field in ("URI", "USERNAME", "PASSWORD", "AUTH_DB"):
+            monkeypatch.delenv(f"YQUANT_UD_AUDIT_{kind}_MONGO_{field}", raising=False)
+
+
+ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS_DIR = ROOT / "scripts"
 SCRIPT = SCRIPTS_DIR / "unified_data" / "audit_smoke.py"
 
@@ -61,7 +68,9 @@ def _load_module():
     return module
 
 
-def _run_cli(*args: str, env_overrides: dict | None = None) -> subprocess.CompletedProcess:
+def _run_cli(
+    *args: str, env_overrides: dict | None = None, module: bool = False, cwd: Path = ROOT,
+) -> subprocess.CompletedProcess:
     """调用 audit_smoke CLI 的 subprocess；显式覆盖 audit_rollout 系列 env。
 
     dry-run 路径不得因父进程残留凭证被默默切换到连库路径。
@@ -84,10 +93,55 @@ def _run_cli(*args: str, env_overrides: dict | None = None) -> subprocess.Comple
         env.pop(k, None)
     if env_overrides:
         env.update(env_overrides)
+    entry = ["-m", "scripts.unified_data.audit_smoke"] if module else [str(SCRIPT)]
     return subprocess.run(
-        [sys.executable, str(SCRIPT), *args],
-        capture_output=True, text=True, cwd=str(ROOT), env=env,
+        [sys.executable, *entry, *args],
+        capture_output=True, text=True, cwd=str(cwd), env=env,
     )
+
+
+@pytest.mark.parametrize("args, expected", [
+    ((), 0), (("--evil-flag",), 2), (("--apply",), 3),
+])
+def test_file_and_module_entry_parity(args, expected):
+    file_result = _run_cli(*args)
+    module_result = _run_cli(*args, module=True)
+    assert file_result.returncode == module_result.returncode == expected
+    assert file_result.stdout == module_result.stdout
+    assert file_result.stderr == module_result.stderr
+    output = file_result.stdout + file_result.stderr
+    assert "Traceback" not in output
+    assert "mongodb://" not in output
+    if expected == 0:
+        assert file_result.stdout.count("no side effects will be performed.") == 1
+        assert file_result.stdout.count("[DRY-RUN] done.") == 1
+        assert file_result.stderr == ""
+    else:
+        assert file_result.stdout == ""
+        assert ("error:" if expected == 2 else "credentials:") in file_result.stderr
+
+
+def test_file_entry_from_other_cwd(tmp_path):
+    result = _run_cli(cwd=tmp_path)
+    reference = _run_cli(module=True)
+    assert result.returncode == reference.returncode == 0
+    assert (result.stdout, result.stderr) == (reference.stdout, reference.stderr)
+
+
+def test_file_entry_delegates_once_to_canonical_main(monkeypatch):
+    import runpy
+    from scripts.unified_data import ud_lock
+
+    canonical = _load_module()
+    assert canonical.acquire_ud_lock is ud_lock.acquire_ud_lock
+    assert canonical.UDLockBusy is ud_lock.UDLockBusy
+    calls = []
+    monkeypatch.setattr(canonical, "main", lambda: calls.append(canonical.__name__) or 17)
+    monkeypatch.setattr(sys, "path", sys.path.copy())
+    with pytest.raises(SystemExit) as exc:
+        runpy.run_path(str(SCRIPT), run_name="__main__")
+    assert exc.value.code == 17
+    assert calls == ["scripts.unified_data.audit_smoke"]
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +157,7 @@ class _FakeRuntimeClient:
         self._kind = kind  # "writer" / "reader"，仅用于诊断
 
     def __getitem__(self, name):
-        assert name == "tradingagents", (
+        assert name == "yquant-data", (
             f"[{self._kind}] unexpected database access: {name!r}"
         )
         return self._db
@@ -223,12 +277,37 @@ class TestApplyMissingCreds:
 
 
 class TestStaticScope:
+    def test_ut05_open_clients_keep_independent_auth_sources(self, monkeypatch):
+        import pymongo
+        sm = _load_module()
+        calls = []
+
+        def factory(uri, **kwargs):
+            calls.append((uri, kwargs))
+            return mongomock.MongoClient()
+
+        monkeypatch.setattr(pymongo, "MongoClient", factory)
+        for kind in ("WRITER", "READER"):
+            for field, value in (("URI", f"mongodb://{kind.lower()}-fake"),
+                                 ("USERNAME", kind.lower()), ("PASSWORD", "synthetic-password"),
+                                 ("AUTH_DB", f"{kind.lower()}-identity")):
+                monkeypatch.setenv(f"YQUANT_UD_AUDIT_{kind}_MONGO_{field}", value)
+        writer = sm._open_writer_client()
+        reader = sm._open_reader_client()
+        assert writer is not reader
+        assert [call[1]["authSource"] for call in calls] == ["writer-identity", "reader-identity"]
+        assert [call[1]["username"] for call in calls] == ["writer", "reader"]
+        assert all(call[1]["password"] == "synthetic-password" for call in calls)
+        assert all(call[1]["serverSelectionTimeoutMS"] == 5000 for call in calls)
+        writer.close()
+        reader.close()
+
     """模块级静态白名单；任何越界 fail-closed (rc=2)。"""
 
     def test_module_exposes_canonical_constants(self):
         """白名单常量在模块作用域且唯一。"""
         sm = _load_module()
-        assert sm.ALLOWED_DATABASE == "tradingagents"
+        assert sm.ALLOWED_DATABASE == "yquant-data"
         assert sm.ALLOWED_COLLECTION == "03_data_ud_query_audit"
 
     def test_validate_targets_rejects_out_of_scope_collection(self):
@@ -460,7 +539,7 @@ class TestApplyRoundTrip:
                 self._db = db
 
             def __getitem__(self, name):
-                assert name == "tradingagents"
+                assert name == "yquant-data"
                 return _SpyDb(self._db[name], _SpyWriterColl)
 
             def close(self):
@@ -471,7 +550,7 @@ class TestApplyRoundTrip:
                 self._db = db
 
             def __getitem__(self, name):
-                assert name == "tradingagents"
+                assert name == "yquant-data"
                 return _SpyDb(self._db[name], _SpyReaderColl)
 
             def close(self):
@@ -497,8 +576,9 @@ class TestApplyRoundTrip:
         # reader 至少一次 find_one
         assert "find_one" in reader_calls
 
-        # 验证事件字段与 smoke marker 一致（从 spy 走过的 tradingagents db）
-        doc = fake_db["tradingagents"][sm.ALLOWED_COLLECTION].find_one({})
+        # 验证事件字段与 smoke marker 一致，且旧目标未接收写入。
+        doc = fake_db["yquant-data"][sm.ALLOWED_COLLECTION].find_one({})
+        assert fake_db["tradingagents"][sm.ALLOWED_COLLECTION].count_documents({}) == 0
         assert doc is not None
         assert doc["event_type"] == sm.SMOKE_EVENT_TYPE
         assert doc["source"] == sm.SMOKE_EVENT_SOURCE
@@ -560,7 +640,7 @@ class TestFailClosed:
                 self._db = db
 
             def __getitem__(self, name):
-                assert name == "tradingagents"
+                assert name == "yquant-data"
 
                 class _BoomDb:
                     def __getitem__(self, coll_name):
@@ -626,7 +706,7 @@ class TestFailClosed:
                 self._db = db
 
             def __getitem__(self, name):
-                assert name == "tradingagents"
+                assert name == "yquant-data"
 
                 class _LeakyDb:
                     def __getitem__(self, coll_name):
@@ -685,7 +765,7 @@ class TestFailClosed:
                 self._db = db
 
             def __getitem__(self, name):
-                assert name == "tradingagents"
+                assert name == "yquant-data"
 
                 class _BoomDb:
                     def __getitem__(self, coll_name):
@@ -726,7 +806,7 @@ class TestFailClosed:
                 self._db = db
 
             def __getitem__(self, name):
-                assert name == "tradingagents"
+                assert name == "yquant-data"
 
                 class _LeakyDb:
                     def __getitem__(self, coll_name):
@@ -780,6 +860,61 @@ class TestFailClosed:
 
 
 class TestNoConnectionOnDryRun:
+    @pytest.mark.parametrize("fault", ["ok", "missing", "wrong_id", "wrong_time", "silent_insert"])
+    def test_ut05_exact_target_readback_rejects_faults(self, monkeypatch, fault):
+        sm = _load_module()
+        client = mongomock.MongoClient()
+        target = client["yquant-data"][sm.ALLOWED_COLLECTION]
+        old = client["tradingagents"][sm.ALLOWED_COLLECTION]
+        queries = []
+
+        class Collection:
+            def insert_one(self, event):
+                if fault == "silent_insert":
+                    from types import SimpleNamespace
+                    from bson import ObjectId
+                    old.insert_one(dict(event))  # simulate a stale/caught legacy write
+                    return SimpleNamespace(inserted_id=ObjectId())
+                return target.insert_one(event)
+
+            def find_one(self, query):
+                queries.append(query)
+                assert set(query) == {"_id"}
+                doc = target.find_one(query)
+                if fault == "missing" or doc is None:
+                    return None
+                if fault == "wrong_id":
+                    from bson import ObjectId
+                    doc["_id"] = ObjectId()
+                if fault == "wrong_time":
+                    from datetime import timedelta
+                    doc["fetched_at"] += timedelta(seconds=1)
+                return doc
+
+        class Database:
+            def __getitem__(self, name):
+                assert name == sm.ALLOWED_COLLECTION
+                return Collection()
+
+        class Client:
+            def __getitem__(self, name):
+                assert name == "yquant-data"
+                return Database()
+
+            def close(self):
+                pass
+
+        monkeypatch.setattr(sm, "_open_writer_client", Client)
+        monkeypatch.setattr(sm, "_open_reader_client", Client)
+        assert sm.run_apply() == (0 if fault == "ok" else 4)
+        assert len(queries) == 1
+        if fault == "silent_insert":
+            assert target.count_documents({}) == 0
+            assert old.count_documents({}) == 1
+        else:
+            assert old.count_documents({}) == 0
+            assert target.count_documents({}) == 1
+
     """dry-run 模式必须不调用 pymongo 或 mongomock；可作静态配置检查但不连。"""
 
     def test_dry_run_does_not_invoke_pymongo_or_clients(self):

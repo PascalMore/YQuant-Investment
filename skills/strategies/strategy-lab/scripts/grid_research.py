@@ -320,6 +320,23 @@ def derive_geometry(closed_daily_bars: list[dict], start_utc: Any) -> dict:
             "grid_lines": count + 1, "score": score, "reason": None}
 
 
+def _load_equity_metrics():
+    """Load the shared equity helper by file path, without touching sys.path.
+
+    The helper is a sibling script, not a package, so it is resolved the same
+    way the existing tests resolve this module.
+    """
+    import importlib.util
+
+    path = Path(__file__).with_name("equity_metrics.py")
+    spec = importlib.util.spec_from_file_location("offline_equity_metrics", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("the shared equity metrics helper is missing")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.equity_metrics
+
+
 def margin_metrics(bar_close_rows: list[dict],
                    frequency_seconds: int = DEFAULT_FREQUENCY_SECONDS) -> dict:
     """Compute margin return/MDD and population Sharpe on consecutive bar closes.
@@ -328,6 +345,11 @@ def margin_metrics(bar_close_rows: list[dict],
     is K = 365 * 86400 / frequency_seconds (formula, not a hard-coded constant).
     M0 participates only in return/MDD, never in the first Sharpe return.
     Invalid/nonpositive equity preserves raw net PnL and raw MDD for diagnosis.
+
+    The calculation itself lives in ``scripts/equity_metrics.py`` so there is
+    one implementation of it. This wrapper keeps the original entry point,
+    defaults, field names and diagnostics; it renames the shared ``return_pct``
+    to ``margin_return_pct`` and changes nothing else.
     """
     equities, times = [], []
     for row in bar_close_rows:
@@ -340,48 +362,14 @@ def margin_metrics(bar_close_rows: list[dict],
             equity = INITIAL_MARGIN + _finite(row["realized_net_pnl"], "realized_net_pnl")
             equity += _finite(row["unrealized_pnl"], "unrealized_pnl")
         equities.append(_finite(equity, "computed equity"))
-    peak, maximum_dd = INITIAL_MARGIN, 0.0
-    peak_time = trough_time = None
-    for timestamp, equity in zip(times, equities):
-        if equity > peak:
-            peak, peak_time = equity, _iso(timestamp)
-        drawdown = (peak - equity) / peak * 100
-        if drawdown > maximum_dd:
-            maximum_dd, trough_time = drawdown, _iso(timestamp)
-    frequency = int(frequency_seconds)
-    missing = any((right - left).total_seconds() != frequency
-                  for left, right in zip(times, times[1:]))
-    reasons = []
-    if not equities:
-        reasons.append("empty equity sample")
-    if missing:
-        reasons.append("missing/duplicate/non-native bar")
-    if any(equity <= 0 for equity in equities):
-        reasons.append("nonpositive equity")
-    valid_equity = bool(equities) and not missing and min(equities) > 0
-    returns = [right / left - 1 for left, right in zip(equities, equities[1:])
-               if left > 0]
-    sharpe = NA
-    if len(returns) < 2:
-        reasons.append("insufficient return samples")
-    if returns and statistics.pstdev(returns) == 0:
-        reasons.append("zero volatility")
-    if valid_equity and len(returns) >= 2 and statistics.pstdev(returns) > 0:
-        periods_per_year = 365 * (86400 // frequency)
-        sharpe = statistics.mean(returns) / statistics.pstdev(returns) * math.sqrt(periods_per_year)
-    return {"status": "ok" if valid_equity else NA,
-            "reason": "; ".join(reasons) or None,
-            "net_pnl": equities[-1] - INITIAL_MARGIN if equities else NA,
-            "margin_return_pct": 100 * (equities[-1] / INITIAL_MARGIN - 1)
-            if valid_equity else NA,
-            "peak_equity": peak,
-            "max_drawdown_pct": maximum_dd if equities and not missing else NA,
-            "raw_max_drawdown_pct": maximum_dd if equities else None,
-            "peak_time": peak_time, "trough_time": trough_time,
-            "sharpe": sharpe, "return_count": len(returns), "bar_count": len(equities),
-            "risk_free": 0, "ddof": 0,
-            "periods_per_year": 365 * (86400 // frequency),
-            "limitation": COMPRESSED_EQUITY_LIMITATION}
+    metrics = _load_equity_metrics()(
+        list(zip(times, equities)),
+        initial_capital=INITIAL_MARGIN,
+        frequency_seconds=frequency_seconds,
+        limitation=COMPRESSED_EQUITY_LIMITATION,
+    )
+    metrics["margin_return_pct"] = metrics.pop("return_pct")
+    return metrics
 
 
 def cross_liquidation(snapshot: dict, mmr: float, close_fee: float) -> dict:

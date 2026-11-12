@@ -1,23 +1,37 @@
-# RFC-07-001: Predict.fun BTC 5m——用户 fork 接入与原版基线（M1）
+# RFC-07-001: Predict.fun BTC 5m——M1 基线与 M2 同核心回放研究
 
 ## 元数据（Metadata）
 
 | 项 | 值 |
 |---|---|
-| 状态 | Draft；方案及完整流水线已获用户同意，本文待主控校验；M1 尚未实施，非运行授权 |
-| 作者 | YQuant Principal（yquantprincipal） |
+| 状态 | M1/M2 限定离线工程已签收；M3 官方历史预测研究 V1.3 已获准 Light，待实现/独立验收；非交易授权 |
+| 作者 | YQuant Principal（M1/M2）；YQuant 主控（M3 用户 Light 授权增量） |
 | 创建日期 | 2026-11-09 |
-| 最后更新 | 2026-11-09 |
-| 版本 | V1.1 |
+| 最后更新 | 2026-11-12 |
+| 版本 | V1.3 |
 | 所属模块 | 07_trading |
 | 依赖 RFC | [RFC-26-072](RFC-26-072-trading-intelligent-trading-framework.md)（模块职责规划，非已实现公共执行服务） |
 | 替代 RFC | 无；本 RFC 是首个受限场景契约，不替代模块规划 |
 | 派生 SPEC | [SPEC-07-001](../../spec/07_trading/SPEC-07-001-predictfun-btc5m.md) |
-| AI 适配 | Hermes Kanban：Principal → Developer → Tester → Reviewer → YQuant Closeout |
-| 来源任务 | t_24ca3fd4；工作区 `/home/pascal/workspace/yquant-investment` |
+| AI 适配 | M1/M2 历史 Full Flow；本轮 M3：Developer → Tester → YQuant Closeout（Light） |
+| 来源任务 | M1 t_24ca3fd4；M2 t_36000446；工作区 `/home/pascal/workspace/yquant-investment` |
 | 标签 | #交易 #复用 #源码接入 #离线基线 #授权边界 |
 
-## 1. 执行摘要（Executive Summary）
+适用阶段（以下为 V1.2 历史说明，本轮 M3 另按 V1.3 §14）：§1–§12 保留 M1 需求及接入时点快照，不能把其中“本期”“不回放/不建 Lab”等 M1 限制解释为 M2 禁令；M1 最终状态以 [签收报告 §13](../../../data/reports/2026-11-09-predict-btc5m-m1/report.md) 为准。§13 是本轮 M2 的增量决策，派生 SPEC §9–§15；原有 Design V1.0 仅覆盖 M1，须另经 T2 增量设计后才能实施 M2。后续 C–H 是历史规划，不是本轮自动授权。
+
+## 14. M3 官方历史预测研究（V1.3 当前增量）
+
+2026-11-12 Pascal 明确选择“轻量：最小契约同步→实现并跑研究→独立验收”。M1/M2 的执行记录、旧 proxy 协议及结果原样保留；此前正文中 M3 未授权/待另阶段等陈述仅为当时范围，本节只追加官方历史预测研究，不授权执行加固、模拟/真实订单或改变原策略模型。M2 最终签收见 t_5207d097；UD 数据和每日摄入另按 03-018，已完成，不重做。
+
+复用链固定为 UnifiedDataClient.read_btc5m_history → 实例 history_input.py → 同一 Rust DecisionCore。正式市场为 Predict.fun BTC5m 官方 start_price/UP-DOWN-DRAW，标的输入为 Binance Vision BTCUSDT spot 1s closed-candle close，不冒充实时 top-of-book 或 Chainlink 同源报价。研究主要落在既有 Lab 实例；允许 fork 内独立、无网/无钱包的薄历史估值入口调用原 valuation，以不放宽旧 replay/proxy 的 strike=spot/horizon=300 防线。不得复制 EWMA/digital_up/round_entry 到 Python。
+
+本轮分析已有 [2026-08-10T00:00:00Z,2026-11-12T00:00:00Z) 94 日、27072 轮，时间切分2026-10-10，轮内偏移30/60/120/180/240/270秒。只读事件时间代理，固定官方strike、逐秒因果波动率和真实剩余时间；无调参/优化/进化。方向/概率/校准与基准对比可研究；没有份额历史盘口及执行证据，不产生成交、PnL、收益曲线或实盘资格。
+
+本轮仅 Implement→独立 Tester→主控收尾，不新增 Principal/Review/Activation；三层各增量先于实现同步。具体可计算规则以 SPEC §16、实现范围以 Design §19 为准。此为 V1.3 变更记录：最小新增研究入口与官方秒级研究，不修改 V1.2 旧研究协议或其他交易能力。
+
+2026-11-12 性能增量：Pascal 在实测读取冗余后选择方案2，允许在同一轻量链最小优化既有 Unified Data history reader；不重建数据层、不改接口/存储/模型，不以10小时预算或并行查询掩盖重复计算。此增量覆盖本轮原“UD源码全部只读”的限制，仅放开Design §19.4列明的reader及其colocated测试；保留业务摘要、三流与变更检测语义，先证等价和真实单日成本再续全窗。
+
+## 1. 执行摘要（Executive Summary，M1 历史需求）
 
 沿用 Pascal 已批准的唯一 Toolkits 底座方案，先交付 M1：最小正式契约、用户 fork 子模块接入、未经业务修改的原版构建/离线测试基线与必要入口状态校正。成功是来源及 Git 状态可追溯、真实构建和业务离线测试可复现，不是策略盈利、执行加固完成或实盘就绪；用户已确认 Toolkits fork，主控已用只读 API 核验来源（§11），准确 URL 输入已闭合，本卡仍不接入源码。
 
@@ -66,7 +80,7 @@ M1 不修改 Toolkits 业务源码、测试断言、策略或交易配置，不�
 | 模块 | 既定职责 | M1 交付与边界 |
 |---|---|---|
 | Trading / Toolkits | 唯一预测市场执行底座；后续承载获准版本 | 仅源码与原版构建/测试，不开放运行入口 |
-| Strategy Lab | 后续回放、基线/挑战者、样本外与交付 | 将来实例为 `skills/strategies/strategy-lab/strategies/predictfun-btc-5m/` 直接子目录；M1 不创建 |
+| Strategy Lab | 后续回放、基线/挑战者、样本外与交付 | M1 不创建；旧未来示例 id 为 `predictfun-btc-5m`，已由 M2 §13 统一为 `predict-btc5m-btc-arb`，不创建旧实例 |
 | QuantDinger | 现有支持范围内的 BTC 特征/方向研究 | 不增加 Predict 执行路径，不把二元份额伪装 BTC 现货 |
 | Data / Risk / Portfolio / Reports | 未来数据规范、确定性约束、已对账事实投影与报告 | M1 无新业务接口、集合或服务 |
 | Hermes | 只读脱敏复盘、参数偏差、研究提案、跨会话记忆 | 无签名、订单、运行控制或自动发布生产参数权限；M1 仅工程文档/离线验证 |
@@ -203,3 +217,82 @@ M1 fork 输入已闭合，无需再次向用户确认。依据：任务 `t_24ca3
 |---|---|---|---|
 | V1.0 | 2026-11-09 | 从已批准 Intake 收敛 M1 A/B；明确 fork 待确认、原版验证及后续边界 | yquantprincipal |
 | V1.1 | 2026-11-09 | 按原卡恢复授权同步已确认 Toolkits/研究 fork 来源；闭合 URL 输入，旧 404 保留为早前快照；验证过程见交接 | yquantprincipal |
+| V1.2 | 2026-11-10 | 保留 M1 历史及最终签收来源；新增 §13 M2 同核心回放、Lab 真实研究、降级/复用与阶段边界；不修改 Design 或代码 | yquantprincipal |
+
+## 13. M2 增量：同核心离线回放与首份真实研究
+
+### 13.1 背景、授权与目标
+
+Pascal 于 2026-11-10 明确要求按 AI Coding Pipeline 推进并限定“M2”（任务 t_36000446）。M1 已完成用户 fork 接入、原版构建与安全离线测试，独立证据为 164 passed / 0 failed / 3 ignored；不是完整策略回测或实盘就绪。本轮不重建 M1、不重跑其 Cargo 基线或已有数据探针作为 T1 交付。
+
+M2 必须同时交付：可执行且测试过的同核心 Rust 回放、Strategy Lab 实例 `predict-btc5m-btc-arb`、一份真实数据研究与同源 CSV/报告/复现命令。工程完成与研究结论分开：数据不足可按 §13.5 的已批准降级完成工程，但不得声称获得真实净 PnL、完整执行等价回测或实盘放行。
+
+本轮事实来源为 [缺口报告](../../../data/reports/2026-11-10-predict-btc5m-gaps/report.md) 及其脱敏证据；T1 局部源码复核见 SPEC §9.2。2026-11-10 本地观测 Toolkits main/HEAD/缓存 origin/main 为 `71c0e4ff9e299f9a4d81757fd6b15cf54da69b38`，QuantDinger HEAD 为 `6915e390d3886d441b943aa8ee26cd8d10c959ed`；未 fetch，不将本地缓存等同实时远端状态。
+
+### 13.2 范围与非目标
+
+必须目标：
+
+1. 把原版 `round_entry`、`digital_up`、`EwmaVol` 和入场状态复用为单一 Rust 决策路径；实时适配与回放消费同一逻辑，不在 Python/Bun 重写概率或入场公式。
+2. 独立本地回放入口读取显式输入与事件时钟，验证 BTCUSDT/300 秒市场和 token 身份、预热、因果顺序、一次成功入场/轮次、重复记录和未知结果。无交易配置加载、网络、签名器或 live 开关。
+3. Lab 薄研究脚本复用现成 QuantDinger Agent 行情认证/HTTP/分页；只做 I/O、Rust 调用、指标聚合与报告。首份研究须实际分析真实样本，不能仅交工具或 fixture。
+4. 最小提取公共资金权益指标 helper，显式资本与频率；保留网格 wrapper 和既有结果/字段/判定，不能再复制一套收益/MDD/Sharpe。
+5. 复用 Lab spec/report 模板核心字段、退出码、证据分级、预算纪律及独立验收；正文和 CSV 由同一行集生成。
+
+不做：M3 UNKNOWN/费用净份额/恢复加固、M4/实盘准备、OBI/动量/LLM/参数优化、后台采集、夜报、第二执行器或研究平台、unified_data crypto provider、QuantDinger 改造、公共模板改写。不得启动机器人/模拟或真实订单、账户签名/充值/approve/撤单/redeem、生产库/DDL/索引、服务/长期调度或外发消息。200 USDT 本金和 100 USDT 全实验损失容忍只记背景，不生成生效交易配置；原版 `order_usd=5` 是离线基准参数，不是资金授权。
+
+### 13.3 核心决策与职责
+
+```text
+显式本地事件/配置 → Toolkits Rust 同一决策核心 → 回放决策/原因/状态证据
+现成 QuantDinger 只读行情 → Lab 实例验证与因果适配 → Rust 估值/回放
+  → Python 聚合与同源 CSV/报告 → Tester 独立重算 → Reviewer → 主控 Closeout
+```
+
+- Trading/Toolkits 仍是唯一决策与执行底座；M2 仅抽出可注入时钟/输入的决策能力，现有实时默认参数、source 防护及其他策略不变。不把回放验证器的新 BTC/300 秒输入限制扩散成全局 live 策略变更。
+- 同核心是“同决策函数、同 EWMA 更新、同成功入场确认语义”，不是承诺离线撮合与线上执行等价。原版只有正成交才标记 entered；Blocked/零成交不能锁死轮次，UNKNOWN 不可回填全量成交。回放只消费本地明确的结果事实/测试结果，不修 runtime live。
+- Python 生产研究路径不计算数字期权概率、不选买入 token；代理研究无份额盘口时只调用 Rust 估值，不虚构市场盘口触发入场。仅独立验收的隔离参考计算可按冻结公式重算，不作为第二生产策略或运行分支。fixture 的可控输入只能证明软件行为。
+- Risk/Reports/Data 仅沿用既有规范，无新服务、集合、账本或调度。JSON/CSV 是研究证据，不是生产恢复记录。
+
+### 13.4 数据与复用决策
+
+BTC5m 是到期时长，不是足够的行情采样间隔。完整入场回放需要因果可用的轮内 spot、Yes 盘口（Down 侧沿原版镜像）、深度、市场身份/开盘价/费率/状态；官方 Chainlink 指定报告、平价、暂停/争议及 pending 必须保留。Binance/Coinbase/QD close 都不是官方结算替代品。
+
+现有 QD 只读实测 300 根 BTCUSDT/5m，采样时 299 闭合、1 未闭合；返回无 venue/product provenance。只能声称“QuantDinger Agent BTCUSDT OHLC 代理”，不声明 Binance 现货、gate 实际来源或官方标签。普通 OHLCV 路由不接受 exchange_id/market_type；training_ohlc 的 gate/swap/1D 不适用于此任务。不得通过全局配置换 venue 或新增 provider 绕过。
+
+复用性质与真实函数见 SPEC §9.2：HTTP/认证/分页与 Rust 估值是代码复用；Lab 模板/退出码/验收是规范复用；网格四窗、G/E、35% 和表 A/B 是本实例不适用。研究窗口、切分、频率必须是显式实例参数，不把本次样本长度硬编码成平台常量。
+
+### 13.5 证据降级与输出
+
+先记录历史预测份额/官方标签可得性，再选择分支；不能以只有 OHLC 直接判全策略可回测。
+
+| 可得性 | 本轮允许的研究 | 结论上限 |
+|---|---|---|
+| 有真实轮内输入、权威标签及相应费用/成交证据 | 同核心历史决策回放；分栏列覆盖与未建模项 | 可以报告证据支撑的决策/模型或明确假设的收益；未修会计不能称真实净 PnL，实盘仍未验证 |
+| 缺份额盘口/官方标签，但有真实闭合 OHLC | fixture 回放测试 + 因果 OHLC 概率/波动代理研究（SPEC §11.3） | 工程可验收，研究 `insufficient-evidence`、exit 3；策略净收益/实盘未验证 |
+| 连有效真实代理样本也没有 | 保留真实失败/缺口诊断，软件测试与缺口分列 | M2 未完成；不能只凭 fixture 关闭整个 M2 |
+
+概率基准可为恒定概率 0.5（不是份额买价）；不交易基准不等于已知策略收益。真实标签缺失时禁止填假结算、合成盘口、0.5 买价、mock 收益或将 UNKNOWN 当 0。报告必须区分 fixture、真实代理、真实市场回放三栏，即使某栏未运行也保留原因。
+
+### 13.6 交付、持久化与验收
+
+正式契约仍只此 RFC、对应 SPEC、后续原 Design 增量三文件。M2 当前 T1 只改前两文件及 `data/tasks/active/2026-11-10-predict-btc5m-m2/rfc-spec-handoff.md`；不创建下游卡、不写实现级 Design。
+
+研究唯一正文为实例 `skills/strategies/strategy-lab/strategies/predict-btc5m-btc-arb/reports/report.md` 最新视图。正式归档 `data/reports/2026-11-10-predict-btc5m-m2/report.md` 仅为指向该正文的归档索引（标明 hash/时间），其 `evidence/` 保存本次输入、CSV、命令及测试证据；实例引用这些载体而非维护第二套结论。不可把索引视为已远程备份；`data/` 仍 Git 忽略。再次研究另建日期主题，不覆盖本次原始证据，不建通用 runs/manifest 系统。
+
+SPEC §14 的 M2-A-001..010 是后续 M2 工程验收，全部满足才可 Closeout；研究 `insufficient-evidence` 的合规降级不豁免真实研究、独立 Verify/Review 或可执行回放。报告涵盖样本内外、成本、年化/Sharpe/MDD/Calmar/换手/IR 的适用性、基准、压力假设；无收益序列时保留 N/A 原因，不填代理收益。
+
+完整流程仍为 T1 RFC/SPEC → 主控校验 → T2 Design → Design Gate → Implement → Verify → Review → Closeout；三个实现/验证/审查角色隔离。T2 冻结精确接口/文件 allowlist/离线负向测试与回归路径，原 Design V1.0 不能直接用于 M2 实现。无吞吐、收益、覆盖率百分比、固定四窗或强制观察天数新门槛。
+
+### 13.7 风险、替代方案与开放项
+
+| 风险 | 应对/停止边界 |
+|---|---|
+| 同核心重构悄悄改变线上行为 | 原参数/输入 golden 对拍及其他策略回归；runtime live、依赖、锁文件不改 |
+| 无轮内盘口，粗 OHLC 代理被夸大 | 按 §13.5 降级，明示概率代理不验证原策略入场优势 |
+| 分页去重遮住冲突/未闭合/来源未知 | 实例侧在标准化前检查原页冲突，闭合与覆盖因果验证；不扩 QD 平台 |
+| 费用/净份额和 Summary.equity 被误当真实账户净值 | PnL 与资本分离，真实净 PnL 未验证；M3 另授权 |
+| 共享指标提取改变网格语义 | 真实行为保留，包括首条权益不进入首个 Sharpe 收益；定向零漂移回归 |
+| 历史数据不可得或预算耗尽 | 记录可得性与缺口，exit 3/5；不自动后台采集、换通道/凭据或超预算 |
+
+不选 Python 重写策略、QD bar 引擎模拟二元市场、独立行情平台或先做 M3：均不解决本轮最小同核心/证据目标且越界。当前无待 Pascal 决策的范围 blocker；历史数据是否可得是后续有界事实发现，不假定可用。T2 待定仅为接口序列化/模块布局、样本参数默认值、源码级安全测试与具体复现命令，不得改变本节业务语义或扩大授权。门禁来源均为本任务目标、Lab 现行规范或既有资金/副作用边界，未将主观安全建议升级为额外阶段。

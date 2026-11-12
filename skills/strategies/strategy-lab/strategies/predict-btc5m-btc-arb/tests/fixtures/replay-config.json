@@ -1,0 +1,9 @@
+{
+  "schema_version": "btc-arb-replay/1",
+  "min_edge": 0.03,
+  "order_usd": 5.0,
+  "min_secs_left": 30,
+  "vol_floor": 5e-05,
+  "half_life_secs": 300.0,
+  "min_vol_samples": 20
+}

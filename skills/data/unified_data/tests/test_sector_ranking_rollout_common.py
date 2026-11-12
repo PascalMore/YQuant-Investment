@@ -106,6 +106,70 @@ class TestConnLoader:
         assert captured["serverSelectionTimeoutMS"] == 10000
         assert captured["connectTimeoutMS"] == 10000
 
+    def test_ut04_two_databases_keep_original_authentication(self):
+        calls = []
+        client = mongomock.MongoClient()
+
+        def factory(**kwargs):
+            calls.append(kwargs)
+            return client
+
+        loader = ConnLoader(env={**TEST_ENV, "MONGODB_DATABASE": "identity-db"},
+                            client_factory=factory)
+        assert loader.load_source_db() is client["tradingagents"]
+        assert loader.load_ud_db() is client["yquant-data"]
+        assert loader.load_db() is client["tradingagents"]
+        assert len(calls) == 1
+        assert calls[0]["authSource"] == "identity-db"
+        assert calls[0]["username"] == TEST_ENV["MONGODB_USERNAME"]
+        assert calls[0]["password"] == TEST_ENV["MONGODB_PASSWORD"]
+
+    @pytest.mark.parametrize("reader", [False, True])
+    def test_ut04_ranking_rejects_real_old_database_before_io(self, reader):
+        from pymongo import MongoClient
+        from scripts.unified_data.sector_ranking_rollout.prod_repository import (
+            ProdRankingReader, ProdRankingWriter,
+        )
+        from skills.data.unified_data.storage import UDDatabaseError
+
+        client = MongoClient(connect=False)
+        try:
+            with pytest.raises(UDDatabaseError):
+                if reader:
+                    ProdRankingReader(client["tradingagents"], binding=lambda: False)
+                else:
+                    ProdRankingWriter(client["tradingagents"])
+        finally:
+            client.close()
+
+    @pytest.mark.parametrize("entry", ["audit_rollout", "audit_smoke", "gate2_ddl", "gate3_backfill"])
+    def test_ut04_apply_shared_lock_busy_before_any_client(self, entry, monkeypatch, tmp_path):
+        import importlib
+        from scripts.unified_data import ud_lock
+
+        module_name = ("scripts.unified_data." + entry if entry.startswith("audit") else
+                       "scripts.unified_data.sector_ranking_rollout." + entry)
+        module = importlib.import_module(module_name)
+        lock = tmp_path / "shared.lock"
+        acquire = ud_lock.acquire_ud_lock
+        if entry.startswith("audit"):
+            monkeypatch.setattr(module, "acquire_ud_lock", lambda: acquire(lock))
+            for opener in (["_open_ddl_client"] if entry == "audit_rollout" else
+                           ["_open_writer_client", "_open_reader_client"]):
+                monkeypatch.setattr(module, opener, lambda: pytest.fail("client opened while busy"))
+            with acquire(lock):
+                assert module.run_apply() == 4
+        else:
+            monkeypatch.setattr(ud_lock, "acquire_ud_lock", lambda: acquire(lock))
+            argv = ["--apply", "--yes", "--report-dir", str(tmp_path)]
+            if entry == "gate3_backfill":
+                argv += ["--expected-file", str(tmp_path / "unused.json")]
+            with acquire(lock):
+                assert module.main(
+                    argv,
+                    env={}, client_factory=lambda **kw: pytest.fail("client opened while busy"),
+                ) == EXIT_STOP
+
     def test_fingerprint_contains_only_structural_fields(self):
         loader = ConnLoader(env=TEST_ENV, client_factory=mongomock.MongoClient)
         fp = loader.fingerprint()

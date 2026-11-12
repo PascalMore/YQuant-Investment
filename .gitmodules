@@ -20,5 +20,5 @@
 	branch = main
 [submodule "skills/trading/auto-trading/prediction-markets/Prediction-Markets-Trading-Bot-Toolkits"]
 	path = skills/trading/auto-trading/prediction-markets/Prediction-Markets-Trading-Bot-Toolkits
-	url = https://github.com/PascalMore/Prediction-Markets-Trading-Bot-Toolkits
+	url = git@github.com:PascalMore/Prediction-Markets-Trading-Bot-Toolkits.git
 	branch = main
