@@ -1,6 +1,8 @@
 # 2026-06-25 真实运行日志：RFC-03-006 流水线从 Design 到 Implement
 
-> Read this before deploying the pipeline for the first time. 不替代 SKILL.md 的玩法，是真实事故和故障定位的复盘记录。
+> 退役说明（2026-11-14 起）：本文全文仅为历史记录，不是当前入口或强制规则，无新任务必读要求；旧事实保留，不得按旧阶段链或事故配方执行新任务，也不得以 Closeout 自审替代独立 Validate 验收。
+
+> 本文为真实事故和故障定位的历史复盘记录，不替代 SKILL.md 的现行契约。
 
 ## 时序概览
 

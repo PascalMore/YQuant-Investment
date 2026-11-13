@@ -1,4 +1,4 @@
-# DESIGN-10-004: YQuant AI Coding Pipeline Quick Flow 详细设计
+# DESIGN-10-004: YQuant AI Coding Pipeline Full/Light 详细设计
 
 ## 元数据
 
@@ -7,12 +7,51 @@
 | 状态 | Accepted |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-06-29 |
-| 最后更新 | 2026-06-30 |
-| 版本号 | V1.2 |
+| 最后更新 | 2026-11-14 |
+| 版本号 | V1.3 |
 | 来源 RFC | RFC-10-004-yquant-ai-coding-pipeline-skill-sync |
 | 来源 SPEC | SPEC-10-004-yquant-ai-coding-pipeline-skill-sync |
 | 目标模块 | 10_infra / Hermes Kanban Pipeline |
-| 关联 Design | 无（本 Design 是首批 Quick Flow 设计，承接 RFC-10-004 §12 与 SPEC-10-004 §13） |
+| 关联 Design | 无；V1.3 承接 RFC-10-004 §0 与 SPEC-10-004 §0，原 Quick 设计为历史 |
+
+## 0. V1.3 现行落地设计
+
+依据：[RFC-10-004 V1.3](../../rfc/10_infra/RFC-10-004-yquant-ai-coding-pipeline-skill-sync.md)、[SPEC-10-004 V1.3 §0 验收契约](../../spec/10_infra/SPEC-10-004-yquant-ai-coding-pipeline-skill-sync.md)。仅后续新任务生效，旧任务不自动迁移。
+
+### 0.1 控制流与任务图
+
+```text
+Full:  主控 Intake → principal RFC/SPEC → principal Design → developer Implement → reviewer Validate → 主控 Closeout
+parents:             []                  [RFC/SPEC id]      [Design id]           [Implement id]
+Light: 主控 Intake → developer Implement → reviewer Validate → 主控 Closeout
+parents:             []                    [Implement id]
+```
+
+Intake 中按依赖顺序创建、拿到真实返回 id 再创建下游，并用 kanban_show 读回 parents；这不是等上游 done 才临时建下游，不允许占位 parent。主控不默认另建 Intake/Closeout worker。Full 保留 RFC/SPEC 与 Design 两阶段和三个独立文件，不合并 Plan；Quick 无现行入口，原 Quick 按契约明确且风险可控→Light，否则 Full，不按文件数。
+
+### 0.2 定点变更与交接
+
+- canonical SKILL：只替换现行分流、角色/预算表与任务图；统一 Validate 是唯一完整验收规则。旧 Quick、旧主动推进、P-5/P-27 冲突 SOP 明确退役，保留事故事实，不全面重构其他 pitfalls。
+- references/pipeline、agent-handoff、hermes-kanban-orchestration、document-layers 同步图、模板和交接；Quick 机制与旧验证报告仅加退役标识/必要去冲突。10-004 三文档同步 §0 及历史范围，不新增编号。
+- 根 AGENTS 仅保留启用、路由、独立性及硬授权边界，详细规则引用 canonical skill；reviewer/tester 的必要角色说明一致。受保护 AGENTS/SOUL 由具审批通道的主控修改，本卡只读核对，不写补丁副本；本卡改对应 reviewer/tester README。principal/developer 既有职责无冲突则不动。
+- 本轮仅使用任务 allowlist，不改 Hermes、profile 配置/模型/工具/调度、业务/子模块或其他项目，不读写秘密，不执行旧 cache 同步/删除，不创建框架/永久测试 runner、额外任务或提交推送。
+
+### 0.3 Validate 与证据落点
+
+`yquantreviewer` 按同一 [统一 Validate](../../../skills/infra/ai-coding-pipeline/SKILL.md) 执行必要实际测试、消费者/反例/数据合理性和范围检查，独立于实现者，不改业务实现后自签。预算沿用 60m/1；principal 60m/1、developer 75m/1，tester 45m/1 仅旧链/专项，不改运行配置。任务预算按当前接口实际参数设置，body 不是 runtime 配置或授权替代品。
+
+Kanban 为唯一状态源，summary/metadata 带候选 HEAD+工作树清单或 hash、命令/exit、覆盖/缺口；小任务只需结论和必要日志，复杂任务只一份验收报告＋原始证据，遵循既有 data 目录规则。不强制 state/body 镜像/全文 handoff/重复 Closeout。开发者自测不能代替独立验收；既有独立证据在候选/输入/依赖/条件仍适用时复用，变化补跑受影响部分。主控不第三遍全量跑，不因日志整理重复运行。预算中断先读落盘，只有登记缺失就补登记，不伪造 PASS。
+
+### 0.4 验证、风险与回退
+
+按 SPEC V-A-001–011 实际运行受限 diff、git diff --check、相对链接/三文档一致性检查，并文字走查 Full、Light、原 Quick→Light/Full、只缺登记的中断、安全拒绝、旧链兼容。静态检查不冒充 worker 或业务 E2E；独立验收使用既有下游卡，不另建流水线。
+
+缺陷退回 Implement 最小修复后再独立 Validate；必须授权或验收未满足不能 done。已有预建下游不是 block 理由，不定时盲目 unblock。安全拒绝停止相关动作，不换工具绕行。配置常量/小型明确本地写入不自动升大工程，但 DB/schema、交易执行/配置、外发、调度、凭据等授权与写后读回不减。回退仅经主控明确决定并按本次路径归属恢复，不 reset/stash/checkout 清共享树、不覆盖其他人变更，也不重启 Quick 为新默认。
+
+<details>
+<summary>历史正文 V1.1–V1.2（§§1–7 全部退役，非当前指令）</summary>
+
+以下原编号、Quick 事实与模板保留；其中 Quick/Q-LINK、自审代 Review、旧角色链、运行态 cache/记忆写入及绕行命令形状均已退役。不得执行历史配方或将其作为新任务授权；旧卡继续原契约，不自动迁移。
 
 ## 1. 设计摘要
 
@@ -483,6 +522,8 @@ N/A（无代码变更，仅文档和 skill 内容修改）。
 - 实现过程中发现现有 SKILL.md 的其他章节也需要修改（超出本 Design 范围）。
 - yquant 主 profile 加载 skill 后出现新 Ambiguous 或功能回退。
 
+</details>
+
 ## 8. 参考资料
 
 - `docs/rfc/10_infra/RFC-10-004-yquant-ai-coding-pipeline-skill-sync.md`
@@ -494,6 +535,6 @@ N/A（无代码变更，仅文档和 skill 内容修改）。
 
 ## 9. 版本修订说明
 
-- 当前版本：V1.2
-- 修订日期：2026-06-30
-- 修订摘要：Quick Flow 衔接机制由 orchestrator 串行创建后续 task 改为 Intake 一次性预创建 T1-T4；§3.1 时序图、§3.2-§3.5 body/自审模板、§3.6 orchestrator 改动点和 §3.7 P-12 兼容性矩阵已同步修订。
+- 当前版本：V1.3
+- 修订日期：2026-11-14
+- 修订摘要：§0 落地 Full/Light、统一 Validate、真实依赖与最小证据；§§1–7 保留为非生效历史，旧 Quick/cache/命令配方不再指导新任务。

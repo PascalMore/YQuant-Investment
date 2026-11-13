@@ -10,12 +10,12 @@ YQuant Orchestrator 在完成每个阶段后，必须校验产出物存在性：
 
 | 阶段 | 校验项 | 不通过时行为 |
 |---|---|---|
-| RFC/SPEC 结束 | `docs/rfc/{模块}/RFC-XX-XXX-*.md` 已更新 **且** `docs/spec/SPEC-XX-XXX-*.md` 已创建 | 退回，补齐后再进入 Design |
-| Design 结束 | `docs/design/DESIGN-XX-XXX-*.md` 已创建 | 退回，补齐后再进入 Implement |
-| Implement 结束 | Developer 引用了 SPEC 和 DESIGN 文件路径 | 退回，要求补引用 |
-| Review 结束 | Reviewer 校验实现与 SPEC 一致 | 偏离则退回 Implement |
+| RFC/SPEC 结束 | `docs/rfc/{模块}/RFC-XX-XXX-*.md` 已更新 **且** `docs/spec/{模块}/SPEC-XX-XXX-*.md` 已创建 | 退回，补齐后再进入 Design |
+| Design 结束 | `docs/design/{模块}/DESIGN-XX-XXX-*.md` 已创建 | 退回，补齐后再进入 Implement |
+| Implement 结束 | Full 引用 SPEC/Design；Light 引用已确认契约与验收 body | 退回，补齐本模式实际输入 |
+| Validate 结束 | Reviewer 独立测试并审查实现与 SPEC/Design 一致 | 偏离则退回 Implement |
 
-轻量流程（小改动）可以不创建三层文件，但 Closeout 中必须说明跳过原因。
+Full 保留 RFC/SPEC 与 Design 两个阶段及三份独立文件，不合并为 Plan。Light 用已确认契约与验收 body，可以不新建三层文件；分流依据是契约明确、范围受限、风险可控，而不是文件数。两者共用 [统一 Validate](../SKILL.md)，不以 Closeout 自审代替独立验收。Quick 入口已退役；仅后续新任务使用新规则，旧任务不自动迁移。
 
 ---
 
@@ -53,7 +53,7 @@ YQuant Orchestrator 在完成每个阶段后，必须校验产出物存在性：
 - 验收标准映射
 - 测试要求
 
-Developer 和 Test Engineer 以 SPEC 作为直接工作契约。
+Full 的 Developer 和 Validate 验收者以 SPEC 作为直接工作契约；Light 以已确认契约和验收 body 为准。必要测试专项仍按自己的任务契约执行。
 
 ## `docs/design`
 

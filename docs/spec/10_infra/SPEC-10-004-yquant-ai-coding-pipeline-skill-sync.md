@@ -7,13 +7,40 @@
 | 状态 | Accepted |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-06-27 |
-| 最后更新 | 2026-06-30 |
-| 版本号 | V1.2 |
+| 最后更新 | 2026-11-14 |
+| 版本号 | V1.3 |
 | 来源 RFC | RFC-10-004-yquant-ai-coding-pipeline-skill-sync |
 | 目标模块 | infra / Hermes Kanban Pipeline |
 | 适配 Agent | YQuant-Developer-Engineer, YQuant-Test-Engineer, YQuant-Reviewer-Principal |
 | 关联 RFC | RFC-10-003-infra-architecture |
-| 关联 Design | DESIGN-10-004-yquant-ai-coding-pipeline-skill-sync（待创建） |
+| 关联 Design | DESIGN-10-004-yquant-ai-coding-pipeline-skill-sync V1.3 |
+
+## 0. V1.3 现行可执行契约
+
+来源：[RFC-10-004 V1.3 §0](../../rfc/10_infra/RFC-10-004-yquant-ai-coding-pipeline-skill-sync.md)；实现设计：[DESIGN-10-004 V1.3 §0](../../design/10_infra/DESIGN-10-004-yquant-ai-coding-pipeline-skill-sync.md)。以下契约仅用于后续新任务，旧卡继续原契约，不自动迁移。
+
+| 编号 | 行为与边界 | 可验证结果 |
+|---|---|---|
+| V-A-001 | 仅 Full/Light；Full=Intake → RFC/SPEC → Design → Implement → Validate → Closeout；Light=Intake → Implement → Validate → Closeout | 当前图/模板无默认 Quick、Verify→Review 或专门 Closeout worker |
+| V-A-002 | Full 保留 RFC、SPEC、Design 三文件和 RFC/SPEC→Design 两阶段；Light 把已明确契约与验收写 body | 三层文件独立且引用一致，不合并为 Plan；不为 Light 形式新增文档 |
+| V-A-003 | 原 Quick 按契约是否明确、风险是否可控去往 Light，否则 Full | 两种去向均可走查，不按文件数分流；旧链不自动迁移 |
+| V-A-004 | Full principal→principal→developer→reviewer 四卡；Light developer→reviewer 两卡；Validate=reviewer 60m/1，tester 仅旧链/必要专项 | assignee、预算、任务图一致，不修改运行配置或 profile 名称 |
+| V-A-005 | Intake 内依次拿到真实 task id 后创建下游，parents 指向实际上游，再读回核对；禁止占位 parent | Full/Light 各边有真实 id，不依赖通知回调才创建下一张；dispatcher 停机不等于 DB 自行运行 |
+| V-A-006 | Full/Light 共用 canonical SKILL 的统一 Validate：独立于实现者，必要实际测试＋真实消费者/反例审查＋契约/范围/数据合理性核对＋裁定 | PASS/REVISE 带 file:line/行为证据、候选 HEAD+工作树清单或 hash、命令/exit、覆盖/未验证项；未测不能 PASS，不改业务实现后自签 |
+| V-A-007 | 开发者自测不能代替独立验收；已有独立证据仅候选/输入/依赖/条件仍适用才复用，变化补跑受影响部分 | 不为整理报告重复运行；主控不第三遍全量跑；只缺登记的预算中断补登记，不伪造 PASS |
+| V-A-008 | Kanban 唯一状态源，无强制 state/body 镜像/全文 handoff/重复 Closeout 报告 | 小任务 Kanban 结论＋必要日志，复杂任务一份验收报告＋原始证据；遵循既有目录规则 |
+| V-A-009 | 本阶段验收已满足且有下游则 complete；同卡 review 用 request_review；缺必需验收/环境/授权则 block | 不因有下游 block、不固定时长盲目 unblock，缺陷退回 Implement 最小修复 |
+| V-A-010 | DB/schema、真实或模拟交易/交易配置、外发、调度、凭据、依赖升级/大重构授权不减；runtime 与卡面授权都需满足 | 安全拒绝停止相关动作，不换工具/路径；明确小型本地写入仍最小执行后读回，不因配置常量升级大工程 |
+| V-A-011 | 项目源唯一 canonical，不维护 profile cache；原 §§1–13 的 cache/Quick/Q-LINK 与旧链规则全部退役 | 不执行历史操作配方；仅修改本卡 allowlist 规则，不碰业务/运行配置/其他项目/秘密，不提交推送或新建任务 |
+
+### 0.1 验证与交接
+
+实际执行 `git diff --check`、受限 diff/文件清单、相对链接和现行规则定向扫描；文字走查 V-A-001/003/007/009/010 与旧链兼容。这里是规则静态验收，不创建测试 worker 卡、不宣称业务 E2E。候选和命令/exit 写在 Kanban 生命周期转换本身，不另造 handoff/state/report 副本。复杂任务需要的唯一独立验收报告由对应验收卡交付。
+
+<details>
+<summary>历史正文 V1.0–V1.2（§§1–13 全部退役，非当前指令）</summary>
+
+以下全部 cache 操作/路径验收、旧文件范围、Quick 专用入口、Q-LINK 与角色链只解释历史，不是当前契约或操作授权。原编号、历史事实保留；本轮不得执行历史事故配方。
 
 ## 1. 需求摘要
 
@@ -396,8 +423,10 @@ Quick Flow 的阶段衔接必须满足以下契约：
 
 该契约与 RFC-10-004 §12.6 对齐，并由 DESIGN-10-004 §3.1 的时序图落地。Light Flow 不强制同步修订为四 task 链，但 Implement→Verify 也应优先使用 parent link 预创建，以降低同类断链风险。
 
+</details>
+
 ## 14. 版本修订说明
 
-- 当前版本：V1.2
-- 修订日期：2026-06-30
-- 修订摘要：Quick Flow 衔接机制由 orchestrator 串行创建后续 task 改为 Intake 一次性预创建 T1-T4，并新增 Q-LINK 衔接机制契约，要求 T2/T3/T4 以 parent links 预创建为 `todo` 后自动 promote。
+- 当前版本：V1.3
+- 修订日期：2026-11-14
+- 修订摘要：§0 定义 Full/Light、统一 Validate、最小证据与真实依赖契约；§§1–13 作为非生效历史，Quick/cache 操作规则不再用于新任务。

@@ -1,7 +1,9 @@
 # Quick Flow 衔接机制：方案 A 与历史教训
 
+> 2026-11-14 退役标识：本文全文为历史事故资料，所有 Quick 专用入口、Q-LINK、三流程对比和旧操作配方均非当前指令。后续新任务只用 canonical SKILL 的 Full / Light 与统一 Validate；旧任务仍按原契约，不自动迁移。下文“当前”“必须”“已落地”仅描述当时版本，不构成新任务授权或门禁。
+
 > 本文档是 `SKILL.md` 的补充参考资料，固化 2026-06-30 yinglong 5h44m 卡死事件得出的 class-level 结论。
-> 主体决策与三流程对照矩阵见 `SKILL.md` Quick Flow 章节；具体 KB 关键字 / Kanban body 模板见 `references/pipeline.md`。
+> 现行入口见 [SKILL.md](../SKILL.md)；本页不再是新任务必读或模板来源。
 
 ---
 

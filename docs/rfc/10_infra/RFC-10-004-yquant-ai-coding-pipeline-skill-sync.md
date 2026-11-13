@@ -7,8 +7,8 @@
 | 状态 | 已采纳（Accepted） |
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-06-27 |
-| 最后更新 | 2026-06-30 |
-| 版本号 | V1.2 |
+| 最后更新 | 2026-11-14 |
+| 版本号 | V1.3 |
 | 所属模块 | 10_infra（基础设施 / Hermes Kanban Pipeline） |
 | 依赖 RFC | RFC-10-003-infra-architecture |
 | 替代 RFC | 无 |
@@ -22,6 +22,36 @@
 | V1.0 | 2026-06-27 | 初始创建，定义 AI Coding Pipeline skill canonical source、运行态副本保留策略与 worker 副本删除策略 | YQuant-Codex-Principal |
 | V1.1 | 2026-06-29 | 新增 §12 扩展：Quick Flow 5 阶段流程模式（Intake → RFC/SPEC/Design → Implement → Verify → Closeout） | YQuant-Codex-Principal |
 | V1.2 | 2026-06-30 | Quick Flow 衔接机制由 orchestrator 串行创建改为 Intake 一次性预创建 T1-T4，与 Full Flow 同源 | YQuant-Codex-Principal |
+| V1.3 | 2026-11-14 | 新任务仅 Full/Light；统一独立 Validate；Kanban 唯一状态源；旧 Quick/cache 操作规则明确退役 | YQuant Principal |
+
+## 0. V1.3 现行决策
+
+### 0.1 动机与边界
+
+Pascal 批准以最小规则修订消除重复阶段和重复记账，不建立新的平台、执行器或文档编号。项目源目录继续是唯一 canonical source，所有 profile 均不维护同名运行态 cache；本次只同步规则文件，不修改 profile/config、Hermes、业务代码、DB、凭据、外发或调度，不执行下方历史迁移命令。
+
+### 0.2 流程与独立性决策
+
+- Full：Intake → RFC/SPEC → Design → Implement → Validate → Closeout；RFC、SPEC、Design 三份独立文件，RFC/SPEC 与 Design 保留两个阶段，不合并为 Plan。
+- Light：Intake → Implement → Validate → Closeout；契约明确、范围受限、风险可控即可，不按改动文件数机械划档。
+- Quick 新入口和专用强制规则退役。原 Quick 请求若契约明确且风险可控转 Light，否则 Full。旧任务按原契约继续，不自动迁移。
+- 两流程共用 `yquantreviewer` 的统一 Validate：必要实际测试、真实消费者/反例审查、契约/范围/数据合理性与独立裁定。实现者不能自签验收；`yquanttester` 仅旧链兼容或必要专项，不增删改名 profile。
+- Intake 与 Closeout 由主控处理，不另建默认 worker。Full 四张卡为 principal RFC/SPEC → principal Design → developer Implement → reviewer Validate；Light 两张卡为 developer Implement → reviewer Validate。
+
+### 0.3 证据与状态决策
+
+Kanban 为唯一任务状态源，不强制 pipeline-state.md、任务正文镜像、逐卡全文 handoff 或重复 Closeout 报告。小任务用结论与必要日志；复杂任务一份验收报告及原始证据，目录仍遵循项目 AGENTS。候选身份与证据适用性必须明确；未测不能称 PASS。开发者自测不替代独立 Validate；主控不第三遍全量跑，不为整理日志重复执行。预算中断先核对落盘，只缺登记则补登记，不重做已完成工作。
+
+### 0.4 风险与验收原则
+
+主要风险是历史 Quick/旧 Verify→Review 链重新成为当前指令，因此本文件 §§1–12 整体降为历史，保留事实和编号但不再生效。现行可执行契约见 [SPEC-10-004 V1.3](../../spec/10_infra/SPEC-10-004-yquant-ai-coding-pipeline-skill-sync.md)，落地设计见 [DESIGN-10-004 V1.3](../../design/10_infra/DESIGN-10-004-yquant-ai-coding-pipeline-skill-sync.md)。
+
+验收需核对 Full/Light、原 Quick 两种去向、只缺登记的预算中断、安全拒绝和旧链兼容；用受限 diff、相对链接、现行规则搜索检查一致性，不把静态检查声称为 worker/业务 E2E。真实 parent 依次创建；完成阶段不因下游而 block、不定时盲目 unblock。DB/schema、真实或模拟交易/交易配置、外发、调度、凭据及依赖/大重构授权不减；runtime 拒绝停止相关动作，不换工具绕行；小型明确本地写入仍最小执行后立即读回，不因配置常量自动增加架构工程。
+
+<details>
+<summary>历史正文 V1.0–V1.2（§§1–12 全部退役，非当前指令）</summary>
+
+下文保留原编号与当时事实。所有 cache 同步/删除、Quick/Q-LINK、自审替代 Reviewer、旧默认卡链与验收命令仅解释历史，不得执行或用于后续新任务。旧卡契约不因本次修订自动变更。
 
 ## 1. 执行摘要
 
@@ -371,6 +401,8 @@ T6 Closeout           assignee=<orchestrator>    parents=[T5]
 
 轻量流程（Light Flow）结构上 task 数更少、无三层文档阶段，串行创建风险低一个数量级；但其 Implement→Verify 衔接也应优先采用预创建 parent link，而不是依赖进程层持续在线。
 
+</details>
+
 ## 13. 参考资料
 
 - `skills/infra/ai-coding-pipeline/SKILL.md`
@@ -381,6 +413,6 @@ T6 Closeout           assignee=<orchestrator>    parents=[T5]
 
 ## 14. 版本修订说明
 
-- 当前版本：V1.2
-- 修订日期：2026-06-30
-- 修订摘要：Quick Flow 衔接机制由 orchestrator 串行创建后续 task 改为 Intake 一次性预创建 T1-T4，并通过 Kanban DB parent links 与 dispatcher 自动 promote 机制衔接，与 Full Flow 同源。
+- 当前版本：V1.3
+- 修订日期：2026-11-14
+- 修订摘要：现行仅 Full/Light，共用独立 Validate；取消强制重复记账和默认 Closeout worker；§§1–12 保留为非生效历史，旧任务不自动迁移。

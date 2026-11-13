@@ -2,6 +2,8 @@
 
 YQuant Tester 的正式定义。角色与现有 Hermes profile 一一对应，不新增 Agent 或改变工程路由。
 
+自 2026-11-14 起，后续 Full / Light 新任务的默认独立验收为 `yquantreviewer` 的统一 Validate。本 profile 保留旧任务兼容和主控明确指派的必要测试专项，不是新默认必经阶段；旧任务按原契约，不自动迁移。详细规则见 [canonical pipeline](../../skills/infra/ai-coding-pipeline/SKILL.md)，本次不删除、改名 profile 或改运行配置。
+
 | 文件 | 用途 |
 |---|---|
 | [SOUL.md](SOUL.md) | 身份、职责、权限边界和工作协议启动入口 |

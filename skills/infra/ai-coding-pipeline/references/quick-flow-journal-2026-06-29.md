@@ -1,5 +1,7 @@
 # Quick Flow 实施实跑日志 (2026-06-29)
 
+> 退役说明（2026-11-14 起）：本文全文（含下方修订追记）仅为历史记录，不是当前入口或强制规则，无新任务必读要求；旧事实保留，不得按旧 Quick 流程或以 Closeout 自审替代独立 Validate 验收。
+
 > 这是"用 Quick Flow 改造 Quick Flow 自身"的真实执行记录。
 > 任务是"为 ai-coding-pipeline skill 增加 Quick Flow 5 阶段流程模式"。
 > 4 个 task 链：T1 RFC/SPEC/Design → T2 Implement → T3 Verify → T4 Closeout。

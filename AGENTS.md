@@ -185,10 +185,13 @@ AI Coding 流水线在 Hermes 中使用 Kanban profile worker 执行。各角色
 
 ### 阶段边界
 
-- 完整流程：`YQuant Intake -> YQuant-Codex-Principal RFC/SPEC -> YQuant-Codex-Principal Design -> YQuant-Developer-Engineer Implement -> YQuant-Test-Engineer Verify -> YQuant-Reviewer-Principal Review -> YQuant Closeout`
-- 轻量流程：`YQuant Intake -> YQuant-Developer-Engineer Implement -> YQuant-Test-Engineer Verify -> YQuant Closeout`
-- `Implement`、`Verify`、`Review` 必须由不同角色承担。除非用户明确跳过，否则完整流程不得跳过 Verify 和 Review。
-- 轻量流程仍必须保留最小 Verify，不能把未验证的实现直接 Closeout。
+- 完整流程（需正式规划）：`YQuant Intake -> YQuant-Codex-Principal RFC/SPEC -> YQuant-Codex-Principal Design -> YQuant-Developer-Engineer Implement -> YQuant-Reviewer-Principal Validate -> YQuant Closeout`
+- 轻量流程（契约明确、范围受限）：`YQuant Intake -> YQuant-Developer-Engineer Implement -> YQuant-Reviewer-Principal Validate -> YQuant Closeout`
+- `Implement` 与 `Validate` 必须由不同角色承担。Validate 独立于实现者，同时承担测试验证、真实消费者与反例审查、与契约的一致性检查，以及通过/退回的验收裁定。
+- 走完整流程还是轻量流程，看需求与既有契约是否已明确、风险是否可控，不按改动文件数量机械划档。
+- 轻量流程仍必须保留独立 Validate，不能把未验证的实现直接 Closeout。
+- `YQuant-Test-Engineer` 不再是默认必经阶段，保留用于旧任务兼容与确有必要的测试专项。
+- Intake 与 Closeout 由主控承担，默认不单独建卡。
 - **三层文档强制**：完整流程中 RFC、SPEC、Design 必须分别产出独立文件（`docs/rfc/`、`docs/spec/`、`docs/design/`），不允许合并。YQuant Orchestrator 在 RFC/SPEC 阶段和 Design 阶段结束后必须校验文件存在性，缺失则退回。
 
 ### 子 Agent 路由
@@ -197,10 +200,12 @@ AI Coding 流水线在 Hermes 中使用 Kanban profile worker 执行。各角色
 
 - RFC/SPEC/Design/架构/接口/数据模型：Kanban `assignee="yquantprincipal"`
 - 代码实现：Kanban `assignee="yquantdeveloper"`
-- 测试验证：Kanban `assignee="yquanttester"`
-- 独立审查：Kanban `assignee="yquantreviewer"`
+- 独立验收（测试验证＋反例审查＋裁定）：Kanban `assignee="yquantreviewer"`
+- 测试专项（非默认阶段，按需）：Kanban `assignee="yquanttester"`
 
 委派任务必须包含：任务目标、背景信息、当前约束、相关文件或目录、期望输出、验收标准、禁止事项、是否允许修改文件、是否需要运行测试或命令。Kanban task 必须使用 `workspace_kind="dir"` 和 `workspace_path="/home/pascal/workspace/yquant-investment"`，有前置阶段时必须设置 `parents=[...]`。
+
+Kanban 是任务状态的唯一来源。默认不再额外维护手工状态表、任务正文镜像、逐阶段全文交接或与验收结论重复的收尾报告；小任务在 Kanban 结论中给出验收结果与必要证据路径即可，复杂任务保留一份验收报告与原始证据。
 
 子智能体完成后，@YQuant 必须审核其结论是否回答用户目标，整理关键变更、验证结果、风险和下一步，并用面向用户的清晰语言回复；不要原样转发内部执行日志。
 
@@ -223,11 +228,16 @@ AI Coding 流水线在 Hermes 中使用 Kanban profile worker 执行。各角色
 
 负责独立验证实现是否满足 SPEC 和验收标准。必须说明测试命令、结果、覆盖范围、
 失败原因和未覆盖风险。不能把未运行测试写成已通过。
+现行流程必须保留独立 Validate；yquant-test-engineer 不是默认必经角色，仅用于旧任务
+兼容与主控明确指派的测试专项。
 
 ### yquant-reviewer-principal
 
-负责独立审查实现、测试和文档一致性。问题优先，摘要其次。每个问题必须指向文件、
-行号或明确行为证据。完整流程必须先检查 RFC/SPEC/Design 三层文档完整性。
+现行承担 Validate（独立验收）：独立于实现者，对最终候选执行必要验证，并审查实现、
+测试、文档与运行配置的一致性，优先发现会造成行为回归、数据错误、运维风险、安全风险
+或测试缺口的问题，最终给出通过或退回的验收结论。问题优先，摘要其次。每个问题必须
+指向文件、行号或明确行为证据。不得自行修改业务代码后自签通过，发现缺陷退回实现阶段
+并说明最小修复。完整流程必须先检查 RFC/SPEC/Design 三层文档完整性。
 
 ## 专题知识与角色分工
 

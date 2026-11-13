@@ -1,16 +1,19 @@
 # AI Coding 流水线参考（YQuant / 应龙共享）
 
+现行规则自 2026-11-14 起仅用于后续新任务，旧链按原契约执行、不自动迁移。只有 Full / Light；Quick 入口与专用要求退役。原 Quick 需求按契约明确程度和风险去往 Light 或 Full，不按文件数量分流。
+
 ## 阶段总览
 
 | 阶段 | 角色 | Hermes assignee profile | 产出 | 是否允许改代码 |
 |---|---|---|---|---|
-| 1 Intake | Orchestrator | `yquant` 或 `yinglong` | `00-intake.md` 或简短需求澄清摘要 | 否 |
-| 2 RFC/SPEC | YQuant-Codex-Principal | `yquantprincipal` | RFC 更新、`docs/spec/*.md` 或 `02-spec.md` | 通常否 |
-| 3 Design | YQuant-Codex-Principal | `yquantprincipal` | `docs/design/*.md`、`03-design.md`、`04-implementation-plan.md` | 否 |
+| 1 Intake | Orchestrator | `yquant` 或 `yinglong`，不另建默认卡 | 明确范围、契约、授权、验收与分流 | 否 |
+| 2 RFC/SPEC（Full） | YQuant-Codex-Principal | `yquantprincipal` | 独立 RFC 与 SPEC 文件 | 通常否 |
+| 3 Design（Full） | YQuant-Codex-Principal | `yquantprincipal` | 独立 Design 文件 | 否 |
 | 4 Implement | YQuant-Developer-Engineer | `yquantdeveloper` | 代码变更、实现记录 | 是 |
-| 5 Verify | YQuant-Test-Engineer | `yquanttester` | 测试、`05-test-report.md` | 仅测试/夹具 |
-| 6 Review | YQuant-Reviewer-Principal | `yquantreviewer` | `06-review.md` 或审查意见 | 否 |
-| 7 Closeout | Orchestrator | 与 Intake 相同 | `07-closeout.md`、面向用户的交付摘要 | 否 |
+| 5 Validate | YQuant-Reviewer-Principal | `yquantreviewer` | 必要测试、消费者/反例审查、验收裁定 | 不改业务实现后自签 |
+| 6 Closeout | Orchestrator | 与 Intake 相同，不另建默认卡 | 面向用户的交付摘要 | 否 |
+
+Full：Intake → RFC/SPEC → Design → Implement → Validate → Closeout（四张默认 worker 卡）。Light：Intake → Implement → Validate → Closeout（两张）。`yquanttester` 保留旧任务兼容与必要测试专项，不是默认阶段。
 
 > 查看每个 Agent 当前真实的主模型、fallback 链、compression 配置：
 > ```bash
@@ -20,33 +23,13 @@
 
 ## 任务目录
 
-非平凡工程任务的运行记录属于过程性数据，优先由 Hermes Kanban task/comment/run 保存。需要项目内可读归档时，放在 `data/tasks/` 下：
-
-```text
-data/tasks/active/YYYY-MM-DD-short-name/
-  00-intake.md
-  01-rfc-link.md
-  02-spec.md
-  03-design.md
-  04-implementation-plan.md
-  05-test-report.md
-  06-review.md
-  07-closeout.md
-```
-
-模板放在：
-
-```text
-data/tasks/templates/ai-coding-pipeline-run.md
-```
-
-完成后移动到 `data/tasks/done/`。小型机械修改可以跳过任务目录，但最终输出仍必须包含验证说明。
+Kanban 是唯一任务状态源；不强制 pipeline-state.md、任务 body 镜像、逐阶段全文 handoff 或重复 Closeout 报告。小任务只需 Kanban 结论与必要日志；复杂任务保留一份验收报告及原始证据。项目需要过程资料时沿用 `data/tasks/active/YYYY-MM-DD-short-name/`，完成后整体归入 `done/`；结果报告使用 `data/reports/YYYY-MM-DD-short-topic/report.md`。不为仪式新增文件，其他项目遵循自己的 AGENTS。
 
 ## 触发分级
 
 ### 完整流水线
 
-用户明确要求 AI Coding Pipeline、RFC/SPEC/Design/Implement/Verify/Review/Closeout、先设计后实现、独立测试或独立审查时，直接进入完整流水线。
+用户明确要求完整流水线、先 RFC/SPEC/Design 再实现时进入 Full；独立测试与审查由统一 Validate 承担，不再据此拆出两个默认阶段。具体启用按根 AGENTS 与 SKILL 的触发规则。
 
 任务满足以下条件之一但用户未显式要求时，orchestrator 先向用户确认是否走完整流水线：
 
@@ -62,6 +45,8 @@ data/tasks/templates/ai-coding-pipeline-run.md
 
 以下任务默认使用轻量流程，除非用户明确要求完整流水线：
 
+总判据是行为、范围、既有契约和验收已明确且风险可控；下列只是示例，不限单文件。不满足则走 Full，不能靠文件数机械划档。
+
 - 文案、注释、README 小改动。
 - 对已有功能的小问题修复。
 - 不涉及 RFC/SPEC/Design 变更的优化。
@@ -73,18 +58,18 @@ data/tasks/templates/ai-coding-pipeline-run.md
 ```text
 Orchestrator Intake
 -> YQuant-Developer-Engineer Implement
--> YQuant-Test-Engineer Verify
+-> YQuant-Reviewer-Principal Validate
 -> Orchestrator Closeout
 ```
 
-轻量流程可以不创建任务目录，但必须保留最小 Verify，并在 Closeout 中说明验证结果或无法验证的原因。
+轻量流程可以不创建任务目录，但必须保留独立 Validate，并在 Kanban 结论说明实际验证结果与缺口。
 
 ## 阶段门禁
 
 ### Intake
 - 输入：用户需求、项目上下文。
 - 输出：目标、非目标、约束、风险、开放问题、验收标准。
-- 通过条件：范围足够清楚，可以进入 RFC/SPEC。
+- 通过条件：明确分流；Full 进入 RFC/SPEC，契约明确且风险可控的 Light 直接进入 Implement。
 - 退回条件：核心目标、数据源、权限、交易/风控含义或生产影响不清楚。
 
 ### RFC/SPEC
@@ -100,33 +85,33 @@ Orchestrator Intake
 - 退回条件：新增依赖、Schema 变更、外部接口变更或交易/风控语义变更未获确认。
 
 ### Implement
-- 输入：SPEC、DESIGN、实现计划。
+- 输入：Full 的 SPEC/Design；Light 的已确认契约、范围与验收 body。
 - 输出：最小范围代码与测试变更。
 - 通过条件：实现覆盖计划，且没有无关重构。
 - 退回条件：计划缺口导致需要扩大范围，或本地验证无法继续。
 
-### Verify
-- 输入：代码变更和验收标准。
-- 输出：测试报告，包含命令、结果、覆盖范围和缺口。
-- 通过条件：关键测试通过，失败项有明确处置。
-- 退回条件：核心验收失败，或环境阻塞且没有替代证明。
-- 边界：默认只做验证和测试相关补充，不修改业务实现；如需修复实现，退回 Implement。
-
-### Review
-- 输入：diff、RFC/SPEC/DESIGN、测试报告。
-- 输出：按严重程度排序的审查意见。
-- 通过条件：无阻塞问题；残余风险已明确说明。
-- 退回条件：实现偏离 SPEC、关键测试缺口、安全/可靠性/交易/风控问题。
-- 边界：高严重度或阻塞问题必须退回 Implement；低严重度问题由 orchestrator 判断是否继续 Closeout。
+### Validate（Full / Light 共用）
+- 输入：最终候选 diff、验收契约、开发者自测证据；Full 另核对三份文档完整性与一致性。
+- 执行：按影响运行必要实际测试，审查真实消费者、异常/边界/反例、数据合理性、范围归属和授权边界。开发者自测不替代独立验收；具体规则只维护在 [SKILL 统一 Validate](../SKILL.md)。
+- 输出：PASS / REVISE、file:line 或行为证据、候选身份（HEAD + 文件清单或 hash）、命令/exit、覆盖与缺口；复杂任务仅一份验收报告及原始证据。
+- 通过条件：必需验收实际满足、无阻塞缺陷或未取得的必要授权；未运行不称 PASS。
+- 退回条件：偏离契约、真实路径/数据不合理、必需测试缺口、安全/可靠性问题。退回 Implement 最小修复，不改业务实现后自签。
+- 复用：既有独立证据只有候选/输入/依赖/条件仍适用才复用；候选变化补跑受影响部分。不因整理日志/报告重复跑，主控不第三遍全量跑。
+- 中断：先核对落盘与证据；只缺登记则补登记，未验证则明确缺口再续接。
 
 ### Closeout
 - 输入：实现结果、验证结果、审查结论。
 - 输出：面向用户的摘要、验证说明、风险和后续事项。
 - 通过条件：用户能清楚知道改了什么、如何验证、还剩什么风险。
 
-## Quick Flow
+## 历史：Quick Flow（全节退役，非当前指令）
 
-Quick Flow 是 AI Coding Pipeline 的**中等流程模式**（5 阶段 4 task），介于 Full Flow（7 阶段 6 task）和 Light Flow（3 阶段 2 task）之间。RFC 依据 `RFC-10-004 §12`，SPEC 依据 `SPEC-10-004 §13`，Design 依据 `DESIGN-10-004`。
+<details>
+<summary>保留 V1.2 Quick 规则用于解释旧任务</summary>
+
+以下至 details 结束的 Quick 入口、Q-LINK、强制自审及旧 Full/Light 对比全部退役，不用于新任务。现行只看上方阶段总览和统一 Validate，不执行旧操作配方。
+
+Quick Flow 曾是中等流程模式（5 阶段 4 task）；以下记录当时定义。
 
 ### Quick Flow Kanban 任务链
 
@@ -240,12 +225,14 @@ T4 Closeout 由 orchestrator 执行。由于 Quick Flow 无独立 Reviewer，orc
 - SPEC：`docs/spec/10_infra/SPEC-10-004-yquant-ai-coding-pipeline-skill-sync.md` §13（Quick Flow 可执行契约，**§13.1-§13.10**，含 Q-LINK 契约 §13.10）
 - Design：`docs/design/10_infra/DESIGN-10-004-yquant-ai-coding-pipeline-skill-sync.md`（§3.1 时序图 / §3.2-§3.6 task body 与 orchestrator 改动点 / §3.7 P-1~P-12 兼容性矩阵 / §3.8 降级升级）
 
+</details>
+
 ## 路由规则
 
 - RFC/SPEC/Design/架构/API/数据模型：Kanban `assignee="yquantprincipal"`
 - 代码实现：Kanban `assignee="yquantdeveloper"`
-- 测试验证：Kanban `assignee="yquanttester"`
-- 独立审查：Kanban `assignee="yquantreviewer"`
+- 独立验收 Validate（测试验证＋消费者/反例审查＋裁定）：Kanban `assignee="yquantreviewer"`
+- 旧任务兼容/必要测试专项（非默认）：Kanban `assignee="yquanttester"`
 - Intake 和 Closeout：当前 orchestrator（`yquant` 或 `yinglong`）完成
 
 ## Hermes Kanban 执行规则
@@ -254,6 +241,7 @@ T4 Closeout 由 orchestrator 执行。由于 Quick Flow 无独立 Reviewer，orc
 - Intake 根据 orchestrator 解析 `PIPELINE_WORKSPACE`：`yquant` 对应 `/home/pascal/workspace/yquant-investment`，`yinglong` 对应 `/home/pascal/workspace/yq-yinglong`。
 - 每个任务必须设置 `workspace_kind="dir"` 和解析后的绝对 `workspace_path=PIPELINE_WORKSPACE`。
 - 有前置阶段时必须在创建子任务时设置 `parents=[...]`，不要只在正文里写“等待某任务完成”。
+- 依次取得真实 id 再创建下游，禁止占位 parent；在 Intake 内完成依赖预建，不必等上游 done。阶段通过且有下游时 complete，不因存在下游 block，不盲目定时 unblock。
 - 创建后必须记录返回的 task id；没有 task id 就视为没有真实委派。
-- 如果 gateway 没有运行，ready task 不会自动执行；先启动或恢复 Hermes gateway。
+- 如果 gateway 没运行，ready task 不会自动执行；记录环境阻塞，由具备明确授权的主控/operator 恢复，不自行重启或绕过拒绝。
 - `delegate_task` 可用于短推理、并行代码阅读等临时子任务，但不得替代 profile worker 角色切换。

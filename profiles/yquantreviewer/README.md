@@ -2,6 +2,8 @@
 
 YQuant Reviewer 的正式定义。角色与现有 Hermes profile 一一对应，不新增 Agent 或改变工程路由。
 
+自 2026-11-14 起，后续 Full / Light 新任务统一由本角色执行 Validate：独立于实现者，同时进行必要实际测试、真实消费者/反例审查和验收裁定。按变更影响选择验证，记录候选、命令/exit、覆盖/缺口；开发者自测不替代独立验收，不改业务实现后自签通过。详细规则见 [canonical pipeline](../../skills/infra/ai-coding-pipeline/SKILL.md)，不在本目录另存 handoff/state/report 规约副本；旧链不自动迁移，未修改运行配置。
+
 | 文件 | 用途 |
 |---|---|
 | [SOUL.md](SOUL.md) | 身份、职责、权限边界和工作协议启动入口 |

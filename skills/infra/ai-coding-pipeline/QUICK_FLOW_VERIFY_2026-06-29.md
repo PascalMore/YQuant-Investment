@@ -1,5 +1,7 @@
 # Quick Flow Verify Report (2026-06-29)
 
+> 历史报告，非当前指令：2026-11-14 起 Quick 新任务入口与专用规则已退役。以下 PASS 仅为 2026-06-29 当时对象的记录，不证明当前候选、Full/Light 或统一 Validate 已验收；不复用本文命令作为当前操作授权。
+
 > **任务 ID**: `t_5ac8129d`（yquanttester）
 > **验证对象**: T2 (t_e20d7bd9) 实施的 Quick Flow 改动
 > **验证目的**: 确认 SKILL.md / references/pipeline.md / MEMORY.md 三文件改动可被 Hermes runtime 加载、Quick Flow 4 task 链可由 dispatcher 自动 promote、3 文件间引用一致
