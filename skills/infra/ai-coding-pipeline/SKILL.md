@@ -15,9 +15,9 @@ description: "YQuant / 应龙共享 AI Coding 流水线：Full 或 Light，两�
 - Light：Intake → Implement → Validate → Closeout。受限任务把已有契约与验收直接写入 body，不为了形式新增三层文档。
 - 两者共用下方「统一 Validate」；Intake / Closeout 由主控处理，默认不单独建卡。tester 仅用于旧任务兼容或必要专项，不新增、删除或改名 profile。
 - 已创建的旧任务按原契约执行，不自动迁移。本文明确标为历史的段落只保留事故事实，不是新任务指令；不得据其重启 Quick 或执行旧事故配方。
-- Kanban 是唯一任务状态源。不强制 pipeline-state.md、body 镜像、逐卡全文 handoff、重复 Closeout 报告。小任务用 Kanban 结论与必要日志；复杂任务保留一份验收报告和原始证据，目录沿用目标项目 AGENTS。
+- Kanban 是唯一任务状态源；新任务的目标、范围、计划、负责人、依赖、进度、状态与交接摘要只在 Kanban 管理，不创建或维护 `data/tasks/` 管理档案、pipeline-state.md、body 镜像、逐卡全文 handoff 或重复 Closeout 报告。小任务用 Kanban 结论与必要日志；复杂任务保留一份验收报告和原始证据，报告及必要证据目录沿用目标项目 AGENTS（YQuant 为 `data/reports/YYYY-MM-DD-short-topic/`）。临时探针与中间文件使用当前 profile scratch，不作为第二状态源或任务正文档案；既有 `data/tasks/` 与证据按旧任务原契约保留，不自动删除、迁移、改写或批量归档。
 
-### 统一 Validate（Full / Light 共用）
+### 统一 Validate（Full / Light 共用） <a id="unified-validate"></a>
 默认 `assignee="yquantreviewer"`，独立于实现者；同时负责必要实际测试、真实消费者路径与反例审查、契约/范围/数据合理性核对，最终给出 PASS 或 REVISE。
 
 - 按变更影响选择定向、集成或端到端测试；文档任务执行静态检查，不伪称业务 E2E。产出数据的任务需用真实用户输入检查真实路径和输出合理性；缺权限/环境时明确缺口，不以 fixture 替代真实验证结论。
@@ -54,7 +54,7 @@ sanity-check 关注的是「数据流入业务逻辑之前的最后一道闸门�
 ## Hermes 执行模型
 本流水线在 Hermes 中使用 **Kanban profile worker** 执行。
 
-- 本 skill 的源代码、参考文档和维护入口在项目内：`/home/pascal/workspace/yquant-investment/skills/infra/ai-coding-pipeline/`。
+- 本 skill 的源代码、参考文档和维护入口在项目内：`/home/pascal/workspace/yquant-investment/skills/infra/ai-coding-pipeline/`；配套恢复技能的唯一维护源同在项目：[修复链恢复](../yquant-kanban-repair-orchestration/SKILL.md#current-rules)、[预算恢复](../worker-budget-recovery/SKILL.md#current-rules)，不维护 profile 同名副本。
 - 不再维护 `~/.hermes/profiles/*/skills/infra/yquant-ai-coding-pipeline/` 运行态副本；长期修改只落到项目源目录，worker 通过 `workspace_path` 发现项目源 skill。
 - 运行态 profile 的模型、fallback、toolsets 等易变配置仍以 `~/.hermes/profiles/<profile>/config.yaml` 为准，项目内只保存路由语义、阶段门禁和可复用 skill 逻辑。
 - 当前入口 profile 是 orchestrator，负责 Intake、解析目标工作目录、创建 Kanban 任务、校验阶段门禁和 Closeout。
@@ -140,7 +140,7 @@ find /home/pascal/.hermes/profiles /home/pascal/workspace/yquant-investment \
 ```
 
 ### Kanban 创建规则
-#### 墙钟上限 `--max-runtime`（每张卡必填，2026-11-06 Pascal 拍板）
+#### 墙钟上限 `--max-runtime`（每张卡必填，2026-11-06 Pascal 拍板） <a id="runtime-limits"></a>
 `agent.max_turns` 管的是轮数，各 profile 统一为 150，修改方式见 `config.yaml`。`--max-runtime` 管的是墙钟时间，**没有默认值**：不传就不设上限，dispatcher 只对设了值的卡执行超时终止。超时后，dispatcher 先 SIGTERM，再 SIGKILL，然后把卡重新排队。因此，每次 `hermes kanban create` / `kanban_create` 都**必须**显式传入：
 
 | 阶段 / assignee | `--max-runtime` | `--max-retries` |
@@ -156,7 +156,7 @@ find /home/pascal/.hermes/profiles /home/pascal/workspace/yquant-investment \
   - 卡片 body 写明了理由，例如"长回测轮询""大批量迁移"，可以调大；
   - 范围很窄的续接卡或行政卡，可以调小，例如 `20m`。
 - 偏离默认值时，必须在 body 里写明实际值和原因。
-- 超时属于 dispatcher 的调度事实，不等于工作失败。恢复处理按 `worker-budget-recovery` skill：先看已落盘的产物，再决定是行政收尾还是收窄后续接，不要盲目重跑。
+- 超时属于 dispatcher 的调度事实，不等于工作失败。恢复处理按 [worker-budget-recovery](../worker-budget-recovery/SKILL.md#current-rules)：先看已落盘的产物，再决定是行政收尾还是收窄后续接，不要盲目重跑。
 
 完整流程必须创建依赖链（依次取得真实 task id 再创建下游，禁止占位 parent）：
 ```text
@@ -462,7 +462,7 @@ hermes -p <assignee> chat --skills <skill-a>,<skill-b> -q '只回复 OK'
 
 第一条成功、第二条失败时，优先检查 `skills=[...]` 中是否有 worker 不可见的 profile-local skill。
 
-### P-1c: worker profile `external_dirs` 必须覆盖目标项目 skills 目录（2026-07-01 实测）
+### P-1c: worker profile `external_dirs` 必须覆盖目标项目 skills 目录（2026-07-01 实测） <a id="p-1c"></a>
 
 **症状**（yinglong 5 阶段 4 task 实跑）：worker 进程在 `plugin discovery` 完成后**静默死掉**，无 turn_context、无 tool call、Python 无异常堆栈；dispatcher 60s 后报 `pid not alive` → crash → 2 次后 `gave_up`。日志末尾最后一行是 `Plugin discovery complete: 38 found, 32 enabled`，看似正常但实际已经死。
 
@@ -737,13 +737,13 @@ Intake 内依次调用创建：取得上游返回的真实 id → 创建下游�
 - [Quick 五阶段日志历史](references/history/quick-flow-5stage-2026-06-29.md)
 - [pipeline Quick 阶段参考历史](references/history/pipeline-quick-flow-legacy.md)
 
-- `references/pipeline.md`：阶段门禁、任务目录结构、路由规则。
+- `references/pipeline.md`：阶段门禁、任务管理与报告落点、路由规则。
 - `references/document-layers.md`：RFC/SPEC/DESIGN 的职责边界。
 - `references/agent-handoff.md`：角色交接内容、交付物和退回条件。
 - `references/hermes-kanban-orchestration.md`：Hermes Kanban profile worker 编排规则。
 - `references/quick-flow-journal-2026-06-29.md`：已退役 Quick 历史实跑日志（含 T1-T4 task IDs、产物、关键教训），非当前入口或指令，无新任务必读要求。
 - `references/quick-flow-handoff-mechanism.md`：已退役 Quick 历史事故资料，不是当前入口，无新任务必读要求。
-- **P-1c 复盘（2026-07-01 yinglong 5 阶段 4 task 实跑）**：worker profile `external_dirs` 不覆盖目标项目 skills 目录时，进程静默 SIGKILL、P-1b 风格的 `Unknown skill` 异常被 hermes_cli 静默吞掉。详见本 SKILL.md §P-1c 段。
+- **P-1c 复盘（2026-07-01 yinglong 5 阶段 4 task 实跑）**：worker profile `external_dirs` 不覆盖目标项目 skills 目录时，进程静默 SIGKILL、P-1b 风格的 `Unknown skill` 异常被 hermes_cli 静默吞掉。详见 [P-1c](#p-1c)。
 - `references/spec-from-rfc.md`：**SPEC 阶段专用编写手册**——从 RFC 派生 SPEC 时的决策→契约映射模式、12 节章节清单、7 类陷阱（含「不改动清单 P-2」「硬编码版本号 P-3」「向后兼容 P-4」「混淆 SPEC/Design 边界 P-7」）、验证清单与完成回报模板。
 - `skills/common/utils/print_agent_models.py`：查看所有 Agent 当前模型/fallback/compression 配置。
 - `references/real-run-journal-2026-06-25.md`：已退役历史实跑日志——保留 2026-06-25 RFC-03-006 的真实时序、模型 fallback 观察与 worker crash 复盘，非当前入口或指令，无新任务必读要求。

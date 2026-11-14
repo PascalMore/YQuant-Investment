@@ -104,7 +104,7 @@ Hermes profile：`yquanttester`。
 
 ## YQuant-Reviewer-Principal
 
-负责统一 Validate：在 Full / Light 中独立于实现者，同时执行必要实际测试、真实消费者/反例审查与独立验收裁定。规则见 [统一 Validate](../SKILL.md)，不是仅将 Review 改名。
+负责统一 Validate：在 Full / Light 中独立于实现者，同时执行必要实际测试、真实消费者/反例审查与独立验收裁定。规则见 [统一 Validate](../SKILL.md#unified-validate)，不是仅将 Review 改名。
 
 Hermes profile：`yquantreviewer`。
 

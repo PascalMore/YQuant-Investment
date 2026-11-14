@@ -137,7 +137,7 @@ Intake / Closeout 由主控承担，不另建默认 worker。后续新任务只�
 - 预算中断先核对已落盘产物/证据；只缺登记则补登记，不重跑或补写 PASS
 ```
 
-统一 Validate 的完整规则见 [SKILL](../SKILL.md)，Full/Light 使用同一份。
+统一 Validate 的完整规则见 [SKILL 统一 Validate](../SKILL.md#unified-validate)，Full/Light 使用同一份。
 
 ## 历史：Quick Flow 任务模板（全节退役）
 

@@ -21,9 +21,9 @@ Full：Intake → RFC/SPEC → Design → Implement → Validate → Closeout（
 > ```
 > 升级模型时**只改 `config.yaml`**，本 skill 不需要同步。
 
-## 任务目录
+## 任务管理与报告落点
 
-Kanban 是唯一任务状态源；不强制 pipeline-state.md、任务 body 镜像、逐阶段全文 handoff 或重复 Closeout 报告。小任务只需 Kanban 结论与必要日志；复杂任务保留一份验收报告及原始证据。项目需要过程资料时沿用 `data/tasks/active/YYYY-MM-DD-short-name/`，完成后整体归入 `done/`；结果报告使用 `data/reports/YYYY-MM-DD-short-topic/report.md`。不为仪式新增文件，其他项目遵循自己的 AGENTS。
+Kanban 是唯一任务状态源；新任务的目标、范围、计划、负责人、依赖、进度、状态与交接摘要只在 Kanban 管理，不创建或维护 `data/tasks/` 任务目录、pipeline-state.md、任务 body 镜像、逐阶段全文 handoff 或重复 Closeout 报告。小任务只需 Kanban 结论与必要日志；复杂任务保留一份验收报告及原始证据。YQuant 的正式报告使用 `data/reports/YYYY-MM-DD-short-topic/report.md`，计算明细及必要证据放在同主题目录的 `evidence/` 下，看板引用其路径；临时探针与中间文件使用当前 profile scratch，不作为第二状态源或任务正文档案。既有 `data/tasks/` 及证据仅作历史保留，旧任务按原契约处理，不自动删除、迁移、改写或批量归档。不为仪式新增文件，其他项目遵循自己的 AGENTS。
 
 ## 触发分级
 
@@ -62,7 +62,7 @@ Orchestrator Intake
 -> Orchestrator Closeout
 ```
 
-轻量流程可以不创建任务目录，但必须保留独立 Validate，并在 Kanban 结论说明实际验证结果与缺口。
+轻量流程的新任务同样只在 Kanban 管理，不创建或维护 `data/tasks/` 管理档案；必须保留独立 Validate，并在 Kanban 结论说明实际验证结果与缺口。
 
 ## 阶段门禁
 
@@ -92,7 +92,7 @@ Orchestrator Intake
 
 ### Validate（Full / Light 共用）
 - 输入：最终候选 diff、验收契约、开发者自测证据；Full 另核对三份文档完整性与一致性。
-- 执行：按影响运行必要实际测试，审查真实消费者、异常/边界/反例、数据合理性、范围归属和授权边界。开发者自测不替代独立验收；具体规则只维护在 [SKILL 统一 Validate](../SKILL.md)。
+- 执行：按影响运行必要实际测试，审查真实消费者、异常/边界/反例、数据合理性、范围归属和授权边界。开发者自测不替代独立验收；具体规则只维护在 [SKILL 统一 Validate](../SKILL.md#unified-validate)。
 - 输出：PASS / REVISE、file:line 或行为证据、候选身份（HEAD + 文件清单或 hash）、命令/exit、覆盖与缺口；复杂任务仅一份验收报告及原始证据。
 - 通过条件：必需验收实际满足、无阻塞缺陷或未取得的必要授权；未运行不称 PASS。
 - 退回条件：偏离契约、真实路径/数据不合理、必需测试缺口、安全/可靠性问题。退回 Implement 最小修复，不改业务实现后自签。

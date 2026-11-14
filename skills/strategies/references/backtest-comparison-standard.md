@@ -51,6 +51,6 @@
 
 ## 6. 交付核验
 
-- 原始结果与计算明细落 `data/reports/YYYY-MM-DD-topic/evidence/`，正文 `report.md`；过程清单在 `data/tasks/active/YYYY-MM-DD-task/`。
+- 原始结果与计算明细落 `data/reports/YYYY-MM-DD-topic/evidence/`，正文 `report.md`，由看板引用；新任务的过程清单及目标、范围、计划、负责人、依赖、进度、状态与交接摘要只在 Kanban 管理，不创建或维护 `data/tasks/` 管理档案。临时探针与中间文件使用当前 profile scratch，不作第二状态源或任务正文档案；既有 `data/tasks/` 与证据按旧任务原契约保留，不自动删除、迁移、改写或批量归档。
 - 核对所有目标单元的真实终态、参数/源码身份、时间范围、数据市场身份与计费；同日未收盘 bar 不纳入。
 - 表格规范落盘、报告生成代码可运行、16 次真实回测完成、独立指标核验是不同完成项，分别报告；不得用其中一项代替其它项。

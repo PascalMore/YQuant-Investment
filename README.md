@@ -35,8 +35,8 @@ YQuant 是运行在 Hermes Agent 上的量化金融工程师与工程化主控�
 ## 其他文件的归属
 
 - [CLAUDE.md](CLAUDE.md)：代码助手的短兼容入口，正式规则在 AGENTS；不再维护第二套正文。
-- `skills/`：具体能力和工具方法；`docs/rfc/`、`docs/spec/`、`docs/design/`：工程正式契约。本次不改变 AI Coding Pipeline 已批准的语义与源文件归属，仅同步 V1.4 的结构收敛与口径对齐。
-- `data/reports/`：验收、验证、评估和调研等结果报告；`data/tasks/`：任务过程与交接记录。具体目录约定见 [AGENTS.md 的报告与过程资料约定](AGENTS.md#报告与过程资料的目录约定)。`data/` 当前不纳入 Git。
+- `skills/`：具体能力和工具方法；`docs/rfc/`、`docs/spec/`、`docs/design/`：工程正式契约。[AI Coding Pipeline](skills/infra/ai-coding-pipeline/SKILL.md)、[修复链恢复](skills/infra/yquant-kanban-repair-orchestration/SKILL.md#current-rules)与[预算恢复](skills/infra/worker-budget-recovery/SKILL.md#current-rules)均以项目目录为唯一维护源，不保留 profile 同名可编辑副本；沿用 V1.4 已批准的 Full/Light 与独立 Validate 语义。
+- 新任务的目标、范围、计划、负责人、依赖、进度、状态与交接摘要只在 Kanban 管理，不创建或维护 `data/tasks/` 管理档案；`data/reports/` 保留验收、验证、评估、调研等正式报告、计算明细与必要证据，由看板引用；当前 profile scratch 仅放临时探针与中间文件，不作第二状态源或任务正文档案。既有 `data/tasks/` 及证据按旧任务原契约保留，不自动删除、迁移、改写或批量归档。具体目录约定见 [AGENTS.md 的报告与过程资料约定](AGENTS.md#报告与过程资料的目录约定)。`data/` 当前不纳入 Git，本地保存不等于已提交或远程备份。
 - `USER.md`、`MEMORY.md`：私有上下文，本次保持原件不变；分享前单独审计，不能因已 Git 跟踪就认为可公开。
 - `TOOLS.md`、`HEARTBEAT.md`：已有本地工具/调度参考，本次不改配置、不搬移正文、不推送；命令和集成状态必须与实际运行核对。敏感本地资料不纳入通用 Agent 发布。
 - 密钥、认证、渠道凭据、会话、日志、缓存、数据库和真实交易数据不进入 Agent 定义发布包。

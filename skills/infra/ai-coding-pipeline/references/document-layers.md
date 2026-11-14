@@ -15,7 +15,7 @@ YQuant Orchestrator 在完成每个阶段后，必须校验产出物存在性：
 | Implement 结束 | Full 引用 SPEC/Design；Light 引用已确认契约与验收 body | 退回，补齐本模式实际输入 |
 | Validate 结束 | Reviewer 独立测试并审查实现与 SPEC/Design 一致 | 偏离则退回 Implement |
 
-Full 保留 RFC/SPEC 与 Design 两个阶段及三份独立文件，不合并为 Plan。Light 用已确认契约与验收 body，可以不新建三层文件；分流依据是契约明确、范围受限、风险可控，而不是文件数。两者共用 [统一 Validate](../SKILL.md)，不以 Closeout 自审代替独立验收。Quick 入口已退役；仅后续新任务使用新规则，旧任务不自动迁移。
+Full 保留 RFC/SPEC 与 Design 两个阶段及三份独立文件，不合并为 Plan。Light 用已确认契约与验收 body，可以不新建三层文件；分流依据是契约明确、范围受限、风险可控，而不是文件数。两者共用 [统一 Validate](../SKILL.md#unified-validate)，不以 Closeout 自审代替独立验收。Quick 入口已退役；仅后续新任务使用新规则，旧任务不自动迁移。
 
 ---
 
