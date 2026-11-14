@@ -8,7 +8,7 @@
 | 作者 | YQuant-Codex-Principal |
 | 创建日期 | 2026-06-27 |
 | 最后更新 | 2026-11-14 |
-| 版本号 | V1.3 |
+| 版本号 | V1.4 |
 | 所属模块 | 10_infra（基础设施 / Hermes Kanban Pipeline） |
 | 依赖 RFC | RFC-10-003-infra-architecture |
 | 替代 RFC | 无 |
@@ -23,6 +23,7 @@
 | V1.1 | 2026-06-29 | 新增 §12 扩展：Quick Flow 5 阶段流程模式（Intake → RFC/SPEC/Design → Implement → Verify → Closeout） | YQuant-Codex-Principal |
 | V1.2 | 2026-06-30 | Quick Flow 衔接机制由 orchestrator 串行创建改为 Intake 一次性预创建 T1-T4，与 Full Flow 同源 | YQuant-Codex-Principal |
 | V1.3 | 2026-11-14 | 新任务仅 Full/Light；统一独立 Validate；Kanban 唯一状态源；旧 Quick/cache 操作规则明确退役 | YQuant Principal |
+| V1.4 | 2026-11-14 | §0.5 记录八块历史原样迁出、现行旧链措辞对齐与三文档镜像；结构收敛，不改变 V1.3 契约 | YQuant Principal |
 
 ## 0. V1.3 现行决策
 
@@ -47,6 +48,30 @@ Kanban 为唯一任务状态源，不强制 pipeline-state.md、任务正文镜�
 主要风险是历史 Quick/旧 Verify→Review 链重新成为当前指令，因此本文件 §§1–12 整体降为历史，保留事实和编号但不再生效。现行可执行契约见 [SPEC-10-004 V1.3](../../spec/10_infra/SPEC-10-004-yquant-ai-coding-pipeline-skill-sync.md)，落地设计见 [DESIGN-10-004 V1.3](../../design/10_infra/DESIGN-10-004-yquant-ai-coding-pipeline-skill-sync.md)。
 
 验收需核对 Full/Light、原 Quick 两种去向、只缺登记的预算中断、安全拒绝和旧链兼容；用受限 diff、相对链接、现行规则搜索检查一致性，不把静态检查声称为 worker/业务 E2E。真实 parent 依次创建；完成阶段不因下游而 block、不定时盲目 unblock。DB/schema、真实或模拟交易/交易配置、外发、调度、凭据及依赖/大重构授权不减；runtime 拒绝停止相关动作，不换工具绕行；小型明确本地写入仍最小执行后立即读回，不因配置常量自动增加架构工程。
+
+### 0.5 V1.4 结构收敛事实记录
+
+<!-- V1.4 FACTS BEGIN -->
+本节为 2026-11-14（Asia/Shanghai，UTC+08:00）的结构收敛事实记录，不改变 V1.3 已批准契约；原 §0 语义及三文档历史 details 不重写，不构成独立 Validate 通过声明。
+
+八块历史正文按来源标题定位、原字节迁入 `skills/infra/ai-coding-pipeline/references/history/`：
+- [deployment-routing-2026-08-19.md](../../../skills/infra/ai-coding-pipeline/references/history/deployment-routing-2026-08-19.md)：SKILL 部署分流 details。
+- [quick-flow-v1.2-rules.md](../../../skills/infra/ai-coding-pipeline/references/history/quick-flow-v1.2-rules.md)：SKILL Quick 编排标题及 V1.2 details。
+- [orchestrator-push-sop-2026-06-07.md](../../../skills/infra/ai-coding-pipeline/references/history/orchestrator-push-sop-2026-06-07.md)：SKILL 主动推进 details。
+- [quick-flow-p12-breakchain.md](../../../skills/infra/ai-coding-pipeline/references/history/quick-flow-p12-breakchain.md)：SKILL P-12 整节，止于 P-27 前。
+- [p5-incident-sop.md](../../../skills/infra/ai-coding-pipeline/references/history/p5-incident-sop.md)：SKILL P-5 历史 details。
+- [p27-placeholder-parent.md](../../../skills/infra/ai-coding-pipeline/references/history/p27-placeholder-parent.md)：SKILL P-27 历史 details，保留现行 P-27。
+- [quick-flow-5stage-2026-06-29.md](../../../skills/infra/ai-coding-pipeline/references/history/quick-flow-5stage-2026-06-29.md)：SKILL Quick 五阶段历史整节，止于参考资料前。
+- [pipeline-quick-flow-legacy.md](../../../skills/infra/ai-coding-pipeline/references/history/pipeline-quick-flow-legacy.md)：references/pipeline.md 的 Quick 历史整节，止于路由规则前。
+
+每块原位置仅留简短历史指针；history 统一退役头说明非当前入口/强制规则、无新任务必读要求，现行链接为 ../../SKILL.md。原块内相对链接和历史章节号只按来源上下文解释，不作为现行链接或指令。
+
+实际 SKILL.md 为 749 行（开工基线 1190 行，目标 ≤750 行），references/pipeline.md 为 126 行；压缩空行布局但不删除事实。对齐范围仅为 canonical SKILL 的实现类 worker/Full-Light 编号解释、现行授权引用和旧链措辞，以及 design-gate-audit、pipeline-doc-consistency 的实现后独立 Validate 口径；规划阶段 Design Gate Review 不改名，不新增 Activation 或其他 mandatory 卡。
+
+Full/Light、reviewer 独立 Validate、tester 仅旧链/必要专项、Full 三文件与 RFC/SPEC→Design 两阶段、Kanban 唯一状态源及安全授权/拒绝即停边界均不变。README 与运行记忆由主控另行同步，不计为本实施卡成果；不迁移旧任务、不改运行配置/模型/认证/调度、业务或模板。
+
+本轮若再发现同契约同类残留，先汇总 [closure ledger](../../../data/reports/2026-11-14-ai-coding-pipeline-optimization/closure-ledger.md) 向用户重锚，不擅开 V1.5 窄修；这只约束本轮同契约收敛，不是所有未来工程的永久禁令。
+<!-- V1.4 FACTS END -->
 
 <details>
 <summary>历史正文 V1.0–V1.2（§§1–12 全部退役，非当前指令）</summary>
@@ -413,6 +438,6 @@ T6 Closeout           assignee=<orchestrator>    parents=[T5]
 
 ## 14. 版本修订说明
 
-- 当前版本：V1.3
+- 当前版本：V1.4
 - 修订日期：2026-11-14
 - 修订摘要：现行仅 Full/Light，共用独立 Validate；取消强制重复记账和默认 Closeout worker；§§1–12 保留为非生效历史，旧任务不自动迁移。

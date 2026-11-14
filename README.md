@@ -21,21 +21,21 @@ YQuant 是运行在 Hermes Agent 上的量化金融工程师与工程化主控�
 
 ## 核心工程 Agent
 
-四个现有 Hermes 工程角色的正式定义位于 `profiles/`，每个目录采用 SOUL、AGENTS、config.example、README 四文件。不是新增四个运行实例，不改变当前 AI Coding Pipeline 的角色路由。
+四个现有 Hermes 工程角色的正式定义位于 `profiles/`，每个目录采用 SOUL、AGENTS、config.example、README 四文件。不是新增四个运行实例。当前 AI Coding Pipeline 只有 Full 与 Light 两套流程，统一 Validate 由 `yquantreviewer` 独立承担。
 
 | Profile | 职责 | 正式入口 |
 |---|---|---|
 | `yquantprincipal` | RFC/SPEC/Design、架构、接口、风险与实现计划 | [角色说明](profiles/yquantprincipal/README.md) |
 | `yquantdeveloper` | 按已确认需求做最小范围实现 | [角色说明](profiles/yquantdeveloper/README.md) |
-| `yquanttester` | 独立验证、回归与证据 | [角色说明](profiles/yquanttester/README.md) |
-| `yquantreviewer` | 独立审查、风险和一致性 | [角色说明](profiles/yquantreviewer/README.md) |
+| `yquanttester` | 旧任务兼容或主控明确指派的测试专项（非默认阶段） | [角色说明](profiles/yquanttester/README.md) |
+| `yquantreviewer` | 统一 Validate：必要测试、消费者/反例审查、独立验收裁定 | [角色说明](profiles/yquantreviewer/README.md) |
 
 角色正文在仓库维护；运行 profile 的 SOUL 链接对应文件。具体模型、fallback、凭据和工具仍以本机配置为准。项目 AGENTS 按任务目录加载，角色 AGENTS 通过角色 SOUL 的明确启动要求读取。
 
 ## 其他文件的归属
 
 - [CLAUDE.md](CLAUDE.md)：代码助手的短兼容入口，正式规则在 AGENTS；不再维护第二套正文。
-- `skills/`：具体能力和工具方法；`docs/rfc/`、`docs/spec/`、`docs/design/`：工程正式契约。本次不改变 AI Coding Pipeline 的语义或源文件。
+- `skills/`：具体能力和工具方法；`docs/rfc/`、`docs/spec/`、`docs/design/`：工程正式契约。本次不改变 AI Coding Pipeline 已批准的语义与源文件归属，仅同步 V1.4 的结构收敛与口径对齐。
 - `data/reports/`：验收、验证、评估和调研等结果报告；`data/tasks/`：任务过程与交接记录。具体目录约定见 [AGENTS.md 的报告与过程资料约定](AGENTS.md#报告与过程资料的目录约定)。`data/` 当前不纳入 Git。
 - `USER.md`、`MEMORY.md`：私有上下文，本次保持原件不变；分享前单独审计，不能因已 Git 跟踪就认为可公开。
 - `TOOLS.md`、`HEARTBEAT.md`：已有本地工具/调度参考，本次不改配置、不搬移正文、不推送；命令和集成状态必须与实际运行核对。敏感本地资料不纳入通用 Agent 发布。

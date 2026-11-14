@@ -7,6 +7,8 @@ description: 在 Implement 前审计 RFC/SPEC/Design 的阶段边界、文件范
 
 在 Full Flow 的 T2 Design 完成、T3 Implement 创建之前使用。本 skill 的目标是确认 Design 不只是“文件存在”，而是真正可由不同实现者无歧义地实现、可由测试者证伪，且没有越过阶段或生产边界。
 
+后续新任务的实现后验收统一为 Implement → 独立 Validate（`yquantreviewer`）→ 主控 Closeout；本文 Review 指规划阶段 Design Gate 审查时仍保留原名，不等同于额外的实现后阶段。旧卡按原契约执行，tester 仅用于旧链兼容或必要测试专项。
+
 ## 触发条件
 
 以下任一情况应在 T2 → T3 之间加载：
@@ -41,7 +43,7 @@ description: 在 Implement 前审计 RFC/SPEC/Design 的阶段边界、文件范
 
 ### 1b. 生产副作用的 Activation 交接
 
-Design Gate 的放行只允许进入离线 Implement；它绝不是生产上线许可。若 Design 涉及真实 DDL/DML、外部写入、真实 smoke 或 canary，必须将它们保留为 Review PASS 之后的独立 Activation 卡：用户须对精确动作、allow-list 范围、影响与停止规则明确授权；Activation 必须 dry-run 在前，apply 与 readonly verify 分离，且失败不重试有副作用步骤。凭据只能经冻结脚本做最小存在性 preflight，任何日志/metadata 不得含值。详见 `references/production-activation-transition.md`。
+Design Gate 的放行只允许进入离线 Implement；它绝不是生产上线许可。若 Design 涉及真实 DDL/DML、外部写入、真实 smoke 或 canary，必须将它们保留为独立 Validate PASS 之后的独立 Activation 卡：用户须对精确动作、allow-list 范围、影响与停止规则明确授权；Activation 必须 dry-run 在前，apply 与 readonly verify 分离，且失败不重试有副作用步骤。凭据只能经冻结脚本做最小存在性 preflight，任何日志/metadata 不得含值。详见 `references/production-activation-transition.md`。
 
 ### 2. 审计契约可计算性
 
@@ -104,15 +106,15 @@ Design Gate 必须区分两类内容，避免出现“APPROVE 但仍列 MAJOR”
 
 1. **写出唯一的时钟顺序。** 明确每次循环首先读取 monotonic `now`，在 `now >= deadline` 时必须先进入 deadline 分支；若 Design 禁止 deadline 后新 probe，则不得先调用网络、systemd、端口或任何 round helper 再判定 deadline。
 2. **cap 不是终态触发器，除非文档明确如此。** `cap` 通常仅约束 deadline 前可排程/完成的最大轮数。若 RFC/SPEC 写成“仅 `elapsed >= deadline AND consecutive_failures >= threshold` 才可 failed”，实现不得用 `count >= cap` 或 retry counter单独提前失败。
-3. **穷尽 deadline 三种测试。** Verify/Review 必须要求并检查可执行测试，而非仅看 pytest 全绿：
+3. **穷尽 deadline 三种测试。** 独立 Validate 必须要求并检查可执行测试，而非仅看 pytest 全绿：
    - `elapsed < deadline` 且 `count == cap`：严格断言 `starting`，没有 terminal `failed`；
    - 恰好 `now == deadline`：断言 round helper/网络/systemd 子调用次数不增加，即没有第 N+1 次 probe；
    - `now >= deadline`：仅根据缓存的最后状态裁决；分别覆盖 failure count 达阈值（一次 `failed`）与未达阈值（不得伪造 `failed`）。
 4. **测试断言必须与 docstring 同强度。** 若文本写“预算内绝不 failed”，断言必须为 `status == "starting"`，不能写 `{ "starting", "failed" }` 这样的防御性集合。遇到这种不一致，即使全套 pytest PASS，也应列为 Gate blocker。
 5. **以真实调用边界验证 cadence。** mock monotonic 时序应覆盖第六轮完成、sleep 到 deadline、deadline branch；不仅断言最终 JSON，还要断言 `_probe_round_*` 的调用次数和无额外 round。不得把底层 runner/subprocess 的原始调用数等同于业务 probe round：一个 round 可包含 health、PID、listener、cgroup 等多个子调用，失败路径也可能追加补偿检查。底层调用数如需覆盖，应单列为内部实现测试，不能承担“deadline 后无第 N+1 轮”的契约证明。报告中明确“轮次起点、最后允许完成时间、deadline observer”三个时间点。
-6. **超时实现只算候选，不算交付。** 若 Developer 因 iteration budget 耗尽、timeout、gave_up 或未形成 `kanban_complete` handoff，尽管共享目录已有改动或事后评论声称本地全绿，也不得作为 Gate PASS 依据。保留共享树、不做 reset/revert；新建严格 allowlist remediation card，要求复现 RED、在 round-level seam 建立精确 spy、再产生正式 GREEN handoff。随后必须新建独立 Verify 和 Review，不复用旧的探索性 Verify/Review。
+6. **超时实现只算候选，不算交付。** 若 Developer 因 iteration budget 耗尽、timeout、gave_up 或未形成 `kanban_complete` handoff，尽管共享目录已有改动或事后评论声称本地全绿，也不得作为 Gate PASS 依据。保留共享树、不做 reset/revert；新建严格 allowlist remediation card，要求复现 RED、在 round-level seam 建立精确 spy、再产生正式 GREEN handoff。随后必须新建独立 Validate，不复用旧链探索性 Verify/Review 的结论。
 
-此类问题若被 Gate 发现：先用一个严格 allowlist 的 Design Correction 同步 cap/deadline/threshold 定义，再由 Developer 按 RED→GREEN 修复代码与测试；旧的探索性 Verify 即使 PASS 也不得作为后续正式放行依据。修正后需重新独立 Verify 和 Review，生产 activation 始终另行授权。
+此类问题若被 Gate 发现：先用一个严格 allowlist 的 Design Correction 同步 cap/deadline/threshold 定义，再由 Developer 按 RED→GREEN 修复代码与测试；旧链探索性 Verify 即使 PASS 也不得作为后续正式放行依据。修正后需重新独立 Validate，生产 activation 始终另行授权。
 
 ## 代码规模阈值（行数）变更审计
 
@@ -129,9 +131,9 @@ Design Gate 必须区分两类内容，避免出现“APPROVE 但仍列 MAJOR”
 Gate 建议将实现拆成多张卡时，除按职责和单文件行数拆分外，还必须检查**写路径重叠**：
 
 1. 若两张 Developer 卡都会修改同一个实现文件（例如同一个 Router），不得并行派发到共享 `workspace_kind="dir"`；后卡必须以先卡的真实 task id 作为 `parents`，形成串行链。
-2. 可以在 Gate 后一次性预创建 Implement → Verify → Review → Closeout，但只能使用每次 `kanban_create` 成功返回的真实 id 建立依赖，不能用占位符或仅在任务正文写“等待上一卡”。
-3. 每张 Implement 卡的 allowlist 必须明确到文件。测试卡应只创建与其职责对应的新测试文件；跨卡集成回归由下游独立 Verify 统一覆盖。
-4. 对 Router/结果契约这类多出口代码，设计 handoff 要求 Implement 明确“统一出口 helper”或“每个 return 点覆盖”的选择，并令 Verify 检查不存在漏分支；不得把该选择留成不可证伪的泛泛表述。
+2. 可以在 Gate 后一次性预创建 Implement → 独立 Validate，由主控 Closeout（不另建默认 Closeout worker）；只能使用每次 `kanban_create` 成功返回的真实 id 建立依赖，不能用占位符或仅在任务正文写“等待上一卡”。
+3. 每张 Implement 卡的 allowlist 必须明确到文件。必要测试专项卡应只创建与其职责对应的新测试文件；跨卡集成回归由下游独立 Validate 统一覆盖。
+4. 对 Router/结果契约这类多出口代码，设计 handoff 要求 Implement 明确“统一出口 helper”或“每个 return 点覆盖”的选择，并令 Validate 检查不存在漏分支；不得把该选择留成不可证伪的泛泛表述。
 5. Closeout 的结构化记录若因 worker 输出序列化异常而不完整，Orchestrator 必须在该 Closeout 卡追加一条可读的 `kanban_comment`，补齐 verdict、改动范围、实测计数、安全边界和残余风险；不能以乱码 summary 替代审计记录。
 
 ## 审查预算耗尽或无有效 verdict 的恢复
@@ -198,7 +200,7 @@ Why bounded cycles, not unbounded re-reviews:
 1. 从最新三层文档提取不可协商的行为向量：capability 是 fail-stop/stub/real-mappable、字段必须恒为 `None` 还是允许填充、refresh 在各注入状态是否可 fetch/upsert、真实 Provider 是否允许注册/调用，以及 query 的写入禁令。
 2. 只读检查现有 domain object、stub/default payload、fixture、service 的 query/refresh 分支和已有测试断言；不能只看文档互引，也不能把旧 task 的 PASS 当作当前语义的证据。
 3. 若最新契约要求“字段恒 None”“writer 已注入仍 NotImplementedError”“不得 fetch/upsert”等安全收敛，而历史 stub/fixture、mapper 或 happy-path 仍允许相反行为，即判为**契约—实现漂移**。即使仅发生在 fake/mongomock 路径，也会误导后续实现和测试，属于 T3 前阻断项。
-4. 发现漂移时，**不要**创建泛化 T3 或重复旧 Implement。先创建 Principal-only correction card，同步 RFC/SPEC/Design 的代码 allowlist、禁止路径和可证伪验收；随后运行新的独立 Design Gate。仅在 Gate APPROVE 后，才创建最小 allowlist 的 developer repair → fresh Verify → fresh Review 链。
+4. 发现漂移时，**不要**创建泛化 T3 或重复旧 Implement。先创建 Principal-only correction card，同步 RFC/SPEC/Design 的代码 allowlist、禁止路径和可证伪验收；随后运行新的独立 Design Gate。仅在 Gate APPROVE 后，才创建最小 allowlist 的 developer repair → fresh 独立 Validate 链。
 5. 纠正卡必须把用户授权的副作用边界写成代码级行为：例如未注入 writer 的异常、已注入但未实现的异常，以及两条路径的 fetch/upsert 调用数均为零；不得用“只对真实 Mongo 禁止”偷换为“fake/mongomock 可以写”。
 
 此检查特别适用于 capability 映射、fallback/stub、持久化状态机、Provider activation 和字段语义变更，可防止“旧离线实现先行、最新契约后置”导致的重复开发或安全边界回退。
@@ -211,7 +213,7 @@ Why bounded cycles, not unbounded re-reviews:
 2. **交易时态不能错误归因给格式校验。** “未来日期”“当日未收盘”“已完成交易日”“非交易日”需要可注入的 `TradeCalendar` / `CompletedSessionPolicy` 一类明确 owner、时区/cutoff、输入输出与 fail-closed 行为。现有 service 若只校验日期格式，文档不得声称其判定收盘状态或抛相应 `ValueError`。离线 T3 以 fake calendar + fake clock 证伪；真实 calendar 读取只留到已授权的独立 Activation 卡。
 3. **预算过滤规则必须单义。** 对 repository / BudgetReader 的过滤字段白名单、`find` 与 `aggregate` 首阶段校验、空 filter 的错误类型及负向测试，应在 SPEC 与 Design 只定义一套精确集合；不要把 `market` 等字段留在一层而从另一层漏掉。
 4. **修订后的 provenance 也属于契约。** RFC/SPEC/Design 任一层版本改变后，重新检查三层 metadata、source-RFC/SPEC pointers 与 changelog。一个 Design 继续指向已修订前的 SPEC 版本，是阻断性漂移，不是文档装饰问题。
-5. **日期表示一旦被探测，必须贯穿同一轮的全部 validator。** 若入口通过样本探测 `YYYYMMDD` / `YYYY-MM-DD`（或其他等价表示），Design 必须列出该值传给 coverage、缺失值检查、候选日筛选、canary 排除、报告格式化的全部 callsite；不得允许其中某个 validator 静默回退到硬编码默认格式。Verify/Review 至少要做两套 main/CLI 等价的 injected/mongomock 测试：每套均放入一个缺失 `close` 的 canonical symbol，并断言它既进入 `close_missing` 又不进入 canary；同时确认原默认格式路径未退化。仅测 helper 的显式格式参数不足以证明 main 调用链正确。
+5. **日期表示一旦被探测，必须贯穿同一轮的全部 validator。** 若入口通过样本探测 `YYYYMMDD` / `YYYY-MM-DD`（或其他等价表示），Design 必须列出该值传给 coverage、缺失值检查、候选日筛选、canary 排除、报告格式化的全部 callsite；不得允许其中某个 validator 静默回退到硬编码默认格式。独立 Validate 至少要做两套 main/CLI 等价的 injected/mongomock 测试：每套均放入一个缺失 `close` 的 canonical symbol，并断言它既进入 `close_missing` 又不进入 canary；同时确认原默认格式路径未退化。仅测 helper 的显式格式参数不足以证明 main 调用链正确。
 
 这些项任一不一致时，创建覆盖所有受影响 RFC/SPEC/Design 文件的单张 closure-ledger Principal 修订卡；其后重新独立 Gate。不可用多张零散修订把同一执行语义逐轮推给 Implement。
 

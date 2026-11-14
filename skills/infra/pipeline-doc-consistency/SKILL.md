@@ -17,11 +17,13 @@ Load this skill when:
 - A reviewer returns `PASS_WITH_FIXES` or `REVISE` for document consistency.
 - You are about to create an Implement task from completed planning docs.
 - You have just merged a layered docs-only remediation and want to close it out.
-- A Implement / Verify task reached `done` or `timed_out` while the shared worktree still carries uncommitted diff.
+- An Implement / Validate task (or legacy Verify task) reached `done` or `timed_out` while the shared worktree still carries uncommitted diff.
 
 ## Core Principle
 
 Late user decisions that change **how the system is designed** are not implementation details. They must be synchronized back into every affected planning layer before developer work starts.
+
+For new work, post-implementation acceptance is Implement → independent Validate (`yquantreviewer`) → orchestrator Closeout, with no default Closeout worker. Planning-stage Design Gate Review remains distinct; tester / Verify is retained only for legacy chains or explicitly needed test specialties. Existing cards keep their original contracts.
 
 Common examples:
 
@@ -258,12 +260,12 @@ git diff --check -- <allowlist-paths>
 
 1. 保留原任务及其错误完成声明作为审计证据；不要回写或伪造历史结果。
 2. 将必要结论转存到原任务的 durable Kanban comment。
-3. 新建最小 Light Flow：Developer 仅删除该精确 artifact；独立 Tester 验证 `test ! -e <path>`、该路径的 `git status --short` 为空、`git diff --check` 通过。
+3. 新建最小 Light Flow：Developer 仅删除该精确 artifact；独立 Validate（`yquantreviewer`）验证 `test ! -e <path>`、该路径的 `git status --short` 为空、`git diff --check` 通过，由主控 Closeout。
 4. 修复卡不得触碰代码、测试、RFC/SPEC/Design、生产资源或其他历史卡状态；用户交付中明确“看板证据已保留、项目树无本卡 artifact”。
 
 ## Done-but-Shared-Worktree-Still-Dirty Gate
 
-When a Kanban implementation task (Implement / Verify / Developer) reaches `done` or `timed_out` while the **shared worktree still has partial uncommitted diff** (`git diff --name-status` non-empty, untracked files exist), the orchestrator must:
+When a Kanban Implement / Validate task (or legacy Verify task) reaches `done` or `timed_out` while the **shared worktree still has partial uncommitted diff** (`git diff --name-status` non-empty, untracked files exist), the orchestrator must:
 
 1. Run a scope-bound audit against the actual task body — not the worker summary — to confirm which allowlist paths changed and what tokens survived.
 2. For each surviving forbidden/legacy token, capture `file:line` evidence into a `kanban_comment` on the offending task.
@@ -349,15 +351,15 @@ stock framework    -> 08_research_stock_*
 When a late semantic correction (for example, an error-contract change) must be applied before continuing a pipeline:
 
 1. Inspect the relevant Kanban cards' **current statuses and parent links** before adding dependencies.
-2. A parent link added after a child is already `done` is **not retroactive**: it cannot force that completed Review/Verify to re-run against the revised documents.
-3. Treat completed stages as historical evidence only. If the revised document needs an independent review, create a new review task with the document-verify task as a real parent.
+2. A parent link added after a child is already `done` is **not retroactive**: it cannot force that completed Validate (or legacy Review/Verify) to re-run against the revised documents.
+3. Treat completed stages as historical evidence only. If the revised document needs independent acceptance, create a new independent Validate task with the document-correction task as a real parent; planning-stage Design Gate Review remains distinct.
 4. If an old implementation/review chain has a permanently blocked parent, do not keep new RFC/SPEC/Design work dependent on it. Create a replacement chain whose first task depends only on real, satisfiable gates, then build the remaining chain from returned task IDs.
 5. In user-facing status, distinguish precisely between “previous review passed under the former document baseline” and “future work is gated on the revised-document verification.” Never claim a completed review was retroactively gated.
 
 ### Minimal Gate Checklist
 
-- The document correction has a separate Verify task.
-- Any future implementation/RFC task has that Verify task in `parents`.
+- The document correction has a separate independent Validate task.
+- Any future implementation/RFC task has that Validate task in `parents`.
 - No replacement task references a known-blocked legacy parent.
 - Legacy task chains are explicitly marked obsolete in a task comment or the replacement task body.
 - The new task chain uses real task IDs returned by `kanban_create`, not placeholders.
@@ -368,7 +370,7 @@ When a user changes a project-wide engineering standard during an active pipelin
 
 1. **Update the canonical rule first.** Identify the canonical project source (for example `CLAUDE.md`) and search all in-scope RFC/SPEC/Design documents for direct occurrences of the old threshold or rule. Synchronize only direct contractual references; do not rewrite third-party directories, historical blog posts, or unrelated numeric text.
 2. **Separate the new global rule from a legacy-file exception.** Put the new general threshold in the canonical rule. If an existing file already exceeds it and the user permits current work to continue, record a bounded exception in the closest feature Design: affected file, current scope, non-transferability to other files/features, and the condition requiring a future split/redesign. A one-file exception must never silently become a blanket policy.
-3. **Do not rewrite historical blocked cards.** Preserve the original blocked Verify task as audit evidence. Create a replacement Verify task whose body explicitly cites the synchronized rule and exception, then make a replacement Review task depend on that Verify task.
+3. **Do not rewrite historical blocked cards.** Preserve the original blocked Validate (or legacy Verify/Review) task as audit evidence. Create a replacement independent Validate task whose body explicitly cites the synchronized rule and exception; do not split acceptance back into default Verify → Review stages.
 4. **Gate verification on document completion.** Do not resume testing while old acceptance text conflicts with the new rule. Once documentation is synchronized, require a fresh independent RED/GREEN and regression run; developer self-reported results remain non-independent evidence.
 5. **Keep scope discipline.** Do not force an unplanned large refactor merely to make an already oversized legacy file conform immediately. If a split is needed, create RFC/SPEC/Design for it unless the user explicitly authorizes the refactor.
 
@@ -377,18 +379,18 @@ When a user changes a project-wide engineering standard during an active pipelin
 - Canonical rule updated.
 - All in-scope direct contract references updated or explicitly retained as historical context.
 - Any exception has file, scope, expiry/revisit condition, and non-transferability stated.
-- Old blocked card is preserved; replacement Verify and Review use real returned Kanban IDs.
-- Replacement Verify has no ambiguous old threshold in its acceptance criteria.
+- Old blocked card is preserved; replacement independent Validate uses real returned Kanban IDs.
+- Replacement Validate has no ambiguous old threshold in its acceptance criteria.
 
 ## Worker-Crash Replacement Gate for Document Verification
 
-When an independent document Verify worker crashes or reaches its retry limit **without producing commands, findings, or a verdict**, treat that as a runtime-execution failure—not evidence that the documentation passed or failed.
+When an independent document Validate worker (or legacy Verify worker) crashes or reaches its retry limit **without producing commands, findings, or a verdict**, treat that as a runtime-execution failure—not evidence that the documentation passed or failed.
 
 1. Inspect the failed Kanban task attempts. Distinguish a documented contract failure from bare process metadata such as `exit 1` with no captured stderr or report.
 2. Preserve the failed task as audit evidence. Add an orchestrator comment that no validation result was produced; do not relabel the crash as PASS/FAIL or blindly reopen the same retry loop.
-3. Create a replacement independent Verify/Review card from the last successful, satisfiable planning parent (normally the completed Principal document task), **not** from the blocked/crashed Verify. This prevents an unsatisfiable dependency chain.
+3. Create a replacement independent Validate card from the last successful, satisfiable planning parent (normally the completed Principal document task), **not** from the blocked/crashed validation card. This prevents an unsatisfiable dependency chain.
 4. Carry forward the frozen acceptance criteria and require path-scoped `git status --untracked-files=all`, `git diff --name-status`, `git diff --check`, plus exact semantic searches. In a shared worktree, attribute scope only within the allowlist rather than treating unrelated global dirtiness as a breach.
-5. Use a different specialist profile when appropriate (for example Reviewer after Tester retry exhaustion), while preserving independence from the documentation author. A replacement Review may close a documentation-only gate only after it actually runs the evidence checks.
+5. Preserve independence from the documentation author; new Validate defaults to `yquantreviewer`. Legacy recovery may use a different specialist profile when appropriate (for example Reviewer after Tester retry exhaustion). A replacement Validate may close a documentation-only gate only after it actually runs the evidence checks.
 6. Status reporting must say exactly that the previous verifier crashed without a verdict and that replacement independent review is pending; never claim the original verification retried successfully or was retroactively repaired.
 
 ### Model Override Integrity (Kanban Runtime Field Is Authoritative)
@@ -445,7 +447,7 @@ A Reviewer task whose `result` / `summary` / `metadata.verdict` field says PASS/
 - `references/internal-first-shared-mongo-2026-07-14.md` — shared TA-CN Mongo + internal-first + Task Center 前置最小化的回检 SOP（comments、决议登记、文档一致性检索清单）。
 - `references/cross-doc-residual-gate.md` — 2026-07-17 worked example: cross-doc CLI/namespace token residual and timed-out Implement with partial uncommitted diff (audit commands, retry-vs-reject decision rules, audit checklist).
 - `references/verdict-self-consistency-2026-07-21.md` — *(pending)* worked session log of Phase 3 T2.3 verdict-self-contradiction → T2.4 narrow correction → T2.5 single re-review close-loop, including the clean-exit dispatcher protocol-violation recovery. Create on demand from the close-loop section above when a fresh incident recurs.
-- `references/phase3-contract-gate-pattern.md` — Contract-dispute SOP for public return/persistence semantics discovered after implementation: freeze REVISE, require Principal adjudication, then use a fresh Implement → Verify → Review chain; also contains the three-layer status-reporting rule.
+- `references/phase3-contract-gate-pattern.md` — Historical contract-dispute SOP: freeze REVISE, require Principal adjudication, and retain the three-layer status-reporting rule; its old Implement → Verify → Review chain is legacy only. New work uses Implement → independent Validate → orchestrator Closeout.
 
 ## Verdict Self-Consistency and the "Narrow Correction + Single Re-Review" Close-Loop
 

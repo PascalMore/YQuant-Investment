@@ -10,7 +10,6 @@ description: "YQuant / 应龙共享 AI Coding 流水线：Full 或 Light，两�
 除非用户明确要求走流水线，否则普通问答、极小拼写修正、只读查询不需要触发本 skill。
 
 ## 现行契约（2026-11-14，仅适用于后续新任务）
-
 - 现行模式只有 Full / Light。Quick 入口与专用强制规则退役；用户再说 Quick 时，按契约明确程度与风险重新分流：范围、行为和验收已明确且风险可控走 Light，否则走 Full，不按文件数量机械划档。
 - Full：Intake → RFC/SPEC → Design → Implement → Validate → Closeout。RFC、SPEC、Design 保留三个独立文件；RFC/SPEC 与 Design 保留两个阶段，不合并为 Plan。
 - Light：Intake → Implement → Validate → Closeout。受限任务把已有契约与验收直接写入 body，不为了形式新增三层文档。
@@ -19,7 +18,6 @@ description: "YQuant / 应龙共享 AI Coding 流水线：Full 或 Light，两�
 - Kanban 是唯一任务状态源。不强制 pipeline-state.md、body 镜像、逐卡全文 handoff、重复 Closeout 报告。小任务用 Kanban 结论与必要日志；复杂任务保留一份验收报告和原始证据，目录沿用目标项目 AGENTS。
 
 ### 统一 Validate（Full / Light 共用）
-
 默认 `assignee="yquantreviewer"`，独立于实现者；同时负责必要实际测试、真实消费者路径与反例审查、契约/范围/数据合理性核对，最终给出 PASS 或 REVISE。
 
 - 按变更影响选择定向、集成或端到端测试；文档任务执行静态检查，不伪称业务 E2E。产出数据的任务需用真实用户输入检查真实路径和输出合理性；缺权限/环境时明确缺口，不以 fixture 替代真实验证结论。
@@ -30,12 +28,10 @@ description: "YQuant / 应龙共享 AI Coding 流水线：Full 或 Light，两�
 - 预算中断先核对已落盘候选与证据：只缺登记则补登记，不重跑；真实验证未完成则记录缺项后续接，不能补写 PASS。
 
 ### 授权不随流程简化
-
 生产 DB / schema、真实或模拟交易执行、交易配置、外部消息、长期调度、凭据、依赖升级及大范围重构仍服从项目明确授权边界。卡面授权不等于 runtime 允许，runtime 允许也不等于卡面授权。安全拒绝后停止相关动作，不换工具或路径绕行；只改配置常量不自动触发架构工程，但不免除对应授权及独立 Validate。
 
 ## 配套 skill：sanity-check
-
-T2/T3 worker 在写以下代码时，应当额外加载 `sanity-check` skill（`skills/infra/sanity-check/`）以复用 6 个标准模板：
+实现类 worker 在写以下代码时，应当额外加载 `sanity-check` skill（`skills/infra/sanity-check/`）以复用 6 个标准模板：
 
 - CLI 参数 / argparse 新参数 → `interface_arg_check`
 - 文件 / 目录读写路径 → `file_existence_check`
@@ -47,17 +43,15 @@ T2/T3 worker 在写以下代码时，应当额外加载 `sanity-check` skill（`
 sanity-check 关注的是「数据流入业务逻辑之前的最后一道闸门」。它与本文档的「P-1~P-13 Pitfalls」**正交**——P-* 描述的是流水线机制坑（worker crash、fallback 透明、parent link 断链等），不会被吸收或替代。两套指引并行生效，需要同时遵守。
 
 ## 配套 skill：文档治理三件套（2026-08-21 迁移）
-
 以下三个 skill 是 AI Coding Pipeline 在 RFC / SPEC / Design 文档治理环节的**深度配套**——sanity-check 关注代码层 fail-fast，三件套关注文档层契约收敛。worker 可在对应阶段按需 `skill_view()` 加载，不强制注入：
 
-- `skills/infra/design-gate-audit` —— 在 T2 Design 完成、T3 Implement 创建**之前**使用：审计阶段边界、文件范围、可计算契约。适用于含评分、阈值、存储方案、公开 trace 或生产副作用门禁的设计。
+- `skills/infra/design-gate-audit` —— 在 Full 的 T2 Design 完成、T3 Implement 创建**之前**使用：审计阶段边界、文件范围、可计算契约。适用于含评分、阈值、存储方案、公开 trace 或生产副作用门禁的设计。
 - `skills/infra/pipeline-doc-consistency` —— 在 RFC/SPEC/Design 三件套**已存在且用户提出后续决策变更**时使用：跨文档同步治理、统一审查、实现就绪度检查。
 - `skills/infra/design-baseline-reconciliation` —— 在已有实现、修复链或并行卡**之后**对 RFC/SPEC/Design 做修订或 Design Gate 审计时使用：把"已完成能力"和"待实现能力"边界画清，避免文档漂移。
 
 三件套与本 SKILL 的关系**正交**：本 SKILL 描述流水线机制（dispatcher / parent links / Pitfalls），三件套描述文档契约收敛方法论。任何一方都不能替代另一方；流水线中遇到文档治理难题时优先 `skill_view('design-gate-audit')` / `pipeline-doc-consistency` / `design-baseline-reconciliation` 按上下文选择加载。
 
 ## Hermes 执行模型
-
 本流水线在 Hermes 中使用 **Kanban profile worker** 执行。
 
 - 本 skill 的源代码、参考文档和维护入口在项目内：`/home/pascal/workspace/yquant-investment/skills/infra/ai-coding-pipeline/`。
@@ -73,7 +67,6 @@ sanity-check 关注的是「数据流入业务逻辑之前的最后一道闸门�
 - 任务工作目录必须使用下面“项目上下文解析”得到的共享项目目录；禁止 worker 根据自身 profile 名推断项目。
 
 ### 项目上下文解析
-
 Intake 开始时必须根据当前 orchestrator profile 解析一次 `PIPELINE_WORKSPACE`：
 
 | Orchestrator profile | `PIPELINE_WORKSPACE` | 项目名称 |
@@ -88,11 +81,9 @@ Intake 开始时必须根据当前 orchestrator profile 解析一次 `PIPELINE_W
 - worker 以任务传入的 `workspace_path` / `$HERMES_KANBAN_WORKSPACE` 为准，不重新解析 orchestrator。
 
 ### 项目约定发现与任务正文固化
-
 Pipeline 是跨项目基础设施，但每个项目的文档目录、模块编号、skill/module 命名、持久化规范和凭据位置可能不同。**Intake 在派第一个 worker 前必须发现并固化目标项目约定**，不能把 YQuant 的目录约定照搬到其他项目。
 
 最低发现步骤：
-
 ```bash
 cd "$PIPELINE_WORKSPACE"
 find docs -maxdepth 3 -type f -name 'README.md' -o -name '*-00-000-*template*.md' 2>/dev/null
@@ -111,7 +102,6 @@ Intake 必须把以下内容写进**每个文档类任务（RFC/SPEC/Design）�
 **原则**：worker 优先读 task body；README、模板和 skill 是参考材料，不保证被 worker 主动打开。凡是会影响路径、命名、数据契约或安全边界的约定，都必须在 task body 中显式出现。
 
 ### Hermes Profile 路由
-
 | 阶段 | Hermes assignee profile | 职责 |
 |------|--------------------------|------|
 | Intake / Closeout | 当前 orchestrator：`yquant` 或 `yinglong` | 需求澄清、编排、阶段门禁、最终交付 |
@@ -121,9 +111,7 @@ Intake 必须把以下内容写进**每个文档类任务（RFC/SPEC/Design）�
 | 测试专项（非默认） | `yquanttester` | 旧任务兼容或明确指派的测试专项 |
 
 ### 源目录与运行态同步
-
 AI Coding Pipeline skill 的 **canonical source 只有项目源目录一份**：
-
 ```text
 /home/pascal/workspace/yquant-investment/skills/infra/ai-coding-pipeline/
 ```
@@ -131,7 +119,6 @@ AI Coding Pipeline skill 的 **canonical source 只有项目源目录一份**：
 修改 AI Coding Pipeline 时，只改项目源目录。不要再维护 `~/.hermes/profiles/*/skills/infra/yquant-ai-coding-pipeline/` 运行态副本；否则项目源和 profile 副本会再次漂移，并触发或掩盖 skill collision 问题。
 
 清理 profile 副本：
-
 ```bash
 rm -rf /home/pascal/.hermes/profiles/yquant/skills/infra/yquant-ai-coding-pipeline
 for p in yquantprincipal yquantdeveloper yquanttester yquantreviewer; do
@@ -147,16 +134,13 @@ done
 - 4 个 worker profile（principal/developer/tester/reviewer）：**不要放副本**，通过 `workspace_path` 发现项目源目录。
 
 部署后立即验证（应该只看到项目源目录一份）：
-
 ```bash
 find /home/pascal/.hermes/profiles /home/pascal/workspace/yquant-investment \
   -name "SKILL.md" -path "*ai-coding-pipeline*"
 ```
 
 ### Kanban 创建规则
-
 #### 墙钟上限 `--max-runtime`（每张卡必填，2026-11-06 Pascal 拍板）
-
 `agent.max_turns` 管的是轮数，各 profile 统一为 150，修改方式见 `config.yaml`。`--max-runtime` 管的是墙钟时间，**没有默认值**：不传就不设上限，dispatcher 只对设了值的卡执行超时终止。超时后，dispatcher 先 SIGTERM，再 SIGKILL，然后把卡重新排队。因此，每次 `hermes kanban create` / `kanban_create` 都**必须**显式传入：
 
 | 阶段 / assignee | `--max-runtime` | `--max-retries` |
@@ -175,7 +159,6 @@ find /home/pascal/.hermes/profiles /home/pascal/workspace/yquant-investment \
 - 超时属于 dispatcher 的调度事实，不等于工作失败。恢复处理按 `worker-budget-recovery` skill：先看已落盘的产物，再决定是行政收尾还是收窄后续接，不要盲目重跑。
 
 完整流程必须创建依赖链（依次取得真实 task id 再创建下游，禁止占位 parent）：
-
 ```text
 T1 RFC/SPEC       assignee=yquantprincipal
 T2 Design         assignee=yquantprincipal   parents=[T1]
@@ -184,42 +167,39 @@ T4 Validate       assignee=yquantreviewer    parents=[T3]
 ```
 
 轻量流程必须创建依赖链：
-
 ```text
 T1 Implement      assignee=yquantdeveloper
 T2 Validate       assignee=yquantreviewer    parents=[T1]
 ```
 
-### 实现期小问题：最小化修复与验证
+下文 T1/T2/T3 等阶段编号均按上述对应模式的任务图解释；文档规划与决策同步段中的 RFC/SPEC、Design、Implement 编号指 Full，历史事故中的编号仅指当时任务。
 
+### 实现期小问题：最小化修复与验证
 默认目标是以**完成当前工作所需的最少步骤**收束，而不是为小问题附加完整流程。
 
 - **小型代码或测试问题**：根因明确、范围局限、低风险且在当前 allowlist 内时，在同一张 Implement 卡修复并运行受影响的定向测试或最小复现；沿用既有独立 Validate，不另起设计或多层流水线。
-- **小型、可逆的本地写入或元数据修正**：对象、动作和范围明确时，在当前 Implement 卡写入并立即读回/定向核验；不因“发生写入”额外增加 Verify/Review 或复杂门禁。
+- **小型、可逆的本地写入或元数据修正**：对象、动作和范围明确时，在当前 Implement 卡写入并立即读回/定向核验；沿用独立 Validate，不因“发生写入”额外增加验收阶段或复杂门禁。
 - 除统一 Validate 外，只有现有契约或用户要求才增加额外设计或专项卡；不得把“更安全”的自行建议包装成必经步骤。
 
 需要额外设计时，应说明尚未冻结的契约或不可替代的技术前提；敏感数据、外部发送、资金/账户安全、批量或不可逆写入仍取得对应授权与最少保护，不因风险关键词机械扩展成完整工程。
 
-**真实写入也默认最小化**：对对象、动作、范围已明确的小型本地写入或知识库元数据修正，采用“当前 Implement 卡执行 → 立即读回/定向核验”，随后沿用统一独立 Validate；不默认要求 fresh 零写 preflight、一次性 token、额外 Verify/Review 或 Activation 卡。只有删除/覆盖不可恢复数据、外部发送、资金或账户安全、敏感/隐私数据、批量影响，或现有契约明确要求时，才按该风险取得明确授权并增加对应的最少保护。写入结果不明或核验失败时 STOP，不自动重试。
+**真实写入也默认最小化**：对对象、动作、范围已明确的小型本地写入或知识库元数据修正，采用“当前 Implement 卡执行 → 立即读回/定向核验”，随后沿用统一独立 Validate；不默认要求 fresh 零写 preflight、一次性 token、额外验收阶段或 Activation 卡。只有删除/覆盖不可恢复数据、外部发送、资金或账户安全、敏感/隐私数据、批量影响，或现有契约明确要求时，才按该风险取得明确授权并增加对应的最少保护。写入结果不明或核验失败时 STOP，不自动重试。
 
 ### 三层 scope 纪律（Pascal 2026-09-01 多次纠正）
-
 编辑 AI Coding Pipeline 或同级共享规则时，必须按以下三层审查每一行新增内容，**且前两层只能由现有契约或用户要求触发**：
 
-1. **现有契约明确要求**（可直接落地）：来自已冻结的 RFC / SPEC / Design / 已生效的 SPEC §13.x 闸门。
+1. **现有契约明确要求**（可直接落地）：来自已冻结且现行生效的 RFC / SPEC / Design；10-004 的旧 Quick SPEC §13.x 已退役，不能作为现行授权来源。
 2. **当前目标直接必要**（可作为必经门禁）：来自当前 task 的验收 / 风险 / 用户已声明需求。
 3. **Agent 自行推导的“更安全”建议**（**禁止包装为必经门禁**）：来自“万一出错/万一误用”等防御性假设。
 
 只把 1 + 2 列入正式条款；3 只能写入实现正文或边界说明，**不得进入升级门禁**。升级门禁历史经验上会被反复反转（Pascal 在 2026-09-01 同一会话内连续两次从升级清单中删除“跨模块行为变化”和“权限/授权模型变化”两项）——任何看似“必备”的升级条件都应先质疑是否属于第 3 类。
 
 ### 共享规则改后必须去重（canonical 单一源守则）
-
 当修改任意**跨 session 共享**的规则条款时，在本次获授权路径内定向检索 canonical skill、references、相关正式文档和角色说明，确认无同时生效的冲突。历史实例/日志不批量清理，明确非生效即可；发现范围外副本只报告主控，不扩权读取私有 session/记忆或删除其他项目/profile 内容。
 
 共享源仍只有本项目 canonical 目录；配套文档可引用同一契约，不能以“多处字符串命中”为由删历史、删必要路由或跨项目清理。runtime 副本治理需要单独明确授权，不是本次规则修订的执行步骤。
 
 每个 `kanban_create` 的 body 必须包含：
-
 - 本卡的 `--max-runtime` 取值。按上文"墙钟上限"表的默认值；偏离默认值时写明原因。
 - 用户目标和当前阶段。
 - 相关文件、目录、RFC/SPEC/DESIGN 路径。
@@ -233,9 +213,7 @@ T2 Validate       assignee=yquantreviewer    parents=[T1]
 Orchestrator 创建任务后必须向用户说明目标项目、任务图、任务 ID、assignee、依赖关系和如何追踪状态。
 
 ## 触发入口
-
 ### 显式触发
-
 用户明确提到以下表达时，必须启用完整 AI Coding 流水线：
 
 - “走 AI Coding Pipeline”
@@ -245,7 +223,6 @@ Orchestrator 创建任务后必须向用户说明目标项目、任务图、任�
 - “需要独立测试和审查”
 
 ### 自动触发
-
 用户没有显式要求，但任务满足以下条件之一时，先向用户确认是否走完整流水线：
 
 - 新增核心功能。
@@ -257,7 +234,6 @@ Orchestrator 创建任务后必须向用户说明目标项目、任务图、任�
 - 用户要求“方案评审”“架构设计”“独立 review”“测试验证”。
 
 ### 轻量触发
-
 以下任务默认不走完整流水线，除非用户明确要求：
 
 - 文案、注释、README 小改动。
@@ -267,15 +243,12 @@ Orchestrator 创建任务后必须向用户说明目标项目、任务图、任�
 - 格式化、路径修正、模板补充。
 
 轻量流程为：
-
 `Orchestrator Intake -> YQuant-Developer-Engineer Implement -> YQuant-Reviewer-Principal Validate -> Orchestrator Closeout`
 
 轻量流程仍必须保留独立 Validate，不能把未验证的实现直接 Closeout。
 
 ## 编排顺序：Full Flow
-
 完整流水线固定为：
-
 1. 当前 orchestrator（`yquant` 或 `yinglong`）：Intake 需求澄清，解析并固定 `PIPELINE_WORKSPACE`，确认目标、范围、约束、风险和初步验收标准。
 2. `YQuant-Codex-Principal`：RFC/SPEC 编写；当业务语义、接口、数据模型、交易或风控行为发生变化时，先更新相关 RFC，再派生可执行 SPEC。
    - **门禁**：Orchestrator 在此阶段结束后必须校验目标项目 `docs/rfc/` 和 `docs/spec/` 下有对应文件，否则退回。
@@ -288,7 +261,6 @@ Orchestrator 创建任务后必须向用户说明目标项目、任务图、任�
 完整流程不得跳过独立 Validate；用户明确的本次阶段例外不推广为默认规则。
 
 ## 两流程定位（Full / Light）
-
 按契约明确程度与风险分流，不按文件数；后续新任务只选择以下两种：
 
 | 流程 | 阶段数 | 默认 worker 卡数 | 适用场景 | 三层文档 | 独立验收 |
@@ -301,298 +273,34 @@ Orchestrator 创建任务后必须向用户说明目标项目、任务图、任�
 Full / Light 均使用真实 parent links 自动衔接，不以主控持续在线或通知回调代替依赖。
 
 ## 生产部署/上线/模式切换：最小范围
-
 只修改已明确的配置常量时不自动升成大工程；按契约明确程度选择 Light 或 Full，仍保留独立 Validate 和项目要求的授权。小型明确本地写入沿用当前 Implement 执行后立即读回/定向核验，不默认新增 preflight/token/Activation 卡。
 
-<details>
-<summary>历史：2026-08-19 部署分流准则（全节退役，非当前指令）</summary>
+历史：[2026-08-19 部署分流准则](references/history/deployment-routing-2026-08-19.md) 已退役，仅供审计，非当前指令、无新任务必读要求。
 
-以下至 details 结束的旧 Quick 分流、卡数及角色合并规则全部不再用于新任务。保留当时事实，不执行其操作配方；现行只使用 Full/Light 和统一 Validate。
-
-**核心原则**：当任务涉及生产部署、上线切换、`_EXECUTION_MODE`/其他生产常量切换、capability install、binding 替换等场景时，**状态机精简到 1-2 个状态**，门禁精简到 ≤3 项，**不强制走 SPEC/RFC/DESIGN 三层文档 + P1-P6 阶段门禁**。
-
-### 反例：RFC-18-016 §3.1 的 4 状态机（已禁止照搬）
-
-```text
-contract-ready → artifact-ready → runtime-ready → execution-ready
-                  （4 状态机 + P1-P6 阶段门禁 = 实际 8-10 张卡才能完成单点切换）
-```
-
-这种结构对生产部署/上线/切换类任务是**过度流程化**，成本 8-10 张卡却只换一行常量值。
-
-### 精简准则（≤2 状态、≤3 门禁）
-
-| 任务类型 | 状态数 | 状态名 | 门禁 |
-|---|---|---|---|
-| **生产部署 / 模式切换 / capability install** | **1** | `preflight-ready` | ① fixture 桥完整 ② 真实 I/O 受 O_EXCL 等原子原语保护 ③ 文档同步 SPEC denylist 即可 |
-| **真实 execute_once / execute-write** | **2** | `preflight-ready` + `execution-ready` | `preflight-ready` + ① single-binding active ② Pascal fresh 一次性授权 |
-| **legacy retirement / observation phase** | **2** | `verify-clean` + `retired` | ① 健康证据只读 ② legacy invocation evidence = 0 |
-
-### 走法选择（替换 SPEC-18-016 §3.1 决策树）
-
-```
-生产部署/上线/模式切换任务到达
-   │
-   ├─ 仅修改常量（如 _EXECUTION_MODE=execute）？
-   │    └─ 是 → **Light Flow**（1-2 文档 + 1-2 卡）
-   │            （不再走 P1-P6 阶段，不创建 SPEC/DESIGN 三件套）
-   │
-   ├─ 真实 execute_once（涉及 capability install / 单次写入）？
-   │    └─ 是 → **Quick Flow**（RFC+SPEC 合并 1 卡 + Implement + Verify）
-   │            （简化独立 Tester/Reviewer 为 Verify 内嵌两个独立角色确认）
-   │
-   └─ 跨模块架构变更？
-        └─ 是 → **Full Flow**（保留原 6 卡）
-```
-
-### 何时仍需要完整三档
-
-- 跨 ≥2 个模块的架构变更
-- 涉及交易/风控/真实资金的真实写
-- 跨 ≥3 个 deny list 项的变更
-
-### 历史教训（2026-08-19 B1/T5 后卡链）
-
-- **症状**：B1 完成后用户要切换 `_EXECUTION_MODE=dry_run → execute`，orchestrator 默认按 SPEC-18-016 §3.1 的 4 状态机 + P1-P6 阶段门禁，估算需 RFC-18-019 + SPEC-18-019 + DESIGN-18-022（3 文档）+ T1-T5（5 卡）= **8 张卡才能切换一行常量**。
-- **根因**：状态机本身过度细化（4 状态 + 6 阶段门禁），把"切换常量"与"真实部署"混为一谈。
-- **修复**：本节准则将单点切换拆为 Light Flow（1-2 卡），保留独立 Tester/Reviewer 仅在真实 execute_once 时出现。
-
-### 配套规则
-
-- **状态名要少**：≤2 个，禁止 `contract-ready / artifact-ready / runtime-ready / execution-ready` 这类四段命名
-- **门禁要少**：每状态 ≤3 项检查，禁止 P1-P6 的 6 阶段累加
-- **单步落地**：常量切换 = 1 卡，不再拆 IMPLEMENT/VERIFY/REVIEW/CLOSEOUT 四卡
-- **denylist 同步**：每次简化必须在原 SPEC（如 SPEC-18-016）的 §10 显式同步新增豁免，避免下一次 orchestrator 又按旧规则展开
-
-### 与三流程定位（Full/Quick/Light）的关系
-
-本节**替换** §"三流程定位"中的"Full Flow 适用于高风险、跨模块、交易/风控"边界 ——
-**生产部署/上线/模式切换类任务**即使属于"高风险"，也按本节走 Light Flow 起步，**除非**额外触发"完整三档"条件。
-
----
-
-</details>
-
-## 历史：Quick Flow 编排、触发与门禁（全节退役）
-
-<details>
-<summary>V1.2 历史规则，非当前入口或强制要求</summary>
-
-以下至 details 结束的触发词、Q-LINK、四卡链、自审替代 Reviewer 等要求仅解释旧任务，不适用于新任务。新任务不加载此节作执行指令。
-
-Quick Flow 5 阶段（4 个 Kanban task），衔接机制与 Full Flow 同源：Intake 阶段一次性预创建 T1-T4，由 Kanban DB parent links + dispatcher promote 自动衔接，**不依赖 orchestrator 串行调度**（避免 2026-06-30 yinglong 5h44m 断链事故，P-12）。
-
-```text
-Intake (orchestrator)  ──►  一次性 kanban_create T1/T2/T3/T4 (含 parents)
-   │
-   ▼
-T1 RFC/SPEC/Design   assignee=yquantprincipal  status=ready    parents=[]           ← dispatcher 立即 claim/spawn
-T2 Implement         assignee=yquantdeveloper  status=todo     parents=[T1]        ← T1 done 后由 recompute_ready 自动 promote
-T3 Verify            assignee=yquanttester     status=todo     parents=[T1, T2]    ← T2 done 后由 recompute_ready 自动 promote
-T4 Closeout          assignee=<orchestrator>   status=todo     parents=[T1, T2, T3] ← T3 done 后由 recompute_ready 自动 promote
-```
-
-> 衔接契约（Q-LINK）：详见 `references/pipeline.md` 的 "Quick Flow 衔接机制（Q-LINK 契约）" 章节与 SPEC-10-004 §13.10。
-
-### Quick Flow 阶段定义
-
-1. **Intake**（orchestrator）：需求澄清，判定走 Quick Flow（见下方决策树）。解析 `PIPELINE_WORKSPACE`，固定目标项目，固化目标项目约定。**Intake 必须一次性预创建 T1/T2/T3/T4** 四个 Kanban task，T1 立即 `ready`、T2/T3/T4 `todo` + parents，后续衔接交给 Kanban DB 状态机（`task_links` + `recompute_ready` + `dispatch_once`），不依赖 orchestrator 主 session 或 watcher 持续在线。**禁止**在前序任务 done 后才临时创建下一张 task。
-2. **T1 RFC/SPEC/Design（yquantprincipal）**：一个 Kanban task 同时产出 RFC / SPEC / Design 三份独立文档，分别落到 `docs/{rfc,spec,design}/{module}/` 对应路径。三份文档保留三层职责边界，**不得合并章节**。T1 body 必须在顶部显式声明"本任务走 Quick Flow"和 T2/T3/T4 task id。T1 done 后由 dispatcher 自动 promote T2。
-3. **T2 Implement（yquantdeveloper）**：基于已确认的 SPEC + Design 做最小范围实现。T3 Verify 不得跳过。T2 done 后由 dispatcher 自动 promote T3。
-4. **T3 Verify（yquanttester）**：独立验证 + 端到端 smoke test，**必须做数据合理性抽样**（P-11）。T3 done 后由 dispatcher 自动 promote T4。
-5. **T4 Closeout（orchestrator）**：执行 DESIGN-10-004 §3.5 自审清单（**15 项**，含 V1.2 新增的 #1 Intake 一次性预创建 + #2 T2/T3/T4 parent links），逐项 ✅/❌ 标注。**无独立 Reviewer**，自审替代；T4 必须先复核 T1-T4 在 Intake 阶段一次性预创建且 parent links 完整（Q-A-008 / Q-LINK-001~006）。
-
-完整流程 → Quick Flow **不允许降级**（已创建的多余 Kanban task 不会自动消失）。Quick Flow → 完整流程 **可以升级**（T1 已完成则补开独立 Design task；T3 之后追加独立 Review task）。
-
-## Quick Flow 触发条件
-
-orchestrator 在 Intake 阶段执行以下决策树：
-
-```
-用户需求到达
-   │
-   ├─ 涉及 MongoDB 写入 / 核心交易 / 真实资金 / 生产 schema 变更 / 跨 2+ 模块架构?
-   │    └─ 是 → Full Flow（独立 Review）
-   │
-   ├─ 单文件低风险 bug fix / 注释 / 格式化 / 路径修正?
-   │    └─ 是 → Light Flow
-   │
-   ├─ 中风险 + 需求明确 + 改动 3-8 文件 + 单模块 + 不触交易风控 + 不改三方依赖?
-   │    ├─ 是 → Quick Flow（5 阶段 4 task，Closeout 自审替代 Review）
-   │    └─ 否 → Full Flow
-   │
-   └─ 用户明确说 "走 Quick Flow / 按快捷流程 / 5 阶段快速"?
-        └─ 是 → Quick Flow（覆盖上述判断）
-```
-
-### Quick Flow 显式触发词
-
-- "走 Quick Flow"
-- "按快捷流程"
-- "5 阶段快速"
-- "用 Quick 流程"
-
-### Quick Flow 适用场景（必须全部满足）
-
-- 风险等级：中等或以下。
-- 需求明确度：用户目标已清晰，无需多轮探索。
-- 改动范围：3-8 个文件，单模块为主。
-- 不涉及核心交易、风控、生产数据库 schema 变更、跨 2+ 模块架构变更。
-- 不新增/升级三方依赖。
-
-### 禁止 Quick Flow 场景（任一命中即升 Full）
-
-- 写入生产 MongoDB 集合（含 `portfolio_position` / `portfolio_trade` / Argus / signal 等）。
-- 修改交易执行逻辑、风控规则、回测引擎真实计算路径。
-- 跨 2+ 模块的架构变更（涉及多个 `docs/{rfc,spec,design}/{module}/` 子目录）。
-- 用户明确要求"独立 review"或"独立测试验证"。
-- 凭据相关实现且需要真实外部 API smoke test（按 P-10 仍需要，但应升 Full 以保留独立 Review）。
-
-### Quick → Full 升级时机
-
-T1/T2/T3 任意阶段，orchestrator 若发现：
-
-- 实际风险超出 Quick Flow 边界（如发现需要修改核心交易逻辑）。
-- 用户明确要求升 Full。
-- T3 Verify 发现需要独立 Reviewer 介入的问题。
-
-**升级操作**：
-1. 若 T1 已完成：补开 `T_Design` 独立 task（assignee=yquantprincipal），parents=[T1]。
-2. 在 T3 之后追加 `T_Review` task（assignee=yquantreviewer），parents=[T3]。
-3. 更新后续 task body 的流程模式声明（把 "Quick Flow" 改为 "Full Flow"）。
-
-### Quick Flow 失败模式（orchestrator 应监控的异常信号）
-
-| 信号 | 含义 | 动作 |
-|---|---|---|
-| T1 一次迭代产出 RFC + SPEC + Design 但章节结构不完整 | T1 body 最低要求未满足（SPEC §13.2） | 退回 T1 重做 |
-| T2 代码改动超出 Design §3.1 预期文件清单 | 实现者越界 | 退回 T2 缩小范围 |
-| T3 Verify 漏掉数据合理性抽样（业务字段错配、fixture 全空） | P-11 未落实 | 退回 T3 补跑端到端 smoke |
-| T4 Closeout 自审清单某项标注 ❌ 但仍 continue | 自审被敷衍 | 不允许 closeout，补完再 T4 |
-| T2/T3 完成后状态变 `blocked` 而非 `done` | P-5 worker 误 block（最常见：`残余风险待确认` ≠ block 理由） | **判定 P-5 决策树**：验收 PASS 但有残余风险 → 直接 `done` + 风险进 `summary`/`metadata.residual_risks`。仅 FAIL 才 block。orchestrator 发现误 block 立刻 `kanban_unblock` + 必要时手动 `kanban_complete` 标 done |
-
-P-1~P-13 pitfalls **在 Quick Flow 中全部继续适用**（DESIGN-10-004 §3.7 兼容性矩阵，含 V1.2 新增的 P-12 orchestrator 串行调度风险 + 2026-07-01 新增的 P-1c worker profile `external_dirs` 必须覆盖目标项目 skills 目录），无例外。
-
-## Quick Flow 阶段门禁
-
-> 衔接机制状态：V1.2 起 Intake 阶段已落地一次性预创建 T1-T4（Q-LINK-001~006），所有阶段门禁**不再依赖 orchestrator 串行调度**；门禁只看 Kanban DB 中各 task 的 status / 产出物 / 验收标准。
-
-| 阶段 | 门禁 | 验证方式 |
-|---|---|---|
-| T1 RFC/SPEC/Design | 三份文档存在 + 引用关系正确 + 章节结构完整 + T2/T3/T4 task id 已在 T1 body 显式列出 | orchestrator 校验 |
-| T2 Implement | 代码编译/语法通过 + 单元测试通过 + parent=[T1] 仍存在 | developer 自检 + tester 验证 |
-| T3 Verify | 验收标准全部通过 + 端到端 smoke test 通过 + 数据合理性抽样 + parent=[T1,T2] 仍存在 | tester 报告 |
-| T4 Closeout | DESIGN-10-004 §3.5 自审清单 **15 项** 全部 ✅ + 衔接机制自审（Q-A-008 / Q-LINK-001~006）通过 | orchestrator 逐项核查 |
-
-T4 自审清单 **15 项**（含 V1.2 新增 #1 Intake 预创建 + #2 parent links）详见 `references/pipeline.md` 的 Quick Flow 章节。
-
-### Quick Flow 文档交叉引用
-
-- RFC：`docs/rfc/10_infra/RFC-10-004-yquant-ai-coding-pipeline-skill-sync.md` §12（Quick Flow 扩展，背景/动机/触发条件/Kanban 链/Closeout 自审清单 **15 项**）
-- SPEC：`docs/spec/10_infra/SPEC-10-004-yquant-ai-coding-pipeline-skill-sync.md` §13（Quick Flow 可执行契约，**§13.1-§13.10**，含 Q-LINK 契约 §13.10）
-- Design：`docs/design/10_infra/DESIGN-10-004-yquant-ai-coding-pipeline-skill-sync.md`（§3.1 时序图、§3.2-§3.5 task body 模板、§3.6 orchestrator 改动点、§3.7 **P-1~P-13** 兼容矩阵、§3.8 降级/升级路径）
-
-> **V1.2 衔接机制改造（2026-06-30）**：Quick Flow 的主进度推进已由 Kanban DB 状态机接管（Intake 一次性预创建 T1-T4 + dispatcher `recompute_ready` + `dispatch_once`）。本节"主动推进规则"现在主要用于：① Full Flow 在 Review 后由 orchestrator 创建 T6 Closeout；② Quick Flow 的 Closeout 自审清单触发（Q-A-008 / Q-LINK-001~006）；③ 异常状态下的应急调度（如 worker 卡死、parent link 断裂、需要紧急 Review）。日常 Quick Flow 的"前序 done → 后序 spawn"**不**依赖本节规则，而由 dispatcher 自动完成。
-
-</details>
+历史：[Quick Flow V1.2 编排、触发与门禁](references/history/quick-flow-v1.2-rules.md) 已退役，仅供审计，非当前指令、无新任务必读要求。
 
 ## Orchestrator 主动推进规则
-
 - Intake 完成分流后，按顺序创建真实任务并保存返回 id，再用该 id 创建下游；不等待上游 done 才补依赖，也不使用占位 parent。Full 的文档阶段门禁写入对应任务验收，未通过不得完成该阶段。
 - 通过 `kanban_show` 核对 exact task 的 parents、状态与产物；已有下游由 dispatcher 按真实依赖推进，不重复派卡。没有预建下游时补齐合法任务，不盲目 unblock。
 - Validate PASS 后主控直接 Closeout，核对结论/覆盖/风险，不另建默认 Closeout worker 或重复全量测试。
 - REVISE 给明确缺陷与最小修复，回 Implement 后再独立 Validate；超出现有授权的范围、成本或高风险动作先取得用户决定。用户不继续时明确未完成项，不宣称 PASS。
 - 安全拒绝、缺授权或必要环境等真实阻塞保留 blocked；已通过且不阻塞的残余风险进入 summary/metadata。只缺登记的预算中断补登记，不能重跑或伪造结论。
 
-<details>
-<summary>历史：2026-06/07 主动推进 SOP（全节退役，非当前指令）</summary>
-
-以下至 details 结束的 Verify→Review→Closeout 卡链、定时派发/unblock 和旧自审规则全部退役；历史事故事实保留，不执行旧配方。
-
-**核心原则**：流水线在用户确认后必须自动推进到下一个决策点，不需要用户反复询问"完成了吗"。
-
-### 推进流程
-
-```
-T5 Review 完成
-  ↓
-Verdict = PASS → 自动创建 T6 Closeout，完成后汇报最终结果
-Verdict = REVISE → 先**问用户**："发现 N 个问题（列出概要）需要修，要继续吗？"
-  ↓
-用户确认"继续" → ⚡ 全程自动化推进（无需用户再问）⚡：
-  1. 自动创建 T3'（Implement fix），parents=[T5]
-  2. 自动监控 T3' 完成 → 创建 T4'（Verify），parents=[T3']
-  3. 自动监控 T4' 完成 → 创建 T5'（Review），parents=[T4']
-  4. T5' 完成 → 回到循环顶部（PASS则Closeout，REVISE则再次询问）
-  每完成一步立即告知用户"xxx 已完成，已自动启动下一步"
-  遇到新的 REVISE → 再次问用户
-
-用户选择"先不改"或"范围太大" → closeout 并记录未解决项
-```
-
-### 关键行为变化
-
-| 之前（有问题） | 之后（修复） |
-|---|---|
-| 任务跑完 → 汇报 → 等用户问"然后呢" → 才动 | 任务跑完 → 汇报 + 启动下一步 |
-| REVISE 后等用户问才创建修复任务 | REVISE 后先问用户 → 确认后立即自动创建 |
-| 每个阶段都等人催 | 只用问一次，下个决策点再问 |
-| 用户被动催促进度 | 用户被主动告知"下一步已启动" |
-
-### 执行层 Checkpoint（2026-06-29 新增）
-
-Orchestrator 在以下任一信号出现时，**必须立即**派下一阶段任务，**不**等用户问：
-
-| 触发信号 | 检测方式 | 动作 |
-|---|---|---|
-| 收到"Background process completed (exit code 0)" | process notification | 立即 `kanban_show` 该 task → 若有 children 等待 parents → 派 children |
-| `kanban_show` 看到 status=done | 主动查询 | 检查 children 关系，自动派 |
-| 用户在对话里问"现在如何了 / 进度" | 用户消息 | **先** 派未派的下一阶段，**然后**汇报当前状态（不等用户先问） |
-
-**历史教训（2026-06-29 Quick Flow 实施）**：T2 done 后 7 分钟内未自动派 T3，被用户问"现在如何了"才被动派。违反"主动推进规则"。**修复**：
-- 任何"task done"通知到达 → 30 秒内派下一阶段（如有）
-- 调度优先级：派 children > 汇报状态
-- 写本节强化执行层约束
-
-**反例（禁止）**：
-- ❌ "T2 done 了，要不要我派 T3？"（应直接派）
-- ❌ "等您确认"（仅在 REVISE/高风险时等）
-- ❌ "我先等您问"（违反主动推进）
-
-**worker 误 block 的主动补救**（2026-07-06 新增，与 P-5 联动）：orchestrator 必须监控 T1-T4 task 的 `status='blocked'` 事件。**任何 `blocked` reason 出现以下特征时，立刻按 P-5 决策树判定**：
-- "等 T4 启动 + 人类确认是否接受 XXX 限制" → **典型误 block**，残余风险属于 done 的 summary
-- "残余 High 风险待拍板" → **典型误 block**，除非风险**真正阻断后续阶段**
-- "建议 yquantprincipal/yquantreviewer 介入" → **越权**，worker 不应替 Reviewer 预告
-
-**补救 SOP**：发现误 block 立刻执行 `kanban_unblock(task_id)` + 必要时 `kanban_complete(summary=..., metadata={residual_risks: [...]})` 手动标 done，并在 Closeout 报告里记录事件。
-
-**预防**：编排层派 task 时，**显式在 body 顶部写明 P-5 完成判定**（见 P-5 决策树 § task body 应有的明确指令 段），让 worker 无歧义。
-
-### 不同 REVISE 严重度的处理方式
-
-- **REVISE（high/major 问题）**：必须问用户后再决定是否继续，因为可能涉及范围变更、额外成本或时间投入
-- **REVISE（minor 问题，如文档遗漏、命名建议）**：可以直接修，修完汇报"顺手修了 N 个小问题"
-- **无法自动判断严重度时**：统一按 major 处理，先问用户
-
-</details>
+历史：[2026-06/07 主动推进 SOP](references/history/orchestrator-push-sop-2026-06-07.md) 已退役，仅供审计，非当前指令、无新任务必读要求。
 
 ### 三层文档强制规则
-
 Full 中 RFC、SPEC、Design **必须分别产出独立文件**，存放在各自目录下；RFC/SPEC 与 Design 分阶段。不允许将 SPEC 或 Design 内容合并到 RFC 中；Light 不为形式新增三层文档。详细规则见 `references/document-layers.md`。
 
 ## 阶段决策同步门禁（用户决策变更时）
-
 **核心原则**：**用户决策在 T1/T2 阶段拍板后，编排层（orchestrator）必须在 T3 Implement 派发前，把这些决策同步到对应阶段的产出物中**。任何 T1/T2 完成后的用户决策变更，必须先评估"是否需要回头修订 T1/T2 文档"，再决定是否放行 T3。
 
 ### 判定规则
-
 **问：这条决策是否会让已完成的 RFC / SPEC / Design 章节"不准确"或"遗漏关键设计"？**
 
 - **是** → 触发同步门禁（按下面的处理流程）
 - **否** → 直接写进 T3 body（或下一阶段 body），不回头修订
 
 ### 决策类型 → 影响范围 → 同步策略
-
 | 决策类型 | 典型例子 | 影响范围 | 必须在 T3 派发前同步到 |
 |---|---|---|---|
 | **设计类** | 用什么数据库 / 集合命名规范 / 隐私分级模型 / 三方凭据占位 | RFC + SPEC + Design | T1 body（派发时），或 T1/T2 完成后用 `kanban_comment` 同步 |
@@ -600,7 +308,6 @@ Full 中 RFC、SPEC、Design **必须分别产出独立文件**，存放在各�
 | **细节类** | CLI 参数命名 / 配置默认值 / 错误码文案 / 函数名 | Design | T3 body 内"实现约束"段；不回头修订 T1/T2 |
 
 ### 同步处理流程（编排层责任）
-
 ```
 用户提决策
    ↓
@@ -618,7 +325,6 @@ Full 中 RFC、SPEC、Design **必须分别产出独立文件**，存放在各�
 ```
 
 ### 与 P-1~P-5 的关系
-
 - 这是**编排层行为**的规则，不是 worker 行为——worker 不需要主动检查"用户决策是否同步过"
 - 但 worker **必须**在开始工作前 read 编排层的 comment（"前置决策增补"），把这些决策作为输入
 - 与 P-5（worker blocked 卡住）正交：P-5 是状态机问题，本规则是"决策追溯"问题
@@ -879,85 +585,11 @@ kanban_create(
 
 主控先读 exact task 和证据再处理异常；不存在“blocked 满若干分钟自动 unblock”规则。完成卡的 summary/metadata 记录候选、命令/exit、未覆盖项和不阻塞风险，不再额外维护状态副本。
 
-<details>
-<summary>P-5 历史事故与旧 SOP（全节退役，非当前指令）</summary>
-
-以下至 details 结束的“已有 Reviewer 子任务就 blocked”、定时 unblock、旧 API 形状、Verify→Review 链与耗时表全部不生效；只保留历史记录，不执行旧操作。
-
-**症状**：T3 / T4 / T5 阶段 worker 完成后主动调用 `kanban_complete(..., result="review-required: ...")`，状态变为 `blocked` 等 YQuant（orchestrator）来 unblock。但 YQuant 不会自动监控 blocked 状态，pipeline 在这一步**卡住**：下一阶段（T4 / T5 / Closeout）永远等不到 promote。
-
-**观察**（2026-06-27 实战）：T3' 修复完后 worker blocked 26 分钟无人 unblock，T4' 一直 `todo`，用户问"为什么慢"才暴露问题。
-
-**观察**（2026-07-06 实测，yinglong V1.2 T3）：yquanttester worker 跑完 T3 验证（单测 43/43 + e2e 3 命令 exit 0 + 数据 7/7 PASS + 性能 3 项达标 + 向后兼容 PASS），**仍用 `review-required:` blocked**，reason 写"等 T4 启动 + 人类确认是否接受 V1.2 fixture 限制 + 残余 High 风险是否阻塞上线"。**等用户拍板 4 天未动，T4 永远不会被 dispatcher 自动 promote**。**这是 P-5 错误行为的教科书级反例**：worker 把"残余风险已知 + 不阻塞后续"误判为"必须 human 拍板"。
-
-**修复**（worker 行为约束）：
-
-1. **worker 完成后应直接 `kanban_complete(..., summary=...)` 并 `status="done"`，不要 `review-required:` 标记 blocked**。**Reviewer 阶段本身就是独立 review**——不需要 worker 替 reviewer 预告。
-
-2. **仅在以下情况用 `review-required:` blocked**：
-   - 任务真的有非阻塞风险需要 YQuant 即时拍板（如生产配置变更、跨产品影响）
-   - 已在子任务里创建 Reviewer 任务并 parents 串联
-
-3. **YQuant（orchestrator）侧的补救路径**：发现某个任务 `blocked` 但无后续任务在跑时，可以直接 `kanban_unblock(task_id)`，dispatcher 会重新 claim 并完成。但**这只是补丁**，根因是 worker 误用 blocked。
-
-4. **P-5 健康检查**：流水线中如发现任何任务连续 10 分钟处于 `blocked` 且 heartbeat 缺失，主动 unblock + 在 T5 closeout 报告里记录事件。
-
-**预防**：完整流程跑完后，YQuant 在 T5 closeout 阶段应**主动**核对：
-- T1-T5 状态全部 `done`？
-- 没有遗留 `blocked` / `running` 但无 heartbeat 的孤儿任务？
-- 如果有，立刻 unblock 或归档。
-
-#### block vs done 决策树（worker 行为约束，2026-07-06 新增）
-
-**核心问题**：worker 跑完验证后，应选 `done` 还是 `blocked`？判定标准：
-
-| 完成情况 | 状态选择 | 理由 |
-|---|---|---|
-| 验收标准 PASS + 残余风险已知但不阻塞 + 无 Reviewer 子任务 | **`done`** | dispatcher 自动 promote 下一阶段；残余风险写进 `summary` 或 `metadata.residual_risks` |
-| 验收标准 FAIL（测试不通过 / 数据错配 / 代码未跑通） | **`blocked`** | 真正阻塞，需 orchestrator 介入修复 |
-| 高风险变更需 human 拍板（生产 schema / 凭据 / 跨产品影响） | **`blocked`** | 需人类判断才放行 |
-| 已创建 Reviewer 子任务并 `parents` 串联 | **`blocked`** | worker 预告 Reviewer 介入是合法的 |
-| **残余 High 风险待 human 拍板**（如真实 e2e 凭证缺失、依赖未验证） | **`done` + 写进 `residual_risks`** | **不构成 block 理由**！除非这个风险**阻断后续阶段** |
-| 验收 PASS 但 worker 自己"觉得"需要确认 | **`done`** | worker 替 Reviewer 预告是越权 |
-
-**P-5 黄金法则**：
-
-> **PASS = done（残余风险进 summary/metadata）；FAIL = blocked（写明失败原因 + 哪条验收不达标）。** 两类结果之间不存在中间态。如果 worker 觉得有"需要确认的事"，写进 `summary` 的 "已交付但需确认项" 段，让 Reviewer 阶段或人类在 Closeout 时统一处理。
-
-**判定流程**（worker 写 `kanban_complete` 前的自检）：
-1. 跑一遍 task body 列出的验收标准 → 全 PASS？
-2. 如果全 PASS → 残余风险是"已知但不阻塞"还是"真正阻塞后续"？
-3. 已知不阻塞 → `done` + 风险进 `summary`
-4. 真正阻塞 → `blocked` + 写明阻塞原因 + 哪条验收待补
-5. 验收 FAIL → `blocked` + 写明哪条 FAIL + 期望值 vs 实际值
-
-**task body 应有的明确指令**（orchestrator 派卡时建议写入）：
-```
-完成后状态选择：
-- 验收标准全 PASS → kanban_complete(status="done", summary=..., metadata={residual_risks: [...]})
-- 任何验收 FAIL → kanban_complete(status="blocked", reason="<哪条 FAIL + 期望 vs 实际>")
-- 不要因"残余风险待确认"使用 blocked——残余风险属于 done 的 summary/metadata
-```
-
-**与 P-2 的关系**：worker 也会因 dispatcher 透明 fallback 跑错模型而 hidden 失败，状态可能误标 `done`。P-5 关注**状态机正确**；P-2 关注**完成的内容质量**。两者都需要监控。
-
-**建议每阶段预期耗时**（基于 2026-06-25 / 06-27 实战均值）：
-
-| 阶段 | 典型耗时 | 主要耗时点 |
-|---|---|---|
-| T1 RFC/SPEC | 5-10 分钟 | yquantprincipal LLM 推理 |
-| T2 Design | 5-10 分钟 | yquantprincipal LLM 推理 |
-| T3 Implement | 5-15 分钟 | yquantdeveloper LLM + 测试运行 |
-| T4 Verify | **5-15 分钟** | yquanttester 跑测试集 + dry-run 验证 |
-| T5 Review | 5-10 分钟 | yquantreviewer LLM 推理 |
-
-> **异常长耗时（如 T4 > 30 分钟）通常说明**：worker 卡在某个测试用例 / LLM 推理 hang / 模型 fallback 慢。可以 `kanban_list status=running` 查 PID + `process(action='poll')` 看 heartbeat 时间。
-
-</details>
+历史：[P-5 事故与旧 SOP](references/history/p5-incident-sop.md) 已退役，仅供审计，非当前指令、无新任务必读要求。
 
 ### P-6: T1/T2 完成后用户决策变更未回头修订
 
-**症状**（2026-06-28 应龙 RFC-16-001 案例）：用户在 T1 done 后提出"应龙要有专属 MongoDB"——这是影响 RFC §5、SPEC §4.4、Design §3.x 的**设计类决策**。但编排层在 T3 派发时只把决策写进 T3 body，没回头修订 T1/T2。结果 T2 Design 文档里 0 次出现 yinglong-db 关键词，T5 Review 找不到"为什么这样设计"的依据，事实文档与设计依据脱节。
+**症状**（2026-06-28 应龙 RFC-16-001 历史案例，T5 Review 为当时阶段）：用户在 T1 done 后提出"应龙要有专属 MongoDB"——这是影响 RFC §5、SPEC §4.4、Design §3.x 的**设计类决策**。但编排层在 T3 派发时只把决策写进 T3 body，没回头修订 T1/T2。结果 T2 Design 文档里 0 次出现 yinglong-db 关键词，T5 Review 找不到"为什么这样设计"的依据，事实文档与设计依据脱节。
 
 **根因**：编排层把"用户决策"等同于"细节微调"，误判其影响范围。其实判定的标准是**"这条决策会不会让已完成章节不准确"**，而不是"这条决策大不大"。
 
@@ -1036,66 +668,17 @@ kanban_create(
 
 **预防**：涉及凭据的实现任务，验收标准必须包含"真实连接 smoke test 或只泄露长度的配置读取测试"，不能只检查文件存在。
 
-### P-12: Quick Flow orchestrator 串行创建导致断链（历史）
-
-> 本条整节为历史记录，Q-LINK/Quick 专用要求不再生效。现行 Full/Light 均在创建时引用已返回的真实 parent id；依赖自动推进，但 dispatcher 停机仍需按授权恢复，不能声称 DB 自行执行 worker。
-
-**症状**（2026-06-30 yinglong Travel Pipeline 案例，5h44m 卡死）：Quick Flow T1 done 01:05，T2 done 01:27，T3 出现时间 07:11（间隔 5h44m）。中间 dispatcher `_kanban_dispatcher_watcher` 静默死亡（gateway 主进程继续运行但不 tick），同时 orchestrator 主 session 处于 idle（state.db 0 新 turn）。两条故障叠加导致 T3 永远不会被创建。
-
-**根因**：Quick Flow 原始设计是"前序 done 后由 orchestrator 临时 `kanban_create` 下一张"。这种 100% 依赖进程层的衔接机制在 dispatcher 失效 + orchestrator 不主动调度时**永久停转**——不是 dispatcher 单点，是**进程层全部失效**。
-
-**修复（已落地）**：方案 A — Intake 阶段一次性预创建 T1-T4，T1 ready，T2/T3/T4 todo + parents。后续衔接交给 Kanban DB 状态机（`recompute_ready` + `dispatch_once`）。即便 dispatcher 死 N 小时，恢复后自动追平全部 task，不再依赖 orchestrator 主 session。详见 `references/quick-flow-handoff-mechanism.md` + RFC-10-004 V1.2 §12.6 / SPEC-10-004 V1.2 §13.10 / DESIGN-10-004 V1.2 §3.1 §3.7。
-
-**预防**：
-- orchestrator 在判定走 Quick Flow 时，**Intake 阶段必须**一次性 `kanban_create` 4 张 task
-- 任一 task 在前序 done 后被临时 `kanban_create`（`task.created_at > parent.completed_at`）→ Closeout 记录 P-12 流程缺陷
-- 三流程衔接机制对比：Full Flow 0 次进程层主动、Quick Flow **3 次进程层主动（V1.2 后归零）**、Light Flow 1 次
-
-**与 P-5 的关系**：P-5 是 worker 误用 `review-required:` blocked；P-12 是流程架构层错误。前者补丁式 unblock 即可，后者必须改设计。
+历史：[P-12 Quick Flow 断链](references/history/quick-flow-p12-breakchain.md) 已退役，仅供审计，非当前指令、无新任务必读要求。
 
 ### P-27: 仅使用真实 parent id，禁止占位依赖
 
 Intake 内依次调用创建：取得上游返回的真实 id → 创建下游并传 `parents=[真实 id]` → 读回下游核对依赖。这里的“依次创建”不是等待上游执行 done 后再派下一张。Full 四卡、Light 两卡按现行任务图建立；禁止先建下游靠 worker 自我 block 修链。
 
-<details>
-<summary>P-27 历史事故（旧占位 parent 路径 B 已废止，非当前指令）</summary>
-
-以下至 details 结束的 A/B 选择和“否则走占位符”全部退役；不得执行其中修复配方，也不据其推断当前工具仍有相同行为。
-
-**症状**：orchestrator Intake 阶段用占位符 parents 创建 4 张卡（如全部 `parents=[t1_id]`），期望"先创建 T1 done 后再 create T2/T3/T4"。但 `kanban_create(parents=[...])` **不校验 parent_id 是否真实存在**——所有占位符静默通过。T1 done 时 T2/T3/T4 全部 parents（仅含已存在的 T1_id）满足条件，**3 张 worker 同时被 dispatcher 派发**，T3/T4 看到未改动的代码自审全 FAIL。
-
-**根因（两层）**：
-1. **API 设计**：`kanban_create(parents=[...])` 是参数化接收，不强制 parent_id 已存在
-2. **task_links 表**：只记录能 resolve 的 parent_id，不可解析的占位符**静默丢弃**
-
-**真实后果（2026-07-07 P34 K合并案例 + 后续 partial-fallback Quick Flow 当日再犯）**：
-- 4 task 全部 status=ready 后由 dispatcher 同时 claim/spawn
-- T2 (Implement) 唯一可独立跑（基于已有资料）
-- T3 (Verify) / T4 (Closeout) **必自我 block**（代码未改）
-- 用户必须手动 orchestrator `kanban_block` + 后续 `kanban_link` 补 cascade + `kanban_unblock` 重 spawn
-
-**修复 SOP（已沉淀到 MEMORY.md "P34" 段）**：
-1. T3/T4 worker 必自我 block（如 t_c33f24b7 first attempt 的 `P-12 parent link bug` reason）
-2. orchestrator 看到 block → 立刻执行：
-   - `kanban_link(parent_id=t2_real, child_id=t3)`
-   - `kanban_link(parent_id=t2_real, child_id=t4)`
-   - `kanban_link(parent_id=t3_real, child_id=t4)`
-   - `kanban_unblock(t3)` / `kanban_unblock(t4)`
-3. dispatcher 自动重新 dispatch T3/T4 到 worker
-
-**预防（双路径）**：
-- **路径 A（推荐）**：Intake 阶段**串行 create 4 张卡**——先 `kanban_create(T1, parents=[])` 等返回 T1_id，再 `kanban_create(T2, parents=[T1_id])` 拿 T2_id，以此类推。**代价**：orchestrator 必须在线（如失联 T3/T4 不会自动派）。
-- **路径 B（V1.2 标准）**：Intake 阶段一次性预创建 4 张卡 + 占位符 parents。**前提**：占位符 parent_id 会被静默丢弃，4 task 都默认 parent=T1（仅当 T1 是真的）。**危险**：如果 4 task 不依赖 T2/T3 真 id，全依赖 T1 done，则并发 spawn。T3/T4 必自我 block。
-
-**判定**：当且仅当 T3/T4 真的不依赖中间 task 的产物（如本会话 partial-fallback Quick Flow，4 task 链清晰）时走**路径 A 串行 create**（已在本会话 P34 实战验证）。否则走**路径 B 占位符**（依赖 worker 自我 block + orchestrator unblock SOP）。
-
-**历史教训（同一天犯两次）**：P34 K合并（2026-07-07 上午）+ partial-fallback（2026-07-07 下午）——同一日两次违反 P-27。已记入 MEMORY.md。orchestrator 下一次 Intake 必显式选 A/B 路径并写入 task body。
-
-</details>
+历史：[P-27 占位 parent 事故](references/history/p27-placeholder-parent.md) 已退役，仅供审计，非当前指令、无新任务必读要求。
 
 ### P-11: 端到端 smoke test 必须包含"数据合理性校验"，不能只看 Phase 跑通（2026-06-29 应龙 Travel Pipeline 案例）
 
-**症状**：Implement 阶段 worker 把 7 P0 全部产出代码、单测 223 passed、T3 → T4 → T5 都 done。但 orchestrator 直接跑端到端 smoke 时发现：**POI 数据返回了北京景点（故宫/雍和宫/天安门）给"舟山朱家尖 4 日亲子自驾"行程**，因为 POI 聚合没按 destination 过滤；**discovery 反向推荐返回 0 候选**，因为 fixture 过滤逻辑把 8 个目的地全过滤掉了。
+**症状**（历史旧链 T3 Implement → T4 Verify → T5 Review）：Implement 阶段 worker 把 7 P0 全部产出代码、单测 223 passed、T3 → T4 → T5 都 done。但 orchestrator 直接跑端到端 smoke 时发现：**POI 数据返回了北京景点（故宫/雍和宫/天安门）给"舟山朱家尖 4 日亲子自驾"行程**，因为 POI 聚合没按 destination 过滤；**discovery 反向推荐返回 0 候选**，因为 fixture 过滤逻辑把 8 个目的地全过滤掉了。
 
 **根因**：
 - T3 Implement 验收标准只检查"代码可跑 + 测试通过"，**没检查 destination/POI/预算等业务字段是否合理**
@@ -1140,43 +723,19 @@ Intake 内依次调用创建：取得上游返回的真实 id → 创建下游�
 **真因**：judger 自己的模型链也限流，系统卡在"judge 不可用 → 不能 finalize"单点。
 **Fix**：不再依赖 judge force close，改用脱钩续接（新 task parent=[上一级 done]）+ 人工 mark done with real artifacts（grep 文件 + ls 落盘目录）。
 
-## Quick Flow 5 阶段流程模式（2026-06-29 历史日志，全部退役）
-
-> 本节全文仅是历史，不是当前入口。2026-06-30 V1.2 本身也已于 2026-11-14 退役；以下“当前规则”仅指历史时点，不适用于新任务。
-
-> ⚠️ **历史快照**：本节是 2026-06-29 首次落地 Quick Flow 时的实现日志，**当前流程规则已由 2026-06-30 V1.2 改造取代**：① Intake 必须一次性预创建 T1-T4 全部（不是串行）；② parent links 全链 `[T1]/[T1,T2]/[T1,T2,T3]`（不是简化版 `[T1]/[T2]/[T3]`）；③ Closeout 自审清单 13 → **15 项**（含 #1/#2 Intake 预创建核验）；④ 适用 pitfall P-1~P-11 → **P-1~P-12**（含 V1.2 新增的 P-12 orchestrator 串行调度风险）。本节保留作为历史参考，**不要**当当前规则使用。
-
-> 完整 RFC/SPEC/Design 文档：RFC-10-004 §12 / SPEC-10-004 §13 / DESIGN-10-004（yquant 项目 `docs/` 下 V1.2 版本为准）
-
-**5 阶段 4 task Kanban 链（历史版本，仅供参考）**：
-```
-T1 RFC/SPEC/Design   (yquantprincipal)   ← 1 task 产 3 份独立文档
-T2 Implement         (yquantdeveloper)   parents=[T1]
-T3 Verify            (yquanttester)      parents=[T2]
-T4 Closeout          (orchestrator)      parents=[T3]
-```
-
-**适用边界**：中等风险、明确需求、改动 3-8 文件、单模块、不触交易/风控
-
-**与 Full / Light 区别（历史）**：
-- Full Flow (7 阶段 / 6 task)：高风险、跨模块、交易/风控 → 保留独立 Review
-- **Quick Flow (5 阶段 / 4 task)**：中风险 → 去掉 Review，以 **Closeout 自审清单 (13 项 → V1.2 已扩 15 项)** 替代
-- Light Flow (3 阶段 / 2 task)：单文件低风险 bug fix / 注释 / 格式
-
-**Quick→Full 升级路径**：
-- T1 RFC/SPEC/Design 阶段发现改动实际跨模块 → 把 T2 后面的 task 改成 Full 链
-- T2 Implement 阶段发现触动交易/风控逻辑 → 升级到 Full Flow 补 Review 阶段
-- Orchestrator 应在 T2 任务 body 显式声明升级条件
-
-**失败模式**（Orchestrator 监控信号）：
-- T1 done 后 T2 一直 ready 未 claim → 父任务检查失败
-- T2 done 后 T3 一直 ready 未 claim → 同上
-- 任何 task done 通知到达但 children 24h 内未 promote → 主动 unblock + 记录事件
-- T3 Verify 发现 P-11 端到端数据不合理 → 升级到 Full Flow 重新跑
-
-**P-1~P-13 pitfalls 全部适用于 Quick Flow**（2026-07-01 实测新增 P-1c worker profile `external_dirs` 必须覆盖目标项目 skills 目录）
+历史：[2026-06-29 Quick Flow 五阶段日志](references/history/quick-flow-5stage-2026-06-29.md) 已退役，仅供审计，非当前指令、无新任务必读要求。
 
 ## 参考资料
+
+`references/history/` 下八份文件均为历史归档，非当前入口或指令，无新任务必读要求；原块内旧指针按来源上下文解释。
+- [部署分流历史](references/history/deployment-routing-2026-08-19.md)
+- [Quick V1.2 规则历史](references/history/quick-flow-v1.2-rules.md)
+- [主动推进 SOP 历史](references/history/orchestrator-push-sop-2026-06-07.md)
+- [P-12 断链历史](references/history/quick-flow-p12-breakchain.md)
+- [P-5 事故历史](references/history/p5-incident-sop.md)
+- [P-27 占位 parent 历史](references/history/p27-placeholder-parent.md)
+- [Quick 五阶段日志历史](references/history/quick-flow-5stage-2026-06-29.md)
+- [pipeline Quick 阶段参考历史](references/history/pipeline-quick-flow-legacy.md)
 
 - `references/pipeline.md`：阶段门禁、任务目录结构、路由规则。
 - `references/document-layers.md`：RFC/SPEC/DESIGN 的职责边界。
