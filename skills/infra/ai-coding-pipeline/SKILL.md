@@ -61,8 +61,8 @@ sanity-check 关注的是「数据流入业务逻辑之前的最后一道闸门�
 - 阶段执行必须通过 `kanban_create` 创建真实任务，并设置 `assignee` 为对应 Hermes profile。
 - `kanban_create(skills=[...])` 只能引用目标 assignee profile 可见的 **canonical/project skill**。不要把 orchestrator 自己 profile-local 的补丁 skill 传给 worker；worker CLI 会在初始化阶段报 `Unknown skill(s)` 并立即 crash，连 `agent.turn_context` 都不会进入。
 - 不要用 `delegate_task` 承担正式流水线阶段；`delegate_task` 只适合短推理子任务，且默认继承父 profile 的模型，不能按单次调用切到 `yquantprincipal` / `yquantdeveloper` 等 profile。
-- **历史教训（2026-06-25 RFC-03-006 案例）**：`delegate_task` **不在 Kanban DB 创建 task 记录**，会导致后续阶段 `parents=[前阶段 task_id]` 无法设置，pipeline 自动串联中断。所有流水线阶段必须用 `kanban_create` 派任务，每个阶段设置 `parents`，dispatcher 才能自动 promote。详见 `references/real-run-journal-2026-06-25.md` 关键观察 6。
-- **SPEC §3 文件清单必须精确到目录层级**（2026-06-25 教训）：不能写“新建 `providers/` 子包”这种模糊描述，要写“在 `scripts/extractors/providers/` 下新建 10 个文件”。否则 Implement worker 可能写到错的目录层级。详见 `references/real-run-journal-2026-06-25.md` 关键观察 7。
+- **历史教训（2026-06-25 RFC-03-006 案例）**：`delegate_task` **不在 Kanban DB 创建 task 记录**，会导致后续阶段 `parents=[前阶段 task_id]` 无法设置，pipeline 自动串联中断。所有流水线阶段必须用 `kanban_create` 派任务，每个阶段设置 `parents`，dispatcher 才能自动 promote。
+- **SPEC §3 文件清单必须精确到目录层级**（2026-06-25 教训）：不能写“新建 `providers/` 子包”这种模糊描述，要写“在 `scripts/extractors/providers/` 下新建 10 个文件”。否则 Implement worker 可能写到错的目录层级。
 - 不要只在文本中声明“委派给某 Agent”；没有 `kanban_create` 任务就不算真实委派。
 - 任务工作目录必须使用下面“项目上下文解析”得到的共享项目目录；禁止 worker 根据自身 profile 名推断项目。
 
@@ -275,18 +275,12 @@ Full / Light 均使用真实 parent links 自动衔接，不以主控持续在�
 ## 生产部署/上线/模式切换：最小范围
 只修改已明确的配置常量时不自动升成大工程；按契约明确程度选择 Light 或 Full，仍保留独立 Validate 和项目要求的授权。小型明确本地写入沿用当前 Implement 执行后立即读回/定向核验，不默认新增 preflight/token/Activation 卡。
 
-历史：[2026-08-19 部署分流准则](references/history/deployment-routing-2026-08-19.md) 已退役，仅供审计，非当前指令、无新任务必读要求。
-
-历史：[Quick Flow V1.2 编排、触发与门禁](references/history/quick-flow-v1.2-rules.md) 已退役，仅供审计，非当前指令、无新任务必读要求。
-
 ## Orchestrator 主动推进规则
 - Intake 完成分流后，按顺序创建真实任务并保存返回 id，再用该 id 创建下游；不等待上游 done 才补依赖，也不使用占位 parent。Full 的文档阶段门禁写入对应任务验收，未通过不得完成该阶段。
 - 通过 `kanban_show` 核对 exact task 的 parents、状态与产物；已有下游由 dispatcher 按真实依赖推进，不重复派卡。没有预建下游时补齐合法任务，不盲目 unblock。
 - Validate PASS 后主控直接 Closeout，核对结论/覆盖/风险，不另建默认 Closeout worker 或重复全量测试。
 - REVISE 给明确缺陷与最小修复，回 Implement 后再独立 Validate；超出现有授权的范围、成本或高风险动作先取得用户决定。用户不继续时明确未完成项，不宣称 PASS。
 - 安全拒绝、缺授权或必要环境等真实阻塞保留 blocked；已通过且不阻塞的残余风险进入 summary/metadata。只缺登记的预算中断补登记，不能重跑或伪造结论。
-
-历史：[2026-06/07 主动推进 SOP](references/history/orchestrator-push-sop-2026-06-07.md) 已退役，仅供审计，非当前指令、无新任务必读要求。
 
 ### 三层文档强制规则
 Full 中 RFC、SPEC、Design **必须分别产出独立文件**，存放在各自目录下；RFC/SPEC 与 Design 分阶段。不允许将 SPEC 或 Design 内容合并到 RFC 中；Light 不为形式新增三层文档。详细规则见 `references/document-layers.md`。
@@ -585,8 +579,6 @@ kanban_create(
 
 主控先读 exact task 和证据再处理异常；不存在“blocked 满若干分钟自动 unblock”规则。完成卡的 summary/metadata 记录候选、命令/exit、未覆盖项和不阻塞风险，不再额外维护状态副本。
 
-历史：[P-5 事故与旧 SOP](references/history/p5-incident-sop.md) 已退役，仅供审计，非当前指令、无新任务必读要求。
-
 ### P-6: T1/T2 完成后用户决策变更未回头修订
 
 **症状**（2026-06-28 应龙 RFC-16-001 历史案例，T5 Review 为当时阶段）：用户在 T1 done 后提出"应龙要有专属 MongoDB"——这是影响 RFC §5、SPEC §4.4、Design §3.x 的**设计类决策**。但编排层在 T3 派发时只把决策写进 T3 body，没回头修订 T1/T2。结果 T2 Design 文档里 0 次出现 yinglong-db 关键词，T5 Review 找不到"为什么这样设计"的依据，事实文档与设计依据脱节。
@@ -668,13 +660,9 @@ kanban_create(
 
 **预防**：涉及凭据的实现任务，验收标准必须包含"真实连接 smoke test 或只泄露长度的配置读取测试"，不能只检查文件存在。
 
-历史：[P-12 Quick Flow 断链](references/history/quick-flow-p12-breakchain.md) 已退役，仅供审计，非当前指令、无新任务必读要求。
-
 ### P-27: 仅使用真实 parent id，禁止占位依赖
 
 Intake 内依次调用创建：取得上游返回的真实 id → 创建下游并传 `parents=[真实 id]` → 读回下游核对依赖。这里的“依次创建”不是等待上游执行 done 后再派下一张。Full 四卡、Light 两卡按现行任务图建立；禁止先建下游靠 worker 自我 block 修链。
-
-历史：[P-27 占位 parent 事故](references/history/p27-placeholder-parent.md) 已退役，仅供审计，非当前指令、无新任务必读要求。
 
 ### P-11: 端到端 smoke test 必须包含"数据合理性校验"，不能只看 Phase 跑通（2026-06-29 应龙 Travel Pipeline 案例）
 
@@ -723,27 +711,12 @@ Intake 内依次调用创建：取得上游返回的真实 id → 创建下游�
 **真因**：judger 自己的模型链也限流，系统卡在"judge 不可用 → 不能 finalize"单点。
 **Fix**：不再依赖 judge force close，改用脱钩续接（新 task parent=[上一级 done]）+ 人工 mark done with real artifacts（grep 文件 + ls 落盘目录）。
 
-历史：[2026-06-29 Quick Flow 五阶段日志](references/history/quick-flow-5stage-2026-06-29.md) 已退役，仅供审计，非当前指令、无新任务必读要求。
-
 ## 参考资料
-
-`references/history/` 下八份文件均为历史归档，非当前入口或指令，无新任务必读要求；原块内旧指针按来源上下文解释。
-- [部署分流历史](references/history/deployment-routing-2026-08-19.md)
-- [Quick V1.2 规则历史](references/history/quick-flow-v1.2-rules.md)
-- [主动推进 SOP 历史](references/history/orchestrator-push-sop-2026-06-07.md)
-- [P-12 断链历史](references/history/quick-flow-p12-breakchain.md)
-- [P-5 事故历史](references/history/p5-incident-sop.md)
-- [P-27 占位 parent 历史](references/history/p27-placeholder-parent.md)
-- [Quick 五阶段日志历史](references/history/quick-flow-5stage-2026-06-29.md)
-- [pipeline Quick 阶段参考历史](references/history/pipeline-quick-flow-legacy.md)
 
 - `references/pipeline.md`：阶段门禁、任务管理与报告落点、路由规则。
 - `references/document-layers.md`：RFC/SPEC/DESIGN 的职责边界。
 - `references/agent-handoff.md`：角色交接内容、交付物和退回条件。
 - `references/hermes-kanban-orchestration.md`：Hermes Kanban profile worker 编排规则。
-- `references/quick-flow-journal-2026-06-29.md`：已退役 Quick 历史实跑日志（含 T1-T4 task IDs、产物、关键教训），非当前入口或指令，无新任务必读要求。
-- `references/quick-flow-handoff-mechanism.md`：已退役 Quick 历史事故资料，不是当前入口，无新任务必读要求。
 - **P-1c 复盘（2026-07-01 yinglong 5 阶段 4 task 实跑）**：worker profile `external_dirs` 不覆盖目标项目 skills 目录时，进程静默 SIGKILL、P-1b 风格的 `Unknown skill` 异常被 hermes_cli 静默吞掉。详见 [P-1c](#p-1c)。
 - `references/spec-from-rfc.md`：**SPEC 阶段专用编写手册**——从 RFC 派生 SPEC 时的决策→契约映射模式、12 节章节清单、7 类陷阱（含「不改动清单 P-2」「硬编码版本号 P-3」「向后兼容 P-4」「混淆 SPEC/Design 边界 P-7」）、验证清单与完成回报模板。
 - `skills/common/utils/print_agent_models.py`：查看所有 Agent 当前模型/fallback/compression 配置。
-- `references/real-run-journal-2026-06-25.md`：已退役历史实跑日志——保留 2026-06-25 RFC-03-006 的真实时序、模型 fallback 观察与 worker crash 复盘，非当前入口或指令，无新任务必读要求。

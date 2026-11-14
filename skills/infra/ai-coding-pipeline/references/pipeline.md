@@ -104,8 +104,6 @@ Orchestrator Intake
 - 输出：面向用户的摘要、验证说明、风险和后续事项。
 - 通过条件：用户能清楚知道改了什么、如何验证、还剩什么风险。
 
-历史：[Quick Flow 阶段参考](history/pipeline-quick-flow-legacy.md) 已退役，仅供审计，非当前指令、无新任务必读要求。
-
 ## 路由规则
 
 - RFC/SPEC/Design/架构/API/数据模型：Kanban `assignee="yquantprincipal"`

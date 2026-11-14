@@ -73,6 +73,8 @@ Hermes profile：`yquantdeveloper`。
 
 以上写入 Kanban 生命周期转换的 summary/metadata，不强制逐卡全文 handoff 或 body 镜像；记录候选身份（HEAD + 文件清单或 hash）。开发者自测不能替代独立 Validate。
 
+只把实际已落地的变更和已运行的验证写为已完成；建议、计划与尚未执行的动作须明确区分（2026-06-29 实跑日志的“承诺与执行脱节”教训）。
+
 规则：
 - 不修改 RFC/SPEC/DESIGN 的语义
 - 未经确认不新增依赖
