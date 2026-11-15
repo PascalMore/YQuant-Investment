@@ -1,226 +1,197 @@
-# SPEC-07-003: Predict.fun WSL 原生非导出 signer
+# SPEC-07-003: Predict.fun WSL 本地私钥 keyring 录入与启动入口
+
+> V0.5（2026-11-15，Asia/Shanghai）：仅在已验收 V0.4 helper 上增 `check --config <公共JSON> --sign-in`，复用固定 Rust `check-venue --sign-in`。默认普通 check/enroll 兼容；登录成功须同时满足 exit0、唯一完整公开签名/登录成功标记及固定账户匹配，失败关闭、零原输出转发、JWT 不持久化。§4.6 冻结新输入/输出，§5 分离工程验收与主控真实认证。新增能力待 Design/Implement/独立 Validate，不以本文完成宣称实现或真实认证 PASS。
+
+以下两段为 V0.4 修复当时记录，相关 finding 已由 §1 的独立 PASS 闭合；不再是 V0.5 待办或真实访问授权。历史失败及 runtime 拒绝保留，不追溯改判。
+
+> V0.4（2026-11-15，Asia/Shanghai，Pascal 已同意继续）：只闭合已定位的 GetSecret 内容类型兼容。写入仍固定 `text/plain; charset=utf-8`；读回仅接受两个精确字符串 `text/plain; charset=utf-8`、`text/plain`，不做 strip/大小写归一/前缀或任意 MIME 匹配，其他值和类型仍拒绝。已闭合的五业务属性精确核验及可选固定 `xdg:schema=org.freedesktop.Secret.Generic` 保持不变；session、空 parameters、64位规范小写 ASCII key、真实派生 signer 校验不放宽。只改 BOT `tools/predictfun/local_signer.py` 与 `tools/predictfun/tests/test_local_signer.py`，依赖/README/Rust/CLI/SDK/旧证据只读。本轮独立 Validate 须跑完整受影响回归及一轮新唯一 synthetic namespace 的真实 login create、独立进程 read、定点清理和成功空搜索；不接真实 key、不签名/认证/交易、不改服务或安全配置。
+
+> 闭合清单与用户重锚：V0.2 离线 helper 已验；V0.3 schema 窄修复经26项回归和33个独立案例通过，但真实读回仍 REVISE；新授权诊断已证明唯一不一致是 content type（其余字节/派生校验均通过），测试条目已清理。来源为现有同主题报告 `schema-validation.md` 与 `evidence/getsecret-diagnosis-8551b398e666463ca14b029a4b8ec472.json`。当前仅此内容类型 finding 开放，不重开 schema/架构；下文原阶段工作/未实装状态句为 V0.2 阶段记录，不作为当前重新设计要求。原失败证据及 runtime 拒绝保留，不以修订改判 PASS。
 
 ## 元数据
 
 | 项 | 值 |
 |---|---|
-| 状态 | Draft；ROI / 必要复用接口阻塞，不是 Accepted / Implemented |
+| 状态 | V0.5 RFC/SPEC 契约候选：V0.4 synthetic 基线已验；显式 sign-in 待 Design/Implement/独立 Validate，非交易许可 |
 | 作者 | YQuant Principal |
-| 创建日期 | 2026-11-15 |
-| 最后更新 | 2026-11-15（Asia/Shanghai，UTC+08:00） |
-| 来源 RFC | [RFC-07-003](../../rfc/07_trading/RFC-07-003-predictfun-wsl-nonexport-signer.md) V0.1 |
-| 目标模块 | 07_trading；唯一现有 Toolkits 子仓 |
-| 适配 Agent | yquantdeveloper；独立验收 yquantreviewer；编排 yquant |
-| 文档边界 | 冻结行为/拒绝/验收；§8 阻塞闭合前不得派发实现 |
+| 创建日期 / 最后更新 | 2026-11-15 / 2026-11-15（Asia/Shanghai，UTC+08:00） |
+| 来源 RFC | [RFC-07-003](../../rfc/07_trading/RFC-07-003-predictfun-wsl-nonexport-signer.md) V0.5 |
+| 目标模块 | 07_trading；现有 BOT 的 tools/predictfun/ |
+| 适配 Agent | yquantdeveloper；独立 Validate 为 yquantreviewer；主控 yquant |
 
 ## 1. 需求摘要
 
-为现有 Predict.fun executor 提供显式账户绑定的 Privy 非导出签名选择，不替换策略、风险、订单构造或 venue client。外部模式不读取本地私钥或占位私钥，允许持久凭据只进 WSL Secret Service，短期授权签名密钥只在内存。仅 Predict 认证消息与原风控通过的订单能够签名；任意 RPC、交易发送、重复签单及重复提交都不开放。当前测试目标仅离线/合成实现，不操作任何真实账户；原 CLI 无可直接使用的安全 signer 导出，所需认证适配超过原小改假设，故实现路线/预算和必要库接口明确阻塞；初始交互登录/provisioning 则明确不在本次实现范围。
+保持原 Rust 本地 signer、已验收的遮蔽录入/精确 keyring/固定 child 不变，仅增显式登录 flag 与公开成功证据核验。私钥在录入和启动时均派生匹配指定 signer；缺后端、锁定、失配、存取失败均拒绝，无解锁/文件回退。API key 继续既有 `YQUANT_PREDICT_FUN_TOKEN -> PM_PREDICT_API_KEY` 来源，不迁移存储；普通 check/enroll 不变。
+
+基线事实分层（本卡只静态核对，不重复真实操作）：
+
+- V0.4 `t_1b2754f0` 已独立 PASS，仅 synthetic interoperability；[验收报告](../../../data/reports/2026-11-15-predictfun-local-keyring/content-type-validation.md)记录30项回归、56个独立案例及不同进程的真实合成条目 create/read/cleanup。helper SHA256=`438b67a4b60b091cfb8a6c7f9dace1e28a407f737ce8612285d1c1c9da66399c` 与当前源码一致，schema/content-type finding 不重开。
+- 用户本人 enroll 成功为主控传入声明，worker 未查询生产条目。主控[普通 check 证据](../../../data/reports/2026-11-15-predictfun-local-keyring/evidence/authorized-check-76642cc133ed41519fc3fc72d6d6b8e2.json)为单次 exit0 / `FIXED_CHECK_CHILD_COMPLETED`，`sample_signature_independently_observed=false`；不能证明签名、登录或认证账户控制。
+- 主控报告过旧 debug binary 已经 `cargo build --offline --locked --bin polymarket-toolkits` 重建成功；该 check 证据记录 binary SHA256=`7302b4760d6fa90c43a7df40c439ccb1a92fb2ecb7f14926b5c5b3f966f315e6`。本卡不执行/重建 binary。
+- 本卡入场时 helper 尚无 --sign-in 参数，普通 check 丢弃 child 输出；本次仅开发该受限增量。旧报告/失败/拒绝只读，用户真实录入声明不追溯改变旧验收范围。
+
+历史说明：Pascal 已以本地导出路线取代 V0.1 非导出 Agent Authorization；保留 `nonexport` 路径和 run3711 历史，不保留其生效要求、候选钱包或旧 ROI 阻塞。
 
 ## 2. 范围
 
 ### 2.1 In Scope
 
-- Local / Privy 选择和公开地址/链/模式绑定；保留 Local、无钱包 paper、07-002 的账户和执行语义。
-- executor 私有 typed action、精确 EIP-191/EIP-712 编码、签名响应验证和原 consumer 接线。
-- Secret Service-only 的精确 slot 访问、失败关闭、序列化 token 轮换、只内存授权密钥生命周期与不确定结果阻断。
-- 使用真实待实现 seams 的 synthetic transport / store / clock / synthetic local signer 测试；保留独立 Validate。
+既有 TTY/派生/精确 keyring/child-env 均为保留基线；增量仅 check 专属显式 --sign-in、固定 flag 接线、内存公开标记/账户核验、短说明与合成测试。原 signer、订单/Kernel 包装、认证、执行、账户/预算检查均直接复用，07-002 closeout 的 `OFFLINE_ENGINEERING_ACCEPTED` 不重开。
+
+`BOT=skills/trading/auto-trading/prediction-markets/Prediction-Markets-Trading-Bot-Toolkits`。后续实现上限仅 BOT `tools/predictfun/local_signer.py`、`tools/predictfun/tests/test_local_signer.py`、`tools/predictfun/README.md`。本阶段只允许修订来源 RFC 与本 SPEC，不写 Design 或实现。
 
 ### 2.2 Out of Scope
 
-无新 bot/CLOB/钱包服务/HTTP daemon/Windows bridge/DB/调度/通用钱包 CLI；不改模型、资金阈值、策略、订单协议、成交或恢复主账。不增加 funds/approve/redeem/sendTransaction 等动作。不运行真实 device grant、token refresh、wallet authenticate/RPC、Predict JWT 登录/订单、私钥读写或 keyring 凭据操作；不读取共享 `.env` 或 CLI session。不把仅 fake trait 成功当成完整可用的 Privy signer。
-
-`BOT=skills/trading/auto-trading/prediction-markets/Prediction-Markets-Trading-Bot-Toolkits`。本阶段只创建本文件和来源 RFC。后续代码仍只能在同 BOT：候选新逻辑位置为 `src/service/predict_fun/signer.rs`；既有必要消费者为 `src/service/predict_fun.rs`、`src/service/predict_fun/fills.rs`，装配涉及 `src/config.rs`、`src/main.rs` 及实际构造调用者 `src/bot/runtime.rs`、`src/bot/copy_trading.rs`、既有 check 路径。此处不是最终 allowlist；Design 须按批准复用路线逐文件冻结，不能把代码丢进第二工程或继续堆进大父文件。
+不改 Rust、cli.py、sdk_ops.py、策略/风控/资金工具/配置/Cargo/requirements/lock；不安装或升级包，不另建钱包、服务/daemon、通用 secret store/启动器、IPC、数据库、journal、调度、策略框架或第二认证实现。工程 worker 不读生产 keyring、真实 key/seed/password/凭据 session/生产 `skills/.env`，不执行真实钱包 binary、不联网认证或签名、不调用 provider；不下单/撤单/approve/redeem/转账/充值或激活服务，不要求用户再录 key。主控在独立工程 PASS 与审核后沿本次一次认证授权执行真实登录是分离范围，不授权 worker 或交易。
 
 ## 3. 功能规格
 
 | 编号 | 行为 | 输入 | 输出 | 错误/边界 |
 |---|---|---|---|---|
-| F-001 | 显式模式装配 | Local / Privy 与公开绑定 | 唯一绑定 signer | Privy 缺字段/失败不回退；不读本地 key，不伪造 dummy |
-| F-002 | 严格绑定 | app/wallet/slot/signer/chain/账户模式 | 与原 AccountIdentity 一致的上下文 | 不取第一个 Ethereum wallet；任何失配拒绝 |
-| F-003 | 有来源的认证签名 | 原 client 的 auth challenge | 内部 EIP-191 或原 Kernel 包装签名 | 无任意消息入口，无默认 check/paper 远程签名 |
-| F-004 | 原订单签名 | 原 Order、deployment、market、原风险许可 | 原 EIP-712 hash 和内部签名字节 | 无通用 hash/typed-data API；字段/域/许可失配先拒绝 |
-| F-005 | 安全存储 | 精确自有 slot，元数据 | 已验证记录/错误 | 无 Prompt、无 fallback、无 broad search/自动迁移 |
-| F-006 | 只内存密钥 | 官方 authenticate 响应，HPKE 临时密钥 | 有明确到期时间的内存 authorization key | 禁止持久化完整 CLI session；缺 expiry 拒绝 |
-| F-007 | 序列化轮换 | 单 slot 独占权、旧 refresh token | 写后读回成功的新持久会话，再发布内存会话 | 响应丢失/保存失败进入不确定停止，不重用旧 token |
-| F-008 | 严格响应验证 | provider 返回和原签名上下文 | 验证后的签名或稳定错误 | 错 method/encoding/长度/恢复账户均不交 consumer |
-| F-009 | 不重放与阻断 | refresh/签名/提交故障及原 attempt | 拒绝新增，原风险/查询路径保留 | 401 也不自动重签/重播；不重新生成 salt |
-| F-010 | 离线可验证性 | 注入 fake store/transport/clock、公开合成 key | 实装路径可观察调用与反例 | 不能由历史 bypass 或预造结果绕过新 seam |
-| F-011 | 兼容与范围 | 原 Local / paper / 07-002 consumers | 原签名/风险/成交行为 | 不重开已验收能力，不增加本卡未批依赖/平台 |
+| F-001 | 本地遮蔽录入 | 用户真实 TTY；无私钥值参数 | 仅内存中的候选 key | 非 TTY、回显无法关闭、EOF/取消拒绝；不得退为有回显输入 |
+| F-002 | 派生与绑定 | 合法私钥、固定公开身份 | 已验证 signer | 格式/标量或地址错误在 store/launch 前拒绝，不签名来证明控制 |
+| F-003 | 精确存储 | 已验证 key、自有命名空间 | 写后独立读回一致才成功 | 已有条目/重复/锁定/Prompt/不明写入失败停止，不自动覆盖/重试/删除 |
+| F-004 | 精确读取 | 固定条目属性与 login 集合 | 经格式及派生复核的 key | missing/unavailable/locked/readback 异常拒绝，无其他 key/file/backend fallback |
+| F-005 | 固定启动 | Design 白名单模式、原公开 config/账户参数 | 原固定 BOT 子进程 | 非法模式/路径/绑定在 secret lookup 前拒绝，无 shell/eval/任意命令/透传尾参数 |
+| F-006 | 最小子环境 | 精确 key 与既有 API 来源 | 仅目标子进程拥有 PM_PRIVATE_KEY | 父环境不变，竞争私钥拒绝，其他秘密不扩散；无秘密 argv/文件/日志 |
+| F-007 | 兼容与验收 | 合成 store/TTY/child 替身 | 真实入口与 env seam 可测 | 不用 Rust synthetic 签名快捷路径冒充 helper 测试；原风险门禁不变 |
+| F-008 | 显式登录 | 仅 check 的布尔 --sign-in；默认 false | 固定 check-venue 尾部追加 --sign-in | enroll/未知/缩写/透传参数仍拒绝；不直接调 SDK、不重写认证、不重试 child |
+| F-009 | 登录成功核验 | child exit0、stdout 的唯一完整签名/登录行及合法账户 | §4.6 固定公开成功句 | 标记缺失/歧义/次序错/账户失配或 child 失败均非零，原输出/异常/秘密不外泄 |
 
 ## 4. 数据与接口契约
 
-以下为拟新增逻辑类型和必须行为，不声称本树已有同名实现。内部函数排布和 CLI flag 的具体装配由后续 Design 冻结；不得改变数据语义、方法集合或失败边界。
+### 4.1 固定公开身份与私钥格式
 
-### 4.1 模式、账户与凭据装配
+- venue=Predict.fun，chain=56，原配置 `predict_fun.network=mainnet`，account mode=`predict-account`。
+- trading address=`0xfc9eb66e6F22f96608058C0A711Ed048eED8c2E2`；signer=`0x5129330159f4E6a99eF873f86901E3cafa7f9A7D`。
+- Binance 登录钱包 `0xb54b2b4667b33661f83f0d6aeebb1bfa295d03be`、新 agent-wallet `0x2FcDbb1a61f4A0439C9952710eDCe3cee071828c` 均不选；不允许通过 CLI/env 改选账户。主控提供的 block `133658449` owner 观察不冒充本卡实测控制证明。
+- 私钥输入只接受 64 位 ASCII hex，可带一个 `0x` 前缀；无空值、空白、额外前缀/后缀或自动修复。复用已有 `eth_account.Account.from_key` 等已安装能力验证有效 secp256k1 标量并派生，不自制密码学。不得把原异常或输入打印出来。
+- 录入前/启动前按合法解析后的地址字节比较 signer，不混淆 signer 与 trading address。合成测试只能通过内部测试注入选择公开测试身份，不开放生产“任意钱包”CLI。
 
-`SignerSelection = Local | Privy(SignerBinding)`；未显式选择保持 Local，供现有调用兼容。Privy 不可由“private_key 为空”隐式推断。
+### 4.2 TTY、keyring 与失败顺序
 
-| 字段 | 类型 / 约束 |
-|---|---|
-| app_id | 显式非空公开 app ID，不从任意环境覆盖到其他 app |
-| wallet_id | 显式 Privy wallet ID，不是地址，不通过列表位置猜测 |
-| credential_slot | 非秘密稳定 slot 引用；同一 refresh grant 只能有一个活跃 slot，不为每个 chain 复制 token |
-| signer_address | 20 字节非零 EVM 地址；输入须先合法解析，再以地址字节比较；不得修正非法原 token |
-| chain_id | 与原 deployment 一致，仅原支持的 56 / 97；不是自动网络切换许可 |
-| account_mode | Eoa / PredictAccount，使用原含义 |
-| trading_address | EOA 等于 signer；PredictAccount 为显式账户地址，不得默认候选 EOA 为 smart account |
+先解析公开参数与固定目标，验证 TTY/后端前提，再读取候选秘密。录入只读用户控制的 TTY，屏蔽回显；拒绝 stdin 管道、环境私钥、CLI 值、文件、剪贴板或 Hermes 代录。不能沿 `getpass` 的警告 fallback 继续有回显读取；失败/信号/EOF 必须恢复终端状态。录入不要求 API key，不联网、不签任何消息。
 
-候选 `0x2FcDbb1a61f4A0439C9952710eDCe3cee071828c` 只是供未来明确选择的公址，不硬编码为默认或成功身份。`authenticate.wallets` 必须按指定 id 唯一找到 `chain_type=ethereum` 且 address 完全匹配；缺失、重复或地址变化即拒绝。Ethereum wallet 的 chain_type 不证明 provider 实际支持 BNB；本次仅用 fixture 验证上下文绑定。
+后端必须是当前 WSL 会话既有 `org.freedesktop.secrets`，login 集合且 unlocked；default 不指向 login 时拒绝，不修复别名、不启动/重启/解锁服务。只对本功能精确全属性搜索；只接受唯一正确集合/业务属性的条目；仅容许 V0.3 固定 schema 元数据，其他未知/重复/其他集合拒绝。允许的元数据检查不是枚举其他 item 的许可。
 
-外部模式须在遗留凭据加载前分流：不打开包含本地私钥的 legacy credentials YAML，不读取 `PM_PRIVATE_KEY`，不创建 PrivateKeySigner，不通过空/合成 key 先构造再替换。非秘密 public config 可沿用；外部所需 Predict API key 来自精确独立 keyring 条目，Privy refresh token 来自本 slot。禁止让外部模式沿用 `AppConfig::load` 全读私钥再忽略；当前 `config.rs:596–649` 正存在这条风险接缝。Local 的现有 loader 和其他 venue 行为不在本次重新治理范围。
+操作本身不得请求交互：不调用 Unlock 或 Prompt、不显示/等待密码框；如 API 返回需 Prompt 即失败，不执行 Prompt。超时、权限或 bus/集合错误均稳定失败，等待有界且不自动重试。沿既有固定 Jeepney 适配与9秒业务+1秒清理预算；仅预检 unlocked 后使用会自动解锁的普通 lookup/store 仍不合格。V0.5 不重新选择后端 API，不以历史 secret-tool 成功替代当前约束。
 
-原 `AccountIdentity`、RunContext、人工预算确认、链/owner/初始化/ERC-1271、分页、余额/gas/授权/持仓核对不变。公开 signer 选择不等于新预算确认或账户健康。
+store 仅在目标尚不存在时进行；原条目存在即拒绝，不增加替换/删除管理功能。一次写入后重新精确搜索/读取，在内存逐字节核对后才输出已保存；写入/读回不明不能声明“已成功”或“绝未写入”，不得重试或删条目补救。launch 只读且再次派生核验，无存取失败后读旧文件或父环境 key 的备用分支。
 
-### 4.2 能力与调用顺序
+### 4.3 固定子进程与现有配置接缝
 
-executor 私有动作仅两种：
+`src/main.rs` 已有 `--config`、`--credentials`、`--venue predict-fun`、原预算/RPC 参数；`src/config.rs` 已有 `PM_PRIVATE_KEY`、`PM_PREDICT_API_KEY`、`PM_PREDICT_ACCOUNT` 覆盖。helper 必须显式绑定 venue、mainnet、目标账户；不能只验证 helper 的展示值却让子进程使用另一配置。
 
-- `PredictAuth { binding, challenge }`：challenge 只能由原 Predict client 的固定官方 `/auth/message` 响应产生，且消费于原 `/auth`。本地观测时间与使用相隔不得达到官方 10 分钟期限；这只是防本地缓存过旧，不冒充服务端消息时间戳验证。空消息、来源不符、过期/重用到其他绑定均拒绝。原消息包含 ToS，依旧仅 live 或显式 sign-in 路径允许请求认证签名。
-- `PredictOrder { binding, order, market_route, attempt_context }`：Order 必须由原 builder 构造并与原 market/token/side/amounts/expiration 等约束一致；有原风险许可、预留与账户门禁的关联，不能把可伪造的 `approved=true` 当许可。公有接口不得让 Hermes 传任意 JSON/digest 制造该动作。
+沿既有固定 binary=`BOT/target/debug/polymarket-toolkits`、cwd=BOT，不通过 PATH/env 指定任意可执行文件，不 `cargo run` 隐式构建。显式 `--credentials` 固定 `BOT/tools/predictfun/.keyring-no-credentials`，`lexists=true` 即拒绝（含悬空链接），不能落回默认 `config.yaml`。公开 JSON 严格要求 venue=predict_fun、network=mainnet、mock_trading=true、enable_trading=false，拒绝重复键/credentials 字段，必须是显式普通 .json 文件；不读 YAML/.env 验证“没有私钥”。预算门禁沿原 CLI，不自建审批或自动确认。
 
-拒绝顺序：公开输入/模式 → 账户/链/动作/许可验证 → backend/slot 独占及会话有效性 → 生成唯一允许的 provider payload → 一次签名请求 → 严格核验 → 原 consumer。订单继续原 `check_allows_new_order / begin_attempt / check_signed_bound` 等 gate，不以 signer 自建第二风控。认证用于原账户读取的前提，不机械要求“先完成全部已认证账户读取才能获得 JWT”而造成循环。
+无模式时只展示用法/拒绝，不启动。普通 check 只交原 `check-venue`，联网读市场/盘口、签未提交样例但不 Terms/登录；显式 --sign-in 才接受 Terms 并认证核验账户，仍不提交订单。不得把 config/live/env 作为隐式升级，不透传 SDK approve/redeem 或任意策略入口。工程测试两分支均只用 fake child，不带真实凭据执行 binary。
 
-外部模式普通 `check-venue` 和 paper 不请求远程 order/auth 签名、也不因检查构造 synthetic 私钥；显式 `--sign-in` 的原语义保留但本流水线不实际执行。现有 `predict_fun.rs:1713` 的非 live sample place 会签本地示例订单，故后续必须区分 Local 与 Privy，不能未经许可对真实 wallet 调用 sample signer。只改外部模式，不取消原 Local 离线签名检查。
+### 4.4 环境与秘密边界
 
-### 4.3 精确签名编码
+启动前检查父环境存在 `PM_PRIVATE_KEY` 即拒绝，只查键存在性，不读取/比较其秘密值；不在 keyring 失败时继承它。legacy credential 文件完全不进入 loader；其他 venue 的 `PM_*` 凭据不得透传此子进程。
 
-所有 `||` 表示字节拼接。`M` 是挑战字符串的原始 UTF-8 字节：不 trim、不 Unicode normalization、不改换行、不先转 hex 文本再当消息。`H`、`K`、domainSeparator 均为 32 字节，不是其 66 字符显示字符串。
+保留既有 `YQUANT_PREDICT_FUN_TOKEN -> PM_PREDICT_API_KEY`：helper 从已由既有启动机制提供的源变量在内存映射，不自己 source/解析生产 `skills/.env`，不创建 API key 条目或修改来源。源缺失/空白拒绝；若父进程另带 `PM_PREDICT_API_KEY`，只允许与源一致，冲突拒绝，不暗中择一。子进程只需接收目标 `PM_PREDICT_API_KEY`，不额外复制源别名。
 
-| 路由 | 交给 Privy 的动作 | 要验证的摘要与结果 |
+子环境从 Design 白名单显式构造，保留必要 OS、代理/CA 等原运行条件，不全量复制环境；不继承无关凭据、其他账户或加载注入变量。代理配置如含认证信息，只沿既有必要网络环境传递且不得日志输出，不宣称白名单内每个值都公开。固定 `PM_PREDICT_ACCOUNT` 为选定 trading address。keyring 工具若必需接收秘密，只能受控 stdin/内存，不能秘密 argv；也不得继承 BOT 私钥/API key。禁止修改全局 `os.environ`、shell profile/export、临时文件或转交 SDK资金工具。
+
+错误只输出固定 `code/step/reason`，不透传输入、异常链、底层 stdout/stderr、Secret Service 返回体、环境字典、请求或签名。成功只报公开地址/完成状态。退出即尽量释放秘密引用，不承诺 GC、swap/core dump 或同 UID 物理隔离。
+
+### 4.5 拒绝语义
+
+错误类别为 `INVALID_INPUT`（模式/格式/配置）、`TTY_REQUIRED`（无安全输入）、`ACCOUNT_MISMATCH`、`BACKEND_UNAVAILABLE`（含锁定/需交互）、`CREDENTIAL_MISSING`、`STORAGE_FAILURE`（含重复/已有条目/写后不明）、`ENV_CONFLICT`、`LAUNCH_FAILED`。既有细分 reason/exit/有界 timeout 保持，新登录证据错误固定于 §4.6；不新增交易状态机。启动前拒绝不启动 child；child 已启动后的退出或证据失败只报告真实状态，不重启/重试签名或交易。
+
+### 4.6 V0.5 显式 sign-in 输入、输出与证据契约
+
+输入仅扩展既有 `local_signer.py check --config <公共JSON> [--sign-in]`，--sign-in 是无值布尔开关，默认 false；仅 check 子命令接受。不接受 `--sign-in=true`、缩写、未知/尾参数、任意命令/argv、钱包或 binary 覆盖；错误不回显参数，先拒绝再访问秘密。enroll、无命令及 --help 的原语义保留。
+
+child argv 仍为 `[固定绝对binary, --config, 绝对公共JSON, --credentials, 固定缺失路径, --venue, predict-fun, check-venue]`；仅显式登录在尾部增加一个字面 `--sign-in`。shell=false、close_fds=true、stdin=DEVNULL，单次 child、60秒超时及终止/回收不变；父环境不改写，最小 env/API映射/冲突规则与 keyring 核验完全相同。普通分支 stdout/stderr=DEVNULL 不变；登录分支仅在内存接收 stdout/stderr，不写临时输出文件、不重跑 helper/child、不新增网络/SDK调用。
+
+原 Rust 事实（静态来源：`src/main.rs:61–67,199–201`，`src/service/predict_fun.rs:1372–1509,1656–1727`）：先 GET 市场/盘口、`place(..., false)` 签未提交样例，再 GET /auth/message、认证签名（接受 Terms）、POST /auth、GET /account。JWT 只留原 Rust 内存，不向 helper 输出或持久化。`authed_text` 的 ReadOnceRefresh 在认证 GET 遇401时会清 JWT、再登录并重读一次；不能承诺单次 helper 必然只做一次 HTTP 认证，也不更改该既有行为。
+
+stdout 的既有成功标记仅以下两类（不是本卡运行结果）：
+
+1. `signing        ok: 1 share would cost <金额> USDT (not submitted)`；金额语法为 `[0-9]+(?:\.[0-9]+)?`（完整有限非负 ASCII 十进制数），不接受正负号/指数/任意文本/NaN/Infinity；只核结构，不输出或保存金额。
+2. `sign-in        ok: API identifies you as <账户>`；账户严格为一个 `0x` 加40位 ASCII hex，先完整格式校验，再按20字节与固定 `0xfc9eb66e6F22f96608058C0A711Ed048eED8c2E2` 比较；允许合法 hex 大小写，不 strip/补前缀/截断/修复 token。
+
+必须完整按行匹配固定字面文本，各恰好一次，签名行先于登录行；不做子串/宽松大小写/ANSI清洗或从 stderr 提取。候选标记前缀行畸形、重复（即使内容相同）、顺序相反、任一缺失均为歧义/无效证据。非标记的市场/盘口等其他文本只丢弃，绝不转发。Rust 创建 signer 失败会打印 `signer         none (...)` 后 `Ok(())`，因此 exit0 本身不够；上述两个标记与账户匹配以及 exit0 缺一不可。
+
+| 模式/结果 | stdout（固定句，末尾换行） | stderr / exit |
 |---|---|---|
-| EOA 认证 | `personal_sign`，params.message 为原 UTF-8 字符串，encoding=`utf-8` | EIP-191：`keccak256(0x19 || UTF8("Ethereum Signed Message:\n") || ASCII(decimal(len(M))) || M)`；只加一次前缀 |
-| EOA 订单 | `eth_signTypedData_v4`，params.typed_data 为原 Order 的完整结构 | `H=keccak256(0x1901 || domainSeparator || structHash(Order))`，等于原 `order_digest`；不得对 H 再 EIP-191 |
-| PredictAccount 认证 | 先以 M 求上述 EIP-191 得 H，再按下述 Kernel 包装得 K；`personal_sign` 对 K 的原始 32 字节 | params.message=`0x` + K 的64位hex，encoding=`hex`；provider EIP-191 后恢复 owner；外层包装仍原86字节 |
-| PredictAccount 订单 | 原订单 EIP-712 得 H，再按下述 Kernel 包装得 K；同样 `personal_sign` 原始32字节 | encoding=`hex`，不能 encoding=`utf-8` 签 hex 文本；不能再预加一次 EIP-191 |
+| enroll 成功 | `Saved and independently verified.` | 空 / 0；原语义不变 |
+| 普通 check 成功 | `Check child completed; no trading authorization implied.` | 空 / 0；仅 child 完成，不升级为签名/认证证明 |
+| 显式登录成功 | `Sign-in verified for Predict Account 0xfc9eb66e6F22f96608058C0A711Ed048eED8c2E2; no trading authorization implied.` | 空 / 0；只在全部核验满足后输出 |
+| 登录证据缺失/畸形/重复/顺序错 | 无成功句 | 固定 JSON `code=LAUNCH_FAILED, step=launch, reason=EVIDENCE_INVALID` / 1 |
+| 唯一且格式合法的登录账户失配 | 无成功句 | 固定 JSON `code=LAUNCH_FAILED, step=launch, reason=AUTH_ACCOUNT_MISMATCH` / 1 |
 
-Kernel 包装完全沿用既有 `sign_for_account`：`wrapped=keccak256(abi.encode(keccak256("Kernel(bytes32 hash)"),H))`；`K=keccak256(0x1901 || KernelDomainSeparator || wrapped)`。Kernel domain 精确为 name=`Kernel`、version=`0.3.1`、chainId=绑定链、verifyingContract=trading_address。provider 返回 owner 的 65 字节签名后，原 executor 拼接 `0x01 || 20字节validator || signature`，validator=`0x845ADb2C711129d4f3966735eD98a9F09fC4cE57`，总86字节。订单 POST 前仍以原 H 和此签名执行原 ERC-1271 门禁。
+新增错误同样仅 code/step/reason 三字段；畸形/重复优先按 EVIDENCE_INVALID 处理，不从不可信文本拼 reason。child 启动/非零/信号/超时仍按既有 LAUNCH_FAILED 的 START/EXIT/SIGNAL/TIMEOUT、exit1，先判 child 失败，不因残留成功标记放行。参数错误仍 INVALID_INPUT/args/ARGUMENTS、exit2，既有其他错误保持。失败不宣称“认证绝未发生”：POST /auth 可能已发生，仅 helper 不能确认成功，不自动重试。
 
-EOA EIP-191 认证本身不含 chain/domain；chain 只能由执行上下文、wallet 选择和原账户检查约束，不得宣称其具有密码学链隔离。EOA 订单与 Kernel 签名才由各自 domain 纳入 chain/account。
-
-订单 domain 精确为 name=`predict.fun CTF Exchange`、version=`1`、chainId=原 deployment、verifyingContract=原 `deployment.exchange(is_neg_risk,is_yield_bearing)`；不另抄新地址表。Order 类型和字段顺序完全沿 `predict_fun.rs:63–76`：`Order(uint256 salt,address maker,address signer,address taker,uint256 tokenId,uint256 makerAmount,uint256 takerAmount,uint256 expiration,uint256 nonce,uint256 feeRateBps,uint8 side,uint8 signatureType)`。maker/signer=trading_address，taker=原构造值（当前零地址），signatureType=原0；所有数值/精度/金额仍由原 builder 决定。typed_data.primary_type=`Order`；uint256 用精确十进制字符串，uint8 用合法整数，domain.chainId 用精确整数，types 明确 EIP712Domain 与 Order，不经过 JS 不安全浮点转化。每个字段、顺序和 domain 以原 Alloy hash 对拍，不重新实现交易定价/金额算法。
-
-公开官方 fixture 的 Order hash 为 `0xe6a0edf257e9904e5fd4a1b8fdc3dd092e8789c4fa596ff6275097515ee4fd34`；测试必须用官方所列全部原字段重新计算，不硬编码该 hash 当测试通过。
-
-### 4.4 官方传输与签名结果
-
-- Agent Authorization 使用 `https://auth.privy.io/api/oauth/v2/token`（refresh grant）、`/wallets/authenticate`（短期 key）、`/wallets/{指定wallet_id}/rpc`；其完整前缀均为 `/api/oauth/v2`。wallet ID 必须合法且安全编码，不能含路径注入。禁止用户传任意 base URL/headers/method 来扩权，不跟随重定向，不发送 app secret，不拿 server-wallet Basic 示例替代 bearer device grant。
-- 只发 `personal_sign` / `eth_signTypedData_v4`；不暴露 `secp256k1_sign`、transaction/user-op/7702/send 类方法。provider 的 general API 支持这些方法不是本 executor 的许可。
-- RPC 使用 `privy-app-id`、`privy-grant-type: device_code`、Bearer access token、`privy-authorization-signature`，全部只在 executor 内。请求签名覆盖完整固定 URL、HTTP method、确切 body 和该 device-grant 协议要求的 headers；固定 CLI 中的 payload 只包含 app-id，不能未经对拍就套用通用 API 文档任意增减 header。B-002 要求在实现放行前固定这一映射。
-- Privy 请求授权签名与钱包 EIP 签名不同：按 RFC 8785 canonicalize 结构化请求，以 P-256 / SHA-256 产生 DER ECDSA 签名再 base64；不是 secp256k1、Keccak 或 EIP-191。固定 CLI 用 Node crypto PKCS8/SPKI、HPKE 库与 canonicalize；其细节不是 Rust 现成可调用 SDK。HPKE 算法 suite、info/AAD、密钥封装格式及库对拍仍属 B-002，不可自己猜测或手写加密原语。
-- 结果仅接纳对象中 `method` 与请求一致、`data.encoding=hex`、`data.signature` 是 `0x` 前缀且严格65字节 r/s/v；r/s 有效、低 s、v=27或28，并恢复到绑定 signer。其他 encoding、扁平兜底 `signature`、缺字段或把整个 JSON 字符串当签名均拒绝。不同官方响应若与该固定形状不兼容，应明确停下来修订协议，不效仿 CLI 的宽松 fallback。
-- Kernel 包装前验证 owner 的65字节签名；包装后本地长度/validator 及原 ERC-1271 检查不变。签名只送原内部 consumer，不通过模型/命令 stdout、普通日志、报告或 Kanban 返回。
-- provider 请求最多一次；401、403、5xx、断连、响应损坏、超时均不在同调用自动刷新后重放。可在请求前主动完成一次必要续期；收到401后使会话不可用并结束本动作，后续经明确恢复才允许新的合法动作，不复用失败动作自动重签。
-
-通用官方 RPC schema 是类型/编码来源，不构成已证明 device-grant 在 BNB/该钱包上成功的证据。B-002 不闭合时不能用 fake HTTP 结果冒充该协议已实际兼容。
-
-### 4.5 会话与安全轮换
-
-逻辑状态为 `Unavailable → Ready → Renewing → Ready`，任何不明确远端/本地更新进入 `RenewalUncertain`，密钥到期或授权拒绝进入 `ReauthorizationRequired`。无静默“仍可用”状态。
-
-1. 同 slot 使用一个存活期 OS 独占锁，内部 renewal/authorization-key 更新单通道串行；后续实现须证明第二 executor 拒绝 `SESSION_IN_USE`。锁只保护合规消费者，不防同 UID 恶意进程/其他 CLI。禁止运行原 CLI 共享同一 grant；不得声称 Keyring 是跨进程 compare-and-swap token 服务。
-2. 每次使用前确认 backend 仍可用/解锁，且 access token 与 authorization key 未过期；正在 Renewing 不接新签名。缺少有效到期时间即拒绝。clock 在测试中可注入，不依赖真实睡眠；具体提前续期裕量由 Design 明确且不延长官方 expiry。
-3. refresh 使用旧 refresh token，一次请求。远端响应合法后，先检查 app/slot/绑定和新 token/expiry，再以一个 Secret Service item 更新 §4.bis 允许字段；由独立读取精确核对新 generation/绑定/token，再发布 access token。后续 HPKE authenticate 得到的 key 只在内存，authenticate 失败不把 key 加入持久 item。
-4. 即使只更新 authorization key 而 refresh token 未变化，也不允许把它序列化到 keyring。退出/过期丢弃旧内存密钥，尽可能减少副本；不宣称 GC/OS swap/core dump 下绝对物理清零。后续选择具体语言/库时必须说明密钥内存和 crash-dump 边界，不能以“non-export”掩盖本地短期授权密钥存在。
-5. refresh 响应丢失、写入失败、精确读回失败或更新中取消：不发签名、不发布新会话、不回退旧 token、不自动重复 refresh，不删真实记录试图重来；记录无秘密的失败类别并停止该 slot。新 token 已保存而读取失败可能仍可在以后人工恢复，不能自动猜测哪一代有效。
-6. 崩溃窗口：远端接收旧 refresh token 后、本地新记录提交前，重启只能读到失效旧 token，需要以后重新授权；写成后发布前，重启可从已提交记录开始正常续期但必须重新建立只内存 key，并仍经过 07-002 的对账/新运行预算。不存在远端/Keyring 原子事务或完整跨重启恢复保证。
-7. backend 锁定/缺失/失配即使还有未过期内存 key，也停止新签名；不自动调用 unlock/Prompt/重启 backend。撤销 refresh grant 后已有 access JWT 可能仍有效到自然到期（官方文档最长15分钟），不得保证立即远程失效；本地停止必须即时拒绝后续动作。
-
-### 4.6 错误、风险与恢复契约
-
-内部错误逻辑字段为 `code, step, reason, action_ref?`；外层映射到现有 `VenueError` 和 AccountGate，不在共享类型增加一套不相关交易状态机。下表 code 为新 seam 的稳定语义，不假称当前 enum 已存在。
-
-| code | 触发 | 必须行为 |
-|---|---|---|
-| INVALID_INPUT | 缺 mode 关联字段、坏地址/wallet ID、非法payload/unsupported action | 在 provider/secret 使用前拒绝；无输入回显 |
-| ACCOUNT_MISMATCH | app/wallet/address/chain/mode/domain/order 绑定不符 | 阻断账户新增；不换钱包/链/本地 key |
-| BACKEND_UNAVAILABLE | bus/owner/collection 错误、locked/missing/需Prompt | 不解锁/不文件 fallback，即使内存 key 未过期也不签 |
-| STORAGE_FAILURE | 写入或精确读回失败/重复条目 | 不发布新会话；轮换已可能发生则 RenewalUncertain |
-| SESSION_IN_USE | 同 slot 已有执行器 | 拒绝第二实例，不并行 refresh |
-| RENEWAL_FAILED | 到期、拒绝、超时、HPKE/密钥格式错误 | 停新签名；refresh 可能发生则不重试，需恢复/重新授权 |
-| SIGNER_UNAVAILABLE | 远端拒绝、无有效 key/签名服务不可用 | 停止本动作及新增，不调用 Local |
-| INVALID_SIGNATURE | 响应形状/encoding/长度/r/s/v/恢复地址不符 | 不交原 consumer、不 POST |
-| SIGNING_UNKNOWN | RPC 可能已处理但没有可验证结果 | 本动作至多一次调用，禁止自动重签/自动下一tick换salt |
-
-步骤/原因只用稳定 token，不透传 HTTP body、request、headers、URL、raw exception/source 或 stdout/stderr。日志只可含 code/step/公开 action_ref/脱敏模式；不得含 token、API key、authorization key、签名及其完整请求载荷。
-
-签名状态不明不自动等价于订单已发送：若原 handle 仍 Prepared 且可证明未 POST，沿原契约处理预留，但必须阻断同一意图的自动重签；一旦 MayHaveSubmitted，保留原 hash/预算和查询链，不能由 signer 错误清掉旧未解释风险。恢复只允许原查询/对账及已有撤单流程；其认证签名同样受 signer 可用性限制，不声称离线 signer 故障时一定还能私有查询。不得为了“恢复”创建新交易或 re-sign 原失败请求。
+stdout/stderr、TimeoutExpired/其他异常、签名、JWT、API key、私钥及其长度/摘要不得转发/记录/持久化；不得将原文本放入 JSON、异常链、报告、任务字段。成功只输出上表固定公开账户（不是复制任意捕获字符串），校验完即尽量释放输出/秘密引用，不承诺物理清零。helper 不消费 token，不记录 HTTP 原响应；仍保留同 UID/管理员及子环境/内存的既有威胁边界。
 
 ## 4.bis 持久化契约
 
-仅选 Secret Service login 集合；不创建生产 DB/schema/表/索引/TTL，不读写 `.privy/session.json`，不建替代 secrets 文件。以下为该集成的 L0/L1/L3 说明，不改变全局隐私分类。
+以下是既有本功能字段级逻辑契约，不是新的全局 store schema；沿原 Design 固定 Secret Service 字面属性名/用途前缀及密钥规范表示。V0.5 不新增持久秘密或 JWT 存储；条目属性仅供精确归属，不形成交易许可。
 
-| 存储对象 | 字段/属性 | 类型 | 必填 | 规则 | 生命周期 | 隐私 |
+| 对象 | 字段 | 类型 | 必填 | 规则 | 生命周期 | 隐私 |
 |---|---|---|---|---|---|---|
-| Secret Service item attributes | service | string | 是 | `yquant.predictfun.privy.v1` | 随显式 slot | L0 |
-| 同上 | app_id | string | 是 | 与 SignerBinding 一致 | 同 slot | L1 |
-| 同上 | credential_slot | string | 是 | 一个 refresh grant 一个 slot，不复制跨链条目 | 同 slot | L1 |
-| 上述 item secret 内 JSON | schema_version | integer | 是 | 1；未知版本拒绝，不自动迁移 | 同 slot | L0 |
-| 同上 | app_id | string | 是 | 同属性/运行绑定；防错误条目 | 同 slot | L1 |
-| 同上 | credential_slot | string | 是 | 同属性/运行绑定 | 同 slot | L1 |
-| 同上 | wallet_id | string | 是 | 仅本次显式钱包，不接受列表首项 | 同 slot | L1 |
-| 同上 | signer_address | string | 是 | 合法地址的规范化字节对应小写hex | 同 slot | L1 |
-| 同上 | chain_id | integer | 是 | 与批准绑定一致，不充当 refresh grant 的另一个复制 key | 同 slot | L0 |
-| 同上 | account_mode | enum | 是 | eoa / predict-account | 同 slot | L0 |
-| 同上 | trading_address | string | 是 | 与批准绑定一致 | 同 slot | L1 |
-| 同上 | refresh_token | secret string | 是 | 仅执行器内；不得日志/hash回报；无空值/占位 | refresh 后替换；未来显式撤销/删除才清理 | L3，特批 OS store 持久字段 |
-| 同上 | generation | unsigned integer | 是 | 成功轮换递增；不是跨进程CAS保证 | 同 slot | L0 |
-| 独立 Secret Service item | Predict API key | secret string | mainnet需要时 | service=`yquant.predictfun.api.v1`，精确 app_id/slot/chain 属性，禁止发往 Privy | 未来另批 provisioning，轮换显式执行 | L3 |
+| login item attributes | purpose | string | 是 | 本地 Predict signer 独有含版本命名空间，隔离历史 Privy 和 SDK 条目 | 随条目；未知版本拒绝 | L0 |
+| 同上 | chain | string | 是 | 固定 56 | 同条目 | L0 |
+| 同上 | account_mode | string | 是 | 固定 predict-account | 同条目 | L0 |
+| 同上 | trading_address | string | 是 | 合法地址的规范表示，与固定身份一致 | 同条目 | L1 |
+| 同上 | signer_address | string | 是 | 合法地址的规范表示，与派生地址一致 | 同条目 | L1 |
+| login item secret | private_key | secret string/bytes | 是 | 唯一私钥，不含 JSON session、API key、JWT 或其他密钥 | 用户显式本地录入创建；无 TTL/自动更新 | L3，既有明确选定的 OS store 例外 |
 
-以下字段永远不属于持久序列化允许集合：access_token、JWT、authorization_key、authorization_key_expires_at 所关联密钥对象、HPKE 私钥、device_code、钱包主私钥、签名字节、CLI session 原始对象。未知 secret JSON 字段拒绝，不能宽松 deserialize 完再 serialize 回整对象。可保留内存 expiry 但不能为方便恢复保存密钥。
-
-精确访问顺序：检查本会话 `org.freedesktop.secrets` owner/collection 元数据 → default 指向 login 且 unlocked → 仅用上述三个属性精确搜索 → 要求唯一、自有、集合正确 → 读取；写入要求非交互 API，拒绝任何 Prompt 返回，随后独立读取并在内存逐字节核验。不能用“先 metadata 检查，再允许 secret-tool 自动解锁”的竞态路径承诺无 Prompt；选定库/API 必须能在操作时拒绝交互。具体实现依赖属 B-002；当前不安装/不操作真实 backend。
-
-新记录只能由以后明确获准的 provisioning 创建；不存在自动首次登录、从 CLI session 导入或从聊天 token 初始化。本流水线仅 synthetic fake store/transport 验证生产实现的上述逻辑；不要求重跑真实已证明的 WSL 读写基线。删除/清理只允许具体授权的自有条目；不批量扫描、清理其他记录，不自动备份/恢复 token，不将 local-mode 凭据迁移为新模式。
+唯一性必须由精确搜索并检查条目数/归属实现，不能假定后端天然唯一索引。无 DB/表/索引/TTL、普通文件、session 集合、自动迁移、备份或清理其他条目；旧非导出 session 不读取。已有目标拒绝覆盖，失败不自动回滚/删除，真实替换/移除另行具体处理。测试仅在全属性唯一的 disposable namespace 中创建自身 synthetic item，结束后清除该项并精确确认不存在，不能触及生产属性对应记录。
 
 ## 5. 验收标准
 
-下表全为后续 Implement/独立 Validate 必须实际运行的离线要求，不是当前通过记录。原生依赖/API/安全存储对拍的未决项必须先闭合，不能以行为 fixture 绕过。
+下表 A-001–009 为既有基线要求，V0.5 不重新实现；后续仍跑完整 helper 受影响回归并新增 S-001–005，不能只跑新 flag 正例。此表不是本卡已运行结果。
 
-| 编号 | 场景 | 必须观察到的结果 | 验证方式 |
-|---|---|---|---|
-| A-001 | Privy 明确模式，无真实/占位 local key；对照 Local | 外部 loader 不访问 legacy key 文件/PM_PRIVATE_KEY、不构造 PrivateKeySigner；Local 原行为保持 | 实际配置/constructor consumer；禁止访问即失败的 secret-loader spy，不能仅把已读 key 清空 |
-| A-002 | app/wallet ID/链/地址/账户模式错配、重复wallet；EOA vs PredictAccount | 全部在 provider 签名前拒绝；不取第一个钱包，不降级 | 实际 binding validator + authenticate fixture + signer构造路径 |
-| A-003 | EOA auth：ASCII、中文、换行；对照签hex文本/双前缀 | UTF-8字节与EIP-191恢复正确；错误编码签名被拒；消息仍原字节 | 真 auth签名seam + synthetic local signer；假 REST challenge → 原 sign_in body构造，网络/JWT登录0 |
-| A-004 | EOA Order 官方向量；chain/exchange/token/amount/side/domain逐项篡改 | 原 Alloy Order hash 对拍官方值；typed_data哈希等于原hash；改域/字段不被当原许可 | 真 builder → typed payload → fake provider中合成签名 → 原响应验证；非预造最终hash |
-| A-005 | Kernel auth/order；将32字节K误当hex文本；错误account/validator | 与既有 sign_for_account公式等价；65/86字节及owner恢复正确；逐单ERC-1271拒绝路径保留 | 同一个公开合成key通过新 seam和既有公式对拍，假chain read进入原 gate |
-| A-006 | backend missing/locked/unavailable、default错集合、重复条目、操作返回Prompt | signer/refresh调用均0，无Prompt调用/解锁/文件fallback；内存key未过期也拒绝 | 生产store适配实际接口的fake D-Bus/API；文件写入/子进程能力spy，不能只返回预设helper错误 |
-| A-007 | store成功但读回不一致/失败；混入authorization_key或CLI整session | 拒绝发布新会话，不保存非法字段；令牌/密钥/签名不出stdout/log/Debug/错误链 | 真序列化allowlist→fake store精确读回，使用合成secret哨兵做全输出扫描 |
-| A-008 | 并发续期、第二executor同slot、新代token | 唯一refresh调用/提交路径，第二实例SESSION_IN_USE；只有新record读回后才能签名；不因另chain复制slot | 实际锁/renewal状态机，受控fake传输暂停点和调用计数；不靠sleep或单线程预造结果 |
-| A-009 | refresh响应丢失、远端成功保存前/保存后发布前故障、任务取消 | RenewalUncertain/重新授权边界准确，旧token不重试；重启不假称恢复authorization key/风险账 | 真状态机逐故障点注入，记录secret访问/refresh/sign计数；fake持久store跨实例重建 |
-| A-010 | key/access过期、缺expiry、authenticate/HPKE失败、撤销/renewal拒绝 | 到期key不签，不persist授权key，不自动device登录；failed slot停止新增 | fake clock推进 + 真crypto库适配的合成HPKE/request-signature向量，不只fake解密返回值 |
-| A-011 | 签名RPC 401/403/5xx/超时/损坏；不明后多tick同意图 | 同动作provider签名请求至多1；无401内重放，无自动新salt重签；旧风险保持 | 原 fills/Broker/copy必要consumer连贯驱动 + transport/sign计数；synthetic快捷sign bypass必须禁用 |
-| A-012 | 错method/encoding/扁平签名/坏长度/高s/错v/恢复错人 | INVALID_SIGNATURE，不进入原POST；任意raw/transaction方法在网络前拒绝 | 实装响应parser+恢复验证，fake REST提交计数0 |
-| A-013 | 新seam成功/失败进入原live路径；订单POST不明、迟到成交/重启 | 原07-002的预算/未知身份/不重放/对账/ERC-1271保持；signer错误不清除旧attempt或造满额 | 实际原Builder→signer→fills→Broker，合成REST/RPC/receipt，不直接塞最终State |
-| A-014 | Local、paper、普通check、其他venue、包/文件范围 | Local签名向量与既有回归不变；paper/普通外部check无keyring/Privy/sign；G3与依赖/许可符合获准Design | 必要Rust离线回归/编译/格式检查、consumer构造者扫描、实际LOC/依赖清单；不得执行真实CLI/wallet |
+| 编号 | 场景与必须结果 | 验证方式 |
+|---|---|---|
+| A-001 | PTY 遮蔽输入、EOF/取消恢复；非 TTY/回显关闭失败在读 key/store 前拒绝 | 实际 helper + PTY 捕获/termios 断言及受控失败注入，不只 mock 输入函数 |
+| A-002 | 公开 synthetic key 真派生匹配；空/坏hex/零/越界/登录钱包或其他 signer 不存不启动 | 使用既有真实库派生 + 实装校验；store/child 调用计数 0 |
+| A-003 | 精确唯一条目写入/独立读回，已有/重复/错集合/错属性/损坏 key 拒绝 | 实装存储适配 + 隔离 fake API；计数和精确属性断言，不是预造成功 |
+| A-004 | locked/missing/unavailable/Prompt/超时/存储或读回失败均停止 | 实装适配的底层接缝注入；Unlock/Prompt/自动重试/文件 fallback 调用 0；不锁共享后端 |
+| A-005 | 固定 binary/命令/config/chain/account；任意命令、改钱包、错网、隐式 live、默认 YAML 路径拒绝 | 真 parser/argv 构造及 fake child 捕获；拒绝发生在 key lookup 前 |
+| A-006 | 仅目标 child 获 PM_PRIVATE_KEY/API key/account；父环境不变；竞争私钥/API冲突拒绝 | 实际 launch seam + 无网 fake child，内存断言 env/argv/cwd；禁止执行真钱 binary |
+| A-007 | 正常 API 来源映射保持；其他秘密/加载注入变量不传 child 或 keyring 工具 | synthetic 源值/无关秘密哨兵；源缺失/冲突/白名单/代理保留反例；生产 .env 访问 0 |
+| A-008 | 各错误/取消/child失败不泄露、不 fallback、不重启；真实 key 访问 0 | 扫描 stdout/stderr/异常/日志与文件写入 spy，合成 secret 哨兵不得出现 |
+| A-009 | helper 真实消费者与短说明一致，Rust signer/原预算门禁/SDK资金工具不变 | 独立候选 diff、定向原工具回归及真实入口合成 e2e；不运行任何真钱 check/sign-in/run |
+
+| 编号 | V0.5 新增工程验收（仅 synthetic/fake child/隔离 transport） |
+|---|---|
+| S-001 | 实际 main/parser：普通 check 未加登录 flag 且保留原输出/DEVNULL；显式 check 仅尾加固定 --sign-in；enroll --sign-in、带值/缩写/未知参数及钱包/binary/任意 argv 透传在 lookup/child 前拒绝 |
+| S-002 | 实际 launch seam：exit0 + 唯一完整签名行 + 后续唯一匹配账户行才成功；合法 hex 大小写接受，stdout 只出固定成功句；证明未走 SDK/新认证核心 |
+| S-003 | exit0 无 signer/无标记、缺任一标记、仅 stderr 标记、子串/错大小写/ANSI/畸形金额或地址/前后缀、重复同值或冲突/错序、合法错账户均关闭；child非零/信号/超时即使带成功行也失败，错误码按 §4.6 |
+| S-004 | 在 stdout/stderr/启动及超时异常注入 synthetic key/API/JWT/signature/代理秘密哨兵；成功和失败均无原文/秘密/长度/摘要外泄，无输出文件/父环境改动；单 child、不重试，超时有回收 |
+| S-005 | 登录分支保留固定 binary/cwd/缺失 credentials、strict mainnet/mock/enable_trading、固定 chain/account、最小 env/API来源与冲突、keyring拒绝/no Prompt/no Unlock/no fallback；完整回归及README消费者用法一致，受保护Rust/SDK/依赖/配置零修改 |
+
+验收层次：独立 Validate 的 PASS 只代表 V0.5 离线工程；此后主控审核，沿用户本次一次认证授权执行一次真实 helper 调用（不是保证只有一次内部 HTTP 认证），按相同标记/账户/exit规则判断。真实成功只能归档固定公开状态/账户、候选身份和必要公开执行元数据；不保存原输出/秘密/摘要。缺失授权、环境或 runtime 安全拒绝即停止并说明，不能以 offline PASS 代替 real auth PASS，不追加自动重试或交易动作。证据按需入 `data/reports/YYYY-MM-DD-predictfun-keyring-signin/evidence/` 与同主题唯一 `report.md`，日期用工具确定；本卡不新建报告。
 
 ## 6. 测试要求
 
-- 模块单测随 BOT 模块 colocate，跨模块集成才可进入主仓根 tests。不在根堆 signer 单测；报告若必要使用 `data/reports/2026-11-15-predictfun-wsl-signer/`，证据在 `evidence/`，不建 `data/tasks/` 或任务正文镜像。
-- 主执行测试 seam 必须为实际待实现的 signer transport / SecretStore / clock / 独占锁；仅这些依赖可以用合成替身。现有 `PredictFunTrader::sign_in` 和 `fills::sign_order` 的 `#[cfg(test)] synthetic` 快捷返回会绕过 signer，测试不得借其假通过。Design 须增加能驱动实际 auth/order seam 的测试入口，不重写业务策略。
-- 钱包签名使用明确不可充值的公开 synthetic key，仅本地离线生成；不读取真实key，不把本地合成签名称为Privy实测。HPKE/P-256请求签名须通过获准真实库和合成对端验证，避免只测模拟解密/模拟header。
-- 安全验证必须包含文件fallback/整session持久化/秘密输出的负断言；对错误先于provider调用、refresh与sign至多一次、跨tick无重签有实际计数。持久化测试证明只存允许字段，并暴露崩溃窗口；不依赖人为锁定/重启用户真实keyring。
-- 07-002 原验收不重开。按受影响范围保留Rust Local签名公式、Broker与账户/成交回归、copy构造者兼容和paper，无94日研究/新paper观察/真实网络测试。
-- 后续 Design 给出准确 test filter 和逐项命令；允许的验证形态为 BOT 内 `cargo test --offline --locked ...`、`cargo check --offline --locked --all-targets`、受限格式与diff检查。依赖缺失、锁文件不符则报真实阻塞，不能自行安装/换版。本卡不运行这些业务测试；没有测试名/实现时不伪称已存在。
-- 独立 Validate 必须绑定实际候选身份、真实命令/exit、覆盖/未覆盖项，检查三层文件存在且互相一致；开发者自测不替代。实际Privy/BNB/Predict兼容、真实token续期、用户keyring冷启动和同UID隔离均明确NOT_EXECUTED，fixture不能替代。
+测试随 `tools/predictfun/tests/`，用既有隔离环境与标准库测试设施；注入 store/child/TTY 等最小依赖，不增加公共测试后门、钱包配置或 generic store 框架。测试用公开已知、永不充值的合成 key；生产固定账户的 mismatch 要走真实校验，测试成功身份只能内部注入。实际 launch seam 必须进入子环境构造/调用，不以预造 dict 或单独测试 helper 函数代替。
+
+独立 Validate 记录候选、实际命令/exit、覆盖/未覆盖；无 Rust delta 不要求重跑整仓交易验证。沿既有 `tools/predictfun/tests/test_local_signer.py` 完整 unittest 回归，Design 细化新增测试，不伪造当前不存在的测试名。V0.4 真实后端 synthetic 证据只读复用，V0.5 工程 worker 仅 fake child/隔离 transport，不为登录补证访问生产 keyring 或执行真实钱包 binary。
+
+用户真实 provisioning 声明不冒充本卡实测；真实签名/认证、当前 keyring 解锁状态、冷启动、网站控制和交易能力均非工程 PASS 证明范围，不以 fixture 冒充。开发者自测不替代独立 Validate；主控真实认证与工程验收严格分离，交易始终不在此次授权内。
 
 ## 7. 实现约束
 
-1. 原 07-002 已经 `OFFLINE_ENGINEERING_ACCEPTED`；只读原三层、报告/证据，不修改旧验收结论或把已完成能力列为当前待实现。
-2. 原CLI 0.3.11不是可直接import的signer SDK：bundle有顶层CLI解析、无已确认的安全库导出，内部fallback、authorization_key持久化和401重放必须实际消除，不是wrapper文案约束。禁止运行/导入该bundle试错。
-3. 固定CLI许可证声明Apache-2.0，BOT为MIT；若未来批准复制/裁剪，须处理上游许可证/修改标识/适用NOTICE和所选传递依赖，不能删来源/强称全部MIT。当前tarball缺LICENSE/NOTICE文件不是禁止使用的定论，也不是分发审查已通过。
-4. 禁止假定当前Cargo具有HPKE/P-256/JCS/Secret Service接口；现有直接依赖未包含它们。新依赖、Node子进程/认证fork、具体库替换须先经§8决定，不以vendoring第三方代码来隐藏维护成本。
-5. 遵守G3：predict_fun父2385行、account2390行、fills1972行；新增主体放专责子模块，Design定义必要拆分与增长边界、独立Validate。不能另造钱包runtime/平台或为省行数压缩/省测试。
-6. 工作区仅 `/home/pascal/workspace/yquant-investment`；不改其他项目/profile、security policy、服务、调度、全局依赖、Git history/gitlink。运行时安全拒绝后停止被拒动作，不换工具/路径重放。
-7. 真实凭据不进入模型、stdout、错误链、报告、Kanban或`.env`；不要读取shared credentials文件来“验证没有私钥”。真实keyring本阶段不写、不解锁、不Prompt、不扫描。新命名空间的合成store测试也不在本卡执行。
-8. runtime估算约340–560行、加必要测试约640–1060行，非已测LOC，且尚不含完整device-login/bootstrap。超过原110–220 / 260–470估算以及必要新依赖/认证fork均触发re-anchor；不得降低安全来满足旧数字。
+仅 workspace `/home/pascal/workspace/yquant-investment`，不改 `/home/pascal/workspace/yq-yinglong`、其他 profile、Hermes 核心/配置、服务、安全策略、调度、生产库或 Git history/gitlink。共享树 dirty 为上游基线，path-filtered 归属，禁止 reset/stash/clean/checkout/commit/push。runtime 拒绝后立即停止，不改工具/路径绕过。零 Rust/SDK/依赖/配置 delta，不安装/升级任何包；若不能在三个允许文件内完成则报告具体缺口，不自行扩张。组件增量估算见 RFC §10，不是代码行数硬门禁。
+
+历史 D-1 单包例外已属于已验收基线，不是 V0.5 安装许可：既有 `jeepney==0.9.0` 与 wheel SHA256=`97e5714520c16fc0a45695e5365a2e11b81ea79bba796e26f9f1d178cb182683`、隔离 `.venv`、[Design §3.4](../../design/07_trading/DESIGN-07-003-predictfun-wsl-nonexport-signer.md#secret-service-adapter) 固定方法/9+1秒预算不变。五业务属性精确核验及可选固定 `xdg:schema=org.freedesktop.Secret.Generic`、写入 `text/plain; charset=utf-8`/读回仅两精确 `text/plain; charset=utf-8` 与 `text/plain`、相同 session/空 parameters/64位规范小写 ASCII key/真实派生匹配全部保留，不放宽或重新实现。
 
 ## 8. 开放问题
 
-本 SPEC 的行为、编码与拒绝标准已显式化，但必要复用接口尚不能被称为实现就绪；这是阻塞，不是开发者可自行选择的细节。最小运行凭据入口已定为预先存在、精确绑定且符合 §4.bis schema 的 keyring 条目，缺失即失败关闭，不额外要求本轮实现交互授权。
+与 RFC §11 同步：开放业务契约项0，D-1/D-2 既有接缝已经实现并以 V0.4 synthetic 基线验证；不重开存储/架构。下一 Design 仅细化 §4.6 的参数接线、严格标记提取/错误与 S-001–005 测试，行为/账户/API来源不交实现者再决定。
 
-- B-001：主控/Pascal 需决定是否接受新ROI，选择同 BOT 内受限Node认证派生核心、Rust官方协议库适配、或暂停等待官方可注入库。仅做fake seam若被单独选中，必须相应下调目标，不标本RFC完成。
-- B-002：在获准路线内固定真实库/制品、HPKE suite/info/AAD和密钥格式、request authorization payload/header映射、非交互Secret Service API、独占锁实现和许可/依赖边界；无这些不能下发Implement。通用RPC网页的Basic认证示例不得被视为device-grant signer API已经闭合。
-- 初始授权边界（已定，非新增阻塞）：本轮不实现交互device登录/provisioning；合成测试通过指定store接缝准备合成记录。未来真实初始化另行授权，不读取CLI session、不聊天导入token、不自动授权钱包；refresh消费测试不证明完整初次接通。
+本轮 RFC/SPEC 可交主控检查，预建 Design 仍 operator-held，须从 V0.4 同步为 V0.5 并消除旧拒绝 sign-in/待实现叙述；三层一致与主控 Design Gate 后才实现。旧非导出阻塞不再生效，不额外创建激活平台、新阶段或替代任务图；真实认证未执行不阻塞本卡文档交付。
 
-真实账户归属/BNB兼容/真实Predict认证与交易仍属未来另批验证，不要求本卡执行，也不以这些未授权动作构成循环门槛。本卡因上述ROI/接口决策真实阻塞，RFC/SPEC保持Draft；不得仅以文件已存在标阶段验收通过。
+## 版本记录
+
+| 版本 | 日期 | 更新内容 |
+|---|---|---|
+| V0.2 | 2026-11-15 | 本地TTY/keyring固定入口，取代旧非导出路线 |
+| V0.3 / V0.4 | 2026-11-15 | 历史schema/content-type修复，V0.4仅synthetic interoperability独立PASS，原REVISE/拒绝不改判 |
+| V0.5 | 2026-11-15 | check专属显式sign-in，固定输出/标记与账户核验，普通check/enroll兼容，工程与主控真实认证分离 |
