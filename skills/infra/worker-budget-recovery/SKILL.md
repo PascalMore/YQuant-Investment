@@ -136,6 +136,12 @@ worker 常用「import 了真包 / 断言了封装层」冒充「依赖接缝已
 - **清完必须 dispatch 一次并读回新 run 的 id/worker_pid**，才称已重新派发；`ready` 只表示排队。
 - 清除的是**调度状态**，不是内容完成度：旧的 blocked/rate_limited run 仍是审计历史，不得追认为 PASS。
 
+### Review 交回后被自动派发且缺少 sdlc-review
+
+- 日志出现 `Unknown skill(s): sdlc-review` 时，将启动失败与文档质量分开；dispatcher 的 review lane 可自动注入该技能，即使 task.skills 为空。不要把旧 worker 输出当新 run 的工作成果，不为恢复自动安装技能或修改 profile。
+- 对已有明确修订 delta 的 blocked 卡，先核 CLI 与当前源码：`unblock` 可能按历史事件恢复为 review，导致重复注入；受支持的 `promote <id> --dry-run --json` 可验证 blocked/todo 到 ready 的普通执行转换。确认前置已完成后才正式 promote，读回 body/parents/status，dispatch 一次并核新 run 的 source_status=ready；这不是绕过内容验收，不将未修候选标 done。
+- 由主控同卡执行 Design Gate 且不希望自动 review worker 时，文档作者交回可使用明确的 `needs_input` hold 等待实际主控裁定，不进入会自动派发的 review lane；主控审核通过后才 complete 释放实现。保持原卡、原下游和失败历史。
+
 ### 永久 blocked/frozen 的 parent 会永久挡住整条链
 
 下游卡的 `parents=[...]` 只在所有 parent 达到 `done` 时才 promote。把一张**已冻结留证、永远不会再 done** 的旧卡（典型：早期限额冻结的 blocker 卡）留在 parent 列表里，会让整条下游链永久停在 `todo`，而 dispatcher 每次都正常派发「无果」——看起来像调度坏了，实际是状态机前提永不满足。
@@ -328,8 +334,9 @@ hermes auth reset <provider> [credential-id]
 
 同一卡在同一 block kind 上反复 block→unblock 会触发看板的解锁循环熔断：`block_recurrences` 达到上限后卡片被送入 `triage` 列（事件 `block_loop_detected`），且计数跨 unblock 保留。先比较各次实际 reason、候选增量与最新交接，不把相同 kind 当成相同根因：旧输入已解决、后一次仅为实现未完成时，应恢复剩余代码工作，而不是再次索要旧输入或重开设计。熔断是调度保护，不证明代码失败或看板损坏，不运行 repair 代替原因分类。
 
-- **triage 状态不接受 unblock/promote/schedule/reassign，直接 complete 也可能返回 unknown id or terminal state**：不要把它当缺ID或加force重试。唯一受支持的退出是 `hermes kanban specify <task-id>`（或 `decompose`），由辅助 LLM 把卡改写后降为 todo，再由 dispatcher 自动 promote。若用户已裁定只需行政交接，先把原卡正文收窄为只读裁定与登记、禁止重跑实现/测试/研究，再specify；它可能立即被dispatcher派发，恢复冻结正文并精确读回后，若已出现行政worker就让其按窄正文收尾，不强制覆盖活跃claim。登记者按实际角色记录，不因主控启动恢复就写成主控执行。
+- **triage 状态不接受 unblock/promote/schedule，直接 complete 也可能返回 unknown id or terminal state**；当前CLI实测 `reassign` 可在triage中修改assignee，但不会解除triage，不能当恢复执行。不要把它当缺ID或加force重试。唯一受支持的退出是 `hermes kanban specify <task-id>`（或 `decompose`），由辅助 LLM 把卡改写后降为 todo，再由 dispatcher 自动 promote。若用户已裁定只需行政交接，先把原卡正文收窄为只读裁定与登记、禁止重跑实现/测试/研究，再specify；它可能立即被dispatcher派发，恢复冻结正文并精确读回后，若已出现行政worker就让其按窄正文收尾，不强制覆盖活跃claim。登记者按实际角色记录，不因主控启动恢复就写成主控执行。
 - **specify 会用辅助 LLM 重写标题和 body**。调用前先归档旧正文，将最新候选、已核事实、必要剩余 delta 和禁做事项写入当前镜像，用 `hermes kanban edit <task-id> --body "$(</absolute/path/current-body.md)"` 写回并精确读回，再执行 specify。成功后立即用 edit 同时恢复原定 title 和镜像 body，读回正文、parents、状态及最新事件。对照 edited 与 claimed 的先后确认 worker 领取的是哪版输入；若 claim 早于正文恢复，须明确通知活跃 worker 使用现行契约，不假定数据库编辑会自动刷新其已加载提示。恢复后只报告已排队或已取得新 run/运行证据，不把 specify 成功当实现通过。
+- **主控已接手完成、仅需从triage行政收口时，防止specify后启动重复worker。** 先核完整产物、最终原生测试与候选hash，写明真实实现者和独立下游；暂时 `reassign <id> none` 并读回，再specify退出triage、恢复精确标题/仅行政正文，确认ready且unassigned后complete。随后可将done卡reassign回实际实现者并读回；metadata保留actual_implementer，旧失败不追认。不要为了保留assignee标签让dispatcher先启动一份重复实现；暂时unassigned不等于产物无人负责。
 - specify 依赖 `auxiliary.triage_specifier` 配置的辅助模型；辅助链不可用时它会超时或跳过而非改卡——不要把“specify 没生效”误判为卡坏了，也不因此反复重发。但 `--json` 返回 `ok:false` 且 reason 是瞬时 LLM 错误（如 APIConnectionError）时，卡未被改动，重试一次是正确动作；区别于“辅助链长期不可用”（反复超时/跳过），后者才应停止重发。它可能跑满 120 秒以上，放在后台跑并轮询读回状态，不要占前台超时。
 - **辅助链长期不可用时，triage 的受支持出口是同一个底层转换。** `hermes kanban specify` 只是辅助 LLM 改写 title/body 后调用 `kb.specify_triage_task`；当 codex 传输错误 + 备用 provider 额度上限让辅助链持续不可用时，直接调用 `kb.specify_triage_task(conn, task_id, author=...)` 可只翻转 `triage -> todo` 并保留正文逐字节不变（调用方不传 title/body 即无字段被改）。这避免让 LLM 重写主控精心冻结的契约正文。调用方式：用 Hermes 运行时解释器 + `PYTHONPATH=<hermes repo>:<PM generation site-packages>` 跑一个小脚本（`kanban_db` 需要 `ruamel.yaml`，store Python 裸跑会 ImportError），并在脚本内读回 before/after 的 status/body/title 断言未变。注意 `promote`/`unblock` 只接受 todo/blocked，triage 状态直接调会报 “promote only applies to 'todo' or 'blocked'”。翻转后 `recompute_ready` 会按 parents 决定是否立刻进 ready/被派发，因此正文必须先冻结成最终契约再翻转。
 - **工程与生产输入可分离时，不让已知生产HOLD反复中断离线修复。** 若同卡还有明确未实现代码，而外部writer静默等输入只影响生产执行，恢复正文应内联已验证候选与精确缺口，先完成授权范围内的离线实现/假边界验证，生产分支明确HOLD且不读凭据/连接；不能把这一分离称作前提已满足。离线闭合后只登记`OFFLINE_READY + 生产待输入`并保持整卡未验收，不用done提前释放要求真实数据的下游；工程仍不齐则继续披露NOT_COMPLETE，禁止拿绿色总测试数替代契约覆盖。不要仅因同一个已知HOLD在修复中途反复block→unblock触发熔断。

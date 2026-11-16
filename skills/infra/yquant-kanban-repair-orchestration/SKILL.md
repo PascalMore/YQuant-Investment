@@ -5,6 +5,15 @@ description: "YQuant 工程流水线中真实验证失败后的修复链重建�
 
 # YQuant Kanban Repair Orchestration
 
+## 主控直接运营的看板记录
+
+- 主控已经直接启动后台作业、只需创建跟踪卡时，用 `initial-status=blocked` 明确行政 HOLD（等待原作业结果，不是业务失败），并记录实际进程/session/读回。不要用 `initial-status=running` 表示“仅记录”：当前 CLI 可能将其规范化为 ready 并自动派发 worker。也不要把 ready 卡设 unassigned 当作可靠隔离：dispatcher 可能 `auto_assigned_default` 到 developer 后启动。错误派发仅 reclaim 对应worker，再将跟踪卡行政block；不得动原后台作业或派第二实例。
+
+## 秘密字段修复的定向检查
+
+- 公共配置拒绝集的覆盖测试必须核对实际输入源、环境映射和子进程构造处使用的全部现行秘密别名；不得只从“父环境禁止键”反推覆盖，因为合法行情 API 环境键可能不在该禁止集中。
+- 同时验证公共 JSON first-write 前拒绝与正常环境注入仍可用；不要为了禁止秘密落盘而把合法环境凭据路径一并禁用。只用合成哨兵，保留历史反例，新候选交独立 Validate。
+
 ## 当前规则优先（2026-11-14） <a id="current-rules"></a>
 
 - 本技能及原有 `references/` 的唯一维护源为项目 `skills/infra/yquant-kanban-repair-orchestration/`；不维护 profile 同名副本，frontmatter name 不变。
