@@ -4,18 +4,20 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 | V1.0 RFC/SPEC 阶段契约候选；非实现、运行或实盘验收通过 |
+| 状态 | V1.1 固定单键来源修订，待主控 Gate；不是本增量实现、运行或实盘验收通过 |
 | 作者 | YQuant Principal |
 | 创建日期 / 最后更新 | 2026-11-16 / 2026-11-16（Asia/Shanghai，UTC+08:00） |
 | 模块 / 工作区 | 07_trading；`/home/pascal/workspace/yquant-investment` |
-| 需求来源 | Kanban `t_5b6a743f` 转交的 Pascal 2026-11-16 决定 |
+| 需求来源 | 原始 `t_5b6a743f`；本次 `t_3b2deaac` 转交的 Pascal 2026-11-16 后续启动单键来源固化授权 |
 | 派生 SPEC | [SPEC-07-004](../../spec/07_trading/SPEC-07-004-btc5m-controlled-paper.md) |
-| 后续 Design | `docs/design/07_trading/DESIGN-07-004-btc5m-controlled-paper.md`，由预建下一阶段独立产出，本阶段不创建 |
+| 当前 Design | [DESIGN-07-004](../../design/07_trading/DESIGN-07-004-btc5m-controlled-paper.md) V1.3；原 V1.0 独立下阶段产出安排保留为历史 |
 | 依赖 | [07-001](RFC-07-001-predictfun-btc5m.md)、[07-002](RFC-07-002-predictfun-live-foundation.md)、[07-003](RFC-07-003-predictfun-wsl-nonexport-signer.md)，不替代其历史签收 |
 
 ## 1. 执行摘要
 
 复用唯一 `DecisionCore/RoundTaker → runtime Broker → Predict venue`，补足固定安全运行入口、现有 keyring 到 SDK signer-fd / 主网 market API-key 的接线，以及 opt-in 的虚拟现金约束。完成 Full 工程与独立 Validate、主控核验后，只由主控启动一次 6 小时 unsigned paper：初始虚拟本金 100 USDT、单笔上限 2 USDT、同时敞口上限 10 USDT、费用后累计净亏损达到 20 USDT 锁存停新增；不是实盘许可或 alpha 证明。
+
+V1.1 仅将后续 unsigned-paper 启动的单键来源固化进原入口：父环境完全缺少 `YQUANT_PREDICT_FUN_TOKEN` 时，允许在公开配置与父钱包/JWT 拒绝之后，从固定项目 `skills/.env` 精确读取该键到临时内存副本，复用原 API 来源核验及 child 白名单。已有键（包括空白）不回退、不覆盖；signed/SDK/check/enroll/sign-in 不增加文件回退。既有 R3 工程 PASS、F1/F2 闭合为本次输入基线，不重新开发或宣称本增量已验；原阶段事实/身份保留为历史，当前修订范围以本段和 §5.1 为准。不触碰、重启、停止或重建当前已启动观察，不重跑任何 6h、不修改其证据；修订不授予下一轮自动启动许可。
 
 ## 2. 背景、事实与增量边界
 
@@ -49,7 +51,7 @@
 
 不调参、不换 Binance 输入、不复制 core、不走 copy OrderExecutor、不引入第二 bot/SDK/钱包/认证协议、OMS、数据库、持久账本、daemon、调度或研究平台。不重跑 94 日研究；其无盘口 PnL，不作为本次盈利门禁。不给无人值守、自动恢复、真实 Gas/排队/部分成交/到账时延或可持续 alpha 结论；不批准 allowance/operator、真实首单或实盘启动。
 
-当前 T1 只新建本 RFC 与 SPEC，不写 Design、实现、测试、配置、报告、技能、模板或三层 README；不访问 `/home/pascal/workspace/yq-yinglong` 或其他 profile。后续代码最小范围见 SPEC §2.3，精确设计和估算归下阶段。
+原 V1.0 T1 只新建本 RFC 与 SPEC。当前 V1.1 文档卡只同步本 RFC、SPEC 和独立 Design，不写代码/测试/配置/报告/技能/模板/三层 README，不访问其他项目或 profile。本增量后续代码范围限 SPEC §2.3 的 V1.1 限定，不重新开放原全量工程范围。
 
 ## 4. 方案选择与职责
 
@@ -70,7 +72,9 @@
 
 ### 5.1 启动与授权
 
-公开模式、目标和配置先检查，再取 API key / signer。unsigned 路径只接受 mainnet Predict 公共行情、BTCUSDT / 300 秒、`enable_trading=false`、`mock_trading=true`、新受控资金参数；显式缺失 credentials 路径不得存在（含悬空链接），不读默认 YAML/.env。不执行 check-venue 样例签名来证明 unsigned。
+公开模式、目标和配置先检查，再取 API key / signer。unsigned 路径只接受 mainnet Predict 公共行情、BTCUSDT / 300 秒、`enable_trading=false`、`mock_trading=true`、新受控资金参数；显式缺失 credentials 路径不得存在（含悬空链接），不读默认 YAML 或 shell profile。唯一文件例外是父环境根本不存在 `YQUANT_PREDICT_FUN_TOKEN` 时，在公开配置通过且父钱包/JWT 按键存在性拒绝之后，读取固定项目 `skills/.env` 的精确同名键；不加载整个文件的变量，不执行 source/eval/load_dotenv、变量或命令替换，不新增秘密存储/任意路径选项。读取到临时环境副本后仍经原 `local_signer._api_source` 与 `child_environment`：已有源含空白均不读文件，空白仍拒绝，`PM_PREDICT_API_KEY` 冲突仍拒绝，父环境不变。不执行 check-venue 样例签名来证明 unsigned。
+
+该例外只支持单行赋值的可选 export、等号空白、引号及尾注释；重复目标键（同值也拒绝）、缺失/空值、不可读、坏引号、多行或编码错误一律固定脱敏 `API_SOURCE`，不输出原行/值/底层异常，细则见 SPEC §4.1.1。公共 JSON 的秘密键大小写/嵌套拒绝仍在首次 write 之前，新文件读取也不得抢在公开配置或父钱包拒绝之前。后续已获准启动可直接调用原入口，不需 inline 包装；signed future-live、SDK、原 check/enroll/sign-in 完全不增加此文件回退。
 
 signed future-live 必须显式选择，声明同账户预算并保留 07-002 全部账户、链、RPC、授权、未知风险检查；没有未来真实动作批准不能运行。工程实现具备该受限分支不等于当前批准真实调用。SDK plan/check/tx 只读核验不加载 signer；执行分支必须先确认具体 target digest，再取精确 keyring，FD 只交固定 SDK 消费者；不开放任意 command/argv/钱包/可执行文件。
 
@@ -102,13 +106,13 @@ paper 仍是原盘口 walk 的全额或拒绝模拟；不新增排队/真实部�
 
 无生产 DB/schema/索引/TTL 或新主账。虚拟现金、预占、净份额、累计损益和 halt 属本次 Broker 内存；只保存一次性公开启动/结束证据、脱敏事件和结果用于核验，不能由日志自动恢复交易。
 
-工程唯一验收报告为 `data/reports/2026-11-16-btc5m-controlled-paper/validation.md` 及 `evidence/`，由后续验收阶段产出；实际 paper 另按主控启动日主题归档。任务/进度/交接只在 Kanban，无新建 data/tasks、任务镜像或重复状态报告。证据 exclusive-create，不覆盖旧历史，无自动删除/TTL/迁移/备份；data 被 Git 忽略，不等于远程备份。秘密、JWT、签名材料和含密钥 URL 不落盘，首次输出前脱敏。现有 keyring 私钥条目不迁移/改属性，API key 保持既有来源。
+原全量验收报告 `data/reports/2026-11-16-btc5m-controlled-paper/validation.md`、后续 R2/R3 及其 `evidence/` 均保留原字节。本 V1.1 单键来源增量仅由独立 Validate 产出 `data/reports/2026-11-16-btc5m-market-key-bootstrap/validation.md`，必要原始证据放同主题 `evidence/`；Implement 不另写重复结果报告。实际 paper 仍按原启动主题归档，不受本增量影响。任务/进度/交接只在 Kanban，无新建 data/tasks、任务镜像或重复状态报告。证据 exclusive-create，不覆盖旧历史，无自动删除/TTL/迁移/备份；data 被 Git 忽略，不等于远程备份。秘密、JWT、签名材料和含密钥 URL 不落盘，首次输出前脱敏。现有 keyring 私钥条目不迁移/改属性，API key 保持既有来源。
 
 ## 6. 验收与阶段分离
 
-本阶段成功：两独立文件存在、why/what 与可测试行为分离、旧基线/新增能力准确、可计算现金/风险/费用/结算/退出语义无业务未决项，引用/空白检查通过且记录文件身份。
+原 T1 成功标准为两独立文件及公式/边界检查；当前修订成功标准为 RFC V1.1、SPEC V1.1、Design V1.3 三独立文件一致、单键例外与旧禁读条款无冲突、定向 diff/空白及 SHA 检查后交主控 Gate。本卡不执行实现回归；后续必须真实 run 验证读取/首次 write/child 顺序、回退成功、合法原环境零文件读取、全部拒绝及无秘密落盘（SPEC §5 B-001–B-006），不能以 R3 PASS 代替本增量验收。
 
-后续 Design 固定真实接缝、文件 allowlist、G3、最小实现顺序、回滚、无网测试及安全日志；Implement 完成候选，独立 Validate 覆盖 SPEC 全矩阵。工程 PASS 不证明真实账户资金动作、SDK 网络可用性或 6h 运行结果。主控核验后执行已获准的一次 unsigned paper，不再重复创建文档链；真实 signed/资金执行始终需另行明确许可。
+原全量流程由 Design 固定接缝/allowlist/G3/回滚与测试，再经 Implement 和独立 Validate 覆盖原 SPEC 矩阵；本次复用仍适用证据，仅补受影响增量。工程 PASS 不证明真实账户资金动作、SDK 网络可用性或 6h 运行结果。不重复创建文档链或重跑现行观察；后续 unsigned 启动及真实 signed/资金执行仍按各自明确授权边界处理。
 
 ## 7. 风险、替代与未完成事项
 
@@ -126,3 +130,4 @@ paper 仍是原盘口 walk 的全额或拒绝模拟；不新增排队/真实部�
 | 版本 | 日期 | 变更 |
 |---|---|---|
 | V1.0 | 2026-11-16 | 基于已验 07-001/002/003，冻结一次受控 paper 与必要安全接线的增量范围 |
+| V1.1 | 2026-11-16 | 仅允许后续 unsigned-paper 缺源时从固定 skills/.env 读取精确单键；冻结环境优先、脱敏拒绝与新回归，其余行为及当前运行不变 |

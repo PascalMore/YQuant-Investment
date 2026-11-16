@@ -4,18 +4,20 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 | V1.0 RFC/SPEC 阶段契约候选；不是实现、工程验收或运行通过 |
+| 状态 | V1.1 固定单键来源修订，待主控 Gate；不是本增量实现、工程验收或运行通过 |
 | 作者 | YQuant Principal |
 | 创建日期 / 最后更新 | 2026-11-16 / 2026-11-16（Asia/Shanghai，UTC+08:00） |
-| 来源 RFC | [RFC-07-004](../../rfc/07_trading/RFC-07-004-btc5m-controlled-paper.md) V1.0 |
+| 来源 RFC | [RFC-07-004](../../rfc/07_trading/RFC-07-004-btc5m-controlled-paper.md) V1.1 |
 | 模块 / 工作区 | 07_trading；`/home/pascal/workspace/yquant-investment` |
-| 需求 / 下游 | Kanban `t_5b6a743f`；预建 Design `t_020c4222`，不重建任务链 |
-| 后续 Design | `docs/design/07_trading/DESIGN-07-004-btc5m-controlled-paper.md`，本阶段不创建 |
+| 需求 / 下游 | 原 `t_5b6a743f` / `t_020c4222` 为历史；当前来源 `t_3b2deaac`，沿预建 Implement/Validate，不重建任务链 |
+| 当前 Design | [DESIGN-07-004](../../design/07_trading/DESIGN-07-004-btc5m-controlled-paper.md) V1.3 |
 | 角色 | Design：yquantprincipal；Implement：yquantdeveloper；独立 Validate：yquantreviewer；运行：主控 yquant |
 
 ## 1. 需求摘要
 
 固定入口区分 unsigned paper 和另行授权的 signed future-live，前者不读 keyring、不构造 signer/trader、不做认证或订单请求。唯一策略仍是 `arbitrage.rs DecisionCore/RoundTaker → runtime Broker → Predict venue`。受控 paper 显式启用 100 USDT 虚拟现金、单笔 2 USDT、单市场 2 USDT、同时成本及预占 10 USDT、累计净亏损 20 USDT 锁存停新增。六小时是有界观察窗而非保证持续开仓，截止后只核对已有成交的官方结算；工程仅离线合成验证，实际观察须独立 PASS 和主控核验后由主控启动。
+
+V1.1 只新增 §4.1.1 固定单键文件回退及 §5 B-001–B-006 回归，供后续明确授权的直接入口启动，无需 inline 包装。既有 R3 PASS 与 F1/F2 闭合不重做；原始接缝/身份/阶段与全量文件表是历史追溯，不代表本次待实现清单。不触碰/重启/停止/重建当前观察，不重跑 6h 或修改当前证据，不自动开启下一轮；模型、100/2/2/10/20、费用、期限/尾查及 A-001–A-019 其他行为不变。
 
 ## 2. 范围与既有消费者
 
@@ -29,11 +31,13 @@
 
 ### 2.2 排除与阶段授权
 
-本卡只新建 RFC-07-004、本 SPEC；可读公开源码/契约/指定本地报告并做文档静态检查。不写 Design/代码/测试/配置/报告，不执行网络、真实 keyring、SDK 或 BOT 业务命令。后续工程 worker 也不访问生产 keyring、`skills/.env`、私钥/JWT/seed，不真实签名/认证/广播/下撤单/approve/redeem/私有账户或余额探针；只 synthetic key、fake transport 与明确离线测试。
+原 V1.0 T1 只新建 RFC-07-004、本 SPEC；当前文档卡只修订三层正式契约并做静态检查，不改代码/测试/配置/报告，不执行业务命令。§4.1.1 是后续授权 unsigned 入口的生产代码行为，不是工程 worker 读取真实 `skills/.env` 的许可。文档、Implement、Validate 均不访问生产凭据/keyring/私钥/JWT/seed，不执行网络/真实认证/签名/广播/下撤单/approve/redeem/私有账户或余额探针；只 scratch fixture、synthetic key、fake child/transport 与明确离线测试。
 
 不新增依赖、钱包/认证核心、第二策略/执行器/OMS、数据库/持久账本、daemon/调度、自动充值/赎回/授权、跨进程恢复、数据源或调参。保持 main，不 reset/stash/clean/checkout/commit/push；不改 gitlink、其他项目/profile、模板和三层 README。不把签收资金准备、SDK 安装或短窗正收益称为资金/收益闭环。
 
-### 2.3 后续最小文件职责边界（不是本卡修改许可）
+### 2.3 文件职责边界（本次限定与原全量追溯）
+
+V1.1 后续唯一可写文件均在 BOT 内：`tools/predictfun/btc5m_control.py`、`tools/predictfun/tests/test_btc5m_control.py`、`tools/predictfun/README.md`、`docs/LIVE-TRADING.md`。仅原 unsigned 来源点、隔离回归及使用说明，不新增文件/wrapper/helper、任意 env 路径、runner、依赖或平台；Rust/SDK/local_signer/公开配置不变。下表为原 V1.0 全量范围追溯，不再作为本增量修改授权；当前精确设计见 Design V1.3 §2.3。
 
 下列路径均相对 `BOT=skills/trading/auto-trading/prediction-markets/Prediction-Markets-Trading-Bot-Toolkits`。Design 必须裁剪并给精确 allowlist、直接消费者及 G3 说明；不得把目录整体当白名单。
 
@@ -47,7 +51,7 @@
 | 测试 | 上述 Rust 模块 colocated tests；`tools/predictfun/tests/test_local_signer.py`、`test_sdk_ops.py`、必要时 `test_btc5m_control.py` | 实际入口→原消费者 fake 集成，保留旧测试；不得搬整个测试树 |
 | 公开配置/使用说明 | 必要时新增 `tools/predictfun/btc5m-controlled-paper.json`；`tools/predictfun/README.md`、`docs/LIVE-TRADING.md` | 仅公共参数和已实现的固定入口说明；不改默认 `config.json`/YAML/任何秘密 |
 
-新 helper 是现有模块内职责拆分候选，不要求全部创建；如仍需范围外文件，先报告主控，不自行扩张。Cargo/requirements/锁文件不变。工程唯一验收报告为 `data/reports/2026-11-16-btc5m-controlled-paper/validation.md` 和 `evidence/`，不建 data/tasks 或重复状态档案。
+原全量 helper 候选范围仅作历史追溯，V1.1 不新增文件或扩大四文件范围，Cargo/requirements/锁文件不变。原 `data/reports/2026-11-16-btc5m-controlled-paper/validation.md`、R2/R3 及其证据保留原字节。本增量独立 Validate 唯一结果报告为 `data/reports/2026-11-16-btc5m-market-key-bootstrap/validation.md`，必要原始证据位于同主题 `evidence/`；Implement 不另写重复结果报告。不建 data/tasks 或重复状态档案。
 
 ## 3. 功能规格
 
@@ -79,12 +83,20 @@
 | 开关 | 显式 unsigned 模式，`enable_trading=false`、`mock_trading=true`，controlled cash/net-share fee opt-in；实际 Broker live=false |
 | 生命周期 | 一次 21600 秒；不能由用户尾参数延长、循环重跑或覆盖风险预算 |
 
-1. 先解析模式/路径/公开 JSON/完整固定配置与生命周期，再校验环境/API 来源，最后才允许该分支所需秘密和 child。JSON 拒绝重复键、NaN/Infinity、credentials/秘密字段及畸形类型；布尔不当金额，数值必须有限且满足范围。固定 `.json`、固定 BOT cwd/binary，不读默认 YAML、`.env` 或 shell profile。
+1. 先解析模式/路径/公开 JSON/完整固定配置与生命周期，再校验环境/API 来源，最后才允许该分支所需秘密和 child。JSON 拒绝重复键、NaN/Infinity、credentials/秘密字段及畸形类型；布尔不当金额，数值必须有限且满足范围。固定 `.json`、固定 BOT cwd/binary，不读默认 YAML 或 shell profile；文件来源仅限 §4.1.1 的 unsigned 精确单键例外，且必须晚于公开配置与父钱包/JWT 拒绝、早于首次证据写入和 child。
 2. 沿 07-003 固定缺失 credentials 路径，`lexists=true`（包括悬空链接）拒绝，不让 loader 回落默认 YAML。新公开配置是另一个 opt-in 文件，不覆盖旧默认。
 3. paper 父环境出现 `PM_PRIVATE_KEY` 或显式钱包/JWT 注入时，仅按键存在性拒绝，不读/记录值；child env 只保留必需 OS/代理/CA 与行情 API key，禁止无关 `PM_*`、钱包、JWT、加载注入变量。不调用普通 check/check-venue 作为 paper 前置证明；其会尝试样例签名。Rust 受控 paper 也须直接绕过 `PredictFunTrader::new`，不能依赖 signer 构造失败来达到“无钱包”。
-4. API 来源沿既有 `YQUANT_PREDICT_FUN_TOKEN → PM_PREDICT_API_KEY` 内存映射，源缺失/空白或目标同名变量冲突拒绝；不自己加载生产 `.env`，不创建新 API key 存储。不修改父环境。秘密不可进入 argv、临时文件、配置、进程异常/日志或任务字段。
+4. API 来源沿既有 `YQUANT_PREDICT_FUN_TOKEN → PM_PREDICT_API_KEY` 内存映射与原 `_api_source` 核验。unsigned 仅在父环境不存在源键时按 §4.1.1 回退；源键存在（包括空白）不得读文件或覆盖，空白仍拒绝；目标 `PM_PREDICT_API_KEY` 与最终源不同仍按现有口径拒绝。不加载其他文件变量、不创建新存储或修改父环境。秘密不可进入 argv、普通临时文件、公共配置、进程异常/日志或任务字段；测试文件中的 synthetic 哨兵不是生产秘密。
 5. signed future-live 为单独显式分支，须匹配固定 chain56 / predict-account / trading address `0xfc9eb66e6F22f96608058C0A711Ed048eED8c2E2`，signer `0x5129330159f4E6a99eF873f86901E3cafa7f9A7D`。仅该分支可用原 keyring→原 Rust signer；配置须显式 enable_trading=true/mock_trading=false，保留 2/2/10/20、原 RPC/预算确认/账户/未知订单门禁，不装配 paper 虚拟现金。公开确认是人工声明，不自动产生真实授权；本轮不运行这个真实分支。
 6. 无 shell/eval、任意 executable/PATH 覆盖、任意 bot/TUI、argv 尾转发、自动 sign-in/approve/redeem 或 keyring unlock/Prompt/fallback。原 enroll/check/sign-in 的固定行为不借新增 run 改写。
+
+### 4.1.1 unsigned-paper 固定单键文件来源
+
+- 唯一目标名是区分大小写的 `YQUANT_PREDICT_FUN_TOKEN`。仅原 `btc5m_control.run → check_environment` unsigned 路径可回退；signed-future-live、SDK、原 check/enroll/sign-in 没有此例外。固定项目根由 BOT 定位，文件为 `BOT.parents[4] / "skills/.env"`，不依赖 cwd，不加 CLI/环境路径覆盖；测试 patch 固定路径常量至当前 profile scratch，绝不读取真实生产文件。
+- 顺序为完整公开 JSON/固定值校验 → 父钱包/JWT 禁键按存在性拒绝 → 判断源键是否存在 → 仅不存在时读取文件并将目标值放临时环境副本 → 原 `local_signer._api_source` → 原固定路径/身份与首次证据 → 原 `child_environment` → 固定 child；除来源点外不重排原 run。若禁键存在，即使源缺失或文件合法也先拒绝且文件读取为 0。公共 JSON 的秘密名（含行情源/别名大小写、顶层/嵌套）始终 `PUBLIC_CONFIG`、首次 write 前拒绝，且文件读取/keyring/child 均为 0。
+- 只以 UTF-8 严格解码，精确提取唯一单行赋值。允许行首/行尾空格或 tab、可选 `export` 后空白、键与等号两侧空白；值可不加引号或用匹配单/双引号包围。非引号值去两端空白，空白后 `#` 为尾注释，紧贴值的 `#` 为字面字符；引号内 `#` 保留，引号后只允许空白/尾注释。去除外层引号后内容按字面值保留，不进行转义、变量/命令替换；不支持续行或跨行引号。空行/注释/其他精确非目标键不导入、不求值，近似名/大小写变体不充当目标键。
+- 完整扫描以拒绝重复目标键（同值也拒绝），不得“取首个/末个成功”；缺失、空值/仅空白、不可读、坏引号/非法引号尾部、多行/续行、UTF-8 错误统一 `code=API_SOURCE, step=env, reason=API_SOURCE, exit=2`，不附原行、值、文件内容或底层异常。父源非空且合法时文件读取必须为 0；父源为空白仍同一 API_SOURCE 拒绝，不准借文件修复。别名冲突保持当前 `code=ENV_CONFLICT, step=env, reason=API_SOURCE, exit=2`（不把内层 API_CONFLICT 改成新公共口径）。
+- 仅最终 API 值经白名单进入 child 的 `PM_PREDICT_API_KEY`，不传文件其他项、源键、钱包/JWT 或新秘密；原 OS/代理/CA 白名单不变。调用者传入映射与 `os.environ` 均不变，不把临时副本提升为全局环境。成功/拒绝均不得把值、原行、含密异常或秘密摘要写到 stdout/stderr、argv、公开快照/started/events/ended/其他普通输出文件；不新增持久化键值。README 与 LIVE-TRADING 说明直接原命令、环境优先、固定脱敏错误及其他入口无回退。
 
 ### 4.2 SDK 目标、FD 与只读请求
 
@@ -207,6 +219,17 @@ Gas 标 `NOT_INCURRED`/`NOT_MEASURED`，可说明模拟未扣 Gas，但不填伪
 
 数值向量在 T1 用 Python Decimal 从上述公式复算，不是实现测试或真实场馆事实。复杂多次预占/成交/卖出/结算序列须逐事件核验 §4.3 恒等式，不只比较最终报告余额。
 
+V1.1 新增回归如下；沿用并保留 A-001–A-019、F1 首次 write 大小写/嵌套矩阵和 F2 真实 Rust 协议消费者，不删除/skip/弱化旧断言。全部通过真实 `run` 接缝及有界无网 fake child 验证，不只测解析纯函数；以下是待执行要求，不是本卡测试结果。
+
+| 编号 | 输入 / 场景 | 必须结果 / 消费者验证 |
+|---|---|---|
+| B-001 | 缺父源键；scratch 文件合法单键，含 export/等号空白/单双引号/尾注释；另夹其他秘密项与近似键 | fallback 成功，真实 run 捕获 child 只收到正确行情 key；其他文件项不入 env，父映射/os.environ 不变；记录 config→父禁键检查→credential-read→首次 write→child 实际顺序，不触真实 BOT/keyring/网络 |
+| B-002 | 父源合法；文件读取 spy 设为调用即失败；父源为 `""`/空白且文件可用；源/别名同值及冲突 | 合法原 env 路径真实 run 成功、文件读取 0；空白拒绝且读取 0；同值兼容、冲突保持 ENV_CONFLICT/env/API_SOURCE，文件回退也必须验证别名冲突，无 child/证据 |
+| B-003 | 文件目标键重复同值/异值、缺目标/仅近似键、空值/仅空白、不可读/不存在、坏引号/引号后杂文、多行引号/反斜线续行、非法 UTF-8 | 全部 API_SOURCE/env/API_SOURCE、exit2；文件哨兵/原行/异常不出 stdout/stderr/证据，无 child、无首次证据 write；保留原 missing-source 测试及断言，仅将文件常量隔离至不存在 scratch fixture |
+| B-004 | 坏公共 JSON/固定配置（两模式，含行情别名大小写与嵌套）与父钱包/JWT 各禁键，均缺父源且文件可用 | 捕获真实 run 的读取/write/keyring/child spy：公共配置先 PUBLIC_CONFIG；合法 unsigned 配置的父禁键先 ENV_CONFLICT，不读取禁键值；两者 credential-read/首次 write/keyring/child 均 0 |
+| B-005 | signed-future-live 合法 fake 配置与确认但缺源；SDK/check/enroll/sign-in 原来源 | signed 真实 run 仍按旧来源拒绝、文件读取/keyring/child/证据为 0；合法 signed 原 env 路径无文件读取；SDK/helper 源码不改、引用仍适用既有独立结果，不为新回退重跑旧认证或网络 |
+| B-006 | 文件值含变量/命令/反引号字面串、其他项含秘密哨兵；成功/拒绝及 child 输出夹哨兵 | 不求值/不执行命令；只允许固定一次无网 child；首次 write spy 及保存后的全部输出扫描无秘密/秘密摘要（输入 fixture 除外），不得先 raw 落盘再过滤；公开参数与事件/期限/回收保持旧行为 |
+
 实际六小时观察另列主控运行核对，不是工程 worker 必跑项：候选和有效配置匹配、无钱包/JWT、启动/结束/退出事实、实际可观察时长、成交/拒绝与停止后零新增、逐笔费用/净库存/现金和官方末轮结果对账、pending/数据源/Gas边界、结果与未完成项。真实启动失败/中断如实记录，不以 synthetic PASS 冒充观察完成；不强求正收益/成交数。
 
 ## 6. 测试与本阶段自检
@@ -216,13 +239,13 @@ Gas 标 `NOT_INCURRED`/`NOT_MEASURED`，可说明模拟未扣 Gas，但不填伪
 - 仅无网、隔离 synthetic；原API/keyring/backend使用会报错的fake，固定真钱binary不执行。停止测试可运行无网fake executable/受控匿名pipe/隔离socketpair，不连接真实服务。测试临时文件仅当前profile scratch。
 - 默认兼容回归覆盖受影响的helper完整测试、SDK identity/ops、Rust运行时/模型/回放与直接构造者；不重跑94日/旧6h，不升级依赖换绿灯。具体测试名由Design按实存源码确认，不杜撰计数。
 - 独立Validate记录候选HEAD+文件SHA、真实命令/原生exit、A-001–019覆盖、失败与未验证范围；三独立文档存在且一致才进入实现。开发者自测不替代独立验收，不因旧offline签收重开已关闭finding。
-- 本T1只检查两文档实际存在/引用/占位/空白/范围/公式与向量、path-filtered git diff-check并记录身份。不运行以上业务测试、不声称SDK网络或真实账户/资金闭环。
+- 原 T1 只核对两文档及公式/向量；当前修订只静态核对三独立文档、引用/范围/空白/来源优先级和新回归映射，定向 git diff-check 并记录 SHA。本卡不运行上述业务测试；Implement/独立 Validate 按 Design V1.3 跑受影响 launcher 完整回归，不全库重跑、不读取生产 .env、不触碰当前运行，不声称 SDK 网络/资金闭环。
 
 ## 7. 安全与交接约束
 
 worker只在指定工作区和本阶段文件内工作；上游README/requirements/helper/tests和07-003文档dirty是基线，path-filtered审计，不reset/stash/clean/覆盖。runtime拒绝立即停止该动作，原拒绝留Kanban，不换工具/profile/路径重放。敏感值不进命令参数/普通文件/报告/日志/聊天，首次日志前脱敏；不承诺同UID/管理员/进程内存或物理清零隔离。
 
-本阶段交主控核验RFC/SPEC后释放已有Design。Design负责精确types/CLI/文件allowlist/G3/增量估算、调用点、实现顺序、测试和最小回滚；不能把本节已冻结金额、费用/现金、退出/授权语义再交实现者决定。后续独立工程PASS只支持主控已获准的一次unsigned paper；签名run、allowance/operator、真实订单/redeem/到账、长期运行、盈利资格均另行明确授权/验证，不默默增加第二流水线或运行服务。
+原 T1 交接为主控核验 RFC/SPEC 后释放 Design。当前 V1.1 与 Design V1.3 三层修订交主控 Gate，不提前 complete 释放预建 Implement，不另开 same-card review；通过后仅按当前窄 allowlist 实现及独立验收。既有 R3 PASS 不因本卡重判，也不替代新回归；不能把金额、费用/现金、退出/授权语义再交实现者决定。后续启动仍由主控另行明确授权，不为此修订自动重跑或安排服务；signed/资金动作/长期运行/盈利资格边界不变。
 
 ## 8. 开放问题与版本
 
@@ -231,3 +254,4 @@ worker只在指定工作区和本阶段文件内工作；上游README/requiremen
 | 版本 | 日期 | 内容 |
 |---|---|---|
 | V1.0 | 2026-11-16 | 从RFC-07-004冻结固定模式、SDK接线、100现金/2/2/10/20、净份额费用、累计亏损锁存、21600秒和有界尾查、A-001–019及授权分离 |
+| V1.1 | 2026-11-16 | 仅新增 unsigned 缺源键时固定文件精确单键回退、环境优先/错误口径及 B-001–B-006；其他入口与运行/资金契约不变 |
