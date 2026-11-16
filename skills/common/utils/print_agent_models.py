@@ -34,8 +34,7 @@ AGENTS: list[tuple[str, str, str]] = [
     ("yquant",            "YQuant (Orchestrator)",   "Intake / Closeout"),
     ("yquantprincipal",   "YQuant-Codex-Principal",  "RFC / SPEC / Design"),
     ("yquantdeveloper",   "YQuant-Developer-Engineer", "Implement"),
-    ("yquanttester",      "YQuant-Test-Engineer",    "Verify"),
-    ("yquantreviewer",    "YQuant-Reviewer-Principal", "Review"),
+    ("yquantreviewer",    "YQuant-Reviewer-Principal", "Validate"),
 ]
 
 

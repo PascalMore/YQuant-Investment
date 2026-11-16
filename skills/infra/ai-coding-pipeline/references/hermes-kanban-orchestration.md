@@ -90,7 +90,7 @@ Intake / Closeout 由主控承担，不另建默认 worker。后续新任务只�
 
 - 在同一 Intake 内按依赖顺序调用工具：先创建上游、读取返回真实 `task_id`，再创建下游并传该真实 id。创建后 `kanban_show` 读回 exact task 的 parents；禁止占位 parent、幽灵 parent、未定义 id 或靠 worker 自我 block 修链。
 - T1/T2 是上图符号，不是可直接传入的 id。不要等待上游执行 done 才创建后续任务；预建下游由 dispatcher 随真实依赖自动推进。
-- RFC/SPEC、Design：60m/1；Implement：75m/1；Validate（`yquantreviewer`）：60m/1。tester 45m/1 只用于旧任务/必要专项，不是默认阶段。参数是任务预算，不修改运行 profile 配置。
+- RFC/SPEC、Design：60m/1；Implement：75m/1；Validate（`yquantreviewer`）：60m/1。2026-11-16 批准退役 tester，不再派发；必要测试专项归独立 reviewer，不增加默认阶段。旧卡保留原契约、依赖、runs 与作者，由主控逐卡核实后迁移或历史归档，不自动取消未完成验收。参数是任务预算，不修改运行 profile 配置。
 - `kanban_create` 的墙钟参数使用当前工具 schema 的 `max_runtime_seconds`（60m 对应 3600，75m 对应 4500）；重试上限按实际支持的创建接口设置。若当前工具不暴露该参数，写明需主控核实实际值，不得谎称 body 文本已配置调度器。
 - 卡面授权与 runtime 许可须同时满足；拒绝后停止相关动作，不换工具/路径重放。环境或必要授权不足时明确 block，不自行启动 gateway。
 - Kanban 是唯一状态源；不强制 state/body 镜像或全文 handoff；小任务 Kanban 结论＋必要日志，复杂任务一份验收报告＋原始证据。

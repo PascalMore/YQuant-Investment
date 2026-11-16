@@ -13,7 +13,7 @@
 | 5 Validate | YQuant-Reviewer-Principal | `yquantreviewer` | 必要测试、消费者/反例审查、验收裁定 | 不改业务实现后自签 |
 | 6 Closeout | Orchestrator | 与 Intake 相同，不另建默认卡 | 面向用户的交付摘要 | 否 |
 
-Full：Intake → RFC/SPEC → Design → Implement → Validate → Closeout（四张默认 worker 卡）。Light：Intake → Implement → Validate → Closeout（两张）。`yquanttester` 保留旧任务兼容与必要测试专项，不是默认阶段。
+Full：Intake → RFC/SPEC → Design → Implement → Validate → Closeout（四张默认 worker 卡）。Light：Intake → Implement → Validate → Closeout（两张）。2026-11-16 Pascal 批准退役 `yquanttester`，测试专项归独立于实现者的 `yquantreviewer`；不再派发 tester，不恢复默认 Verify→Review 链。旧卡由主控逐卡处理，保留原契约、依赖、runs 与作者，退役不等于验收缺口消失。
 
 > 查看每个 Agent 当前真实的主模型、fallback 链、compression 配置：
 > ```bash
@@ -109,7 +109,7 @@ Orchestrator Intake
 - RFC/SPEC/Design/架构/API/数据模型：Kanban `assignee="yquantprincipal"`
 - 代码实现：Kanban `assignee="yquantdeveloper"`
 - 独立验收 Validate（测试验证＋消费者/反例审查＋裁定）：Kanban `assignee="yquantreviewer"`
-- 旧任务兼容/必要测试专项（非默认）：Kanban `assignee="yquanttester"`
+- 必要测试专项：Kanban `assignee="yquantreviewer"`，仍独立于实现者；不是额外默认阶段
 - Intake 和 Closeout：当前 orchestrator（`yquant` 或 `yinglong`）完成
 
 ## Hermes Kanban 执行规则

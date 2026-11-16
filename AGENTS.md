@@ -190,7 +190,7 @@ AI Coding 流水线在 Hermes 中使用 Kanban profile worker 执行。各角色
 - `Implement` 与 `Validate` 必须由不同角色承担。Validate 独立于实现者，同时承担测试验证、真实消费者与反例审查、与契约的一致性检查，以及通过/退回的验收裁定。
 - 走完整流程还是轻量流程，看需求与既有契约是否已明确、风险是否可控，不按改动文件数量机械划档。
 - 轻量流程仍必须保留独立 Validate，不能把未验证的实现直接 Closeout。
-- `YQuant-Test-Engineer` 不再是默认必经阶段，保留用于旧任务兼容与确有必要的测试专项。
+- `YQuant-Test-Engineer` / `yquanttester` 已于 2026-11-16 经 Pascal 批准退役，不再派发新任务；必要测试专项由独立于实现者的 `yquantreviewer` 承担。旧卡由主控逐卡依证据归档或承接，不因退役取消真实未完成的验收义务。
 - Intake 与 Closeout 由主控承担，默认不单独建卡。
 - **三层文档强制**：完整流程中 RFC、SPEC、Design 必须分别产出独立文件（`docs/rfc/`、`docs/spec/`、`docs/design/`），不允许合并。YQuant Orchestrator 在 RFC/SPEC 阶段和 Design 阶段结束后必须校验文件存在性，缺失则退回。
 
@@ -201,7 +201,7 @@ AI Coding 流水线在 Hermes 中使用 Kanban profile worker 执行。各角色
 - RFC/SPEC/Design/架构/接口/数据模型：Kanban `assignee="yquantprincipal"`
 - 代码实现：Kanban `assignee="yquantdeveloper"`
 - 独立验收（测试验证＋反例审查＋裁定）：Kanban `assignee="yquantreviewer"`
-- 测试专项（非默认阶段，按需）：Kanban `assignee="yquanttester"`
+- 测试专项（按需，不新增默认阶段）：Kanban `assignee="yquantreviewer"`，仍须独立于实现者
 
 委派任务必须包含：任务目标、背景信息、当前约束、相关文件或目录、期望输出、验收标准、禁止事项、是否允许修改文件、是否需要运行测试或命令。Kanban task 必须使用 `workspace_kind="dir"` 和 `workspace_path="/home/pascal/workspace/yquant-investment"`，有前置阶段时必须设置 `parents=[...]`。
 
@@ -224,12 +224,12 @@ Kanban 是任务状态的唯一来源。默认不再额外维护手工状态表�
 负责按照已确认的 SPEC 和 Design 做最小范围代码实现，新增或更新必要测试，
 记录改动文件、验证命令、未验证项和残余风险。不得修改需求语义，不得做无关重构。
 
-### yquant-test-engineer
+### yquant-test-engineer（退役历史角色）
 
-负责独立验证实现是否满足 SPEC 和验收标准。必须说明测试命令、结果、覆盖范围、
-失败原因和未覆盖风险。不能把未运行测试写成已通过。
-现行流程必须保留独立 Validate；yquant-test-engineer 不是默认必经角色，仅用于旧任务
-兼容与主控明确指派的测试专项。
+2026-11-16 Pascal 批准退役 `yquanttester`，不再派发新任务；原独立测试职责由
+`yquantreviewer` 的统一 Validate 承担。历史验收作者、命令、失败记录和证据保留；
+主控逐卡核实，有证据证明无效的卡可受支持 archive，无需改正文或重跑；有效未完成
+验证职责才迁 reviewer，保状态/依赖、不因迁移 unblock，不直写数据库。
 
 ### yquant-reviewer-principal
 

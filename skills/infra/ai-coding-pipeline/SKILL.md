@@ -13,8 +13,8 @@ description: "YQuant / 应龙共享 AI Coding 流水线：Full 或 Light，两�
 - 现行模式只有 Full / Light。Quick 入口与专用强制规则退役；用户再说 Quick 时，按契约明确程度与风险重新分流：范围、行为和验收已明确且风险可控走 Light，否则走 Full，不按文件数量机械划档。
 - Full：Intake → RFC/SPEC → Design → Implement → Validate → Closeout。RFC、SPEC、Design 保留三个独立文件；RFC/SPEC 与 Design 保留两个阶段，不合并为 Plan。
 - Light：Intake → Implement → Validate → Closeout。受限任务把已有契约与验收直接写入 body，不为了形式新增三层文档。
-- 两者共用下方「统一 Validate」；Intake / Closeout 由主控处理，默认不单独建卡。tester 仅用于旧任务兼容或必要专项，不新增、删除或改名 profile。
-- 已创建的旧任务按原契约执行，不自动迁移。本文明确标为历史的段落只保留事故事实，不是新任务指令；不得据其重启 Quick 或执行旧事故配方。
+- 两者共用下方「统一 Validate」；Intake / Closeout 由主控处理，默认不单独建卡。2026-11-16 Pascal 批准退役 `yquanttester`；不再向其派发新任务，测试专项也由独立于实现者的 `yquantreviewer` 承担，不恢复默认 Verify→Review 链。
+- 已创建的旧任务保留原验收契约、依赖、历史 runs 与作者，不自动改判或重跑；主控逐卡核实：有证据证明冗余、误派、错误或已无效的卡可用受支持 archive 保留历史，无需为迁移改正文、修复或重跑；仅旧/blocked/todo 不构成无效证据。真实未完成且有效的验证职责才迁至独立 reviewer，保状态/依赖、不因迁移 unblock；接口不支持原态改派时停止并报告，不直写数据库。退役不取消生产/验收/REVISE 缺口。本文明确标为历史的段落只保留事故事实，不是新任务指令；不得据其重启 Quick 或执行旧事故配方。
 - Kanban 是唯一任务状态源；新任务的目标、范围、计划、负责人、依赖、进度、状态与交接摘要只在 Kanban 管理，不创建或维护 `data/tasks/` 管理档案、pipeline-state.md、body 镜像、逐卡全文 handoff 或重复 Closeout 报告。小任务用 Kanban 结论与必要日志；复杂任务保留一份验收报告和原始证据，报告及必要证据目录沿用目标项目 AGENTS（YQuant 为 `data/reports/YYYY-MM-DD-short-topic/`）。临时探针与中间文件使用当前 profile scratch，不作为第二状态源或任务正文档案；既有 `data/tasks/` 与证据按旧任务原契约保留，不自动删除、迁移、改写或批量归档。
 
 ### 统一 Validate（Full / Light 共用） <a id="unified-validate"></a>
@@ -108,7 +108,6 @@ Intake 必须把以下内容写进**每个文档类任务（RFC/SPEC/Design）�
 | RFC / SPEC / Design | `yquantprincipal` | RFC/SPEC/Design、架构、接口、数据模型、风险评估 |
 | Implement | `yquantdeveloper` | 按 Full 的 SPEC/Design 或 Light 已确认契约做最小实现 |
 | Validate | `yquantreviewer` | 独立测试、真实消费者/反例审查、通过/退回裁定 |
-| 测试专项（非默认） | `yquanttester` | 旧任务兼容或明确指派的测试专项 |
 
 ### 源目录与运行态同步
 AI Coding Pipeline skill 的 **canonical source 只有项目源目录一份**：
@@ -121,17 +120,17 @@ AI Coding Pipeline skill 的 **canonical source 只有项目源目录一份**：
 清理 profile 副本：
 ```bash
 rm -rf /home/pascal/.hermes/profiles/yquant/skills/infra/yquant-ai-coding-pipeline
-for p in yquantprincipal yquantdeveloper yquanttester yquantreviewer; do
+for p in yquantprincipal yquantdeveloper yquantreviewer; do
   rm -rf "/home/pascal/.hermes/profiles/$p/skills/infra/yquant-ai-coding-pipeline"
 done
 ```
 
-**不要把 worker profile（principal/developer/tester/reviewer）的 skill 副本留下**——它们和项目目录的同名 skill 会触发 **Skill name collision**，worker 启动后立刻 crash（exit 1）且不会进入对话循环。
+**不要把现役 worker profile（principal/developer/reviewer）的 skill 副本留下**——它们和项目目录的同名 skill 会触发 **Skill name collision**，worker 启动后立刻 crash（exit 1）且不会进入对话循环。退役 tester 的运行目录由主控按单独退役清单处理，不纳入部署循环。
 
 正确策略（2026-06-28 更新）：
 - `yquant` 主 profile：**不保留副本**，通过 YQuant 项目 external skills 目录加载本源文件。
 - `yinglong` 主 profile：**不保留副本**，`skills.external_dirs` 直接加载本 canonical skill 目录。
-- 4 个 worker profile（principal/developer/tester/reviewer）：**不要放副本**，通过 `workspace_path` 发现项目源目录。
+- 3 个现役 worker profile（principal/developer/reviewer）：**不要放副本**，通过 `workspace_path` 发现项目源目录。
 
 部署后立即验证（应该只看到项目源目录一份）：
 ```bash
@@ -148,10 +147,9 @@ find /home/pascal/.hermes/profiles /home/pascal/workspace/yquant-investment \
 | RFC/SPEC、Design（`yquantprincipal`） | `60m` | `1` |
 | Implement（`yquantdeveloper`） | `75m` | `1` |
 | Validate（`yquantreviewer`） | `60m` | `1` |
-| 旧任务/测试专项（`yquanttester`，非默认） | `45m` | `1` |
 | 主控明确代执行的行政卡（非默认 Closeout worker） | `30m` | `1` |
 
-- 默认值依据 2026-09 以来已完成 run 的实际时长：各角色 p95 都不超过 37 分钟（reviewer 37.0、principal 25.2、developer 21.6、tester 17.4）。默认值是 p95 的 1.6–3.5 倍，绝大多数卡不会被误杀。历史上最长的几次超过了默认值（principal 74.5、reviewer 70.4），这类长任务应在 body 里写明理由并调大上限。过去出现过 20 次 `elapsed > limit`，原因都是当时手填的 10–30 分钟太紧。
+- 默认值依据 2026-09 以来已完成 run 的实际时长：各角色 p95 都不超过 37 分钟（reviewer 37.0、principal 25.2、developer 21.6、tester 17.4；tester 仅为历史统计，不是现役路由）。默认值是 p95 的 1.6–3.5 倍，绝大多数卡不会被误杀。历史上最长的几次超过了默认值（principal 74.5、reviewer 70.4），这类长任务应在 body 里写明理由并调大上限。过去出现过 20 次 `elapsed > limit`，原因都是当时手填的 10–30 分钟太紧。
 - 只在两种情况下偏离默认值：
   - 卡片 body 写明了理由，例如"长回测轮询""大批量迁移"，可以调大；
   - 范围很窄的续接卡或行政卡，可以调小，例如 `20m`。
@@ -381,7 +379,6 @@ Full 中 RFC、SPEC、Design **必须分别产出独立文件**，存放在各�
 | RFC / SPEC / Design | YQuant-Codex-Principal | `~/.hermes/profiles/yquantprincipal/config.yaml` |
 | Implement | YQuant-Developer-Engineer | `~/.hermes/profiles/yquantdeveloper/config.yaml` |
 | Validate | YQuant-Reviewer-Principal | `~/.hermes/profiles/yquantreviewer/config.yaml` |
-| 旧任务/测试专项（非默认） | YQuant-Test-Engineer | `~/.hermes/profiles/yquanttester/config.yaml` |
 
 **模型与 fallback 不写在本 skill 里**——它们是易变事实，每次模型升级都会变化。查询当前实际配置：
 
@@ -399,9 +396,9 @@ python3 skills/common/utils/print_agent_models.py
 
 - 当前 orchestrator（`yquant` 或 `yinglong`）已启用 `kanban` toolset。
 - Hermes gateway 正在运行；否则 Kanban ready task 不会自动派发。
-- 目标 assignee profile 存在：`yquantprincipal`、`yquantdeveloper`、`yquanttester`、`yquantreviewer`。
+- 目标 assignee profile 存在：`yquantprincipal`、`yquantdeveloper`、`yquantreviewer`；退役 `yquanttester` 不作为启动前提。
 - `~/.hermes/kanban.db` 能记录任务；若任务没有进入 `tasks` 表，说明没有真实委派。
-- **只保留项目源目录的 skill，4 个 worker profile 不放同名副本**（避免 Skill name collision 导致 worker 启动崩溃）。
+- **只保留项目源目录的 skill，3 个现役 worker profile 不放同名副本**（避免 Skill name collision 导致 worker 启动崩溃）。
 
 验证命令：
 
@@ -415,6 +412,8 @@ PY
 ```
 
 ## Pitfalls（2026-06-25 / 06-28 实跑后补）
+
+P-1/P-1c 中的四 worker 名单、修复脚本与预防循环是当时事故处置原文，保留历史，不是现行部署要求，不得照抄执行或据此重建 tester。现役名单以上方路由与运行态自检为准；配置/运行态治理仍须取得相应授权。
 
 ### P-1: Skill name collision 让 worker 永远进不了对话循环
 

@@ -81,11 +81,11 @@ Hermes profile：`yquantdeveloper`。
 - 不扩大范围，不重构无关代码
 - 设计缺口需要自行发明方案时，退回 Principal
 
-## YQuant-Test-Engineer
+## YQuant-Test-Engineer（历史角色，已批准退役）
 
-仅承担旧任务兼容或主控明确指派的必要测试专项，不是 Full/Light 新默认必经阶段；既有旧链继续按原契约，不自动迁移。
+2026-11-16 Pascal 批准退役，不再派发新任务；必要测试专项由独立于实现者的 `yquantreviewer` 承担。以下输入/输出/规则为历史职责记录，不是现行路由；旧卡保留原契约、依赖、runs 与作者，由主控逐卡核实迁移或归档，不自动改判、取消或重跑。
 
-Hermes profile：`yquanttester`。
+历史 Hermes profile：`yquanttester`；运行态删除须由主控另行执行，本文不证明已删除。
 
 输入：
 - diff

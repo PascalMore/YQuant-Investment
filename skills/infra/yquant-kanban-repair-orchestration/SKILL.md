@@ -22,7 +22,7 @@ description: "YQuant 工程流水线中真实验证失败后的修复链重建�
 
 > 若严格 allowlist 修复卡被 auto-decomposer 擅自改派、重写 body、拆子卡或在共享树创建未追踪 `handoff/`，按 `references/auto-decomposition-contamination.md` 先止损、保全现场，并用可信上游 parent 重建源码实物驱动的 Verify → Review；不得把被污染 root 或其 child 当作通过依据。
 
-> 研究类产出（多窗口汇总表、风险判定重算、指标载体）没有代码 bug 要修，只有一份产物要证明它对，因此**不需要完整修复链**。这类任务的验收角色分工、对拍基准生成规则、检查项数量控制与旧清单退役映射，按 `references/research-output-verification-role-split.md` 执行：验收归单角色完成，复审只在「改了多层契约文档 **且** 涉交易/风控语义」时才开，技能文档修订与纯数值研究均不触发。
+> 研究类产出（多窗口汇总表、风险判定重算、指标载体）没有代码 bug 要修，只有一份产物要证明它对，因此**不需要完整修复链**。这类任务的验收角色分工、对拍基准生成规则、检查项数量控制与旧清单退役映射，按 `references/research-output-verification-role-split.md` 执行：由独立于实现者的 `yquantreviewer` 单角色承担统一 Validate（测试验证、消费者/反例审查与通过/退回裁定）；同一阶段内仅在「改了多层契约文档 **且** 涉交易/风控语义」时检查契约文档与实现/报告三处一致性及 diff 范围，技能文档修订与纯数值研究均不触发该专项检查，不另开复审角色或阶段。
 
 适用于 YQuant Full / Light 中，独立 Validate（旧链为 Verify 或 Review）发现真实缺陷后，需要修复并重新取得独立证据的工程任务。它补充通用 AI Coding Pipeline：重点是**失败证据保留、替代链重建、关闭旧链残留与诚实 Closeout**；以下旧链步骤按上方当前规则优先解释，不作为新任务默认图。
 

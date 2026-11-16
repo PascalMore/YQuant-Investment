@@ -21,14 +21,15 @@ YQuant 是运行在 Hermes Agent 上的量化金融工程师与工程化主控�
 
 ## 核心工程 Agent
 
-四个现有 Hermes 工程角色的正式定义位于 `profiles/`，每个目录采用 SOUL、AGENTS、config.example、README 四文件。不是新增四个运行实例。当前 AI Coding Pipeline 只有 Full 与 Light 两套流程，统一 Validate 由 `yquantreviewer` 独立承担。
+三个现役 Hermes 工程角色的正式定义位于 `profiles/`，每个目录采用 SOUL、AGENTS、config.example、README 四文件。当前 AI Coding Pipeline 只有 Full 与 Light 两套流程，统一 Validate（包括测试专项）由 `yquantreviewer` 独立承担。2026-11-16 Pascal 批准退役 `yquanttester`，不再派发新任务；其四文件保留为历史档案，运行态删除与旧卡逐卡处理由主控执行，不由本说明宣称已完成。
 
 | Profile | 职责 | 正式入口 |
 |---|---|---|
 | `yquantprincipal` | RFC/SPEC/Design、架构、接口、风险与实现计划 | [角色说明](profiles/yquantprincipal/README.md) |
 | `yquantdeveloper` | 按已确认需求做最小范围实现 | [角色说明](profiles/yquantdeveloper/README.md) |
-| `yquanttester` | 旧任务兼容或主控明确指派的测试专项（非默认阶段） | [角色说明](profiles/yquanttester/README.md) |
 | `yquantreviewer` | 统一 Validate：必要测试、消费者/反例审查、独立验收裁定 | [角色说明](profiles/yquantreviewer/README.md) |
+
+历史角色：[`yquanttester` 退役档案](profiles/yquanttester/README.md)。旧任务契约、依赖、runs 和作者保留，不因 profile 退役抹去未完成验收或失败记录。
 
 角色正文在仓库维护；运行 profile 的 SOUL 链接对应文件。具体模型、fallback、凭据和工具仍以本机配置为准。项目 AGENTS 按任务目录加载，角色 AGENTS 通过角色 SOUL 的明确启动要求读取。
 

@@ -69,14 +69,14 @@ strategy-lab/                     # 只放研发工具资产
      有推荐则最终回测并读回 → 写 `reports/report.md` 与 `reports/comparison.csv`。
    - 研究类：目录内 `research.py` 直接执行；只调用行情读接口，不交易、不进化。
 3. **交付**：报告记录 `sourceId`/`runId`/`jobId`、判定分类、限制与复现命令；
-   平台侧 UI 实查（`/strategy-ide?sourceId=`、`/backtest-center?sourceId=`）由独立 Verify 完成。
+   平台侧 UI 实查（`/strategy-ide?sourceId=`、`/backtest-center?sourceId=`）由独立 Validate 完成。
    研究类报告必须包含 [templates/research-report.md](templates/research-report.md) 的核心字段
    （结论摘要、数据与口径声明、假设与未建模项、限制与不适用范围、结果明细、复现命令、证据分级）；
    量化口径（年化周期数、初始资金、成本与未建模项等）必须显式标注，不得沿用默认值而不声明。
 
 ## Rust 同核心研究实例的适用性
 
-`strategies/predict-btc5m-btc-arb/` 是 SPEC-07-001 M2 的窄例外：Python 本地薄 I/O 调用 Toolkits 单一 Rust 决策核心，不上传Python策略、不提交QD回测/进化。恢复研究仅读已归档OHLC/原页/availability，合法代理外层exit3；venue/product及真实收益未知，不把无盘口候选/成交写成0。平台UI、保证金回执、网格表A/B/四折/G/E和35%阈值对此代理研究不适用；公共权益helper仅在存在真实权益输入时使用，不凭空生成净值。唯一正文及证据见实例README/spec/report；Developer自测不替代独立Verify/Review，不授权交易、重采或长期调度。
+`strategies/predict-btc5m-btc-arb/` 是 SPEC-07-001 M2 的窄例外：Python 本地薄 I/O 调用 Toolkits 单一 Rust 决策核心，不上传Python策略、不提交QD回测/进化。恢复研究仅读已归档OHLC/原页/availability，合法代理外层exit3；venue/product及真实收益未知，不把无盘口候选/成交写成0。平台UI、保证金回执、网格表A/B/四折/G/E和35%阈值对此代理研究不适用；公共权益helper仅在存在真实权益输入时使用，不凭空生成净值。唯一正文及证据见实例README/spec/report；Developer自测不替代独立Validate，不授权交易、重采或长期调度。
 
 ## 研究预检（研究类开工前必过）
 
@@ -386,7 +386,7 @@ Sharpe 置于其后（风险调整后的衍生指标）。
 不得新增未定义值（含 `unknown`——占位行用 `insufficient-evidence`，状态缺失一律 `N/A`）。
 N/A（未知/缺失）与 0（实测为零）严格区分：前者带原因，后者是有效观测值。
 
-## 研究验收标准与角色分工（2026-11-04 Pascal 裁定）
+## 研究验收标准与角色分工（2026-11-04 裁定；2026-11-16 路由对齐）
 
 研究类产出（表 A / 表 B / 载体 CSV / 报告正文）必须过独立验收。分工按**角色职责不同**划分，不为研究场景额外增加角色。
 
@@ -395,11 +395,10 @@ N/A（未知/缺失）与 0（实测为零）严格区分：前者带原因，�
 | 角色 | profile | 职责 | 启用条件 |
 |---|---|---|---|
 | 实现 | `yquantdeveloper` | 按已冻结契约做最小实现、补测试 | 有代码改动 |
-| 研究验收 | `yquanttester` | 独立重算对拍 + 载体同源核对（+ 口径/范围一致性，见下触发条件） | 研究类产出后**必过** |
-| 契约复审 | `yquantreviewer` | 只审契约文档与实现/报告三处一致性、审 diff 范围、出通过/退回决定 | **仅**同时满足：改了 `docs/{rfc,spec,design}/` 三层契约 **且** 变更涉及交易/风控语义 |
+| 研究验收 Validate | `yquantreviewer` | 独立重算对拍 + 载体同源核对；按下表触发口径/范围一致性检查，并完成消费者/反例审查与通过/退回裁定 | 研究类产出后**必过** |
 
-研究验收归 Light Flow 的 Verify 阶段（单角色 tester），不另开 reviewer 卡。
-独立性来自「实现者不是验证者」+「验证者不用实现者的算法」，**不来自角色数量**——同一数值用同法重算两次不构成额外独立性。纯数值研究（换合约/换窗口/加 cell）不触发 reviewer；阈值、展示口径、列序类调整也不触发。
+研究验收归 Full / Light 共用的统一 Validate（单角色 reviewer），不另开默认 Verify 或契约复审卡；tester 已批准退役，不再派发。流程分流遵循 [canonical pipeline](../../infra/ai-coding-pipeline/SKILL.md#unified-validate)。
+独立性来自「实现者不是验证者」+「验证者不用实现者的算法」，**不来自角色数量**——同一数值用同法重算两次不构成额外独立性。纯数值研究（换合约/换窗口/加 cell）、阈值、展示口径、列序类调整均由同一独立 Validate 按本节判据验收，不额外增加角色；下方数值、算法与触发条件不变。
 
 ### 验收检查项（3 项，判据必须可证伪）
 
@@ -545,7 +544,7 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python skills/strategies/strategy-lab/script
 - 策略源码中的 `order_target_percent` 只在平台历史回测沙箱执行，不构成真实下单授权；
   首版交易闭环固定 Human JWT，缺 JWT 如实阻塞，不 mock 替代。
 - 报告只存明确业务字段，丢弃 headers/token/password 样式字段；不含凭据、账户或原始 HTTP 响应。
-- 研究类在证据不足时必须 fail closed：退出码 3、零业务请求、不产出完成报告；离线自检通过不等于独立 Verify/Review。
+- 研究类在证据不足时必须 fail closed：退出码 3、零业务请求、不产出完成报告；离线自检通过不等于独立 Validate。
 - 杠杆请求后必须读回核对：回执 `executionAssumptions` 与请求不一致时按契约失败处理（不得静默放行、
   不得改写请求或用请求值覆盖回执）；回执字段缺失或不可读时按证据不足处理，不得默认判通过、不得用
   请求参数回填回执值。
