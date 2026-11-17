@@ -22,6 +22,8 @@ Hermes profile：`yquant` 或 `yinglong`。Intake 必须先按共享技能规则
 - 期望产出
 - 验收标准
 - 权限边界和禁止事项
+- 命令的 cwd、既有测试/固定用途脚本精确路径、参数、输入输出和副作用禁区；按[任务书命令边界](../SKILL.md#command-boundaries)审阅，不泛禁所有脚本、不开放任意解释器，保留测试 native exit
+- 必需验收依赖与可选步骤；按[动作级拒绝恢复](../SKILL.md#action-scoped-refusal)写停手条件，不把可选拒绝变成自动整卡停工或主控接管
 
 不得：
 - 将子 Agent 原始日志直接转发给用户
@@ -129,4 +131,4 @@ Hermes profile：`yquantreviewer`。
 - 存在阻塞问题时退回对应阶段
 - 按影响选择必要实际测试，核对消费者路径和数据合理性；发现缺陷退回 Implement，不改业务实现后自签通过
 - 候选、输入、依赖与条件仍适用才复用原独立证据；只整理日志/补登记不重复运行，主控不第三遍全量验证
-- 任务已通过且有预建下游时 complete；仅同卡 review 用 request_review；真正缺验收/授权时 block。安全拒绝停止相关动作，不换工具绕行
+- 任务已通过且有预建下游时 complete；仅同卡 review 用 request_review；真正缺必需验收/授权时 block。安全拒绝按[动作级规则](../SKILL.md#action-scoped-refusal)停止被拒动作及依赖分支；可选动作记 `NOT_EXECUTED/OMITTED` 并省略，只继续独立已授权工作，不自动回收或主控代工。工具等待/不得替代、人类拒绝和 hardline/deny 不可覆盖；不换工具等价重放，必需验收未齐不 done

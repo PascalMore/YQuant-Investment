@@ -121,4 +121,5 @@ Orchestrator Intake
 - 依次取得真实 id 再创建下游，禁止占位 parent；在 Intake 内完成依赖预建，不必等上游 done。阶段通过且有下游时 complete，不因存在下游 block，不盲目定时 unblock。
 - 创建后必须记录返回的 task id；没有 task id 就视为没有真实委派。
 - 如果 gateway 没运行，ready task 不会自动执行；记录环境阻塞，由具备明确授权的主控/operator 恢复，不自行重启或绕过拒绝。
+- 任务书命令与脚本按 [命令边界](../SKILL.md#command-boundaries) 固定 cwd、精确入口和副作用限制，保留测试 native exit；拒绝按 [动作级恢复](../SKILL.md#action-scoped-refusal) 裁定。可选动作记 `NOT_EXECUTED/OMITTED` 后只继续独立已授权工作，不等价重放或自动主控接管；必需验收受阻则 block 依赖分支，未齐不 done，工具明确停止/等待要求不可覆盖。普通测试/文件保护错误在原范围按原工具修复。
 - `delegate_task` 可用于短推理、并行代码阅读等临时子任务，但不得替代 profile worker 角色切换。

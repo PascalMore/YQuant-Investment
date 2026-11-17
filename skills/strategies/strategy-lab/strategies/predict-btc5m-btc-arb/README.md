@@ -57,3 +57,54 @@ research.py支持 --ohlc-file、--raw-pages-file、--availability-file，归档�
 这是复现接口说明，不是新增执行授权；当前超预算禁止启动或覆盖现有报告。正式全窗仍未运行，不能释放Tester或Closeout。
 CLI只允许mode/as-of/evidence-dir/report；Rust只允许config/input/output/summary/from-ms/to-ms。无live/RPC/wallet入口。
 
+## M4 研究性能编排（2026-11-17，2026-11-18 Fix1 返修）
+
+新增 `history_performance.py`（旁路性能入口，`history_research.py` 与 `history_input.py` 不变）：
+
+- `--mode rescore`：只读复用**已签收**的 `samples.csv`，本地重评分重建 comparison/calibration/daily/monthly，
+  与归档统计逐列比对；不启动 Rust、不连 Mongo。
+  输入身份必须与固定可信清单（五个文件的 sha256）逐项匹配，且 identities/params/manifests
+  互相自洽；**自算 hash 不构成自认证**，其它 source-dir 一律拒绝。
+- `--mode window` / `--mode candidates`：用既有 facade / day_events / 既有 Rust history 核心跑显式窗口。
+  事件流每日只编码一次并广播给多个**同配置**独立核心（各自连续状态、各自 stdout）。
+  每个核心导出**自己的**完整 samples.csv 与四张统计表，编排层逐列精确比较（无容差）。
+- 有界预取：最多 2 个并行读取任务 / 有界待消费结果。**未启动**的待读日被取消且**确定不会运行**；
+  已启动的读取无法杀死，如实记为 `unreclaimed` 并保留在 registry 中不丢弃。
+- **默认 `--strategy serial`**；`prefetch` / `both` 仅显式启用。`candidates` 模式**始终**追加
+  `independent` 控制臂（逐实例独立重复读取）；`--strategy` 决定的是是否附加预取臂，不是是否跑独立臂。
+- 失败传播：任一实例非零退出、缺 values/summary、partial summary、写入阻塞超时或预取未回收，
+  都令该批 `complete=false`，CLI 返回非零（4=批次不完整，2=异常，5=超时），绝不发布伪完整状态。
+- 有界退出：stdin 走非阻塞管道 + `select`，总 deadline 约束每次事件写入与最终等待；
+  回收顺序为 terminate → 有界 wait → kill → reap，异常路径同样关闭 stdin/stderr 句柄。
+
+边界：`replay/types.rs` 的配置校验锁定原参数，`vol_floor` 仅接受 0.00005。因此本模块只做
+**多实例控制实验**（相同冻结配置的多个独立连续核心），**不**交付不同 floor 的模型能力、
+**不**放宽 Rust 校验、**不**输出模型择优；后续 M2 / 最新 phase1 研究接线按其自身契约另办。
+
+输出目录固定在本主题 `evidence/` 子树（`developer` / `fix1` / `validate` 皆可），且独占创建、
+冲突即失败（不覆盖既有证据）。所有产物只读本地既有归档与真实 facade，不写生产库、调度、paper
+或交易配置。
+
+构建及定向测试（项目解释器，不安装依赖）：
+
+    .venv/bin/python -B -m pytest skills/strategies/strategy-lab/strategies/predict-btc5m-btc-arb/tests/test_history_performance.py -q
+
+    # 结果复用（无 Rust、无 Mongo）
+    .venv/bin/python -B skills/strategies/strategy-lab/strategies/predict-btc5m-btc-arb/history_performance.py \
+      --mode rescore \
+      --evidence-dir data/reports/2026-11-17-btc5m-research-performance/evidence/fix1/rescore-<run-id>
+
+    # 真实 facade 多实例控制实验（共享输入 vs 独立重复读取）
+    # 默认 serial；加 --strategy prefetch 才附加预取臂
+    .venv/bin/python -B skills/strategies/strategy-lab/strategies/predict-btc5m-btc-arb/history_performance.py \
+      --mode candidates --instances 2 --strategy serial \
+      --start 2026-11-15T23:30:00Z --end 2026-11-16T00:30:00Z \
+      --as-of 2026-11-17T15:00:00Z \
+      --evidence-dir data/reports/2026-11-17-btc5m-research-performance/evidence/fix1/candidates-<run-id>
+
+CLI 只接受 mode/as-of/start/end/evidence-dir/source-dir/expect-samples-sha256/instances/strategy/budget-seconds；
+输出限定在本主题 evidence/ 子树，越界即拒绝。
+evidence 目录为**独占创建**：已存在即失败，绝不覆盖既有证据。--instances 上限 3。
+每次运行在 evidence 目录写入 `identity-start.json` / `identity-after.json`：argv、cwd、
+当前 source/tests/config/binary 的 sha256，用于把运行绑定到具体候选代码版本。
+

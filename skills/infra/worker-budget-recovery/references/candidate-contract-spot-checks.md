@@ -49,7 +49,7 @@
 4. **写入超时先对账**：工具超时且原生退出/summary缺失时，结果记 UNKNOWN；通过已有自然键、stored/recomputed/官方原文转换后的业务hash核实实际已写子集，再决定幂等续跑。部分行一致不等于整日完整，不追认原ack或exit，也不清库重来。
 5. **只恢复授权的最小引用**：确认候选manifest内容hash、kind、cursor和冻结上下界与真实stream精确相符，取得具体namespace/记录/字段的恢复授权。复用应用既有写锁，保存完整旧文档，使用包含旧值条件的 `update_one(..., {"$set": {"scan_manifest_ref": verified_ref}}, upsert=False)` 执行一次CAS；只补引用，不清cursor、不重置retry、不改day complete或水位。匹配数不是1、ack不明或读回异常即停止，不自动重试。
 6. **核完整文档而非只核新字段**：读回同一精确目标，断言新文档等于旧文档加获准字段，保存receipt和前后证据。一次单字段生产恢复不授权批量纠正已有标签；后续仍走已审管道。
-7. **长摄入用受跟踪的原入口**：首次设计执行方式时，为预计超过前台工具等待上限的已授权CLI使用 `terminal(background=True, notify=True)`，保存session_id、原生退出和逐批summary；同一业务进程未结束不启动第二次apply。若前台动作已经安全拒绝，改后台仍须新的相应授权；未知写入结果先按上步对账，不能用后台重跑掩盖。
+7. **长摄入用受跟踪的原入口**：首次设计执行方式时，为预计超过前台工具等待上限的已授权CLI使用 `terminal(background=True, notify=True)`，保存session_id、原生退出和逐批summary；同一业务进程未结束不启动第二次apply。若前台动作已经安全拒绝，不改后台等价重放，按 [动作级拒绝恢复](../../ai-coding-pipeline/SKILL.md#action-scoped-refusal) 停止该动作及依赖分支；对应恢复授权仍不能覆盖工具的硬性禁止或等待要求。未知写入结果先按上步对账，不能用后台重跑掩盖。
 
 ## 配套结论规则
 

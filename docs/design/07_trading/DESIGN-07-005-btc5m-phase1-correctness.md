@@ -135,7 +135,7 @@ Broker 在原 State 锁下注册/核对本次 candidate 的 id、market/token、
 
 PRE_SUBMIT 失败直接 blocked，无 reservation。原 Broker 拒绝保留原 Blocked reason，diagnostic_reason=BROKER_BLOCKED。reservation 之后失败释放本笔一次，依次 release/blocked，现金、成本、库存、entered 不变。phase1 新原因用原 DataIncomplete 承载，diagnostic_reason 细分；run deadline/停止/损失优先 reason=RUN_STOPPED，不因同时出现30秒信号而放行。正 fill 才 entered，settlement 不清 entered。
 
-PRE_APPLY 是同锁内实际应用前采样/复算的快照，不读取网络。为防 stdout 写阻塞成为未复核延迟，诊断/事件先在同锁内进行有界本地序列化与字段/长度预检，PRE_APPLY 和本次 fill/release 的输出批次按逻辑顺序暂存在本次调用局部缓冲；应用前最后一次取时钟、检查/计算，紧邻本地内存更新，二者之间无 await、网络或阻塞 stdout。随后仍在该锁的事件序列化出口按序 flush（PRE_APPLY 在 fill 行前）；快照中的 accounting 是采样时的真实应用前账户值，不是 flush 时重新拼成的事后值。不跨调用缓存/持久化这批事件，不形成事件主账。所有走该出口的 v2 事件共享序号/输出顺序，不能让其他线程插队。
+PRE_APPLY 是同锁内实际应用前采样/复算的快照，不读取网络。2026-11-17 Pascal 确认的最小实现澄清：为防 stdout 写阻塞成为未复核延迟，PRE_APPLY 先在同锁内有界本地序列化并暂存在本次调用局部缓冲；fill/release 在 reservation 前先编码不可变字段，并以 accounting 标量、event_seq、event_time、diagnostic_reason 的明确编码长度上界预检最终整行容量及剩余序号。动态标量的保守表示宽度预算不是业务阈值，整行仍须遵守原 64KiB 上限。此处不要求应用前固定事后账务的最终字节，不预演或复制账本：成交后从原 Broker 真实状态构造 fill 的 accounting，拒绝释放后从真实状态构造 release 的 accounting；容量或序号不足必须在应用前拒绝。应用前最后一次取时钟、检查/计算，紧邻本地内存更新，二者之间无 await、网络或阻塞 stdout；随后仍在该锁的事件出口按序输出（PRE_APPLY 在 fill 行前）。PRE_APPLY 快照中的 accounting 是采样时的真实应用前账户值，不是 flush 时重新拼成的事后值。不跨调用缓存/持久化局部事件，不形成事件主账；所有走该出口的 v2 事件共享序号/输出顺序，不能让其他线程插队。
 
 如果最终重取 clock 使较早的 PRE_APPLY 失效，只发当前最终检查的快照，不把临时局部计算当已发事件。任何最终检查失败仍 release/blocked，不应用成交；编码/容量失败先按 DIAGNOSTIC_LIMIT 停该候选。实际 stdout I/O 在应用后失败只能停止新增、保留真实 Broker 状态并使 run 证据不完整，不能假装输出成功、回滚已发生账务或补造成功 terminal；这是无持久化事务的明确边界，不新增可靠消息服务。
 
@@ -247,7 +247,7 @@ config.rs（1377）只读；models.rs和默认配置不动，避免给所有旧�
 
 ## 4. 实现计划
 
-以下是同一预建 T3 内部顺序，不新建任务图，不在本T2执行。
+以下是一期实现的依赖顺序，不在本 T2 执行。2026-11-17 Pascal 批准预算恢复：保留既有 T3 与 T4，将剩余实现按 Rust 前向/事件闭合 → replay/2 → 原 T3 Python 消费者与最终集成串行调度；前两项作为有界下层实现卡，原 T3 等待其真实 parent 完成，原 T4 仍等待 T3 后做一次统一独立 Validate。此调整只改变调度粒度，不改变 §3.1 文件范围、业务语义、§5 验收义务或运行授权，不增加设计/验收阶段；任何中间卡完成都不等于一期 PASS。
 
 1. 先为 SPEC A-001–022 建 RED：保留旧断言，新增明确phase1的费用门槛、缺上下文和源/时钟反例；新测试仅进入已列文件，测试夹具全scratch/fake。复核本地HEAD/dirty/输入SHA，不能还原共享树。
 2. 按§3.6提取books循环并回归plain，接 observation/quote_observed/observed_books/Known；统一时钟origin和真实每批获取时刻，保留旧默认API。先证明获取时刻与缓存/失败不续鲜，再接源epoch。
