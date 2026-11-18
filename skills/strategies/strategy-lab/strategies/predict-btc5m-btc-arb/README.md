@@ -57,7 +57,7 @@ research.py支持 --ohlc-file、--raw-pages-file、--availability-file，归档�
 这是复现接口说明，不是新增执行授权；当前超预算禁止启动或覆盖现有报告。正式全窗仍未运行，不能释放Tester或Closeout。
 CLI只允许mode/as-of/evidence-dir/report；Rust只允许config/input/output/summary/from-ms/to-ms。无live/RPC/wallet入口。
 
-## M4 研究性能编排（2026-11-17，2026-11-18 Fix1 返修）
+## M4 研究性能编排（2026-11-17，2026-11-18 Fix1/Fix2 返修）
 
 新增 `history_performance.py`（旁路性能入口，`history_research.py` 与 `history_input.py` 不变）：
 
@@ -73,9 +73,25 @@ CLI只允许mode/as-of/evidence-dir/report；Rust只允许config/input/output/su
 - **默认 `--strategy serial`**；`prefetch` / `both` 仅显式启用。`candidates` 模式**始终**追加
   `independent` 控制臂（逐实例独立重复读取）；`--strategy` 决定的是是否附加预取臂，不是是否跑独立臂。
 - 失败传播：任一实例非零退出、缺 values/summary、partial summary、写入阻塞超时或预取未回收，
-  都令该批 `complete=false`，CLI 返回非零（4=批次不完整，2=异常，5=超时），绝不发布伪完整状态。
+  都令该批 `complete=false`，CLI 返回非零（4=批次不完整，2=异常，5=超时，6=源码漂移，7=中断），
+  绝不发布伪完整状态。
 - 有界退出：stdin 走非阻塞管道 + `select`，总 deadline 约束每次事件写入与最终等待；
-  回收顺序为 terminate → 有界 wait → kill → reap，异常路径同样关闭 stdin/stderr 句柄。
+  回收顺序为 terminate → 有界 wait（`CORE_WAIT_SECONDS`）→ kill → 有界 wait（`CORE_KILL_SECONDS`）
+  → reap，全程只用 `wait4(WNOHANG)`，**不存在**阻塞式 `wait4(pid, 0)`；活着的子进程绝不记为已回收。
+- 异常路径同样落盘：超时、open 失败或中断时，partial 状态、每核 native exit / terminate / kill /
+  reaped / 未回收标记与 prefetch 的 cancelled / reclaimed / unreclaimed / still_tracked
+  写入 `failure.json` 后原异常照常抛出，清理异常不掩盖原异常。
+- 原生 summary 契约校验：按 `src/bin/btc_arb_history.rs` 的实际输出检查 `native_exit` / `spots` /
+  `values` / `complete` / `error` 五个必需字段、精确类型（bool 不作整数）与
+  「值计数 = 实际输出行数」「native_exit 与观测退出码一致」的出口一致性；
+  仅写 `{"complete": true}` 或字段缺失一律判失败。
+- 运行身份绑定：`identity-start.json` 记录**开始时**的 source/tests/config/binary 及公共 facade
+  （client / history_reader / history_types / storage）sha256，`identity-after.json` 与该快照
+  **逐项比较**；漂移即保留两份证据并 CLI 返回 6，不再比较两次结束态。
+- 跨臂拒绝闸门：main 成功前统一比较各臂的逻辑单流 event/day 内容身份、逐实例完整 samples
+  身份与行数、valued 行数、missing-reason 分母，以及 source 摘要的 coverage / missing / pending /
+  conflicts / row_counts；独立臂**各 part 的完整 samples** 也逐列比较。独立臂 events 总量是其
+  自身重复读取之和，不与共享臂单流值直接相等比较。
 
 边界：`replay/types.rs` 的配置校验锁定原参数，`vol_floor` 仅接受 0.00005。因此本模块只做
 **多实例控制实验**（相同冻结配置的多个独立连续核心），**不**交付不同 floor 的模型能力、
@@ -106,5 +122,8 @@ CLI 只接受 mode/as-of/start/end/evidence-dir/source-dir/expect-samples-sha256
 输出限定在本主题 evidence/ 子树，越界即拒绝。
 evidence 目录为**独占创建**：已存在即失败，绝不覆盖既有证据。--instances 上限 3。
 每次运行在 evidence 目录写入 `identity-start.json` / `identity-after.json`：argv、cwd、
-当前 source/tests/config/binary 的 sha256，用于把运行绑定到具体候选代码版本。
+当前 source/tests/config/binary 与公共 facade 的 sha256，用于把运行绑定到具体候选代码版本；
+`sources_unchanged` 是「开始快照 vs 结束快照」的逐项比较结果。
+运行还写入 `runs.json`（各臂结果）、`arm-comparison.json`（跨臂拒绝闸门结论）与
+失败时的 `failure.json`（partial 状态与清理证据）。
 
