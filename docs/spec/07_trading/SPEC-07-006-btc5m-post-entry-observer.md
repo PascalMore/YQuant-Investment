@@ -4,12 +4,12 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 / 版本 | Draft V1.0；供下一阶段 Design，不是实现/独立 Validate PASS |
+| 状态 / 版本 | Draft V1.1；2026-11-19 因果水位落盘修订，待独立文档核验与实现验收 |
 | 作者 | YQuant Principal / yquantprincipal |
-| 创建 / 更新 | 2026-11-18，Asia/Shanghai（UTC+08:00） |
-| 来源 RFC | [RFC-07-006](../../rfc/07_trading/RFC-07-006-btc5m-post-entry-observer.md) V1.0 |
+| 创建 / 更新 | 2026-11-18 / 2026-11-19，Asia/Shanghai（UTC+08:00） |
+| 来源 RFC | [RFC-07-006](../../rfc/07_trading/RFC-07-006-btc5m-post-entry-observer.md) V1.1 |
 | 工作区 / 来源任务 | /home/pascal/workspace/yquant-investment；t_408e60a0 |
-| 后续 Design | docs/design/07_trading/DESIGN-07-006-btc5m-post-entry-observer.md；独立下阶段产物，本阶段不创建 |
+| 后续 Design | docs/design/07_trading/DESIGN-07-006-btc5m-post-entry-observer.md V1.1；本次同步既有独立实体 |
 | 执行 / 验收角色 | Design: yquantprincipal；Implement: yquantdeveloper；独立 Validate: yquantreviewer；Gate/Closeout: 主控 yquant |
 
 ## 1. 需求摘要
@@ -49,7 +49,7 @@ BOT=`skills/trading/auto-trading/prediction-markets/Prediction-Markets-Trading-B
 
 不做交易/退出/反手/加仓/对冲、优化退出点、择优回填、PnL 策略反事实、校准/参数搜索、第二 core/Broker/账本/执行器、新采集/WS/服务/队列平台、恢复/调度、真实 API/DB/凭据/依赖变更。原参数和来源 guard、100/2/2/10/20 USDT、poll_secs=5、min_edge=0.03、min_secs_left=30、floor/half-life/样本门槛不变。不开任何新 paper/影子盘或观察服务，不授权 git fetch/merge/add/commit/push/reset/stash/clean/checkout。
 
-本阶段仅写 RFC-07-006 与本 SPEC，其他只读；不写 Design、报告/证据、业务代码/测试、模板/README/AGENTS/SOUL。本任务结果报告只允许后续使用 data/reports/2026-11-18-btc5m-post-entry-observer/report.md 和必要 evidence/，无 data/tasks/ 或任务镜像。
+V1.0 原文档阶段只写 RFC/SPEC 的范围为历史。V1.1 用户批准同步既有 RFC/SPEC/Design 三实体；本次修复的唯一结果报告使用 data/reports/2026-11-19-btc5m-observer-runtime-fix/report.md 追加节及 evidence/ 新叶，原报告/证据只读保留，无 data/tasks/ 或任务镜像。代码增量仅 Design §3.4.5 三路径。
 
 ## 3. 功能规格
 
@@ -192,23 +192,25 @@ exit_reason 有限集合：OK、NO_POSITION、MARKET_INVALID、MISSING_BOOK、IN
 ### 4.8 输出、过滤与只读消费者
 
 1. 交易 btc5m-controlled-paper.v1/v2 的 BTC5M_EVENT 原 envelope/schema/kind/event_seq、decision_id、关系/公式校验、accounting 与 started/ended 含义一律不变。观察不能新增原交易事件、向 source.decision 塞新字段，不能将原 ALREADY_ENTERED 改成 ELIGIBLE 或补 p_up 来冒充原评估。
-2. 旁路 schema 固定 /1，使用独立可识别 framing 与独立文件，不是被 supervise 丢弃的自由 tracing。具体传输/文件名由 Design 冻结，不要求新服务/通用队列。显式 OFF 时零观察输出/文件副作用，原行为不变；旧 run 没有旁路为 OBSERVATIONS_UNAVAILABLE，不创建空文件伪完整。
+2. 传输 wire/1 与 §4.5 record/1 固定不变；V1.1 落盘保存完整已验证 SAMPLE envelope（含 after_event_seq 与原 record），使用独立可识别 framing 与独立文件，不是被 supervise 丢弃的自由 tracing。具体传输/文件名由 Design 冻结，不要求新服务/通用队列。显式 OFF 时零观察输出/文件副作用，原行为不变；旧 run 没有旁路为 OBSERVATIONS_UNAVAILABLE，不创建空文件伪完整。
 3. 真实 Rust writer→现存 launcher 路由/逐行验证→首次旁路 write→本地只读 reader 全链必须存在。对 schema/run/market/token归属、枚举、时钟/null、公式/深度、序号及原fill关联先验证再落盘；不先写raw再清洗。reader须实际被离线测试调用，可与严格校验复用；不为此新增汇总研究平台。
-4. 关联只读使用原单次入场的 (run_id,market_id,token) 到原正BUY fill/settlement/final，检查 Q/K 与当时账本；不以 observer 构造第二本可交易库存/现金。观察自己的序号不能进入 _EventRelations 或影响 previous accounting snapshot。未知 token、没有正fill却声称持仓、重复/倒序序号、坏版本/字段/公式拒绝观察证据。
+4. 关联只读使用原单次入场的 (run_id,market_id,token) 到原正BUY fill/settlement/final，按每行实际持久化的 after_event_seq 检查 Q/K 与当时账本；fill_seq 必须不大于水位，ACTIVE 时 settlement_seq 须仍在水位之后，SETTLED 时 settlement_seq 须已在水位内。不能以整个日志 last_seq 或时间推断替代缺失水位。同毫秒先后按该因果水位裁定，跨毫秒显著未来/时钟不一致仍拒绝，不放宽公式/时钟；不以 observer 构造第二本可交易库存/现金。观察自己的序号不能进入 _EventRelations 或影响 previous accounting snapshot。未知 token、没有正fill却声称持仓、重复/倒序序号、坏版本/字段/公式拒绝观察证据。
 5. 观察校验/写盘/容量错误只禁用或丢弃旁路当前记录，并使覆盖不完整；不得设置原 Phase1Run.output_failed、halt、stop-new-risk、loss_latch 或触发原 OUTPUT_INVALID 停交易。反过来旧交易坏行仍原失败，不混同为可忽略观察行。旁路秘密/任意错误原文不得落盘，也不得以失败隔离放宽父环境/输出秘密边界。
 6. 原行界64KiB/每数组1000/秘密递归过滤不放宽；不可无界积压、重试阻塞或吞掉原交易行。共享pipe物理破损/进程退出等原生命周期仍按原规则，不承诺绕过真实I/O故障继续执行。Design 必须给容量/失败状态的精确落点，并测试旁路自身错误与原协议错误的区别。
 7. 固定输入数值对拍 abs≤1e-9 或 rel≤1e-9；序号/枚举/身份/交易状态和动作次数精确相等。旁路传输公式校验可沿原1e-7上限，不能放宽原交易恒等式或深度门槛；用容差通过字段校验不等于能把不足的Q改为full。
 
 ## 4.bis 持久化契约
 
-无数据库/schema/索引/TTL或自动恢复。§4.5每个逻辑字段都是旁路记录的待实现字段契约，均必有键、null规则如表；run/seq/market/token/时钟/状态为L1，其余行情/模型/公开费率为L0（和run关联时仍按L1工程证据管理），无L2/L3。Design仅决定同义物理分组/文件名，不可删失语义。
+无数据库 schema/索引/TTL 变更或自动恢复。观察文件的 V1.1 物理格式保留已有 SAMPLE envelope 水位，区别于不变的 record/1 逻辑字段。§4.5每个逻辑字段都是旁路记录的待实现字段契约，均必有键、null规则如表；run/seq/market/token/时钟/状态为L1，其余行情/模型/公开费率为L0（和run关联时仍按L1工程证据管理），无L2/L3。Design仅决定同义物理分组/文件名，不可删失语义。
 
 | 存储对象 | 规则 | 生命周期 / 兼容 |
 |---|---|---|
-| 同一新受控 run 目录内独立观察 JSONL | §4.5严格版本化记录，exclusive-create后追加，仅校验通过行 | 无自动删除/TTL/迁移/覆盖/上传；中断保留原字节，禁止resume账本 |
+| 同一新受控 run 目录内独立观察 JSONL | V1.1：严格既有 SAMPLE envelope，键仅 wire_version/kind/run_id/after_event_seq/record；record 严格对应 §4.5；exclusive-create后追加，仅校验及 as-of 关联通过行 | 无自动删除/TTL/迁移/覆盖/上传；中断保留原字节，禁止resume账本 |
 | 同目录观察覆盖状态 | 显式OFF/可用/不完整，接收/有效写入/拒绝/丢失与原因可核对；具体schema由Design明确 | 不写任务进度，不改原ended字段含义，不以无终止冒充完整 |
 | 原 events.jsonl/started.json/ended.json/public-config.json | 不混入观察，原字段/验证/保留策略不变 | 旧证据只读，旧缺观察明确unavailable；不补写历史 |
 | 工程结果 | data/reports/2026-11-18-btc5m-post-entry-observer/report.md；必要evidence/ | 后续独立Validate记录候选/命令/native exit/覆盖/限制；本阶段不创建 |
+
+V1.1 reader 不改返回的 flat records/API 版本或原 coverage schema。每行水位必须是非负真正整数（不接受 bool），不得超出有效原交易日志；漏水位、错版本、重复/未知键、错 run 等必须拒绝并标 INCOMPLETE。legacy flat-only 文件缺因果水位时标 RELATION_UNRESOLVED，不补写、不默认取 last_seq；其余合法新格式行可独立验证，但不能把整个 run 认证 COMPLETE。旧证据不得迁移/补造。
 
 观察覆盖状态只是输出证据，不保存另一份Q/K/现金账本。没有文件时不能默认为所有tick成功，也不因为交易正常结束默认完整。若无法可靠测得producer丢失数量，明确UNKNOWN/INCOMPLETE，不编造精确0。data被Git忽略，不自动备份；无跨项目复制/外发。
 
@@ -236,10 +238,17 @@ exit_reason 有限集合：OK、NO_POSITION、MARKET_INVALID、MISSING_BOOK、IN
 | A-016 | 已持仓离开selected，Known/tracked已有该book | 仍观察，不增加请求集合/交易evaluate；无持仓/blocked/零fill不能制造ACTIVE退出规模 | rescan变化→原Known→真实旁路 |
 | A-017 | 0<T<30秒有效，首次T≤0/官方移仓/runstop | 不套30秒入场限制；到期/结算/停止终止，无新模型/退出值，无T=0概率冒结算；不延长cleanup/采样 | 原tick/lifecycle与官方fixture |
 | A-018 | pending后原settlement/final、提前停止/进程中断 | 现金/entered与OFF一致；不重启观察，不补terminal或提前兑付；覆盖不完整可见 | 原settlement/监督链→reader关联 |
-| A-019 | 真实Rust旁路输出经launcher验证持久化再reader读取 | 不只手拼JSON或单测纯函数；旧交易events原样、旁路不进_EventRelations；真实读回模型/深度/费用/原因正确 | 隔离候选binary离线fixture→现存supervise→首次write→本地reader |
+| A-019 | 真实Rust旁路输出经launcher验证持久化完整 SAMPLE 水位，再reader按原水位读取 | 不只手拼JSON或单测纯函数；旧交易events原样、旁路不进_EventRelations；真实读回模型/深度/费用/原因正确 | 隔离候选binary离线fixture→现存supervise→首次write→本地reader |
 | A-020 | 正常/未知版本/坏run或token/漏键/坏null/重复键/枚举/非有限/bool冒数/坏公式/序号重复倒序缺口 | 坏行不首次写入，覆盖INCOMPLETE；合法null不填0；旁路错误不改变交易trace，原交易坏行仍OUTPUT_INVALID | 真实过滤/写入spy/只读reader；对照原交易错误 |
 | A-021 | 合法边界内深度和输出；观察写盘/编码/容量失败 | 1000档/64KiB超界不可截断伪完整，不无界积压/阻塞重试，不写raw秘密；旁路fail不设置Broker output_failed/halt/latch | 真实writer/launcher故障注入及原行为对拍 |
 | A-022 | 默认OFF、普通/signed/history/replay旧行为 | 无观察副作用，不放宽v1/v2严格校验/秘密/交易限制；不改冻结文件/参数/binary；所有构建显式隔离target | 受影响旧回归、scope diff及冻结身份逐项核对 |
+
+### 5.1 V1.1 必需增量矩阵
+
+1. Yes/No 均有真实 Rust producer→OS datagram→原 supervisor/receiver→首次 write→reader 的同毫秒 fill 后首样本及多 ACTIVE/terminal；明确断言两侧确属同毫秒，OFF/ON 原交易 trace/状态/请求次数不变。
+2. 构造时钟/字段/公式均合法且同毫秒、但 after_event_seq < fill_seq 的负例；先证明 validate_record 成功，再证明 as-of 关联拒绝，不能以 CLOCK 或泛 INVALID_FRAME 冒充 FILL 检查通过。另保留跨毫秒真实 fill 前拒绝。
+3. 结算同毫秒边界：水位前 ACTIVE/ROUND_ENDED 合法，SETTLED 必须水位覆盖 settlement；提前 SETTLED/结算后 ACTIVE 拒绝，不能用时间启发式倒推水位。
+4. 完整 envelope 的严格键/版本/身份与水位边界、legacy flat-only 缺证据 fail-closed、缺观察 unavailable；历史证据原字节保留，不补水位求绿。
 
 ## 6. 测试与证据要求
 
@@ -261,8 +270,9 @@ Design 必须给实存入口和精确 argv/cwd/候选目录，Rust Cargo --offli
 
 开放业务契约冲突：0。以下是下一Design必须落实的工程决策，不是开放交易语义：精确只读hook/快照点（含同tick新fill）、传输framing/路径/wire分组及reader接口、opt-in拼写、容量和失败/coverage schema、逐文件allowlist/G3、离线真实链与隔离构建命令。不能将这些留到实现时自由发明或默默扩大scope。
 
-本阶段核对RFC/SPEC独立实体与V1.0互引后，以kanban_complete交既有Design子卡t_7e3ae26e；不写Design、不新建阶段/同卡review。两个文档满足Design输入不等于工程已实现；后续仍须Design实体Gate、Implement和独立Validate。
+V1.0 原文档阶段向 t_7e3ae26e 的交接为历史，不重建已完成原功能。V1.1 三独立实体互引须均为 V1.1；独立文档核验后续接原 Fix t_bfce2064，再交原独立 Validate t_3cfa9034 R2，t_572e8264 仍保持 blocked。
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
 | V1.0 | 2026-11-18 | 冻结同tick只读/非干扰、原模型/clock有效性、净库存bid退出/费用证据、独立旁路消费/覆盖及22项验收 |
+| V1.1 | 2026-11-19 | 用户批准因果水位落盘：复用完整已验证 SAMPLE envelope 与原 after_event_seq，reader 按逐行水位验证；legacy 缺水位 fail-closed、不回填；补 Both Yes/No 同毫秒、FILL 负例及结算边界；三实体同步并保留原链及未启动 paper 边界。修订者 yquant。 |

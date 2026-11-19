@@ -4,16 +4,16 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 / 版本 | Draft V1.0，Design 交付候选；待实现与独立 Validate，不是功能 PASS 或运行授权 |
+| 状态 / 版本 | Draft V1.1，因果水位落盘修订；待独立文档核验、增量实现与独立 Validate；非运行授权 |
 | 作者 | YQuant Principal / yquantprincipal |
-| 创建 / 更新 | 2026-11-18，Asia/Shanghai（UTC+08:00） |
-| 来源 RFC | [RFC-07-006](../../rfc/07_trading/RFC-07-006-btc5m-post-entry-observer.md) V1.0 |
-| 来源 SPEC | [SPEC-07-006](../../spec/07_trading/SPEC-07-006-btc5m-post-entry-observer.md) V1.0 |
+| 创建 / 更新 | 2026-11-18 / 2026-11-19，Asia/Shanghai（UTC+08:00） |
+| 来源 RFC | [RFC-07-006](../../rfc/07_trading/RFC-07-006-btc5m-post-entry-observer.md) V1.1 |
+| 来源 SPEC | [SPEC-07-006](../../spec/07_trading/SPEC-07-006-btc5m-post-entry-observer.md) V1.1 |
 | 来源任务 / 下游 | t_7e3ae26e / 已建 Implement t_5180822f，再交独立 Validate t_9a3fa171 |
 | 工作区 ROOT | /home/pascal/workspace/yquant-investment |
 | 工程根 BOT | skills/trading/auto-trading/prediction-markets/Prediction-Markets-Trading-Bot-Toolkits，相对 ROOT |
 
-上游实体已完整读取且互引一致：RFC SHA256 `55a6928e5e1c29a8bd371d36389a5c8e1c3a3556f694d032ea94a628f75bd2a3`；SPEC SHA256 `6216bf2d74a61971d598defbbcdaa5032718264214a6b734c959224b05b491d1`。上游阶段状态文字保留，不回写上游。本文所有新增符号、文件、参数和测试均为待实现契约，不冒称当前已有能力。
+V1.0 原阶段身份快照（仅历史，当前契约以三文档 V1.1 为准）：RFC SHA256 `55a6928e5e1c29a8bd371d36389a5c8e1c3a3556f694d032ea94a628f75bd2a3`；SPEC SHA256 `6216bf2d74a61971d598defbbcdaa5032718264214a6b734c959224b05b491d1`。上游阶段状态文字保留，不回写上游。V1.0 的实现及独立验收是既有基线；本次仅执行下述 V1.1 增量，不重建原功能。主控依据用户本轮批准同步具体契约，仍须独立文档核验与原独立 Validate。
 
 ## 1. 设计摘要
 
@@ -189,7 +189,7 @@ SAMPLE.after_event_seq 可能尚未被父端处理（stdout与datagram无全局�
 
 | 对象（同一个新run目录） | 触发 / 字段 / 校验 | 失败与兼容 |
 |---|---|---|
-| post-entry-observations.jsonl | ON时ObserverReceiver独占x创建；仅§3.3严格record，首次write前完成schema/公式/身份/水位关联；序列按producer原顺序追加一行并flush | 旁路独立catch，不进入原supervise外层stop；部分写入保留字节、禁重试/覆盖；reader拒绝尾坏行 |
+| post-entry-observations.jsonl | V1.1：ON时ObserverReceiver独占x创建；每行仅完整已验证 SAMPLE envelope（wire_version/kind/run_id/after_event_seq/record），record 严格为§3.3；首次write前完成schema/公式/身份/水位关联，序列按producer原顺序追加并flush | 旁路独立catch，不进入原supervise外层stop；部分写入保留字节、禁重试/覆盖；reader拒绝尾坏行 |
 | post-entry-coverage.json | ON时run的finally在原ended处理之外best-effort独占x写一次；下述完整对象 | 写失败不改变facts/final/exit；缺文件reader为INCOMPLETE或UNAVAILABLE，不能自动写回 |
 | events.jsonl/started.json/ended.json/public-config.json | 原代码/验证/真实含义不变，无观察键/事件 | OFF/ON原语义相同；旧证据不补写 |
 | 工程结果 | 仅data/reports/2026-11-18-btc5m-post-entry-observer/report.md，必要evidence/新叶 | 后续Implement/Validate记录，本文不创建报告 |
@@ -208,9 +208,23 @@ coverage必有且仅有：schema_version,run_id,enabled,transport,status,ready_r
 
 btc5m_observer.py 提供 read_observations(run_directory: Path) -> ObservationReadResult（Python dataclass或严格同键dict均可），返回仅schema_version,run_id,status,records,coverage,reasons；schema_version固定btc5m-post-entry-read/1，status为COMPLETE/INCOMPLETE/OBSERVATIONS_UNAVAILABLE。records为已严格验证的record列表，coverage为严格对象或null，reasons为固定枚举。API只读，不自动创建文件/补键/ffill/插值/回填；未知版本/非法记录不变成合法null。
 
-reader先只读原started/public-config/events/ended，用旧validate_event与_EventRelations及原adjacent accounting规则验证原交易证据，再由新索引验证观察as-of关系和coverage，不把观察送入旧relations。为避免循环import，新模块仅在reader入口局部导入btc5m_control；旧control在runtime装配时局部导入observer，不在模块初始化互相导入。不能因新reader而提取/重写旧交易校验；原相邻账务规则可在本地只读循环等价复核并有旧反例对拍。
+reader先只读原started/public-config/events/ended，用旧validate_event与_EventRelations及原adjacent accounting规则验证原交易证据，再逐行严格读取已持久化 SAMPLE envelope，以其原 after_event_seq 验证观察as-of关系和coverage，不把观察送入旧relations。为避免循环import，新模块仅在reader入口局部导入btc5m_control；旧control在runtime装配时局部导入observer，不在模块初始化互相导入。不能因新reader而提取/重写旧交易校验；原相邻账务规则可在本地只读循环等价复核并有旧反例对拍。
 
 原交易坏行使reader返回INCOMPLETE/TRADING_EVIDENCE_INVALID，不输出“已认证”records；原监督仍按旧OUTPUT_INVALID。旁路缺/坏/截断只影响观察status，原run事实不改。reader实际被新离线集成测试调用，读取launcher真实写出的文件和coverage，不只测试手拼JSON。未来研究必须先看status/reason/fee_basis，本文不新增收益汇总/最佳点选择功能。
+
+#### 3.4.5 V1.1 水位落盘增量与兼容
+
+用户 2026-11-19 已批准仅保留既有 after_event_seq 并让严格 reader 使用。替代 V1.0“只写 flat record”及 reader 用完整日志 last_seq/时间推断水位的做法；不改 Rust 生产 SAMPLE wire/1、record/1、coverage/1 或 read/1 返回 flat records。ObserverReceiver 在原 relate(record, watermark) 成功后，同一次 write/flush 保存原 SAMPLE 的严格重建 envelope；不保存未验证 raw，不新增 sidecar/二次账本/额外写流，64KiB 上限按完整 envelope 含换行检查。内部 write 参数可携水位，不能生成新水位。
+
+reader 验证完整 envelope 的精确五键、wire_version、kind=SAMPLE、同 run、非负真正整数 watermark<=有效日志 last_seq，再校验原 record、序列和 relate(record, watermark)。fill_seq<=watermark；ACTIVE 不得看见水位内 settlement；SETTLED 必须已有水位内 settlement。删去基于完整日志 last_seq 及 settlement 时间的合成水位回退。毫秒时间只作一致性/跨毫秒未来拒绝，不作同毫秒因果证明；无浮点容差放宽、无新增 clock/observe/evaluate。
+
+legacy flat-only 行无法证明原水位：INCOMPLETE/RELATION_UNRESOLVED，不自行补 last_seq、不猜同毫秒、不迁移旧文件。新格式漏键/非法水位/未知版本等仍拒绝；缺全部文件按旧 OBSERVATIONS_UNAVAILABLE。返回 records 仍只含原 flat record，coverage 收写计数与完整性重算沿旧语义。独立 R1 flat-only 反例保留为原缺陷/旧格式缺证据，不将其补写成新成功证据；候选 GREEN 使用新原生 fixture 产生的新文件。
+
+本次实现唯一可写源码/测试（相对 BOT）：tools/predictfun/btc5m_observer.py、tools/predictfun/tests/test_btc5m_observer.py、src/bot/arbitrage/observer/tests.rs；Rust 生产 observer.rs 的已通过时间精度修复保留且不再改动，control.py/策略/交易协议/配置不改。仅报告追加及 evidence/ 新叶可写；此前所有失败叶和二进制只读。原 Fix t_bfce2064 续接，原 t_3cfa9034 做 R2；不建第二实现链、不自动启动 paper。
+
+G3 新基线：observer.py 1102行、Python测试834行，维持各<=1200；Rust observer/tests.rs 1336行为1201–2400受控扩张，职责仅该观察模块测试与既有原生fixture，为Both Yes/No同毫秒和settlement seam作有限增长，经独立Review检查；下次跨职责或将越2400必须先拆分设计。本段仅替代§3.1对该测试文件的旧<=1200目标，不豁免其他文件或允许本次大重构。
+
+必需增量矩阵同 SPEC §5.1；实现先写直击“落盘丢水位”的RED，再修最小生产边界，原生fixture必须Both Yes/No断言同毫秒，负例先通过record/clock/formula再因watermark<FILL拒绝，settlement前后直接回归。冻结原受影响Python三文件、Rust lib及隔离build；完整新候选交原独立R2。旧被拒精度探针/违规scratch脚本一律不重放，不以本授权追认run3866。
 
 ## 4. 实现顺序
 
@@ -291,10 +305,11 @@ env CARGO_TARGET_DIR=/home/pascal/workspace/yquant-investment/data/reports/2026-
 
 若冻结资产必须改、原guard/fee/clock序列无法保留、实际首次write无法验证关联、隔离构建/真实fixture不可用或需要新生产运行，停止受影响分支并REVISE/block主控；不以“只读”豁免。原已存在功能不列为待重建；未运行验证明确未验。
 
-Design 静态自检关闭项：上游独立实体和V1.0互引、hook与下一tick快照、无新增now/observe/evaluate、selected外覆盖、完整flat字段、独立framing/存储/reader、跨通道水位关联、coverage与故障隔离、G3/allowlist、真实离线fixture/隔离argv和默认OFF回退均已有明确决策；开放业务冲突=0，开放Design finding=0。终止缺clock/源时间缺失/paper费用假设/真实I/O延迟是明确的证据限制，不是默默留给实现者决定的问题。
+V1.0 原 Design 静态自检记录（仅历史，不作为 V1.1 放行）：上游独立实体和V1.0互引、hook与下一tick快照、无新增now/observe/evaluate、selected外覆盖、完整flat字段、独立framing/存储/reader、跨通道水位关联、coverage与故障隔离、G3/allowlist、真实离线fixture/隔离argv和默认OFF回退均已有明确决策；开放业务冲突=0，开放Design finding=0。终止缺clock/源时间缺失/paper费用假设/真实I/O延迟是明确的证据限制，不是默默留给实现者决定的问题。
 
-本阶段完成前再次核RFC/SPEC/Design三个独立实体及上游SHA、本文空白/互引/字段/范围。本文交付不代表代码或A-001–022通过；沿预建Implement→独立Validate释放下游，不新增卡或同卡review。主控收到完成通知仍须核三文档Gate；Implement开工必须重复该前置条件。结果唯一报告在data/reports/2026-11-18-btc5m-post-entry-observer/report.md，任务状态只在Kanban。
+V1.0 原 Design→Implement→Validate 为历史已实施基线。V1.1 先独立核对三文档的版本/互引、持久格式/兼容与三路径/G3，再恢复原 Fix t_bfce2064→原独立 Validate t_3cfa9034 R2；无额外平台或重建功能。当前唯一结果报告使用 data/reports/2026-11-19-btc5m-observer-runtime-fix/report.md 的追加节及 evidence/ 新叶；任务状态只在 Kanban。历史阶段 target/报告仅引用不覆盖，当前构建/新证据路径由原续接卡明确。
 
 | 版本 | 日期 | 变更 |
 |---|---|---|
 | V1.0 | 2026-11-18 | 冻结post-trade/下一tick快照、原时钟复用、非阻塞datagram旁路、严格wire/coverage/reader、as-of关联、allowlist/G3与离线验收 |
+| V1.1 | 2026-11-19 | 用户批准因果水位落盘：复用完整已验证 SAMPLE envelope 与原 after_event_seq，reader 按逐行水位验证；legacy 缺水位 fail-closed、不回填；补 Both Yes/No 同毫秒、FILL 负例及结算边界；三实体同步并保留原链及未启动 paper 边界。修订者 yquant。 |

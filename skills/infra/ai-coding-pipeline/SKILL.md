@@ -24,8 +24,8 @@ description: "YQuant / 应龙共享 AI Coding 流水线：Full 或 Light，两�
 - 开发者自测不替代独立 Validate。主控核对覆盖与结论，不第三遍全量跑；不为报告或日志整理重复执行。
 - 记录候选身份（HEAD + 工作树文件清单或 hash）、命令/exit、覆盖与未验证项。既有独立证据仅在候选、输入、依赖和运行条件仍适用时复用；变动后补跑受影响部分。未测不得称 PASS。
 - 发现缺陷退回 Implement 并给最小修复、file:line/行为证据；不得改业务实现后自签通过。未满足必需验收或授权时不能 done。
-- 完成本阶段且有预建下游时 `kanban_complete(summary=..., metadata=...)` 释放下游；仅需同卡 review 时 `kanban_request_review`，真实外部阻塞用 `kanban_block`。不因存在下游而 block，不按固定时间盲目 unblock。
-- 预算中断先核对已落盘候选与证据：只缺登记则补登记，不重跑；真实验证未完成则记录缺项后续接，不能补写 PASS。
+- 本阶段必需验收齐备即登记；有预建下游时 `kanban_complete(summary=..., metadata=...)` 释放下游，仅需同卡 review 时 `kanban_request_review`，真实外部阻塞用 `kanban_block`。预留收尾调用预算，不因仍有预算而继续探索，不因存在下游而 block，不按固定时间盲目 unblock。
+- 预算中断先核对已落盘候选与证据：只缺登记则补登记，不重跑；续接只传当前候选、仍适用证据和剩余缺口，不从头探索或为整理日志重跑。真实验证未完成则保留缺项，不能补写 PASS。
 
 ### 授权不随流程简化
 生产 DB / schema、真实或模拟交易执行、交易配置、外部消息、长期调度、凭据、依赖升级及大范围重构仍服从项目明确授权边界。卡面授权不等于 runtime 允许，runtime 允许也不等于卡面授权。安全拒绝按下方动作级规则停止被拒动作及依赖分支，不换工具或路径绕行；只改配置常量不自动触发架构工程，但不免除对应授权及独立 Validate。
@@ -54,8 +54,9 @@ description: "YQuant / 应龙共享 AI Coding 流水线：Full 或 Light，两�
 
 ### 任务书的命令边界 <a id="command-boundaries"></a>
 
-- 优先原生文件工具与单目的、显式 cwd 的命令。任务事先列明既有测试入口及固定用途、可审阅脚本；不泛禁所有脚本，也不开放任意解释器。管道/内联不是天然恶意，但不因此自动获准，更不能用于重放被拒动作。
-- 固定脚本须可审阅其精确路径、解释器、参数、输入/输出路径及副作用边界；若限定只读，明确禁止凭据读取、网络、子进程与业务写入。脚本不是 OS 沙箱，也非天然只读；扩充脚本/命令 allowlist 先确认，不因“落成文件”推定获准。
+- 任务固定目标、冻结行为、文件范围、副作用禁区和验收，不默认逐命令遥控。worker 可在这些边界及 runtime 限制内选择实现方法、为当前缺陷定向检索、增加必要回归，并按[动作级拒绝恢复](#action-scoped-refusal)自行纠正普通断言、参数、patch 与陈旧写保护错误；不改变需求、削弱断言或扩大文件范围。
+- 优先原生文件工具与单目的、显式 cwd 的命令。任务准确给出必要环境（项目解释器、cwd、必要依赖前提）及既有测试入口、覆盖和关键参数，不把全部诊断写成字面命令白名单。复用已知且仍适用的前提，仅为具体缺口定向核实，不新增每卡例行版本/依赖/网络探针或整仓扫描。当前 headless 不可用的 `execute_code` 不设为必经入口，也不为此改权限。
+- 固定用途脚本须可审阅其精确路径、解释器、参数、输入/输出路径及副作用边界；若限定只读，明确禁止凭据读取、网络、子进程与业务写入。不泛禁解释器/脚本，也不开放任意执行；脚本不是 OS 沙箱或天然只读，管道/内联不因形式自动获准。超出卡面执行边界或扩充 runtime allowlist 须先确认，不因“落成文件”推定获准；已有显式命令限制仍须遵守，安全拒绝后不得换形态重放。
 - 命令和脚本仍经过正常 runtime 审批。类别许可或 dry-run allow 只证明相应检测层的判定，不保证内容扫描、Tirith 或无人值守路径通过，不能称完整 E2E；不得为证明获准而执行被拒探针或放宽权限。
 - 记录测试真实 argv、cwd、覆盖与进程 native exit；管道末端 exit、启动回执或工具拒绝码不等于测试 exit。未取得测试原生结果则明确 UNKNOWN/NOT_VERIFIED，不能补造通过。
 
@@ -88,7 +89,7 @@ sanity-check 关注的是「数据流入业务逻辑之前的最后一道闸门�
 - 运行态 profile 的模型、fallback、toolsets 等易变配置仍以 `~/.hermes/profiles/<profile>/config.yaml` 为准，项目内只保存路由语义、阶段门禁和可复用 skill 逻辑。
 - 当前入口 profile 是 orchestrator，负责 Intake、解析目标工作目录、创建 Kanban 任务、校验阶段门禁和 Closeout。
 - 阶段执行必须通过 `kanban_create` 创建真实任务，并设置 `assignee` 为对应 Hermes profile。
-- `kanban_create(skills=[...])` 只能引用目标 assignee profile 可见的 **canonical/project skill**。不要把 orchestrator 自己 profile-local 的补丁 skill 传给 worker；worker CLI 会在初始化阶段报 `Unknown skill(s)` 并立即 crash，连 `agent.turn_context` 都不会进入。
+- `kanban_create(skills=[...])` 只能引用目标 assignee profile 可见的 **canonical/project skill**。orchestrator 的 profile-local 改动不会自动注入 worker；必要短规则须实际写入 Kanban body，并指向 worker 可见的 canonical 源，不复制长文或强制注入私有 skill。不可见 skill 可能使 worker 初始化时报 `Unknown skill(s)` 并立即 crash，连 `agent.turn_context` 都不会进入。
 - 不要用 `delegate_task` 承担正式流水线阶段；`delegate_task` 只适合短推理子任务，且默认继承父 profile 的模型，不能按单次调用切到 `yquantprincipal` / `yquantdeveloper` 等 profile。
 - **历史教训（2026-06-25 RFC-03-006 案例）**：`delegate_task` **不在 Kanban DB 创建 task 记录**，会导致后续阶段 `parents=[前阶段 task_id]` 无法设置，pipeline 自动串联中断。所有流水线阶段必须用 `kanban_create` 派任务，每个阶段设置 `parents`，dispatcher 才能自动 promote。
 - **SPEC §3 文件清单必须精确到目录层级**（2026-06-25 教训）：不能写“新建 `providers/` 子包”这种模糊描述，要写“在 `scripts/extractors/providers/` 下新建 10 个文件”。否则 Implement worker 可能写到错的目录层级。
@@ -110,15 +111,7 @@ Intake 开始时必须根据当前 orchestrator profile 解析一次 `PIPELINE_W
 - worker 以任务传入的 `workspace_path` / `$HERMES_KANBAN_WORKSPACE` 为准，不重新解析 orchestrator。
 
 ### 项目约定发现与任务正文固化
-Pipeline 是跨项目基础设施，但每个项目的文档目录、模块编号、skill/module 命名、持久化规范和凭据位置可能不同。**Intake 在派第一个 worker 前必须发现并固化目标项目约定**，不能把 YQuant 的目录约定照搬到其他项目。
-
-最低发现步骤：
-```bash
-cd "$PIPELINE_WORKSPACE"
-find docs -maxdepth 3 -type f -name 'README.md' -o -name '*-00-000-*template*.md' 2>/dev/null
-find skills -maxdepth 3 -name SKILL.md 2>/dev/null | head -80
-find config -maxdepth 2 -type f 2>/dev/null | sort
-```
+Pipeline 是跨项目基础设施，但每个项目的文档目录、模块编号、skill/module 命名、持久化规范和凭据位置可能不同。**Intake 在派第一个 worker 前必须确认并固化任务所需的目标项目约定**，不能把 YQuant 的目录约定照搬到其他项目。复用已确认且仍适用的约定；缺失时定向读取相关 AGENTS、文档 README/模板或已知模块入口，不把全量 docs/skills/config 枚举设为每卡前置，也不读取凭据值。
 
 Intake 必须把以下内容写进**每个文档类任务（RFC/SPEC/Design）的 body**，不要只放在 README 或 skill 里：
 
@@ -228,14 +221,14 @@ T2 Validate       assignee=yquantreviewer    parents=[T1]
 
 每个 `kanban_create` 的 body 必须包含：
 - 本卡的 `--max-runtime` 取值。按上文"墙钟上限"表的默认值；偏离默认值时写明原因。
-- 用户目标和当前阶段。
+- 用户目标、当前阶段与冻结行为；方法选择留给 worker，不默认预写未经验证的“标准答案”。
 - 相关文件、目录、RFC/SPEC/DESIGN 路径。
 - 允许修改的范围和禁止事项。
 - 明确交付物。
 - 验收标准。
 - 需要运行的测试或可接受的替代验证。
 - 输出语言要求：中文。
-- 命令与工具必须同时符合卡面授权和 runtime 限制；按[任务书的命令边界](#command-boundaries)列明 cwd、固定测试/脚本路径、参数、输入输出与副作用禁区，保留测试 native exit。临时探针仅用当前 profile scratch；不读取或输出秘密，不要求无人值守 worker 执行需交互审批的动作。
+- 命令与工具必须同时符合卡面授权和 runtime 限制；按[任务书的命令边界](#command-boundaries)给出必要环境、测试入口/覆盖与固定用途脚本的精确边界，明确范围内方法选择、定向检索和普通错误自修复权限，而非逐条列尽诊断命令。临时探针仅用当前 profile scratch；不读取或输出秘密，不要求无人值守 worker 执行需交互审批的动作。
 - 停手条件必须使用[动作级拒绝恢复](#action-scoped-refusal)：列明必需验收依赖和可选步骤；可选拒绝记 `NOT_EXECUTED/OMITTED` 后只继续独立已授权工作，必需验收缺口不 done；遵守工具停止/等待要求，不换形态复现被拒动作，不自动主控接管。普通测试/补丁/并发保护错误在原范围按原工具修复。
 
 Orchestrator 创建任务后必须向用户说明目标项目、任务图、任务 ID、assignee、依赖关系和如何追踪状态。
@@ -304,6 +297,7 @@ Full / Light 均使用真实 parent links 自动衔接，不以主控持续在�
 只修改已明确的配置常量时不自动升成大工程；按契约明确程度选择 Light 或 Full，仍保留独立 Validate 和项目要求的授权。小型明确本地写入沿用当前 Implement 执行后立即读回/定向核验，不默认新增 preflight/token/Activation 卡。
 
 ## Orchestrator 主动推进规则
+- 主控负责授权内编排、补齐必要上下文和核对交付，不默认代写代码、代跑被拒动作或预先包办全部诊断；worker 自主完成授权内实现及自测，独立 Validate 保留。确需接手须有对应明确授权、如实记录实际执行者，且不能违反动作级拒绝规则。
 - Intake 完成分流后，按顺序创建真实任务并保存返回 id，再用该 id 创建下游；不等待上游 done 才补依赖，也不使用占位 parent。Full 的文档阶段门禁写入对应任务验收，未通过不得完成该阶段。
 - 通过 `kanban_show` 核对 exact task 的 parents、状态与产物；已有下游由 dispatcher 按真实依赖推进，不重复派卡。没有预建下游时补齐合法任务，不盲目 unblock。
 - Validate PASS 后主控直接 Closeout，核对结论/覆盖/风险，不另建默认 Closeout worker 或重复全量测试。
@@ -422,7 +416,7 @@ python3 skills/common/utils/print_agent_models.py
 
 ## 运行态自检
 
-开始流水线前，orchestrator 必须确认：
+开始流水线前，orchestrator 必须确认以下必要条件；同一环境已有仍适用证据时直接复用，不要求每卡重新探测。新项目/profile、配置变化或实际派发失败时，仅定向核实相应缺口，不把下方示例变成逐卡必跑命令：
 
 - 当前 orchestrator（`yquant` 或 `yinglong`）已启用 `kanban` toolset。
 - Hermes gateway 正在运行；否则 Kanban ready task 不会自动派发。
@@ -430,7 +424,7 @@ python3 skills/common/utils/print_agent_models.py
 - `~/.hermes/kanban.db` 能记录任务；若任务没有进入 `tasks` 表，说明没有真实委派。
 - **只保留项目源目录的 skill，3 个现役 worker profile 不放同名副本**（避免 Skill name collision 导致 worker 启动崩溃）。
 
-验证命令：
+需补核时的验证示例（仍服从本卡授权与 runtime 限制）：
 
 ```bash
 python3 skills/common/utils/print_agent_models.py
@@ -647,7 +641,7 @@ kanban_create(
 
 **根因**：pipeline 是通用基础设施，但项目命名是局部约定。worker 不会自动推断目标项目的真实模块/skill 编号，也不一定读取 README。
 
-**修复**：Intake 在派第一个文档任务前必须执行“项目约定发现与任务正文固化”：读取目标项目 docs README、模板、skills/module 目录和 config，并把精确交付路径写入 task body。
+**修复**：Intake 在派第一个文档任务前按“项目约定发现与任务正文固化”确认必要约定，将精确交付路径写入 task body；复用仍适用的已知约定，缺失时定向读取相关 README、模板或模块入口，不重复全仓扫描。
 
 **预防**：文档类任务 body 必须给出完整示例，例如：
 

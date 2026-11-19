@@ -4,13 +4,13 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 / 版本 | Draft V1.0；RFC/SPEC 阶段候选，供 Design；不是实现、独立 Validate 或运行授权 |
+| 状态 / 版本 | Draft V1.1；2026-11-19 因果水位落盘修订，待独立文档核验与实现验收；非运行授权 |
 | 作者 | YQuant Principal / yquantprincipal |
-| 创建 / 更新 | 2026-11-18，Asia/Shanghai（UTC+08:00） |
+| 创建 / 更新 | 2026-11-18 / 2026-11-19，Asia/Shanghai（UTC+08:00） |
 | 模块 / 工作区 | 07_trading；/home/pascal/workspace/yquant-investment |
 | 来源任务 | t_408e60a0；Pascal 已明确要求先完善持仓后只读观察 |
-| 派生 SPEC | [SPEC-07-006](../../spec/07_trading/SPEC-07-006-btc5m-post-entry-observer.md) V1.0 |
-| 后续 Design | docs/design/07_trading/DESIGN-07-006-btc5m-post-entry-observer.md；下阶段独立产出，本阶段不创建 |
+| 派生 SPEC | [SPEC-07-006](../../spec/07_trading/SPEC-07-006-btc5m-post-entry-observer.md) V1.1 |
+| 后续 Design | docs/design/07_trading/DESIGN-07-006-btc5m-post-entry-observer.md V1.1；本次同步既有独立实体 |
 | 依赖 / 替代 | 依赖 07-004、07-005 已有受控执行及 06-003 纯估值接缝；不替代或改写它们 |
 
 ## 1. 执行摘要
@@ -112,7 +112,15 @@
 | 工程验收结果 | data/reports/2026-11-18-btc5m-post-entry-observer/report.md；必要 evidence/ | 仅一个结果报告，无任务镜像/data/tasks；本阶段不写 |
 | Broker/core | 原内存事实源，只读克隆或借用 | 无第二库存、现金、恢复账本；观察记录不能用于 resume |
 
-无 DB/schema/索引/TTL、数据迁移、覆盖旧观察、自动删除、备份或外部上传。本地 data 被 Git 忽略不等于备份。旧 run 无旁路时明确 OBSERVATIONS_UNAVAILABLE，不补写历史、不作为完整观察样本；未知版本不能按最新语义读取。
+无数据库 schema/索引/TTL 变更、数据迁移、覆盖旧观察、自动删除、备份或外部上传。观察 JSONL 的物理格式按 V1.1 修订保留已有因果水位，不涉及数据库。本地 data 被 Git 忽略不等于备份。旧 run 无旁路时明确 OBSERVATIONS_UNAVAILABLE，不补写历史、不作为完整观察样本；未知版本不能按最新语义读取。
+
+### 6.1 V1.1 因果证据保留（2026-11-19 用户批准）
+
+实际接收器有 SAMPLE.after_event_seq，但 V1.0 首次写入只保存 record，离线 reader 丢失原 as-of 水位；毫秒 observed_at 与更精确 fill 时间不能单独证明同毫秒先后。本次仅将已验证的原 SAMPLE envelope（含已有水位及原 record）一同持久化，并由 reader 逐行按该水位验证。复用既有 wire/1 与 record/1，不新增交易事件、时钟读取或业务模型。
+
+旧 flat-only 观察没有保存水位，不能从整段日志末序号、时间取整或后续结算倒推补造；严格 reader 必须明确 INCOMPLETE/RELATION_UNRESOLVED，不认证为新格式完整证据。旧文件只读保留，无迁移/回填。缺全部观察文件仍为 OBSERVATIONS_UNAVAILABLE。离线工程通过不授权新 paper；首次失败窗口不重启。
+
+本修订仅覆盖 SPEC §4.8/§4.bis、Design §3.4 的观察持久化及关联；原交易、策略、资金、冻结资产与 default6h/unsigned72h 边界不变。V1.0 阶段派卡/交接文字是历史，不要求重建原功能或原链。
 
 ## 7. 冻结资产与工程边界
 
@@ -120,7 +128,7 @@
 
 后续 Cargo build/test 必须 --offline 且显式 --target-dir 指向本报告独立 evidence 候选目录或当前 worker scratch，绝不覆盖旧 target 入口。当前 arbitrage.rs 1317 行、phase1.rs 1519 行属 1201–2400 受控增长；Design 给职责边界、少量增长理由和拆分触发，不以此开大重构。其他大文件按实测 G3 判断，优先薄旁路而非把全部 schema 塞回大文件。
 
-本阶段只允许写本 RFC 与对应 SPEC；其余只读，不写 Design、报告、代码、测试、模板/根规则，不运行业务测试或新 paper。后续逐文件 allowlist、构建/测试命令与 G3 由 Design 落实。
+V1.0 原 RFC/SPEC 阶段只写两文档的限制为历史。V1.1 由主控按用户批准同步本 RFC、SPEC 与 Design 三个独立实体；实现只写 Design §3.4.5 的三路径，独立核验保留，无运行授权。
 
 ## 8. 验收与风险
 
@@ -132,8 +140,9 @@ SPEC §5 给出必须的接受/反例矩阵。独立 Validate 必须实际执行
 
 开放业务契约冲突：0。Design 必须决定且核实的是内部模块/读取快照时点、独立旁路 framing/文件/consumer API、显式 opt-in 位置、容量/失败隔离与具体离线命令；这些不改变本 RFC/SPEC 的业务语义。若在冻结/非干扰边界内找不到可行接缝，退回主控给最小问题，不自行松绑。
 
-本阶段完成须两个独立实体真实存在、互引 V1.0 一致、契约可供 Design 使用。按既有 parent 链交预建 t_7e3ae26e，不新建阶段或同卡 review。Design 及独立 Validate 仍未完成，文档交付不是功能已上线。
+V1.0 阶段的 RFC/SPEC→t_7e3ae26e→t_5180822f→t_9a3fa171 已是历史基线，不重建。V1.1 三实体互引一致、独立文档核验通过后续接 t_bfce2064，再由既有 t_3cfa9034 做 R2；修订和离线通过都不等于真实运行或 alpha 已验证。
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
 | V1.0 | 2026-11-18 | 冻结只读非干扰、同 tick 数据复用、独立观察证据、净持仓 bid 退出/费用证据与授权/冻结边界 |
+| V1.1 | 2026-11-19 | 用户批准因果水位落盘：复用完整已验证 SAMPLE envelope 与原 after_event_seq，reader 按逐行水位验证；legacy 缺水位 fail-closed、不回填；补 Both Yes/No 同毫秒、FILL 负例及结算边界；三实体同步并保留原链及未启动 paper 边界。修订者 yquant。 |
