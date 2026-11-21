@@ -64,7 +64,7 @@ trade_phase1仅将调用处变为：paper用原take_candidate同步返回；live
 
 仅新live读取固定 `BOT/tools/predictfun/btc5m-live-activation.json`。这是未来人工批准后才可物化的L1公共部署绑定，当前不创建；不是新授权系统、签名token或CLI任意路径。离线测试通过函数参数注入严格同形fake，生产main不开放测试替身。缺文件/未知版本/修改身份均拒绝，不以旧budget bool替代。
 
-该对象精确字段：schema_version=`btc5m-live-activation/1`、authorization_ref、risk_window_id、operations_mode、account_identity、not_before、deadline_at、candidate_digest、storage_binding、gas_policy、takeover_ref。其余字段递归拒绝；ID/时间/地址沿SPEC；takeover_ref是同受控公开ID，非消息地址/自由联系人。storage_binding精确为 deployment_id、database、collection、credential_env、endpoint_id；gas_policy精确为 payer_address、minimum_balance_atoms、maximum_consumption_atoms。两预算均合法BNB atoms且>0，payer限原ChainRead读取的trading_address，其他支付者当前GAS_UNAVAILABLE，不扩RPC路径。未批准输入不填伪值。
+该对象精确字段：schema_version=`btc5m-live-activation/1`、authorization_ref、risk_window_id、operations_mode、account_identity、not_before、deadline_at、candidate_digest、storage_binding、gas_policy、takeover_ref。其余字段递归拒绝；ID/时间/地址沿SPEC；takeover_ref是同受控公开ID，非消息地址/自由联系人。storage_binding精确为 deployment_id、database、collection、credential_env、endpoint_id；gas_policy精确为 payer_address、minimum_balance_atoms、maximum_consumption_atoms。两预算均合法BNB atoms且>0，payer限原ChainRead实际读取的account_identity.signer_address（固定Predict Account的owner/Gas支付者），不得用持有USDT的trading_address替代；其他支付者当前GAS_UNAVAILABLE，不扩RPC路径。未批准输入不填伪值。
 
 候选部署提案：database=`tradingagents`，collection=`07_trading_btc5m_live_guard`，credential_env=`YQUANT_BTC5M_GUARD_MONGO_URI`；这是待批准的新独立集合绑定，不声称存在，不访问portfolio/UD/task集合。deployment_id为受控ID；endpoint_id为严格对象{scheme,hosts,replica_set,tls}，scheme固定mongodb（本轮不支持SRV动态改目标），hosts为已批准的规范host:port有序数组，replica_set为已批准名称或显式null，tls为明确bool。URI解析仅在内存提取这四项与绑定精确比较，禁止隐藏多主机/替换URI query中的库或TLS/replicaSet覆盖，未知连接选项拒绝；pymongo固定主机/primary及上述读写策略。未来主控填定并核同物理部署，当前代码无默认实际连接。正式激活冻结一个绑定及其candidate_digest；CLI、run/window、环境替换库名或集合名不能覆盖。URI只从该单一已批准env键读取，不全量load_dotenv、不从URI推断另一个库、不把URI/摘要传child或写证据。URI变化即不能自证仍在同一Mongo部署，须生产Gate核验而非“可连接即通过”。同UID/管理员可改代码、绑定或删库是明确可信操作员边界，不宣称抵御恶意绕过。
 
@@ -99,7 +99,7 @@ trade_phase1仅将调用处变为：paper用原take_candidate同步返回；live
 ### 4.2 唯一顺序
 
 1. 原core EVALUATE → Broker记录决策。Broker同State锁核身份、revision、core PRE_SUBMIT、新时钟、停止/loss/账户/原子预算；建立原AttemptHandle和原R0/tombstone。无context裸BUY在所有新phase1入口先拒绝，不能从普通take绕过。
-2. 锁外执行原适配器的账户、最终book、权限、签名、JWT、ERC1271等待。每一等待后先检查sticky stop；检测停止即退出后续准备，但已存在hash/事实仍保留。最终book/fee/route必须与冻结候选一致（按原镜像/精度正规化后逐字段、不是容差吞差异）；变化则INPUT_CHANGED终结旧candidate，0POST。更好价也不能暗换旧candidate输入。
+2. 锁外执行原适配器的账户、最终book、权限、签名、JWT、ERC1271等待。每一等待后先检查sticky stop；检测停止即退出后续准备，但已存在hash/事实仍保留。最终book/fee/route必须与冻结候选一致（按原镜像/精度正规化后逐字段、不是容差吞差异）；变化则INPUT_CHANGED终结旧candidate，0POST。更好价也不能暗换旧candidate输入。2026-11-21轻量纠错：此“一致”指最终盘口完整且支持冻结决策——非空、不越过候选限价、深度覆盖冻结股数；越限或深度不足为候选级拒绝（释放本候选、NOT_SUBMITTED证据、不终结窗口），身份/hash/ACK/bound/账户/风控不一致仍硬终止，缺一侧盘口为READ_UNAVAILABLE；不改动本条其他语义。
 3. 由已构造order和部署生成SignedExecutionBound；先在原handle保存hash/Prepared，不泄露签名字节。序列化完整 `order` 事件，经stdout发给原supervisor。此时可能阻塞，绝不算FINAL_SEND已经通过。
 4. supervisor按§7严格校验该行及前缀，首次追加events.jsonl → flush → fsync文件 → 同目标readback精确本行 → 才写ACK。新started/public-config/live-context及目录必须已耐久；不能用flush或文档里的durability=true冒fsync。ACK丢失/超时/错关联不发送、不重新签名；屏障仍ARMED。
 5. 所有await/关键order ACK后，用原client准备完整HTTP请求/单次future；其中JWT已取得、body序列化完成，第一次可能交给transport前再获取最新CheckTime，调用原candidate.recheck（同模型/常量）并重查全部门禁，生成FINAL_SEND快照。不能把旧checked_at或ACK时钟当最终时钟。
@@ -171,7 +171,7 @@ mark只沿原observe/mid_of及合法性，缺book/失败先invalidate新域mark�
 
 新域没有自动SELL/merge/redeem/提款。正claim→WAIT_CASH，B不加claim，K不减，V可用官方值；收到人工资金回收事实也不返回READY。本轮不把手工SDK后的账户差额自动当本run收入，若观察到不属窗口的变化先RECONCILIATION_REQUIRED。未来受权人工报告可用同目标份额/现金读回证明回收，不能回写旧窗口事件或清latch。
 
-Gas策略沿原ChainRead的trading_address余额读回，不增加任意payer RPC。记录初始G0与每次完整G：G低于minimum或G0−G大于等于maximum即GAS_BUDGET停新增；余额不明/上升或不解释的变化GAS_UNAVAILABLE/RECONCILIATION_REQUIRED，不猜充值。这个保守额度控制是消费余额的运行门禁，不是逐tx费用归属；gas_paid_atoms仍null/NOT_MEASURED直到原消费者可证同payer/tx费用。签名/POST/取消API不消耗链Gas不等于整个窗口Gas0，BNB上限必须未来另批。20 USDT只是停止新增阈值，不保证最大损失/全币种成本≤20。
+Gas策略沿原ChainRead的signer_address原生BNB余额读回；trading_address仅为USDT持仓及账户互斥作用域，不是本支持路径的Gas付款者。不增加任意payer RPC。记录初始G0与每次完整G：G低于minimum或G0−G大于等于maximum即GAS_BUDGET停新增；余额不明/上升或不解释的变化GAS_UNAVAILABLE/RECONCILIATION_REQUIRED，不猜充值。这个保守额度控制是消费余额的运行门禁，不是逐tx费用归属；gas_paid_atoms仍null/NOT_MEASURED直到原消费者可证同payer/tx费用。签名/POST/取消API不消耗链Gas不等于整个窗口Gas0，BNB上限必须未来另批。20 USDT只是停止新增阈值，不保证最大损失/全币种成本≤20。
 
 ## 6. 单实例、Mongo屏障、崩溃与人工接管
 
@@ -287,6 +287,8 @@ V1.1 的 candidate_identity.files 显式纳入 src/bot/runtime/live_events.rs、
 所有证据在新唯一run目录exclusive-create，不覆写旧文件；创建started/public-config/live-context/events后fsync及父目录，order关键ACK在events同目标读回后才发。其他关键execution/latch/stop/payout/final也flush+fsync，不是掉电可靠金融恢复承诺；失败立即sticky stop/INCOMPLETE，崩溃屏障弥补拒绝重启，不自动重建可交易账。
 
 ended.json精确沿SPEC：schema_version、run_id、exit_facts、final_event_seq、final_accounting、incomplete_reason、execution_complete、cash_complete、audit_complete、takeover_required。exit_facts精确保留launcher_exit、child_returncode、child_signal、forced_cleanup、stop_reason；无native结果用null而非0。缺final则seq/accounting=null、AUDIT_UNAVAILABLE、audit_complete=false；child非0/强制cleanup不能因一个final而健康。cash pending可正常停止观察，cash_complete=false且takeover；不能称账户清空。
+
+2026-11-21轻量纠错：`ended.json`在上述精确字段外增加可空`incomplete_detail`；stop/final payload各增加可空`stop_detail`（承载原生已有的失败码，非法值按`UNKNOWN`）。二者仅为停机诊断留证，不改变任何停机、放行、takeover或reason判定。
 
 新 `btc5m_live_events.read_live_run(directory)`只读上述started/public-config/events/ended/live-context；返回精确={schema_version:'btc5m-live-read/1',run_id,status,events,ended,reasons}，status=COMPLETE/INCOMPLETE/UNAVAILABLE，reasons为SPEC固定reason去重按枚举定义顺序。缺全新证据或历史signed-null→UNAVAILABLE/FACT_INCOMPLETE，不迁移旧行；坏尾/漏seq/漏final/identity不符→INCOMPLETE/OUTPUT_INVALID或AUDIT_UNAVAILABLE，不返回“已认证完整”的坏行。实际读文件重新运行同严格schema/LiveRelations、原子恒等式/coverage/费用方向/final关联，不写回、ffill或用余额反推缺失fact。
 

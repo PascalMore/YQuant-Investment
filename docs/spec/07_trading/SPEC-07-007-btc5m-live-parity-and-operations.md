@@ -81,7 +81,7 @@
 1. 净份额模型/公式完全继承07-005 §4.1：h(p)=bps/10000×min(p,1−p)，q_net=q×(1−h(p)/p)，cost=q×p，EV=q_net×fair−cost，edge=EV/q（USDT/gross share），min_edge=0.03。BUY不再把份额费等值额扣现金；实际费用另来自官方事实，不替换成模型费。Down镜像、同edge选Down、q向下取整、模型/EWMA/20returns/300秒gap/5与10秒时效/30秒边界等不变。
 2. common允许输入子域的paper/live同core输出同p_up/候选/净EV/原因；paper可Coinbase降级，signed保留Binance-only。signed遇Coinbase给SOURCE_NOT_ALLOWED，未签名/未POST；不伪称通过相同经济判断就获得相同执行授权。
 3. phase1裸BUY缺candidate即CONTEXT_MISSING。唯一候选冻结原07-005身份、revision/source/epoch/clock/fee、q/limit/两侧诊断。live保留EVALUATE与PRE_SUBMIT，额外FINAL_SEND在最后账户/盘口/权限/认证/签名等待及关键证据确认之后、第一次可能POST之前。每次重新取合法CheckTime，以同core重新计算剩余期限/fair/edge并检查输入/期限/stop/loss/data/account gate。不能持Broker锁跨网络await；预占与最终本地check/send许可状态变更须在原原子保护下序列化。
-4. 原venue获取的最终book、fee、market/route和签名maker/taker约束必须可与候选核对；不同输入使旧candidate INPUT_CHANGED终结，不能悄悄沿旧fair签新量。若重考虑，只能在尚未可能提交、仍未入场且授权有效时，由原core新attempt重新评估；不是网络重试补单。signed金额必须遵守原限价、净EV及最坏现金/最低净到账约束；不能凭API的isMinAmountOut/slippageBps名字忽略实际已签约束。不能证明则SIGNED_BOUND_UNPROVEN，0POST。
+4. 原venue获取的最终book、fee、market/route和签名maker/taker约束必须可与候选核对；不同输入使旧candidate INPUT_CHANGED终结，不能悄悄沿旧fair签新量。若重考虑，只能在尚未可能提交、仍未入场且授权有效时，由原core新attempt重新评估；不是网络重试补单。signed金额必须遵守原限价、净EV及最坏现金/最低净到账约束；不能凭API的isMinAmountOut/slippageBps名字忽略实际已签约束。不能证明则SIGNED_BOUND_UNPROVEN，0POST。2026-11-21轻量纠错：本条“最终book与候选一致”只解释为最终盘口完整且足以支持冻结决策——非空、不越过候选限价、深度覆盖冻结股数；越限或深度不足均为候选级拒绝（释放本候选预占、按NOT_SUBMITTED记录证据、保持窗口，不终结整窗）；身份/hash/ACK/bound/账户/风控不一致仍为硬终止；缺一侧盘口为READ_UNAVAILABLE。其余语义不变。
 5. 顺序：候选检查 → 原原子预占 → 原签名及身份校验 → 同hash的order证据经supervisor严格校验且确认耐久 → FINAL_SEND → 原单次POST。关键证据确认失败不发送；确认等待也不能延长freshness/期限。最后检查和交给POST之间不得另做阻塞证据写入/账户请求/等待；必要控制通道由T2复用原管道，不新建服务。终止发生在发送许可前必须0POST，已可能发送的不能靠取消future假装未提交。
 6. live无paper PRE_APPLY“拒绝本地模拟成交”语义。POST后实际晚到/部分/负EV/过30秒/到期成交一律按同hash事实入账，即使已经停新增。能取消仅按预批准原cancel流程；不得回滚真实成交取绿灯。
 7. 原core只有确认正净fill才confirm_fill；费用/net未知时不捏造净量。原round/intent tombstone从可能发送持续阻止同轮补单；确认正gross但net未知也须账户闭锁，不能因core尚未entered自动再试。部分终态也不补余量。同candidate至多一次初始提交，未知时同hash查询不签名、不广播重发，401/timeout不自动重POST。
@@ -115,7 +115,7 @@
 - B为窗口真实已到账现金的预算余额，从100开始，只按归属已核的实际现金支出/收入变动；真实总账户余额另外读回，不代替B。可用额≤B−P且≤完整账户读回的可支用USDT减未闭合预占；不把未兑付余额当现金。无法解释的入金/提款/其他客户端交易导致RECONCILIATION_REQUIRED，不自动改C0。
 - V为净持仓的有效原mark价值与已确认待兑付claim价值之和，同一资产不可同时作share/claim双计。U=V−K；R为已实现净收益；完整、无外部流的窗口满足B=100+R−K、NAV=B+V、net_pnl=R+U=NAV−100。官方已确认零兑付可移除其经济成本并实现损失，链上残余无价值份额仍独立披露；非零claim在现金/烧份额读回前保留成本，不以预计赎回实现现金收益。真实读不全时相关派生值null+原因，不能强套恒等式反推未知余额。
 - mark沿原mid与原有效性；不是模型fair/保证清仓价值。浮亏必须计入20阈值。为与原子现金对账，live估值换算按原有效mark保守向下到USDT原子量，注明VALUATION而非链上cash事实；不修改paper模型/mark。loss判断原子量≤−20 USDT含等号，阈值无epsilon；未获得可用mark/完整风险时DATA_UNAVAILABLE停新增，不能用成本/旧mark证明安全。
-- loss_latched一旦真，在同窗口永久真；下一tick、结算回升、换日、换run/重启/改配置不得清除。同tick成交/费用/估值/结算后更新以及每个FINAL_SEND前都检查；native费用BNB单列，不把BNB加USDT。gas_status=NOT_MEASURED / KNOWN / UNAVAILABLE，NOT_MEASURED不等于0；KNOWN需同payer/tx/读回依据，归属不明不得乱扣。本方案20只为USDT累计净损失停新增，不包括无转换依据的BNB；真实授权须另给Gas支付者、BNB可用/消费预算及停止条件，缺则不启动。无新增模型汇率、无保证总损失/回撤≤20声明。
+- loss_latched一旦真，在同窗口永久真；下一tick、结算回升、换日、换run/重启/改配置不得清除。同tick成交/费用/估值/结算后更新以及每个FINAL_SEND前都检查；native费用BNB单列，不把BNB加USDT。gas_status=NOT_MEASURED / KNOWN / UNAVAILABLE，NOT_MEASURED不等于0；KNOWN需同payer/tx/读回依据，归属不明不得乱扣。本方案20只为USDT累计净损失停新增，不包括无转换依据的BNB；真实授权须另给Gas支付者、BNB可用/消费预算及停止条件，缺则不启动。2026-11-21轻量纠错：本支持的Predict Account路径保留原ChainRead不变，Gas payer必须等于固定account_identity.signer_address；trading_address仍为USDT持仓账户和锁/屏障作用域，不能替代Gas payer，不新增任意支付者RPC。无新增模型汇率、无保证总损失/回撤≤20声明。
 
 ### 4.5 新live事件、严格白名单与真实消费
 
@@ -150,6 +150,8 @@ accounting每个键必有：cash、available、reserved、cost、realized、unre
 | recovery | policy:COLD_START_REFUSE、state:ARMED/RECONCILIATION_REQUIRED/HANDOFF、reason:enum | 不承载可交易余额/自动reset；与持久屏障关联 |
 | payout | status:enum、payout_yes:number/null、position_net_atoms:atoms、claim_value_atoms:atoms/null、cash_received_atoms:atoms/null、tx_hash:hash/null、observed_at:time、reason:enum | payout只取合法官方身份/结果；CASH_CONFIRMED须同目标份额/现金读回；未知保持null |
 | final | run_status:COMPLETED/STOPPED/INCOMPLETE、stop_reason:enum、execution_complete:bool、cash_complete:bool、audit_complete:bool、takeover_required:bool、unresolved:数组、positions:数组 | unresolved每项仅{attempt_id:id,signed_hash:hash/null,closure:enum,reserved_atoms:atoms,reason:enum}；positions复用reconciliation结构；完成运行≠无持仓，pending不得假现金闭合 |
+
+2026-11-21轻量纠错：stop与final的payload各增加一个**可空键`stop_detail`**，值为原生代码中已存在的失败码字符串（例如ACCOUNT_LEDGER_MISMATCH、READ_FAILED、LOCAL_ACCOUNTING_UNPROVEN；无诊断时为null；非法/超长值按`UNKNOWN`），仅用于停机归因，不承载自由文本、地址、URL或凭据。对应`ended.json`增加可空键`incomplete_detail`并原样透传该值。其余payload字段、封闭白名单、reason枚举，以及停机/放行判定语义一律不变。
 
 execution.facts恰含gross_cash、collateral_fee、share_fee、net_cash、net_inventory、vwap六键。每值为严格{status:KNOWN/UNKNOWN/NOT_APPLICABLE,atoms:atoms/null,coverage_gross_atoms:atoms/null,reason:enum}；gross_cash/collateral_fee/net_cash单位USDT，share_fee/net_inventory单位该token份额，vwap沿原适配器固定点单位。status=KNOWN必须atoms/coverage非null，UNKNOWN必须atoms=null；NOT_APPLICABLE仅确认零成交的vwap，其atoms=null。coverage来自原snapshot字段覆盖，不从新gross倒推；不足覆盖不得称COMPLETE。
 
