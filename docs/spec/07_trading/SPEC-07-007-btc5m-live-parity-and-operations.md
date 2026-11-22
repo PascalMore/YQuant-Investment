@@ -5,12 +5,26 @@
 | 项 | 值 |
 |---|---|
 | 状态 / 版本 | Draft V1.0；T1 候选，待主控文档 Gate；非实现/独立 Validate/真实运行 PASS |
+| 本次窄修订 | V1.9，2026-11-23：R13c 窄修订：claim 先判定后入账（账户读回只记为已证明待兑付，已确认官方结果逐 atoms 精确相等才入账为现金）；canonical reader 与 Rust 侧对同一合法流给出一致结论（已兑付持仓不进终态 positions、reader 观察 CASH_CONFIRMED 后不再视为停窗）；沿用 R13/R13b 的官方结果确认口径 |
 | 作者 | YQuant Principal / yquantprincipal |
 | 创建 / 更新 | 2026-11-19 / 2026-11-19，Asia/Shanghai（UTC+08:00） |
 | 来源 RFC | [RFC-07-007](../../rfc/07_trading/RFC-07-007-btc5m-live-parity-and-operations.md) V1.0 |
 | 工作区 / 来源任务 | /home/pascal/workspace/yquant-investment；t_b946f2c3 |
 | 后续 Design | docs/design/07_trading/DESIGN-07-007-btc5m-live-parity-and-operations.md；T2 另行产出，本卡不创建 |
 | 执行 / 验收 | Principal Design；Developer Implement；Reviewer 独立 Validate；主控 Gate/Closeout |
+
+
+## 本轮生效契约：公开 run JSON 参数化（2026-11-22）
+
+来源：t_298e36df 与 Pascal 本轮已授权 Light 决定。下文旧 100/2/2、98/1/1/10/20 及历史算术、FAIL、原始 bytes 均保留为历史示例；本节替代其“唯一合法数值”含义，不追认旧运行。新入口显式要求 `controlled_run={budget_usdt,duration_seconds,operations_mode}`，资金仅复用 `strategies.btc_arb.order_usd` 和 `strategies.limits.{max_order_usd,max_market_usd,max_total_usd,max_loss_usd}`。缺省时旧 paper/legacy/replay 行为不变；同一候选 binary 与通用 launcher 从一份公开 JSON 冻结全 run 参数及 config SHA，不从账户现金自动推预算，不换 config 复用 activation。
+
+参数关系为 target≤order≤market≤total≤budget；各金额必须有限、正数、非 bool、无溢出，最多六位 USDT 小数且≤1,000,000,000 USDT（限定到微 USDT，保证现有 f64 DecisionCore 输入的公开十进制往返唯一；风险 atoms 从原始 JSON 数字 token 精确解析，不从 f64 反算；budget_usdt 另可为≤18 位小数的十进制字符串（按 atoms 精确映射，不截断、不四舍五入、不容差），使 C0 能逐 atoms 等于观察到的 collateral，其余金额仍限六位小数）。loss 独立为正，不要求 loss<exposure；原 0.5 USDT dust floor 保留，不自动缩单。当前公开示例 budget=97、target/order/market=1、total=10、loss=20、duration=86400、unattended，仅示例。预算 B=C0+R−K、NAV=C0+net_pnl 的 C0 与 loss/各 cap 全部取本 run 冻结值，原账户现金单独保留。实际 exposure≥total 沿原黏性停止，不重启。
+
+新 controller 从配置 duration 生成 deadline；若显式 CLI deadline/mode 存在须相同否则拒绝。native options/run/context/runtime 与现有双时钟一致；supervised 0<duration≤21600、unattended≤86400，旧 unsigned 6/72h 与旧 signed 6h 不变。started/final/ended 与严格 reader 使用同份 frozen 配置，禁止通过任意预算常数放宽检查；旧 run007..011 只读兼容、不回写。
+
+定向消费者：config.StrictJson/load_controlled → native options → Broker LiveState；arbitrage 原 order_usd→DecisionCore target→attempt；live.seed_predict 预算准入；taker 预占/可用额/check_caps；live_control FINAL_SEND/total stop；live_accounting project_window 预算与 loss；Python control 固定值/started/deadline 与 live_events 首写、关系索引、ended/reader。超大文件仅原位接线，参数解析与新测试放小模块，不扩既有 tests.rs；本次修改仍须由独立 reviewer Validate。
+
+Canonical `tools/predictfun/btc5m_launch.py` 仅机械归位获准旧 wrapper 步骤，复用 control/live_guard/reconcile 事实及 lazy PortfolioMongoLoader。import/参数检查/默认预检无执行副作用。run/window/auth、声明订单 hashes、精确旧 ARMED 目标显式输入；完整新鲜≤900s、同账户/config 的 reconcile、positions/history、无挂单、外部流及 gas、现金≥budget 的资格检查先于 activation 改动、旧 ARMED 轮换、arm、秘密读取及 child。失败上述副作用为零；成功仍需显式执行授权；精确匹配一条旧 ARMED、不通配删除、不重试，保存旧记录及 activation 原 bytes。原 child 再核账户/预算；本轮仅 fake collection/activation/child 离线验证。
 
 ## 1. 需求摘要
 
@@ -72,9 +86,9 @@
 - execution_mode=UNSIGNED_PAPER / SIGNED_LIVE；operations_mode=SUPERVISED / UNATTENDED。新live仍由原 signed-future-live 固定入口显式选择新契约，不另建runner；不能通过旧config或enable_trading隐式升级。
 - 新候选 started 必须绑定：schema_version、strategy_contract、operations_mode、run_id、risk_window_id、固定 account_identity、候选binary/源文件/公开配置SHA、授权引用 authorization_ref、started_at/deadline_at、recovery_policy=COLD_START_REFUSE、cash_recovery_policy=MANUAL_PAUSE。authorization_ref是公开工程关联，不是凭据或自动审批token。
 - account_identity 仅 {venue:PREDICT_FUN,chain_id:56,account_mode:predict-account,trading_address,signer_address}，继续07-003固定绑定，不能用signer当持仓账户。地址先严格0x+40hex，再按原绑定比较。run_id沿原受控格式；risk_window_id/authorization_ref沿同受控公开ID语法，不接受任意文本/路径。
-- window覆盖一次已批准实验而非一进程/自然日；100 USDT是分配预算C0，不是凭空写入真实账户。startup完整官方对账及原预算确认通过，证实可用资金后才可在限额内活动。当前无真实预算授权，不给本轮填未来金额/期限/Gas批准。
+- window覆盖一次已批准实验而非一进程/自然日；受控 run 的 C0 取本 run 配置冻结的分配预算（legacy 缺省 98 USDT，`live_accounting.rs` 的 `BUDGET_C0_USDT=98` 为历史常量；`live.rs` 的 `seed_predict` 中 `cash_matches_budget_and_claims(budget, collateral, claim_cash)` 要求观察到的 collateral atoms 与本 run C0 加已核验 claim atoms 逐 atoms 相等——含 claims，不等即 bail `CASH_BUDGET_MISMATCH`，早于任何下单；行号仅辅助（当前约 live.rs:782–788，随字段演进可动），`btc5m_launch.py` preflight 同义），不是凭空写入真实账户。startup完整官方对账及原预算确认通过，证实可用资金后才可在限额内活动。当前无真实预算授权，不给本轮填未来金额/期限/Gas批准。
 - 准入先公开模式/版本/固定参数/期限/身份 → 单实例锁与持久拒绝屏障 → 原交易秘密来源/keyring → 单一child → 原完整账户/权限/预算核对 → READY。本文0secret计数指交易私钥/行情API/JWT读取，Mongo自身连接凭据只可由以后获批的明确存储绑定取得，不传child，不全量load_dotenv；测试注入fake存储且两类真实凭据读取都为0。失败不fallback、不自动sign-in/check-venue/approve；无有效监督控制通道的受控live拒绝。
-- 当前paper及旧signed入口的原期限不能被新选项改变。新真实期限由以后授权固定，双UTC/包含暂停的经过时间任一先到即停；工程fixture可推进fake clock，无真实长跑。
+- 当前paper及旧signed入口的原期限不能被新选项改变。新受控 live 的 activation 三入口共用 mode-aware 判定：`supervised` 时 `0 < duration <= 6h`，`unattended` 时 `0 < duration <= 24h`，等号允许、超限及未知 mode 拒绝；不把 unattended 授权扩到 supervised。具体运行仍须有效授权；native options、run/manifest 预算绑定和 runtime validator 同样共用 `OperationsMode::allows_duration` 的 6h/24h 完整精度判断，不用整秒截断放过超限；双UTC/包含暂停的经过时间任一先到即停；工程fixture可推进fake clock，无真实长跑。
 
 ### 4.2 phase1 live 经济与最终发送约束
 
@@ -110,10 +124,11 @@
 
 - 金额/份额保留asset、decimals与atoms。当前支持部署转换沿原1e18路径，仍须核实metadata一致；缺decimals拒绝，不猜6/18。USDT、BNB、shares不可混加；VWAP/模型价是USDT/gross share，不是持仓成本单价。gross与net原子量严格区分，展示小数不能反馈预算判断。
 - 成交实际现金出入用net_cash，份额用net_inventory；额外USDT费只在尚未净额时纳入，份额fee不再从现金/PnL重复扣。累计费是展示项，不从已经净额的NAV再减一次。不同fee币种不支持则INCOMPLETE，不取0。
-- 风险窗口C0固定100 USDT；K为该窗口尚未回收成本（含到期未兑付），P为仍可能增加的最坏现金预占。单笔最坏现金（含可能额外现金费）1≤w≤2、市场K_m+P_m+w≤2、K+P+w≤10，且足够真实/预算可用现金。原q向下取整后不满足最低金额就拒绝；不提高2、不改fee公式/参数、不自动缩单凑成功。
+- 风险窗口C0取本 run 配置冻结的分配预算（legacy 缺省 98 USDT，`live_accounting.rs:32` 为历史常量）；K为该窗口尚未回收成本（含到期未兑付），P为仍可能增加的最坏现金预占。单笔最坏现金（含可能额外现金费）0.5≤w≤1（下限 `live_accounting.rs:30 MIN_ORDER_ATOMS=0.5`，上限 `MAX_ORDER_USDT=1`）、市场K_m+P_m+w≤1、K+P+w≤10（`taker.rs:419–436`、`live_control.rs:386–395`），且足够真实/预算可用现金。原q向下取整后不满足最低金额就拒绝；不提高单笔/市场上限、不改fee公式/参数、不自动缩单凑成功。
+- 当前实际敞口 `K+P >= 10 USDT`（含等号）触发既有黏性 stop，沿 graceful cleanup/final 进入原 drive 返回，不空转、不重启；使用既有 `MANUAL_STOP` reason 与安全 `TOTAL_CAP` detail，不新增事件或错误类别。候选 `w` 尚未预占时不计为实际敞口；`K+P<10` 但 `K+P+w>10` 仅拒候选。保留已有 stop、20u loss latch、在飞/未知订单的保守余量、unresolved 和人工接管，退出不等于平仓。
 - 预占占用为同单已确认成本+尚未闭合余量，不能把整笔R0和确认成本双算，也不能低于max(R0,已知实际更高风险)。未确认风险不默认为0；实际超预占保留更高实绩并halt，不裁剪。P是B受限部分，不能再从NAV重复扣。
-- B为窗口真实已到账现金的预算余额，从100开始，只按归属已核的实际现金支出/收入变动；真实总账户余额另外读回，不代替B。可用额≤B−P且≤完整账户读回的可支用USDT减未闭合预占；不把未兑付余额当现金。无法解释的入金/提款/其他客户端交易导致RECONCILIATION_REQUIRED，不自动改C0。
-- V为净持仓的有效原mark价值与已确认待兑付claim价值之和，同一资产不可同时作share/claim双计。U=V−K；R为已实现净收益；完整、无外部流的窗口满足B=100+R−K、NAV=B+V、net_pnl=R+U=NAV−100。官方已确认零兑付可移除其经济成本并实现损失，链上残余无价值份额仍独立披露；非零claim在现金/烧份额读回前保留成本，不以预计赎回实现现金收益。真实读不全时相关派生值null+原因，不能强套恒等式反推未知余额。
+- B为窗口真实已到账现金的预算余额，从本 run C0 开始（legacy 缺省 98；`live_accounting.rs:32` 为历史常量），只按归属已核的实际现金支出/收入变动；真实总账户余额另外读回，不代替B。可用额≤B−P且≤完整账户读回的可支用USDT减未闭合预占；不把未兑付余额当现金。无法解释的入金/提款/其他客户端交易导致RECONCILIATION_REQUIRED，不自动改C0。
+- V为净持仓的有效原mark价值与已确认待兑付claim价值之和，同一资产不可同时作share/claim双计。U=V−K；R为已实现净收益；完整、无外部流的窗口满足B=C0+R−K、NAV=B+V、net_pnl=R+U=NAV−C0（legacy 示例 C0=98）。官方已确认零兑付可移除其经济成本并实现损失，链上残余无价值份额仍独立披露；非零claim在现金/烧份额读回前保留成本，不以预计赎回实现现金收益。真实读不全时相关派生值null+原因，不能强套恒等式反推未知余额。
 - mark沿原mid与原有效性；不是模型fair/保证清仓价值。浮亏必须计入20阈值。为与原子现金对账，live估值换算按原有效mark保守向下到USDT原子量，注明VALUATION而非链上cash事实；不修改paper模型/mark。loss判断原子量≤−20 USDT含等号，阈值无epsilon；未获得可用mark/完整风险时DATA_UNAVAILABLE停新增，不能用成本/旧mark证明安全。
 - loss_latched一旦真，在同窗口永久真；下一tick、结算回升、换日、换run/重启/改配置不得清除。同tick成交/费用/估值/结算后更新以及每个FINAL_SEND前都检查；native费用BNB单列，不把BNB加USDT。gas_status=NOT_MEASURED / KNOWN / UNAVAILABLE，NOT_MEASURED不等于0；KNOWN需同payer/tx/读回依据，归属不明不得乱扣。本方案20只为USDT累计净损失停新增，不包括无转换依据的BNB；真实授权须另给Gas支付者、BNB可用/消费预算及停止条件，缺则不启动。2026-11-21轻量纠错：本支持的Predict Account路径保留原ChainRead不变，Gas payer必须等于固定account_identity.signer_address；trading_address仍为USDT持仓账户和锁/屏障作用域，不能替代Gas payer，不新增任意支付者RPC。无新增模型汇率、无保证总损失/回撤≤20声明。
 
@@ -153,6 +168,10 @@ accounting每个键必有：cash、available、reserved、cost、realized、unre
 
 2026-11-21轻量纠错：stop与final的payload各增加一个**可空键`stop_detail`**，值为原生代码中已存在的失败码字符串（例如ACCOUNT_LEDGER_MISMATCH、READ_FAILED、LOCAL_ACCOUNTING_UNPROVEN；无诊断时为null；非法/超长值按`UNKNOWN`），仅用于停机归因，不承载自由文本、地址、URL或凭据。对应`ended.json`增加可空键`incomplete_detail`并原样透传该值。其余payload字段、封闭白名单、reason枚举，以及停机/放行判定语义一律不变。
 
+2026-11-22轻量修复补注：旧v1 stop/final缺少`stop_detail`、旧ended缺少`incomplete_detail`时，仅在内存中于精确键校验前补null；其他必需键及未知键仍严格校验，不回写历史、不补造final。私有账户读请求在原边界按ApiError整数status、reqwest/serde_json错误类型安全投影为固定操作标签加既有READ_UNAVAILABLE/FACT_INCOMPLETE码（HTTP另带整数状态，如`POSITIONS_READ_UNAVAILABLE_HTTP_503`）；VenueError原reason及既有短码保留，未知自由文本仍UNKNOWN，不保存body、URL/query或原始stderr，不增诊断sink/重试。该补注不认定历史run006的原始根因。R1修复：账户请求类型投影不保留原始cause；启动及runtime账户检查返回前只保留安全类型code/step/reason或既有短码/UNKNOWN，Debug链、普通日志与持久协议同样不得披露原始错误。
+
+2026-11-22 R2b事实补注：`signed_hash`仅为事件投影口径（`live_events`按hash归属本窗口订单），不参与账户delta放行；`open_orders`放行规则只认`venue_order_id`——仅当恰好一个attempt已ACK、持有`venue_order_id`且未闭合时，列表每一项都必须等于该id才放行，hash命中不足以豁免；启动路径仍对任何非空挂单列表拒绝。
+
 execution.facts恰含gross_cash、collateral_fee、share_fee、net_cash、net_inventory、vwap六键。每值为严格{status:KNOWN/UNKNOWN/NOT_APPLICABLE,atoms:atoms/null,coverage_gross_atoms:atoms/null,reason:enum}；gross_cash/collateral_fee/net_cash单位USDT，share_fee/net_inventory单位该token份额，vwap沿原适配器固定点单位。status=KNOWN必须atoms/coverage非null，UNKNOWN必须atoms=null；NOT_APPLICABLE仅确认零成交的vwap，其atoms=null。coverage来自原snapshot字段覆盖，不从新gross倒推；不足覆盖不得称COMPLETE。
 
 execution.delta恰含gross_q_atoms、gross_cash_atoms、collateral_fee_atoms、share_fee_atoms、net_cash_atoms、net_inventory_atoms，值为本次唯一原Broker实际应用非负增量atoms；核算未全而未应用的字段为null（不是伪已应用0），重复已知快照确认为无新应用才可0。无法从现存状态直接获得的delta须T2给最小类型投影，不在Python重建可交易账。实际币种/decimals由started的asset_units声明，asset_units恰为{collateral_symbol:USDT,collateral_decimals:integer,share_decimals:integer,gas_symbol:BNB,gas_decimals:integer}；与原部署事实不一致启动拒绝。
@@ -163,7 +182,7 @@ supervisor关系规则：decision→candidate→reservation→signed order持久
 
 ### 4.6 有人值守/无人值守可用性与故障状态
 
-运行安全状态：STARTING → READY → STOP_NEW_RISK → HANDOFF / ENDED；READY还可→WAIT_CASH→HANDOFF/ENDED。任何STOP_NEW_RISK或WAIT_CASH后本run不回READY；临时行情失败的恢复也不解已触发的停止/loss。首次STARTING的确定未发故障可以0订单退出，但不能自动重启一个新run。
+运行安全状态：STARTING → READY → STOP_NEW_RISK → HANDOFF / ENDED；READY还可→WAIT_CASH→HANDOFF/ENDED。任何STOP_NEW_RISK后本run不回READY；WAIT_CASH是本run内唯一可撤销的等待：只有当账户读回证明的claim与已确认官方结果逐atoms精确相等（同一净份额、同一兑付金额）时，该等待才可清回READY，其余WAIT_CASH（差1 atom、结果未确认、foreign token）仍停窗；该撤销在 wire 上由 payout `CASH_CONFIRMED`（含 `cash_received_atoms`）承载，canonical reader 据此解除同一等待，不得把该 run 随后的 RESERVE/FINAL_SEND 判为 OUTPUT_INVALID；其它原因造成的停窗不因该记录解除；停窗原因首因胜出，`CASH_CONFIRMED` 只撤销由 `CASH_PENDING` 造成的停（后续 payout `CASH_PENDING` 不覆盖已存在的其它停止原因）。临时行情失败的恢复也不解已触发的停止/loss。首次STARTING的确定未发故障可以0订单退出，但不能自动重启一个新run。
 
 | 条件 | 新增风险 | 允许行为 / 不代表什么 |
 |---|---|---|
@@ -194,9 +213,9 @@ SUPERVISED工程首单可一笔加预批准退出，由人核官方回执/账单
 
 ### 4.8 结算、人工回收与final
 
-官方结果仍须同market/token/BTCUSDT/300秒、固定起止价与非争议结果一致；模型/本地spot不结算。DRAW官方0.5只形成相应claim，不保证可卖价或USDT已到账。实际库存烧毁与同笔USDT回读须沿原SDK target/route/receipt，tx hash或success单独不够。
+官方结果仍须同market/token/BTCUSDT/300秒、固定起止价与非争议结果一致；模型/本地spot不结算。history-only 仓位解释归零前，目标 token 必须明确属于最新官方 Yes/No outcomes，且完整 token 对/侧别与读取前的历史 known 市场绑定一致；同 market id 不足以放行，缺失/替换/互换/重复/额外 outcome 不得默认当 No，拒绝结果不得污染下一次的 known 绑定。复用原 settle_from_facts/settlement_payout，只有 RESOLVED/CLOSED、非 contested 且目标 payout=0 才可解释归零；平局与正兑付只在官方结果已确认、该 token 的 claim 按 inventory×payout（1e6/5e5）逐 atoms 与持仓精确相等、budget+Σclaim 逐 atoms 等于观测 collateral 时才可解释为现金已到账；缺元数据、矛盾、未结算、额外持仓、数量不符或任一 atom 差异仍 fail-closed。不增加请求种类或客户端。DRAW官方0.5只形成相应claim，不保证可卖价或USDT已到账。实际库存烧毁与同笔USDT回读须沿原SDK target/route/receipt，tx hash或success单独不够。
 
-默认MANUAL_PAUSE：首个需要回收的官方正claim即WAIT_CASH并停止新风险，列claim/净份额/成本/未决。可以在已有持仓上完成有界对账，不自动approve/redeem/merge/卖出。人工以后获得具体目标许可后调用原SDK或官网，读回失败保留同hash并停，不重签/重发。即使后来读到账，本run也不自动复READY；下一启动服从冷启动人工核对。若只有官方零兑付，按§4.4记经济损失和链上剩余份额，不造赎回现金。
+默认MANUAL_PAUSE：首个需要回收的官方正claim即WAIT_CASH并停止新风险，列claim/净份额/成本/未决。可以在已有持仓上完成有界对账，不自动approve/redeem/merge/卖出。人工以后获得具体目标许可后调用原SDK或官网，读回失败保留同hash并停，不重签/重发。claim先判定后入账：账户读回只把claim记为已证明的待兑付，只有当已确认官方结果逐atoms精确等于该claim（同净份额、同兑付金额）时才入账为本run现金并清回READY；差任一atom、结果未确认或token不属于本run时，claim不入账、cash_complete=false、WAIT_CASH继续，reader亦须观察到仍未停窗解除。下一启动服从冷启动人工核对。若只有官方零兑付，按§4.4记经济损失和链上剩余份额，不造赎回现金。
 
 自动连续运行当前NOT_SUPPORTED；资金回收责任明确由指定接管人承接，不能用虚拟paper回款或“人工以后会看”证明自动周转。资金工具既有能力不重建，未来如另批自动回收须明确有限route/target、Gas/失败/原消费者验收，不能隐式approve所有路线。
 
@@ -236,7 +255,7 @@ SUPERVISED工程首单可一笔加预批准退出，由人核官方回执/账单
 | 同上 | started_at | UTC timestamp，是 | 实际启动尝试起点；L1 |
 | 同上 | deadline_at | UTC timestamp，是 | 未来授权固定值，等待不延长；L1 |
 | 同上 | candidate_identity | 原公开文件/binary SHA对象，是 | 不复制环境/凭据；L1 |
-| 同上 | public_config_identity | 原公开配置SHA及固定参数，是 | 100/2/2/10/20和原模型参数；L1 |
+| 同上 | public_config_identity | 原公开配置SHA及固定参数，是 | 98/1/1/10/20和原模型参数；L1 |
 | 新events.jsonl | 每字段/关系 | §4.5逐字段，是 | 校验后追加，关键订单发送前耐久确认；L1，行情L0关联后按L1 |
 | 新ended.json | schema_version | 与started一致，是 | 原生退出后独立创建，不覆盖；L1 |
 | 同上 | run_id | 受控ID，是 | 与started一致；L1 |
@@ -248,6 +267,12 @@ SUPERVISED工程首单可一笔加预批准退出，由人核官方回执/账单
 | 同上 | cash_complete | bool，是 | pending claim不得真；L1 |
 | 同上 | audit_complete | bool，是 | 坏/缺事件不得真；L1 |
 | 同上 | takeover_required | bool，是 | 必需接管显式；L1 |
+| 新stop-output.json | schema_version/run_id | 固定btc5m-stop-output/1及受控ID，是 | 真实OUTPUT_INVALID停机的触发片段记录，create-new一次性；L1 |
+| 同上 | stream/bytes/newline_terminated | stdout/stderr、原始字节数、原始是否以换行结束，是 | 原片段元数据，不改写原文；L1 |
+| 同上 | truncated/text | bool及按形状脱敏后最多2048字符，是 | 秘密名值/Bearer/带凭据URI/裸64hex替换为脱敏标记；L1 |
+| 同上 | occurred_at/child_returncode | UTC timestamp及int/null，是 | 与ended同源的停机时刻和原生退出事实；L1 |
+
+`stop-output.json`只在停机原因本身是`OUTPUT_INVALID`（EOF残留、超长行、stderr行三类真实触发，或store拒绝该行）时create-new一次，写在该run的`ended.json`之前。模糊审计I/O失败既不写该文件也不写`ended.json`，`stop_reason`保持原样；其他停机原因之后到达的尾部输出不写该文件、也不改变`stop_reason`，该run仍按原原因正常写`ended.json`。
 
 所有新证据文件保留原字节、屏障保留原始内容，无TTL/自动压缩/删除/迁移/覆写/上传，旧v1/v2只读不补字段。人工轮转屏障需另明确授权并留证据；本轮无生产DB DDL/DML/schema/索引和真实部署。秘密仅原keyring/内存/匿名FD，L3禁止入事件/屏障/报告；Mongo连接秘密不传child/事件，不记录RPC敏感URL/签名字节/API/JWT/完整账户原响应。OS/同UID/管理员、存储物理耐久/人为删除不是本方案可保证隔离；必要Mongo确认/本地审计文件耐久不满足即拒绝，不降级临时目录或其他数据库。
 
@@ -276,7 +301,7 @@ SUPERVISED工程首单可一笔加预批准退出，由人核官方回执/账单
 | A-017 | fake keyring正常/locked/缺失/Prompt、断网/账户缺页/无mark | 失败停新增，无Unlock/file备用/秘密重读循环；丢数据保留K/P/持仓，绝不作零账户 |
 | A-018 | 父EOF/监督失联、child异常、控制/证据输出/告警失败、deadline与inflight竞争 | child下一可能POST前停手；原有界退出/原生exit可见，不自动重启；已可能发单即未知，不能假撤销 |
 | A-019 | remove accepted+removalLockedUntil+late fill+最终权威不可成交 | 原cancel/query消费者处理竞争，只终态且核算全才释放；rest/继承风险不能靠cancel_all成功当清零 |
-| A-020 | 分别考验真实现金不足/单笔/市场/总额/预占并发及实际风险超R0 | 100真预算非仅报表分母，2/2/10各独立约束，等号可、超额拒；不双算/漏算、不自动升额/缩单 |
+| A-020 | 分别考验真实现金不足/单笔/市场/总额/预占并发及实际风险超R0 | 100真预算非仅报表分母，2/2/10各独立约束，等号可、超额拒；不双算/漏算、不自动升额/缩单。（2026-11-22 口径注：该条冻结的 100/2/2 为旧 1u 前验收事实，保留原文不改写；现行契约见 §4.4——C0=98 USDT、单笔下界 0.5（`live_accounting.rs:30`）且上限 1、单市场 ≤1、总额 ≤10，旧“2/2”单笔/市场额度已被 1/1 取代，等号/超额/不双算等判定语义不变。） |
 | A-021 | 官方WON/LOST/DRAW/争议/pending→claim→人工fake原SDK receipt+同目标份额/USDT读回 | 官方结果不代表到账；正claim WAIT_CASH且0新增/自动redeem/approve；错route/读回失败保留未知hash；零兑付不造现金 |
 | A-022 | SUPERVISED首单、策略pilot与UNATTENDED能力/授权分别判定 | 有人首单不要求先自动赎回；有人pilot不可用null final通过；无人必须多故障/接管/冷启动，不能声称自动连续复投或外部已通知 |
 | A-023 | 原安全signer、SDK lazy FD/API、07-004/005受影响资金/clock及兼容回归 | 仍适用旧独立证据按身份复用；必要回归不删/skip弱化；实际auth/签名/网络/DB调用计数0，依赖/配置/调度/权限不变 |
@@ -308,8 +333,21 @@ T1仅静态核对两实体/互引/版本/来源路径/字段和验收映射、sc
 
 真实Gas预算、批准额度、期限、退出/取消/人工回收目标和可达接管者均为以后实测的明确授权输入，不从历史余额/旧budget flag推定，不在本卡填伪值。本阶段两文档完成静态检查后交主控Gate，按原Full图推进，不自行创建真实运行/同卡重复review或提前Implement。
 
+本轮版本 V1.4：t_298e36df / Pascal Light；以上参数化契约优先于历史固定示例。
+
 ## 版本记录
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
 | V1.0 | 2026-11-19 | 冻结phase1 live同core/FINAL_SEND、实际原子量与新live白名单、窗口/单实例/拒绝冷启动、MANUAL_PAUSE回收及24项离线正反例验收 |
+| V1.1 | 2026-11-22 | 事实补注：已有ACCEPTED且带venue_order_id、closure仍非FINAL的订单视为在飞；在飞期间的未完成快照为事实未到，不得作为run级停机理由；只有无ACK/身份或账本不匹配/签名hash不符/风控触发，或订单已FINAL/超期仍无法证明时，才停机并携带既有失败码 |
+| V1.2 | 2026-11-22 | 纯文档数值对齐：§4.1/§4.4 的当前生效契约改为 C0=98 USDT、单笔 0.5≤w≤1、单市场 ≤1、总额 ≤10、B 从 98 起、恒等式 NAV/98；A-020 的旧 100/2/2 作为历史验收事实保留原文并加显式取代说明。无代码/语义/金额授权变更 |
+| V1.3 | 2026-11-22 | R2 V1/V2/V3：§4.1 三入口共用 mode-aware 6h/24h 正时长边界；§4.4 区分实际敞口≥10u 的 sticky stop/cleanup/drive 返回与拟新增单超额的拒单；§4.8 官方完整 token/side 绑定和历史一致后才解释零兑付，拒绝不污染后读。预算/限额、20u loss、paper、旧证据和上线授权不变。 |
+| V1.4 | 2026-11-22 | 公开 run JSON 参数化（Light）：C0/金额改为取本 run 配置冻结值（legacy/历史示例仍为 98/1/1/10/20），并按 target≤order≤market≤total≤budget 校验；事件与 ended 账务读者取该 run 的 budget/loss，元数据读者保留 public==limits 且不发明 target==cap。不改经济、授权或历史证据。 |
+| V1.5 | 2026-11-22 | R7 Validate 文档校正（MINOR-1/2）：§4.4 C0 改为取本 run 冻结预算（legacy 98，早期 100 仅历史示例）；预算/caps 行号指针更新为 live.rs:746–754、taker.rs:419–436、live_control.rs:386–395，常量指针校正为 live_accounting.rs:30/32/34/38/40；不改代码/额度/授权语义 |
+| V1.6 | 2026-11-22 | R12 窄修订：§4.1 逐 atoms 相等门行号校正为 live.rs:757–764；预算须逐 atoms 等于启动时观察到的 collateral（budget_usdt 支持≤18 位小数的十进制字符串、按 atoms 精确映射，不截断、不容差；±1 atom 即启动前 CASH_BUDGET_MISMATCH 拒绝）；不改经济、额度或授权语义 |
+| V1.7 | 2026-11-23 | R13 窄修订：确认的正兑付 claim 在官方结果已确认后，按官方结果的 claim_value_atoms 与已兑付份额核对；claim 未确认前不入账为现金 |
+| V1.8 | 2026-11-23 | R13b 窄修订：官方结算先到、精确 claim 后到的顺序下，本 run 内允许把该精确 claim 清回 READY；差 1 atom、结果未确认、foreign token 仍停窗 |
+| V1.9 | 2026-11-23 | R13c 窄修订：claim 先判定后入账（账户读回只记为已证明待兑付，已确认官方结果逐 atoms 精确相等才入账为现金）；canonical reader 与 Rust 侧对同一合法流给出一致结论（已兑付持仓不进终态 positions、reader 观察 CASH_CONFIRMED 后不再视为停窗） |
+| V1.10 | 2026-11-23 | R13d 窄修订：reader 收到 payout `CASH_CONFIRMED` 且该等待由 `CASH_PENDING` 造成时同步解除 `stopped`（其它原因停止仍黏性，并以 producer→reader 双用例覆盖续单与反例）；逐 atoms 预算门等指针改为符号锚定（`seed_predict` 的 `cash_matches_budget_and_claims` 不等即 bail `CASH_BUDGET_MISMATCH`，行号仅辅助）；移除 `live.rs` 未使用的 `cleared_waits`；不改经济、额度或授权语义 |
+| V1.11 | 2026-11-23 | R13e 微修：停窗原因首因胜出——reader 的 payout `CASH_PENDING` 仅在 `stop_reason` 为空或已是 `CASH_PENDING` 时写入停窗，`CASH_CONFIRMED` 只撤销由 `CASH_PENDING` 造成的停；补一条 wire 级反例用例（stop DATA_UNAVAILABLE → payout CASH_PENDING → CASH_CONFIRMED → 后续 RESERVE/FINAL_SEND 仍被拦）；不改经济、额度或授权语义 |
