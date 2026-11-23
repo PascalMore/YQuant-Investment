@@ -295,6 +295,12 @@ worker 因 body 自相矛盾而 `needs_input` block 不是 worker 缺陷，是�
 3. **复算证实卡面正确时**：回退 worker 改动并按卡面重派，同时排查自己派卡时为何写出错误答案。
 4. 对比验证还可能揭示「旧发布值本就用了某个口径所以零漂移」——数值零漂移不等于语义已冻结，仍要把隐式口径用测试锁死，防止未来被错误"修复"。
 
+## 混合 Python / Rust 回归：先核框架与原执行前提
+
+- 派发固定测试命令前，读取目标文件的测试声明与 fixture：函数式 `test_*`、`tmp_path` / `monkeypatch` 等 pytest fixture 必须用 pytest，不用 unittest 的零收集冒充通过。跨测试文件裸导入的 unittest 套件，复用已验证的 `unittest discover -s <test-dir> -p <file>` 上下文，不通过额外 PYTHONPATH 掩盖入口错误。
+- Python 测试若内部启动离线 Cargo fixture，任务正文必须带上已验证的 `CARGO_TARGET_DIR`、当前 profile scratch `TMPDIR`、项目解释器绝对路径与 cwd；清除 Hermes 注入的 PYTHONPATH/PYTHONHOME，不丢失业务测试确实依赖的环境。不要把项目根 `.venv` 写成子模块 cwd 下的相对 `.venv`。
+- 原生运行出现导入错误、环境缺项或零测试收集且没有新安全拒绝时，主控应纠正错误入口与必要前提，在原四组范围内继续；不要为同一测试目标重复索取审批，也不要改生产代码或削断言迁就错误调用。真实安全拒绝仍按动作级规则停手，不能据本节更换形式等价重试被拒动作。
+
 ## unittest定向选择：不要同时传整文件与未限定方法
 
 执行少数指定用例时，为每个位置参数使用完整 `module.Class.method`；不要把测试文件路径与未限定的 `Class.method` 并列传给 `python -m unittest`，前者会加载整模块、后者会被当独立模块导入，既扩大执行范围又产生伪导入错误。派窄修复前把已实测的完整selector写进正文，以实际 `Ran N tests` 核对方法数；subTest失败记录另计。普通选择器错误不是安全拒绝，先保存越界执行事实、核保护hash与副作用；原授权范围未变时纠正选择器后续接，不自动升级为新一轮审批或重建图。新安全拒绝按动作级规则停被拒动作及依赖分支，可选省略不自动整卡停工或主控代跑。

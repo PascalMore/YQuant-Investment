@@ -4,17 +4,232 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 / 版本 | Draft V1.1；窄 Design Amendment 交付候选，待主控核对及独立 Design Gate；非实现、独立 Validate 或生产放行 |
-| 本次窄修订 | V1.9，2026-11-23：R13c 窄修订：claim 先判定后入账（账户读回只记为已证明待兑付，已确认官方结果逐 atoms 精确相等才入账为现金）；canonical reader 与 Rust 侧对同一合法流给出一致结论（已兑付持仓不进终态 positions、reader 观察 CASH_CONFIRMED 后不再视为停窗）；沿用 R13/R13b 的官方结果确认口径 |
-| 作者 / 日期 | YQuant Principal；2026-11-19，Asia/Shanghai（UTC+08:00） |
-| 来源 RFC | [RFC-07-007](../../rfc/07_trading/RFC-07-007-btc5m-live-parity-and-operations.md) V1.0 |
-| 来源 SPEC | [SPEC-07-007](../../spec/07_trading/SPEC-07-007-btc5m-live-parity-and-operations.md) V1.0 |
-| 来源任务 | 原 T2 t_44dc54d1（父 t_b946f2c3）；本次 Amendment t_780a6887；仅 live_events 类型/测试有界拆分 |
+| 状态 / 版本 | Draft V1.15；R16 Design 候选，文档静态 Gate 不等于实现、独立 Validate 或生产放行 |
+| 本次窄修订 | V1.15，2026-11-23：§R16 冻结诊断接线、R15 三 minor 闭合、本 run 兑付证据及600s有界续驱动；同版范围修正见§R16.6.1；Pascal另明确批准§R16.6.2的单一既有Python测试路径补充（总28路径），仅迁移已冻结预期，不改RFC/SPEC业务语义；旧正文作为历次设计基线保留，冲突处由§R16精确替代 |
+| 作者 / 创建 / 更新 | YQuant Principal；2026-11-19 / 2026-11-23，Asia/Shanghai（UTC+08:00） |
+| 来源 RFC | [RFC-07-007](../../rfc/07_trading/RFC-07-007-btc5m-live-parity-and-operations.md) V1.15，§R16 |
+| 来源 SPEC | [SPEC-07-007](../../spec/07_trading/SPEC-07-007-btc5m-live-parity-and-operations.md) V1.15，§R16.1–R16.6 |
+| 来源任务 | 本轮 t_5f6833d4，父 t_3691ff23；同版测试范围修正 t_ea1ed5d7；原 T2/Amendment 及历次修复记录保留 |
 | ROOT | /home/pascal/workspace/yquant-investment |
 | BOT | ROOT/skills/trading/auto-trading/prediction-markets/Prediction-Markets-Trading-Bot-Toolkits |
-| 后续 | 独立 Design Gate t_e43a4b06 仍 blocked，待主控核对后释放；L1 t_9edc6973 仍 triage；原 L2/L3、总收口 t_9be36fdf 与独立 Validate t_c6dc70ae 保留原链/hold |
+| 后续 | Design完成仅提供原 Implement t_38aafb47 的续接依据，仍须主控更新其指令并读回恢复；实现后由预建独立 Validate 验收。旧 blocked/triage 卡保留历史，不自动解锁/归档，不额外增设 review lane |
 
-上游输入实体已全文读取。RFC V1.0 SHA256=`38356736b1132689a276be720eed9ff1cd9c009d3d02a0342f9e595f8f8d8416`、SPEC V1.0 SHA256=`12f8afda7b29026fe9139d49024a92b096a91b7b96411a94718de49cb114d873`在本次 Amendment 以 sha256sum 重新核对一致，均不修改。原 Design V1.0 SHA256=`58562e2b78c606467b2d8ca60e67493fec49592371857ae85d53aa75c7f2ec49`为修订基线。上游元数据仍记录 T1 交付时状态及无版本号的同一 Design 路径，是历史阶段记录，不是要求当前 Design 仍为 V1.0。本文 V1.1 继续实现 RFC/SPEC V1.0，仅细化内部模块、范围和测试归属，不改变经济、字段、恢复、授权或24项验收语义，不升级 wire/schema 版本。
+历史 V1.1 Amendment 记录（非本轮 source pointer）：RFC V1.0 SHA256=`38356736b1132689a276be720eed9ff1cd9c009d3d02a0342f9e595f8f8d8416`、SPEC V1.0 SHA256=`12f8afda7b29026fe9139d49024a92b096a91b7b96411a94718de49cb114d873`当时重新核对一致；原 Design V1.0 SHA256=`58562e2b78c606467b2d8ca60e67493fec49592371857ae85d53aa75c7f2ec49`为当时基线。V1.1只细化内部模块/测试，不升级wire。本轮 source、身份与范围以下节为准，不能把历史未完成清单当R16重建授权。
+
+## R16：当前最小实施设计（2026-11-23）
+
+本节实现 RFC/SPEC V1.15 的§R16，优先于本文旧阶段状态、旧文件清单/行数、旧候选构建路径及 WAIT_CASH 即结束/首因遮蔽后来硬停的表述。历史代码缺口、产物、PASS/FAIL及版本记录不删除、不追认；本节是 planned implementation，不是已完成声明。T2只修改本文；不构建业务、不运行业务测试、不访问凭据/账户/网络/数据库，不改代码/测试/配置/模板/README/根规则。生产选择器、activation、签名授权、真实或模拟交易、资金/链上、屏障和调度均不在本轮授权。
+
+### R16.1 实测基线、保留项与替代范围
+
+入口 ROOT main HEAD=`6f85b9f48972b8b3cd547ff9d2add76a1301c6ba`；BOT main HEAD=`4b6420f6a11eb5303d1a94949037f52b866d24c3`。入口 Design SHA256=`686461811e0d2f0238cd8c8594a66eaa8bd5938f339b91144a7eb40971b249dd`；上游 RFC/SPEC SHA256=`05f4fd93ca803b30d62518fe9ffcc705a51bbe5b2439e232de1d534b95f5342e` / `b7581dd585042ad771bfdf4209c9514c401044b51ece86bf288dea8f315d3830`。本卡按入口字节快照归属，不按mtime、共享树累计diff或dirty数量归属。下文src/、tools/均相对元数据BOT。
+
+| 分类 | 当前源码与已核证据 | 本轮精确处置 |
+|---|---|---|
+| existing offline baseline | R15 t_239d0c0c/run4022：lib638/0/4ignored，bins15/2/2/4；账户并发、发送准备复用tick账户读、闭合历史记忆化；check_locked在facts/ACK/permit核对10s/身份/代际/attempt | 复用上游独立结论，不称本卡重跑；不再实现这些能力 |
+| existing offline baseline | R13 credit_claim/promote_pending_claim及reader局部撤销CASH_PENDING；原Broker LiveState/net_cash/net_inventory/claims、同core、原单次POST和unknown/tombstone | 保留；补共同提交与驱动接线，不建立第二账本/reader余额控制器 |
+| implementation gap | RunControl::must_end:230把WaitCash当结束；paper::wait_controlled_stop:686→drive:1609–1611/1637提前finish | 区分可撤销等待与终止；在原drive跳过策略新增而继续只读，恢复后下一tick重建候选 |
+| implementation gap | account::reconcile_account_history:761跳过bound_orders；live::claimed_payouts:1059只读历史claimed_win，check_runtime_account:1154才核销 | 新增同次账户读取的本run证据出口；不把bound单重新塞进startup历史现金 |
+| implementation gap | RunControl::stop仅Ready转换且stop首次胜出；reader只有全局cash_pending且每个CASH_CONFIRMED直接清空 | 临时现金等待与第一硬stop分责；多claim逐项索引，后到硬stop不能被清掉 |
+| evidence gap | R15 before重复键/旧标签；book_to_facts_us止于facts而非ACK后permit；旧end_to_end漏账户采集；fixture无历史hash | 旧artifact原字节保留、NON_COMPARABLE；新同版探针只报实际量，不重造before |
+| production gap | selector仍candidate-r14；R14 SHA96a7ed05…、R15 bcb5a8c0…均历史只读；run018原reader INCOMPLETE且无CASH_CONFIRMED | 不部署/切换；真实≤5s及到账分布NOT_EXECUTED/NOT_VERIFIED |
+
+不变项逐项继承SPEC：单笔/market/total/budget/loss、min_edge/min_secs_left、10s盘口/账户及原spot规则、allowance、签名/bound/ACK/首次poll原子门、unknown/identity/generation、paper账本/结算与DecisionCore。`phase1.rs::recheck_diagnostic`、`btc5m_control.py::candidate_input_error`、原纯官方身份/settlement helper均只读复用。mark_time最小缓存时间和暂时generation INCOMPLETE不扩为新专题。run018事实以[只读诊断](../../../data/reports/2026-11-23-btc5m-live-diagnostic/report.md)为准：34次是NOT_SUBMITTED/INPUT_CHANGED，不是交易所拒单；5.407s后现金增加不代表原run已恢复。
+
+### R16.2 拒绝诊断的唯一来源与时钟
+
+内部类型在 `service/venue.rs` 定义封闭 `SendCheckStage` / `SendCheckDetail` / `SendCheckObservation`，只携带SPEC §R16.2十个键的类型化值：stage、detail、checked_at、checked_elapsed_ms、tick_started_elapsed_ms、book_receipt_age_ms、spot_receipt_age_ms、account_receipt_age_ms、book_request_age_ms、spot_request_age_ms。不是新的reason/stop枚举。guard在 `live_control/diagnostics.rs` 计算投影，保存在原ControlledLiveState按attempt的最新检查记录；失败记录first-failure，不能被后续清理/成功覆盖。已持State的guard内部直接用mut State记录，不回调会重锁State的通知方法；adapter锁外通知才取State锁。adapter只传有类型的分支结果给原guard；原Error/CandidateRefused/Submission及判断顺序保持，禁止从Display/字符串解析“更精确”原因。
+
+沿 `ControlledSendGuard` 增加默认无副作用的诊断通知方法（不授予许可），携带stage/detail；`LiveCandidateGuard`实现将原phase1 clock取得的CheckTime和同tick/原candidate/LiveAccountRead时钟冻结。adapter本地失败仍走原错误返回，不改变downcast分类；`FrozenAttempt`/market_amounts/check_limit/原bound校验的失败处就地通知，绝不另跑一套价格/深度规则。成功检查也可记NONE；没有可靠CheckTime时order.diagnostic=null，不能伪造checked时钟或Tp。原无法细分且未在下表列出的分支为UNKNOWN，未测/旧流缺键只表示UNKNOWN。
+
+| 原owner/分支（在原顺序处捕获） | stage / detail | 原控制结果不变 |
+|---|---|---|
+| prepare check_allows_new_order/guard.check_preparation | PREPARE / RUN_STOPPED；若原命中冻结输入为FROZEN_INPUT | 原硬停/拒绝不重分类；同一复合if按原左到右首个命中，不能先查age改优先级 |
+| account_snapshot缺失、不完整、receipt过期 | PREPARE或当前FACTS/ACK/SEND_PERMIT / READ_UNAVAILABLE、ACCOUNT_INCOMPLETE、ACCOUNT_STALE | 原READ_UNAVAILABLE；只诊断，不把账户失配当候选可重试 |
+| guard.check_book空一侧 | PREPARE / EMPTY_BOOK | 原READ_UNAVAILABLE/EMPTY_BOOK，非交易所拒单 |
+| 原market_amounts深度不覆盖、原check_limit越限 | PREPARE / DEPTH、LIMIT_PRICE | 原CandidateRefused/INPUT_CHANGED，确知未发才释放该attempt |
+| FrozenAttempt::check_order及原已签界限证明 | SIGNED_BOUND / FROZEN_INPUT或SIGNED_BOUND_UNPROVEN | 只按原失败分支分类；不放宽q/签名ratio/fee/route |
+| check_locked身份/指针/候选关联复合检查 | FACTS/ACK/SEND_PERMIT / IDENTITY_MISMATCH、ATTEMPT_MISMATCH、FROZEN_INPUT | 原INPUT_CHANGED及Candidate/Window区别保留；拆诊断标签不拆原判断优先级 |
+| check_locked的receipt/complete/identity/generation/next_attempt检查 | 当前stage / ACCOUNT_STALE、ACCOUNT_INCOMPLETE、IDENTITY_MISMATCH、GENERATION_MISMATCH、ATTEMPT_MISMATCH，按源码顺序 | 原READ_UNAVAILABLE，不跳过任何guard |
+| recheck_diagnostic返回Reason::SpotStale/BookStale/RoundTooLate/EdgeBelowMin/InputChanged | 当前stage / SPOT_STALE、BOOK_STALE、ROUND_TOO_LATE、EDGE_BELOW_MIN、FROZEN_INPUT | 使用这一次原core结果；ClockInvalid/RequestTooSlow/其余未映射→UNKNOWN，不另复制模型 |
+| ACK槽/15s耐久确认故障 | ACK / ACK_UNAVAILABLE | 原AUDIT_UNAVAILABLE/CONTROL_CHANNEL/PARENT_LOST优先级不变 |
+| with_send_permit最后callback的失败或成功 | SEND_PERMIT / 对应首个分支或NONE | Tp必须来自gate内callback成功且handoff成立；guard外提前检查不冒充Tp |
+| POST权威RejectedFinal或可能提交后异常 | POST / VENUE_REJECTED或SUBMISSION_UNKNOWN | 原权威证据才RejectedFinal；401/timeout/坏响应未知，保留风险/同hash且0重POST |
+| 原预算/gas等未列detail的安全失败 | 当前stage / UNKNOWN | 不发明detail/stop、不把不识别当成功 |
+
+同一临界区内仅捕获固定大小enum/时钟/整数；不得新分配无界集合、打印/刷盘、等待另一个测量锁或新增I/O。`LiveCandidateGuard::with_send_permit`原State→handle→gate→first_poll顺序不变；诊断随原后续order发送，`prepare_order`及guard的PREPARED/MAY_HAVE_SUBMITTED两个直接OrderPayload构造点全部接同一字段，不能漏一出口。原reason/diagnostic_reason原字节不改；无attempt的无机会仍只用原decision诊断。
+
+`live_events/order.rs`拥有OrderPayload和其严格校验（从types.rs同义迁移），父types显式re-export，原live_events门面不变。order新增且仅新增可空diagnostic；新producer显式写null或封闭十键对象，新Rust/Python validator对旧流缺键先内存补null、然后原exact校验，不回写。递归未知/重复键、bool冒整数、非负、时间/枚举校验均在首次write前；不以serde默认忽略未知键。reader不以诊断决定放行/资金，仍调用原candidate_input_error校验冻结事实；旧reader不承诺前向兼容。
+
+时钟owner是run.phase1.clock（原UTC+含暂停elapsed）。T0在 `check_runtime_account` 的本tick首个账户请求发起前采，保留至该tick候选/guard；startup seed不是T0，后续record_account_read只记完成receipt、不覆盖T0。Tb取该candidate原book receipt；Tp在ACK后原gate内最后callback成功完成且紧邻第一次transport handoff采；拒绝采Tr，无Tp。主指标`tick_to_send_permit_ms=Tp.elapsed−T0.elapsed`，并列`book_receipt_to_send_permit_ms=Tp.elapsed−Tb.elapsed`；拒绝仅`tick_to_refusal_ms=Tr.elapsed−T0.elapsed`。每个receipt/request age按SPEC双时钟max，任一缺失/负差为null，不夹成0或改变原freshness。5000ms仅目标，不新增/放宽发送门禁。
+
+### R16.3 R15三minor最小闭合
+
+1. 新探针measurement_revision=`btc5m-send-path.r16.1`，单位ms（旧us segment另列单位，不混换）；`timing.rs`旧重复stage不能再拼成object同名key，采用有序segments数组 `{stage,duration_us}`、由serde序列化，report递归拒重复键。新probe实际执行账户采集→同core→原guard/ACK/permit/first_poll，不用decision+旧total或book_to_facts_us拼主指标。n/缺测/成功/本地拒绝/unknown分组、nearest-rank p50/p95/max及RTT/样本数/冷热历史身份均记录；串行运行避免原全局timing窗口交叉。旧before原bytes/hash保留并标NON_COMPARABLE；没有干净R14源可重现就不生成新before，只给新候选绝对值。
+2. `account/runtime_claims.rs`承接原read_account_snapshot共同读取主体。positions→history组成有依赖腿（history在positions完成且remember_market后消费declared订单lookup）；open_orders/account/chain仍并发。最终错误判定仍 positions→open_orders→account身份→chain→history，持仓链证明仍按原positions顺序判错。不删除每轮matches、新未声明hash拒绝、完整分页或Closure::Final后memo写入。冷缓存反例让declared hash不出现在matches、market仅positions可提供且positions延迟；热缓存相同输入对照，新增foreign hash即使memo命中仍拒绝。
+3. 在既有SyntheticTransport边界注入authorize读失败和balances故障，分别钉住 balances失败→原余额错误；余额可读但不足/零gas→INSUFFICIENT_FUNDS；余额足够→原authorize错误，均0sign/0POST。guard preparation同时变化时仍按fills.rs现有`balances? → check_preparation → funds → authorized? → check_preparation`顺序。只扩cfg(test) transport，不改生产authorize/并发或安全reason。
+
+### R16.4 本run证据出口、精确核销与单一提交者
+
+不用历史ClaimedWin承担runtime含义，也不加会使全仓AccountSnapshot字面构造扩散的必填字段。新增内部 `RuntimeAccountObservation { snapshot: AccountSnapshot, bound_claims: Vec<BoundClaimEvidence> }`；`OrderVenue::runtime_account_observation(&self, closed: &[RuntimeClaimInventory])`默认委托一次原account_snapshot并给空证据（不能产生claim）。`RuntimeClaimInventory`精确为identity:OrderIdentity、execution_generation:u64、inventory_atoms:U256，由Broker在原State锁下从当前Closed、pages/费用/net已完整应用且reserved=0的本runattempt生成，不承载现金或官方结果。PredictFun在原fills.rs的OrderVenue impl委托account/runtime_claims.rs同次读取主体；普通account_snapshot调用同一主体的legacy模式、返回原快照，startup行为不变。不新建client/第二账户读，不新增请求种类。生产唯一调用新增方法的是controlled check_runtime_account；同operation lane、锁外await，回来先核next_attempt/generation版本。
+
+`BoundClaimEvidence`是原事实DTO，不含可交易余额/认证材料；精确字段为identity:OrderIdentity、execution_generation:u64、yes_token:String、no_token:String、inventory_atoms:U256、claim_atoms:U256、payout_millionths:u32。身份含local_attempt/hash/venue id/account/market/token/side；run/window由消费它的冻结run绑定（不由adapter造run id）。仅缺失/已移除同token份额的bound order才尝试生成；持仓尚在时不生成到账证据。把closed输入与bound_orders原handle的Closed/完整identity及adapter当前generations逐项匹配，复制绑定后锁外沿原官方MarketData/official_settlement读取。这里禁止再调用read_bound_execution：其每次读会增加generation，若不经原sync消费就无法对应当前Broker代际；实际执行仍由此前原sync→consume_snapshot唯一消费，closed输入只引用这一次已完整的事实。同账户读前后adapter generation变化则拒绝本次证据，下一轮原sync重证，不伪造代际。用读取前原Yes/No绑定验证完整官方身份/非争议/0.5或1，U512 floor得P。同份额/同token的positions读回、原pinned chain余额/持仓验证不能省略（缺失token也必须沿原chain.position以期望0核链，不能只看REST空列表）。adapter不在此应用执行delta、不resolve新风险、不记B/R，不把“返回候选证据”称现金已核销。
+
+history仍跳过bound hash，startup declared历史解释仍走原claimed_cash_matches(C0+历史claim)。runtime模式对历史claim使用opening baseline消除重复：基线已有的历史Q/P只作旧事实一致性检查，不再要求当前余额等于C0+历史claim，不再计runtime收益。原history/matches未声明新hash和known token绑定保护继续运行；不可简单忽略positions_explained。runtime helper返回原始snapshot完整性与候选bound证据，只有Broker的全量核对成功后才可把该read的positions_explained置为真并发complete reconciliation；不为适配器partial/failure置真。没有本run唯一owner的变化保持RECONCILIATION_REQUIRED。
+
+对应真实投影接缝是 `live_accounting.rs::project_window` 当前以 `facts.opening_claim_cash()` 初始化claimed_cash（入口412行）：本轮改为0，opening_claim_cash仅保留startup对账/来源元数据，不再进入本run的B/R/NAV收益。预算仍为原params.budget=C0，不用Cb抬高预算；B=C0−本run实际支出+本run已核现金，R只含本run已实现损益。账户总collateral用Cb全量两式单列核对，Cb−C0的历史已到账不再次成为可交易预算/本run收益。这样保留原预算恒等式与reader预算校验，不改C0/额度、不把账户总余额和窗口B混同。旧历史run投影不回写；同流fixture同时断言startup资格、实际总账户核对及本run收益三者分责。
+
+新 `live/claims.rs`承接原claimed_payouts及check_account_delta_with_claims的同义纯核对，保留原路径pub(crate)门面供旧调用；新增runtime证据验证只读State。按 `(run,window,account,attempt,hash,market,token)` 唯一逻辑键、当前generation、Closed、预占0、完整费用/net验证，不能仅按token找到first owner；多owner/冲突拒绝。controlled生产runtime只能使用BoundClaimEvidence，不能因默认wrapper证据为空而回退到ClaimedWin造本run收入；旧ClaimRead/ResumedVenue局部fixture显式实现新typed只读出口，按§R16.6.1迁移被新契约替代的断言，其余正反语义保全，仍不是full-path验收。不把已核销inventory从原累计net_inventory删除，否则重复读无法再解释trade-only增量；原claims作为核销集合，pending_claims只保留证据和所依据代际/读版本，不拥有余额。
+
+严格实现SPEC §R16.4的两式：`Cobs=Cb+Din−Dout+sum(P[A∪N])`；每token `Iobs=Ib+ΔI−sum(Q[A∪N])-Z`。Cb是opening snapshot实际collateral，历史收入已含其中；Din/Dout/ΔI仅实际交易累计，排除claim；Z仅已证明零兑付归零。U512中间运算checked再转U256，1 atom差也失败，不跨token抵销、不拿总金额相等替代逐owner校验。DRAW payout_millionths=500000，WON=1000000，floor沿原atoms规则；原official pure helper仍负责结果，禁止从展示f64重建金额。零兑付沿原经济损失/链残余披露，不产生现金claim。
+
+唯一核销提交者仍 `live_control::credit_claim`；`promote_pending_claim`改为同一提交者的委托，不能直接insert另一条账务路径。流程为：lane内读取当前State版本→锁外同次account/官方证据→锁内先验证所有拟入账项和完整等式、当前receipt/generation→构造不可变commit计划→官方runtime outcome存在且精确Q/P时一次commit claims/K/B/R投影及outcome.cash_confirmed。失败全部不部分提交。首次现金证据但runtime官方消费者尚未消费时只保存pending、立即进入同一WAIT_CASH，B/R不动；后续原apply_official_result先保留outcome，再经相同验证/提交者消费pending，必须用当前generation完整read重证，不能靠旧tuple跳过。generation变化使pending失效而非被当foreign或永久删除；新完整同目标证明可续接，W0不重置。已到账不符官方结果是事实冲突，不是读失败。
+
+幂等：相同键且Q/P/generation一致的重复结果/快照/重复pending仅确认旧事实，不再入账/发CASH_CONFIRMED；新的更高generation且Q/P相同只更新证据版本，不再记现金，旧generation拒回退；同键不同Q/P为冲突，保留先前风险/账目不冲销。多个claim分批可分别记现金，但所有正claim闭合且无持仓/挂单/unknown/inflight/预占/费用代际缺口、原risk/receipt/deadline均满足前不恢复；现金核销可以在硬stop后如实补事实，不能解除硬stop。
+
+wire不加payout键/event_kind。顺序单一lane分配seq：已有/首次官方正claim的CASH_PENDING（尚未记现金的accounting）→相应stop CASH_PENDING（仅一次）→完整同次读回核销后的reconciliation→逐项payout CASH_CONFIRMED（有cash_received_atoms）→必要lifecycle→下一tick全新decision/PRE_SUBMIT/RESERVE。现金先到只先发stop CASH_PENDING，不伪造runtime outcome/payout；runtime结果消费后先发真实CASH_PENDING再核销发后两项。多claim先投影本批全部pending，再逐项confirmed。若某项仍缺，不清等待。失败输出毒化emitter并硬停，不重发资金动作/补写final。
+
+reader `LiveRelations`只保留审计关联索引，不创造余额。现金核销/等待清除的payout以已有envelope `(market_id,token)`关联唯一attempt（须Closed且净库存已证明），pending/confirmed/zero按该键集合记录，比较Q/P与官方payout及最近完整reconciliation；重复同值不重计，矛盾现金事实拒绝。`UNRESOLVED/CONFLICT`保持原身份关系校验，不附加Closed或完整净库存前提：原apply_official_result在Closed检查前即可输出合法CONFLICT，reader须能记录尚未闭合attempt的冲突及硬停，绝不能据此核销现金或清等待；D16-08补该partial/inflight冲突producer→reader反例。stop CASH_PENDING记未开放风险的等待；没有runtime payout时也不能因global bool初值为false提前解除。只有全部经济owner均已有零兑付或CASH_CONFIRMED且完整reconciliation、无未闭合attempt才清wait。每条CASH_CONFIRMED不能无条件清全局cash_pending。第一非CASH_PENDING硬stop单独黏性；后来现金不能清，后来CASH_PENDING不能改名。保留旧合法单claim流消费及原严格first writer→关系索引→落盘→reader路径，不手拼健康金融事件替代producer。
+
+### R16.5 WAIT_CASH、硬停止与驱动预算
+
+`live_control/cash_wait.rs`拥有CashWait元数据（W0:CheckTime、待回收逻辑身份集合、终止/过期标记），无第二资金表；挂在原ControlledLiveState。CASH_WAIT_BUDGET直接引用现有LIVE_TAIL_BUDGET=600s，不改其值，不复用READ_FAILURE_BUDGET=120s、不另加配置。RunControl保留临时state/stop观察接口，但其第一硬stop不可被等待遮蔽：现金等待发生后出现非CASH_PENDING stop，WaitCash→StopNewRisk，第一硬stop写入并重置stop_event_emitted让原lifecycle输出新事实；之后更多硬stop不改首个硬因。原CASH_PENDING事件保留，不回写历史。已有硬stop后进入现金等待仅补事实、不改变终态。
+
+| 条件 | must_end / may_add_risk | 原drive动作 |
+|---|---|---|
+| Ready、无degraded/硬stop/损失/期限 | false / 沿原规则 | 原sync/strategy/settle |
+| 有效CashWait，无硬stop | false / false | 原poll tick只读观察，绝不新RESERVE/sign/POST/cancel或策略副作用 |
+| 等待中Read/Execution/Valuation短暂失败 | false / false（未耗尽原各自预算） | 继续原降级观察；成功只清对应失败，不清W0/claim |
+| 后到人工stop/父EOF/control/output/loss/unknown/事实冲突/原读失败预算耗尽 | true / false | 第一硬stop胜出，原有界cleanup/final/return；不得等到账才停 |
+| now达现金600s而原deadline未到 | true / false | 保留CASH_PENDING+takeover_required，final不完整；无新stop词汇 |
+| now达原任一时钟deadline（含与到账同tick） | true / false | 原DEADLINE（若无更早硬stop），先关发送；只允许事实消费/收尾 |
+| 全部精确核销且仍在双时钟有效窗口、无其余风险/降级/硬停 | false / 原完整guard重验后才可为true | 清本次wait，废弃旧candidate，下一原tick采新输入进入同core/原发送链 |
+
+每次wait入口、read前后、核销恢复前、tick与wait_controlled_stop观察时均取原clock。有效条件同时为 `now.utc < min(W0.utc+600s,deadline_at)` 和 `now.elapsed_ms < min(W0.elapsed_ms+600000,run_elapsed_deadline)`，任一等号即不得恢复；读取失败/倒退标记不可延长等待，沿既有DATA_UNAVAILABLE/CLOCK保护停止。W0首次官方正claim或可归属现金证据任一先到即记，重复/部分回收/成功读/轮次变化不重置。完全清除后未来真实新claim可建立新W0，总run原deadline永不重置。
+
+`runtime.rs::drive`仅小分派：原sync_live仍执行；若处于wait则调用 `cash_wait::observe_wait_tick`（复用原sync/settle/必要mark读的入口及原poll/settlement cadence）并跳过strategy.tick/is_halted的cancel分支，不能让is_halted/entry_stop提前结束或继续策略。helper不得持operation lane再调用自行取lane的sync/settle；各原操作自己串行，State不跨await。等待期间只读future可由原控制通知/期限select中断；不丢弃已可能POST的future、不引入热循环/第二runner/长期调度。`paper.rs::wait_controlled_stop`只观察真正终止和deadline，并调用wait预算检查；paper分支不变。原settlement cadence用现有SETTLE_CHECK_EVERY，fake测试推进tokio时间/原clock而非真实等待600s。
+
+`finish_controlled_live`保留原cleanup30s及只读tail，但已有CashWait时tail上限取W0剩余额度、原期限/原收尾规则较小值，绝不从finish再给600s；现金等待预算已耗尽则无额外恢复窗口。终止后到账可以补核销/完整事实，但不得回Ready/再RESERVE。cash_complete按必要现金事实而非exit0决定；没有全部事实仍INCOMPLETE/接管。600s不是兑付SLA，真实领取延迟分布未验证。
+
+### R16.6 本轮精确allowlist与G3
+
+下表仅授权后续Implement的必要子集，不授权整个目录；均BOT相对路径。原27路径加Pascal明确批准的§R16.6.2唯一既有Python测试路径，当前总范围为28个唯一路径。新模块路径是明确planned文件，并非声称已存在。其它旧§10清单不作为本轮额外权限。表内测试仅cfg(test)/离线synthetic；§R16.6.1/2只授权列明符号的必要fixture/旧断言迁移，不允许顺手搬迁旧大测试、格式化全仓或修改生产selector/activation。
+
+| 精确路径 | 真实缺口 / 符号与最小用例 |
+|---|---|
+| src/bot/runtime.rs | drive按CashWait跳过策略/保留原只读和退出；D16-06/09原drive不提前finish及真续轮 |
+| src/bot/runtime/live.rs | 注册claims子模块、RuntimeAccountObservation接线/T0、版本及commit计划；原历史/普通live行为回归 |
+| src/bot/runtime/live/claims.rs（新） | 原claimed_payouts/check_account_delta_with_claims最小同义迁移、runtime唯一owner/两式纯验证；1atom/重复/历史隔离 |
+| src/bot/runtime/live_control.rs | 注册cash_wait/diagnostics/两测试子模块；RunControl stop/must_end、credit_claim统一提交、guard各实际分支通知 |
+| src/bot/runtime/live_control/cash_wait.rs（新） | W0/预算/无风险只读tick及恢复资格，不记余额；双时钟边界与硬停次序 |
+| src/bot/runtime/live_control/diagnostics.rs（新） | 同clock、core结果到封闭诊断/age投影；拒绝优先级和缺测/倒退 |
+| src/bot/runtime/paper.rs | wait_controlled_stop窄hook到等待预算/真正终止；paper语义不变 |
+| src/bot/runtime/live_accounting.rs | apply_official_result/pending统一提交/事件顺序、project_window排除opening历史claim收益且不抬C0；finish的W0剩余tail；正反到账/历史分责；仅§R16.6.1列明的opening旧测试预期随契约迁移 |
+| src/bot/runtime/live_events.rs | prepare_order、claim/reconciliation/lifecycle薄投影，stop新硬因及不重复confirmed；真实producer序号 |
+| src/bot/runtime/live_events/types.rs | OrderPayload与order校验同义移出并re-export、旧order缺diagnostic规范化委托；严格门面回归 |
+| src/bot/runtime/live_events/order.rs（新） | 原OrderPayload/校验和可空诊断封闭十键；递归坏键/旧流兼容，非资金逻辑 |
+| src/bot/runtime/live_events/tests.rs | 原schema回归必要构造适配、未知/重复键/非法age断言；旧8例及已有断言保全 |
+| src/service/venue.rs | RuntimeAccountObservation/RuntimeClaimInventory/BoundClaimEvidence和typed诊断DTO、OrderVenue默认只读wrapper/guard通知；不变AccountSnapshot/旧impl必填形状 |
+| src/service/predict_fun/account.rs | 注册runtime_claims/r16_tests；将原read_account_snapshot共同读取主体最小移到子模块；不迁整个history/chain/旧测试 |
+| src/service/predict_fun/account/runtime_claims.rs（新） | legacy/runtime同次完整读取、positions→history依赖、bound证据及官方身份复用；冷/热/未声明hash |
+| src/service/predict_fun/account/r16_tests.rs（新，cfg(test)） | 依赖时序/缓存与历史保护、balances+authorize故障边界；原SyntheticTransport封闭fake |
+| src/service/predict_fun/fills.rs | OrderVenue wrapper委托、prepare/sign/bound/POST实际失败诊断通知；原错误返回/并发/首poll保持 |
+| src/service/predict_fun/controlled.rs | 仅cfg(test)注册r16_fixture及最小synthetic调用seam；不改生产signed-bound/transport算法 |
+| src/service/predict_fun/controlled/r16_fixture.rs（新，cfg(test)） | 扩已有SyntheticRpc/BookTransport为可控账户atoms/官方结果/故障，不替代PredictFunTrader/原sign路径 |
+| src/bot/runtime/live_control/tests.rs | 共享fixture/helper必要可见性及§R16.6.1列明两函数的硬stop旧预期原位迁移；禁止净增行/新增case，最终≤3596且绝对<3600；其余旧断言不变 |
+| src/bot/runtime/live_control/tests/claim_wait.rs | 仅§R16.6.1列明ClaimRead/ResumedVenue及helper的typed fixture、现金先到/失配硬停旧预期迁移；原10个case同名保全，未被替代的安全断言不变；不以mock替代新adapter/drive链 |
+| src/bot/runtime/live_control/tests/r16_cash_drive.rs（新，cfg(test)） | 原drive+实际adapter两种到账顺序、多claim/硬停/边界、emit原始流；D16-06–09 |
+| src/bot/runtime/live_control/tests/r16_diagnostics.rs（新，cfg(test)） | 原guard各阶段/未发与unknown/paper-live共同域对拍；D16-01/02/05/10 |
+| src/bot/runtime/live_control/tests/send_timing_bench.rs | 同版T0→Tp/Tb→Tp真实测量、严格JSON/历史冷热点条件；D16-03 |
+| src/bot/runtime/timing.rs | 旧stage重复键改有序segments/serde输出和revision，保留gated/inert默认；无临界区阻塞测量 |
+| tools/predictfun/btc5m_live_events.py | validate_live_event/LiveRelations首写及reader共同支持order.diagnostic、按owner现金等待/硬stop索引；无生产配置/执行权限 |
+| tools/predictfun/tests/test_btc5m_r16_integrated.py（新） | 原Rust输出→原supervise/LiveEventStore→read_live_run；原健康流、反例/多claim/硬停/严格JSON |
+| tools/predictfun/tests/test_btc5m_live_events.py（既有，Pascal补充授权） | 仅§R16.6.2列明的两处已冻结旧预期迁移；全部原用例/未受影响断言保全 |
+
+实测物理行数（2026-11-23，含空行/注释）：runtime2398、paper2364、live2871、live_control1519、live_accounting1246、live_events692、types1199、live_events/tests576、live_control/tests3596、account2986、fills2309、controlled1124、venue815、timing115、send_timing_bench137、Python live_events896及原test_btc5m_live_events893。不是旧§10各父≤2400的事实；本次不修改根G3、不授≥3600豁免。
+
+- live.rs（2401–3599）：职责仍唯一实绩账/账户对账。只迁上述两个直接相关纯claim helper到live/claims.rs并保持门面；父只增加wrapper/版本/T0接线，不在父写新归属算法或测试。先同义迁移并跑live回归，再添加新证据校验，最后跑原drive/reader。不得为了到2400大搬apply_snapshot/旧测试；本轮最终父≤入口2871、绝对<3600，下次跨职责/超过该入口须新Design。
+- account.rs（2401–3599）：职责仍链读/完整history/身份保护；共同账户snapshot主体和新runtime证据放account/runtime_claims.rs，父只注册/委托，不扩history/chain/老测试；最终父≤入口2986、绝对<3600。先迁读取主体→旧snapshot回归→positions依赖及bound证据→cold/hot/unknown反例；不得为压行删注释或改分页/缓存含义。
+- live_control/tests.rs（3596）仅可见性修饰及§R16.6.1两函数的reason/state预期原位替换，最终≤3596、绝对<3600；不得删断言/注释、压行或改变fault矩阵凑行数。新增硬停事件/恢复反例仍放指定r16_cash_drive.rs，诊断新case仍放r16_diagnostics.rs，注册放父live_control.rs。本修正不搬旧case、不改限定名；若原位修改确需增长，先给主控精确源/目标（限既定模块）、符号和逐项等价覆盖方案并获准，不能自行广泛重构或挤掉原覆盖。
+- runtime/paper/fills继续≤2400且只薄hook；若接线将越界，把本表已指定helper放对应子模块，不默许另建未列文件。live_control/live_accounting≤2400的受控扩张仅本合同职责、独立Validate；新的cash_wait/claims/diagnostics/runtime_claims各≤1200，所有新测试/fixture文件各≤1200。
+- types.rs/live_events.rs继续原≤1200硬边界，先移OrderPayload及order校验到order.rs后加字段；order.rs≤1200，不让1199行父直接堆叠。controlled.rs仅cfg(test)注册，保持≤1200；venue/Python live_events/timing及相关小测试目标≤1200。迁移保留可见性门面和测试限定名；仅§R16.6.1逐项列明的新契约替代预期可改，其他旧断言全部保留，非重复实现。
+
+明确只读：phase1.rs及其模型/测试、arbitrage.rs、taker.rs、phase1_control.rs、live_control/channel.rs（原EOF/ACK seam只调用）、predict_fun.rs/request.rs、其余SDK/signer/cli、btc5m_control.py（含selector/candidate_input_error/supervise）、btc5m-live-activation.json、所有公开配置/依赖/锁文件、README/其他文档/observer/history/replay/冻结研究/旧run/旧candidate/生产数据。需要原supervisor可在测试注入只读调用，不能改运行态。未列文件若确有编译/消费者必要缺口，记录证据交主控修窄范围，不自行扩大。
+
+#### R16.6.1 既有测试迁移矩阵（V1.15同版范围修正，2026-11-23）
+
+本节只消除§R16.4/5已冻结行为与旧测试禁改范围的矛盾，不新增业务决策或文件。以下路径均相对BOT，函数名保持原样（包括含旧语义的历史名字），不删除/skip/ignore/xfail。修正的是断言所表达的旧规则，不是把所有失败判成“旧测试错误”；未列符号只沿原allowlist职责，新缺陷不得改测试迁就。所有fault分支、atoms/身份/generation/费用/未知风险负例、原账务不回滚和幂等覆盖必须保全。
+
+| 精确文件 / 函数或fixture | 原期望 / 迁移后的精确期望 | 来源与不允许改变项 |
+|---|---|---|
+| src/bot/runtime/live_control/tests.rs::live_known_conflicts_override_missing_without_rewriting_outcomes | `applied=true`发生真实冲突后stop仍CASH_PENDING → 与未applied冲突分支同为FACT_CONFLICT、StopNewRisk、0新增；第一硬stop黏性，后来到账不解锁。可原位替换reason及对应旧注释；新增状态/事件反例放r16_cash_drive.rs | SPEC §R16.5终止优先、D16-09；原applied两值/全部15个fault及conflict判定、outcomes不改、net_cash/net_inventory不回滚、冲突必有事件的断言不变；非conflict分支不改成冲突 |
+| src/bot/runtime/live_control/tests.rs::incomplete_official_results_preserve_live_risk_and_sticky_reason | `prior=CASH_PENDING`后读到本函数构造的缺失/异常官方事实，旧expected_reason=CASH_PENDING且WaitCash → DATA_UNAVAILABLE且StopNewRisk，修复事实后仍该第一硬stop、不可恢复；READY/OPEN_ATTEMPT仍DATA_UNAVAILABLE，DEADLINE仍DEADLINE/StopNewRisk | 已读apply_official_result的Pending且非normal_unpublished_result分支；本函数全部field均不构成正常unpublished；paper::same_round/revised_result只读复用。SPEC §R16.1原安全门、§R16.5终止优先/D16-09；全部4个prior/20个field、账本/预占/outcomes/原seq幂等及修复后事实可消费断言保留。正常OPEN的assert_normal_result_wait不在本迁移中，不把短暂读失败一律硬停 |
+| src/bot/runtime/live_control/tests/claim_wait.rs::{ClaimRead,ResumedVenue}::runtime_account_observation（新增impl方法）；同文件claim_read、claim_snapshot、claimed_win | 旧AccountSnapshot.claimed_win兼任本run证明 → 同一次snapshot加显式BoundClaimEvidence，以当前closed参数/原attempt真实identity、hash、pair、generation、Q/P构造；runtime不再走历史ClaimedWin fallback。允许必要构造/调用及pending内部表示断言改为相同逻辑键/Q/P/版本语义 | SPEC §R16.4.1–6；不额外读账户/执行以推进generation、不从展示f64重建生产金额、不替坏token/差1atom输入“纠正”成合法数据、不虚造owner；原ResumedVenue发送/查询仍委托实际trader。这是局部fixture，不代替D16-06/07真实adapter证据 |
+| src/bot/runtime/live_control/tests/claim_wait.rs::a_claim_credited_before_the_official_result_never_stops_the_window | 现金证据先到但runtime结果未消费仍Ready/无stop → WaitCash/CASH_PENDING、may_add_risk=false，保留pending且claims/B/R不加，首次证据记W0；runtime消费完整官方结果并以当前generation完整读重证后才Ready、一次精确credit/COMPLETE | SPEC §R16.4.5–7、§R16.5触发/清除，D16-07；允许必要重读步骤及原状态预期迁移，不允许仅把pending tuple直接提升或删“未确认不入账”断言；最终精确Q/P、cash_confirmed、pending移除/完整性仍保留 |
+| src/bot/runtime/live_control/tests/claim_wait.rs::the_real_producer_pays_the_claim_and_the_reader_can_follow_it；the_real_producer_trades_again_after_the_exact_claim_and_the_reader_follows_it；a_later_exact_claim_clears_the_cash_wait_and_the_final_cash_is_complete | 只迁typed ClaimRead/ResumedVenue构造/调用及必要当前读证明，结果先到仍WaitCash，精确现金后Ready/一次credit；后一交易case仍下一不同轮实际两次sign/POST，不把断言改成“无异常即可” | SPEC §R16.4/5、D16-06；原发送/账务/COMPLETE/final语义断言不改；captured_late_exact_claim_final_reports_complete_cash仅受生产者fixture联动，CASH_PENDING历史、final cash_complete=true/takeover=false/run_status=STOPPED预期不变 |
+| src/bot/runtime/live_control/tests/claim_wait.rs::the_real_producer_refuses_a_claim_one_atom_short；a_claim_one_atom_short_is_never_booked_as_cash；a_late_claim_that_is_not_exact_leaves_the_cash_wait_in_place | 同次完整账户证据差1atom，旧check_runtime_account.unwrap成功、保留WaitCash/CASH_PENDING（a_claim_one_atom_short还把坏proof留pending）→ 读核对拒绝/Err、StopNewRisk/RECONCILIATION_REQUIRED（无先前硬stop时）；坏proof不能成为可核销pending。claims/B/R不加、不得恢复，final现金不完整/接管保持 | SPEC §R16.4.2–6、§R16.5成功读失配不是瞬时读失败、D16-08/09；只迁错误/终态/坏pending预期，不删1atom注入，不改成容差或假装未收到完整证据。captured_one_atom_short_claim_keeps_the_cash_incomplete的final cash_complete=false/takeover=true断言不变 |
+| src/bot/runtime/live_control/tests/claim_wait.rs::a_claim_never_clears_a_stop_that_is_not_the_cash_wait | DATA_UNAVAILABLE先到分支：只迁typed fixture，合法精确proof仍须读核对成功，stop/state/may_add_risk仍DATA_UNAVAILABLE/StopNewRisk/false；runtime结果缺失时只存pending不加现金，不把因fixture没提供typed证明导致的Err当合格结果。foreign token分支：仍Err，旧WaitCash/CASH_PENDING → StopNewRisk/RECONCILIATION_REQUIRED、0新增/0现金；保留错token注入 | SPEC §R16.4.1/4/5及§R16.5第一硬stop黏性、D16-08/09；不把先前DATA_UNAVAILABLE改成新reason，不让foreign proof只等600s；两个分支都保留，不弱化为“不是Ready即可” |
+| src/bot/runtime/live_accounting.rs::tests::an_opening_claimed_payout_adds_exactly_its_cash | 函数实际为无attempt、C0=10 USDT、opening历史claim=1 USDT；旧cash=11、net_pnl=+1 → cash=10、net_pnl=0、realized=0、NAV=10，status=Complete与非负零仍保留；opening fixture仍返回1，不改为0规避 | SPEC §R16.4.2/3/6、§4.4预算与收益分责、D16-08及Design §R16.4既有project_window设计；该预期确被新契约替代，不要求把候选project_window改回历史收益重复入账。startup仍核C0+历史现金/实际Cb，两式仍从Cb起算；不能因此削弱startup资格或把历史现金再注入本run预算 |
+
+迁移范围判定：仅上表明列的现金先到状态、失配硬停、opening收益和typed证明是合法旧预期迁移；精确到账后仍不能核销/续轮、硬stop被现金清掉、错误owner/代际/atoms仍获准、重复入账、reader/writer不一致等均是候选缺陷，必须修候选而非降低断言。上表之外未受影响测试保持；不把原日志13fail逐条推定为测试错误或新建13条修复链。新增必要检查在原指定小模块补齐，原10个claim_wait测试同名保留且各安全语义可逐项追溯。
+
+#### R16.6.2 主控接手后的单一路径补充（Pascal明确批准，2026-11-23）
+
+本补充不改变公开契约，也不重开RFC/SPEC阶段。真实失败证据为`evidence/yquant-takeover-reader-red-clean-env.log`（29用例，6个failure记录及7个error记录；其中事件序号漂移已另在生产者审计投影处修复）。唯一新增授权路径为上表`tools/predictfun/tests/test_btc5m_live_events.py`，总28路径、不得增加第29条。仅允许：
+
+- `test_all_nested_missing_and_unknown_keys_before_first_write`：将order的历史可缺省`diagnostic`列入与原`stop_detail`相同的精确兼容例外；其余任意缺键/未知键/首次写入前拒绝与原用例全部保持。新集成测试须单独证明缺diagnostic归一为null、非null诊断的每个必填键缺失仍拒绝。
+- `test_a_claim_is_judged_before_it_is_booked_and_the_reader_agrees`：差1 atom已按§R16.6.1成为硬停、拒绝该账户证明；终态必须保留未核销库存，不再要求最后一次早于成交的对账位置等于最终库存。改为严格断言原生final仍不完整/需接管、硬停reason正确、未核销份额与实际执行净份额相等、无CASH_CONFIRMED；精确到账分支仍须最终持仓与有效对账一致并完成现金闭环。不得删除用例、修改1 atom注入、弱化为“无异常”，或放宽生产reader去接受矛盾资金事实。
+
+实现继续由获明确授权的YQuant主控承担，原卡行政HOLD防并发；独立Validate仍由原`yquantreviewer`卡完成。此范围补充不是工程PASS或生产授权。此前27路径及范围修正记录保留历史。
+
+### R16.7 最小真实消费者fixture与验收映射
+
+复用原 `controlled::synthetic_controlled_two_round_trader`、`account::SyntheticTransport`、candidate_tests的真实core/clock/ACK/emitter helper及Python `native_stream`/metadata/原supervise测试模式。新r16_fixture只替换transport事实与时钟，不替换Broker、PredictFunTrader、execution parser、account历史/positions/官方投影、核销/drive/writer/reader。测试默认无socket、真实sign/keyring/API/RPC/数据库/资金方法一经调用即fail；cfg(test) fake签名不产生真实签名或交易。健康金融事件由实际producer输出，不手写JSON；坏流可在真实流副本作单点mutation。
+
+固定结果先到脚本：同core第一轮经原adapter一次fakePOST→实际partial/完整净fill/费用/Closed→原官方消费者确认正claim、T=W0（复现09:55:06.275 CST的相对顺序）→多次原drive poll读到账前现金/持仓，assert无finish、0新sign/POST/RESERVE→推进5407ms，transport将同token份额移除且collateral精确增加P→原runtime_account_observation完成positions/history/chain/官方证据投影→Broker完整两式核销→原producer输出reconciliation/CASH_CONFIRMED→原reader清仅该等待→下一不同300s轮新输入经同core和fake执行器第二次POST。金额使用可配置synthetic合法份额/成本，另以run018公开2.0384份/0.936 USDT/2.0384 USDT作atoms算术fixture，不冒充原run事件重放或重新执行历史交易。
+
+反向脚本：只让account adapter所用MarketData先看到完整官方结果及精确现金/移除证据，runtime官方消费者仍读到正常unpublished；先停新增并记W0、保留pending、不增B/R、不误foreign；后让runtime结果完整，当前generation重读证明→同核销链→下一轮真实fakePOST。正常unpublished使用原三态规则，不虚造结果；两个消费者都无官方结果时保持未知，不能生成到账证明。多claim脚本分别支付并确认，第一笔只入账且等待不清；全部闭合才恢复。所有正例最终都需原drive主动按受控deadline结束并由原final/ended/reader判定，不以abort任务或内存Ready代替续驱动。
+
+| SPEC验收 | 最小真实断言与反例owner |
+|---|---|
+| D16-01 | r16_diagnostics→live_events/order→Python首写/reader：PREPARE/SIGNED_BOUND/FACTS/ACK/SEND_PERMIT/POST可达分支，stale分列、limit/depth/edge/round非stale；旧合法缺diagnostic流、非法键/bool/age/重复JSON键写前拒绝；decision无机会不编order |
+| D16-02 | 原CandidateRefused0POST释放本attempt→下一合法轮；硬身份/ACK失败仍停止。timeout/401/坏响应首次poll后Unknown、原风险/单hash保留、sign/POST次数不增；真正RejectedFinal须权威闭合 |
+| D16-03 | send_path_timing_benchmark新revision：T0在账户请求前、Tp在ACK+gate最后检查后，使用不为0的ACK延迟证明未截facts；冷/热declared历史与新hash反例，全部样本/缺测/nearest-rank；旧before NON_COMPARABLE |
+| D16-04 | account/r16_tests延迟positions只带market、matches缺declared hash、冷/热两组；完整且原优先级，新未声明hash拒绝/memo不抹扫描 |
+| D16-05 | 双故障及prepare竞争矩阵严格按R16.3，原typed错误相等，0sign/POST |
+| D16-06 | r16_cash_drive的结果先到脚本；等待0新增且drive未finish，到账后原writer/reader见一次CASH_CONFIRMED，下一不同轮实际到fake执行器；禁止仅mock claimed_win或直接credit_claim |
+| D16-07 | 原适配器现金证据先到、runtime结果后到；多claim分批；pending不增B/R/W0不重置、所有owner闭合才续轮；局部claim_wait现金先到旧Ready断言按§R16.6.1迁为WaitCash，不能替代原drive验收 |
+| D16-08 | Q/P±1atom、错market/token/side/pair、foreign/多owner/额外现金、未移除库存/挂单/unknown/inflight/fee页缺失、旧generation/冲突重放均不恢复；完整成功读的账实失配为硬停而非可等待；§R16.6.1的opening测试排历史收益但不削startup/Cb证明；DRAW floor/零赔付残余、重复一次收益/一次confirmed |
+| D16-09 | fake双时钟W0+599999/600000/600001ms、UTC/elapsed任一先到、原deadline更早/同tick、暂停/回拨；短读失败再成功不清cash wait；120s原读预算耗尽和硬stop/loss/EOF/输出故障两种顺序、同tick到账均0新增，first hard stop不改、尾查不重给600s；§R16.6.1两tests.rs函数迁移后保留完整fault矩阵，原producer输出后到硬stop且reader不会被CASH_CONFIRMED解锁 |
+| D16-10 | readonly原core共同输入域pair：概率/方向/净EV/纯拒绝一致，live专属account/claim差异明示；paper账本、R13/R14/R15受影响回归、selector/activation/旧候选/旧证据未改，真实delta不是mtime归属 |
+
+后续命令计划（本T2未执行；cwd=BOT；TARGET替换为当前worker scratch下独立构建目录，Python子进程同样显式CARGO_TARGET_DIR，禁止默认target）：
+
+```text
+cargo test --locked --offline --target-dir "$TARGET" --lib bot::runtime::live -- --nocapture
+cargo test --locked --offline --target-dir "$TARGET" --lib service::predict_fun::account -- --nocapture
+cargo test --locked --offline --target-dir "$TARGET" --lib service::predict_fun::controlled -- --nocapture
+cargo test --locked --offline --target-dir "$TARGET" --lib bot::runtime::live_events -- --nocapture
+cargo test --locked --offline --target-dir "$TARGET" --lib bot::runtime::live_control -- --nocapture
+cargo test --locked --offline --target-dir "$TARGET" --lib bot::runtime::paper -- --nocapture
+cargo test --locked --offline --target-dir "$TARGET" --lib bot::arbitrage::phase1 -- --nocapture
+cargo check --locked --offline --all-targets --target-dir "$TARGET"
+YQUANT_TIMING=1 YQUANT_TIMING_RUNS=9 YQUANT_SYNTH_RTT_MS=170 cargo test --locked --offline --target-dir "$TARGET" --lib bot::runtime::live_control::candidate_tests::send_timing_bench::send_path_timing_benchmark -- --ignored --exact --nocapture --test-threads=1
+CARGO_TARGET_DIR="$TARGET" /home/pascal/workspace/yquant-investment/.venv/bin/python -B -m unittest discover -s tools/predictfun/tests -p test_btc5m_r16_integrated.py
+CARGO_TARGET_DIR="$TARGET" /home/pascal/workspace/yquant-investment/.venv/bin/python -B -m unittest discover -s tools/predictfun/tests -p test_btc5m_live_events.py
+```
+
+探针使用上行完整限定名；实施若发现实际限定名不同先用--list核对，必须实跑1个目标测试，0test/--list不算通过。仅该已审阅离线ignored探针可显式执行，不跑其它ignored联网测试。9次RTT170是复用旧条件非验收总数门槛，冷热历史分别报告；不是生产达标。所有fixture临时目录使用当前worker scratch，Python测试继承TMPDIR，no network/secret guard显式开启，不安装依赖；缺依赖/必需验收被拒则保留增量block。
+
+### R16.8 交付、身份与文档Gate
+
+实施顺序：记录入口HEAD/精确文件hash及旧selector/activation/candidate身份→两个父文件最小同义迁移/原回归→同次adapter证据与Broker纯核对/统一commit→WaitCash与硬stop/driver→diagnostic/wire/新同版测量→真实Rust producer经原supervise/first writer/reader→最终独立候选与受影响回归。不得在本Design卡执行这些步骤。allowlist内的planned work不标成Gate finding；文档歧义/互相冲突才是finding，未闭合任意blocker/major/minor不能放行。
+
+新唯一候选隔离根固定 `ROOT/data/reports/2026-11-23-btc5m-r16-integrated-validation/evidence/candidate-r16/`，最终binary为其 `polymarket-toolkits`；scratch独立target实际locked/offline build成功后create-new复制并核源/目标SHA，不覆盖已有目标或旧candidate-r14/r15，不修改btc5m_control.py selector/activation/README。候选manifest包含ROOT/BOT HEAD、全部本轮实际源文件hash、入口→最终delta（含新文件）、binary SHA、build命令/native exit、输入fixture与measurement_revision/hash；旧上游dirty通过入口bytes排除归属，mtime不作证。可变源码与历史candidate不相等不自动违规，须看该候选实际delta及本表边界。
+
+新原始日志/JSON/文件delta仅create-new保存主题evidence/下，不能重写历史before/run018/旧report/旧卡PASS。唯一正式验收报告由独立Validate维护在 `ROOT/data/reports/2026-11-23-btc5m-r16-integrated-validation/report.md`（非本T2交付）；原始证据同主题evidence/，临时脚本/profile scratch不建任务状态镜像。报告逐D16项记录实际argv/cwd/native exit、候选/输入/运行条件/未验证项，最终候选改变则补跑受影响项，复用证据须身份/依赖/输入仍适用。
+
+本T2完成前只检查三实体/V1.15/source pointer/本地引用、精确allowlist与新路径、物理行数/迁移边界、可计算两式/时间边界/全部D16 owner、历史保全和定向git diff --check。上游RFC/SPEC无需改冻结语义；其“下阶段Design需修订”是T1阶段记录，现已由本文兑现。业务测试/build/真实PredictFun或BSC≤5s/claim到账分布/部署/交易资金均NOT_EXECUTED；仍不声称能够识别观察上完全相同的抵消外部流，继承账户独占与SPEC §R16.4.8证据限度。工程离线PASS与生产许可严格分离。
 
 
 ## 本轮生效契约：公开 run JSON 参数化（2026-11-22）
@@ -522,12 +737,14 @@ cargo check --locked --offline --all-targets --target-dir <当前profile-scratch
 - [官方Place orders](https://dev.predict.fun/trading/place-orders)、[Fees](https://dev.predict.fun/trading/fees)、[Order lifecycle](https://dev.predict.fun/trading/order-lifecycle)：2026-11-19公开浏览器读取，非私有API或交易验证。
 - [范围评估](../../../data/reports/2026-11-19-btc5m-live-and-hybrid-assessment/report.md)仅线索，当前源码优先；[final-freeze身份清单](../../../data/reports/2026-11-18-btc5m-joint-forward-validation/evidence/review-preparation/final-freeze.json)仅读manifest、不读评分。
 
-本轮版本 V1.4：t_298e36df / Pascal Light；以上参数化契约优先于历史固定示例。
+历史参数化版本 V1.4：t_298e36df / Pascal Light；以上参数化契约优先于历史固定示例。本轮当前版本为元数据及§R16的V1.15。
 
 ## 版本记录
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| V1.15 范围补充 | 2026-11-23 | Pascal明确批准主控直接接手及唯一既有Python测试文件的必要迁移；§R16.6.2限定nullable diagnostic历史兼容和差1 atom硬停后未核销持仓断言，总范围27→28；保留全部旧用例/资金安全反例，RFC/SPEC业务契约、独立Validate及生产禁区不变。 |
+| V1.15 | 2026-11-23 | R16 Design：对齐RFC/SPEC V1.15，保留R13/R14/R15离线基线；新增封闭order诊断与真实T0→ACK后最终permit测量映射、三minor闭合、同次账户bound证据/全量atoms核销/唯一credit提交、600s双时钟现金等待与原drive续轮/硬stop优先、精确allowlist及实测G3最小子模块/原消费者反例。同版范围修正t_ea1ed5d7：正文/allowlist/G3/矩阵允许两处tests.rs硬停预期、claim_wait typed fixture/现金先到与失配终态、opening历史收益测试按§R16.6.1迁移；27路径、tests.rs≤3596/<3600、全部旧case/安全覆盖不变，不新增业务语义/版本。旧候选和生产selector不变，仅文档，无实现/业务测试/上线或资金动作。 |
 | V1.0 | 2026-11-19 | 冻结同core live薄适配、末次await/耐久ACK后原子发送许可、实际原子量投影、单账户Mongo拒绝屏障与人工现金暂停、当前paper隔离、精确allowlist/G3及24项离线验收映射；只交设计 |
 | V1.1 | 2026-11-19 | 仅live_events有界拆分：新增types.rs/tests.rs两路径、allowlist由30到32；同步§4/7模块/wire归属、父re-export/import/私有可见性、§9保护/候选身份、§10物理文件G3和§11原8例保全/迁移/受影响Rust回归/真实producer终链；RFC/SPEC仍V1.0、wire仍btc5m-controlled-live.v1，经济/字段/恢复/授权不变；不实现/运行、不解triage/hold |
 | V1.3 | 2026-11-22 | R2 窄修复同步：§3.1 Python 与 native 三消费者分别共用 mode-aware 6h/24h 方法；§5.2 实际敞口≥10u 的黏性停止/原 drive 返回及只刷新敞口的必要 waiter wiring，保留在飞/未知/paper 语义；严格官方与历史 token-side 绑定并阻止缓存污染后再作零兑付解释。旧记录及 98/1/1/10/20/allowance100 不变，不新增文档阶段/运行授权。 |
@@ -539,9 +756,14 @@ cargo check --locked --offline --all-targets --target-dir <当前profile-scratch
 | V1.9 | 2026-11-23 | R13c 窄修订：claim 先判定后入账（账户读回只记为已证明待兑付，已确认官方结果逐 atoms 精确相等才入账为现金）；canonical reader 与 Rust 侧对同一合法流给出一致结论（已兑付持仓不进终态 positions、reader 观察 CASH_CONFIRMED 后不再视为停窗） |
 | V1.10 | 2026-11-23 | R13d 窄修订：reader 收到 payout `CASH_CONFIRMED` 且该等待由 `CASH_PENDING` 造成时同步解除 `stopped`（其它原因停止仍黏性，并以 producer→reader 双用例覆盖续单与反例）；逐 atoms 预算门等指针改为符号锚定（`seed_predict` 的 `cash_matches_budget_and_claims` 不等即 bail `CASH_BUDGET_MISMATCH`，行号仅辅助）；移除 `live.rs` 未使用的 `cleared_waits`；不改经济、额度或授权语义 |
 | V1.11 | 2026-11-23 | R13e 微修：停窗原因首因胜出——reader 的 payout `CASH_PENDING` 仅在 `stop_reason` 为空或已是 `CASH_PENDING` 时写入停窗，`CASH_CONFIRMED` 只撤销由 `CASH_PENDING` 造成的停；补一条 wire 级反例用例（stop DATA_UNAVAILABLE → payout CASH_PENDING → CASH_CONFIRMED → 后续 RESERVE/FINAL_SEND 仍被拦）；不改经济、额度或授权语义 |
+| V1.12 | 2026-11-23 | R14 窄修订：`drive` 与 `wait_controlled_stop` 以 `must_end()`（仅停或输出损坏）结束，降级不再结束窗口；`ControlledLiveState` 新增按类别的连续失败计数与 `READ_FAILURE_BUDGET`(120s)，降级期间 `may_add_risk` 为假但继续观察、成功即清零；`resolve_blocked_candidate` 的 `NothingToRead` 归为 Ok、仅 `Expired` 停；`refresh_live_risk` 将 `UnknownMark` 估值缺口降级、事实缺口与 `Conflict` 保持停机；live 子进程 stderr 与非事件行写入本次 run 有界脱敏日志；不改经济、额度、授权、stop reason 词汇或逐 atoms 门 |
+| V1.13 | 2026-11-23 | R14b 窄修订（文档对齐 + 守护断言）：R14 行为补注把「行情读」从 `READ_FAILURE_BUDGET` 降级列举中移除，并注明行情/报价读保持既有 drive `failed_ticks` 路径（`MAX_FAILED_TICKS` 达上限只撤挂单、不退出窗口，不使用 `READ_FAILURE_BUDGET`）；C 项用例断言 degraded 窗口的 drive 不提前返回、复位故障后一次 `check_runtime_account` 即恢复（`degraded=false`、`may_add_risk=true`、`stop=None`、`account_read.is_some()`）；补 Read/Execution 两类 `clear_failure` 用例并保持 per-kind 纹互不清；不改经济、额度、授权、stop reason 词汇或生产行为 |
+| V1.14 | 2026-11-23 | R15 窄修订（延迟，不改门禁）：`submit_live_candidate` 不再自读账户（原第二次全量读删除），`place_controlled_tracked` 经 `ControlledSendGuard::account_snapshot()` 使用 tick 在输入前取回并已对账的那次读，`check_locked` 仍逐次复验 receipt 完备/身份/generation/attempt 绑定/10s 新鲜度；`read_account_snapshot` 以 `tokio::join!` 并发五腿并在其后按原序校验、持仓链证明用 `join_all` 并发；关闭历史订单按 hash 记忆化净贡献（新历史仍由 `/orders/matches` 每轮发现）；发送路径 join(book, chain_read) 与 join(balances, authorize)，token/签名/ACK/POST 串行。测试：新增记忆化+新未解释历史用例；探针（`send_timing_benchmark`, RTT=170ms, 9 runs）实测 book→final check 3.262s→0.860s、发送窗口 net_calls 46→24、end_to_end 4.636s→2.234s；候选 `candidate-r15-final` sha256 `bcb5a8c0…`（本卡重试轮对并发后的错误优先级做了两处原位补正：`balances?` 回到 `check_preparation` 之前、每持仓 `market_for_token` 留各自 future 内，仍按持仓原序判定） |
 
 2026-11-22 原位修复补注：`apply_snapshot_detailed` 对"已有ACCEPTED且带venue_order_id、closure非FINAL"的在飞订单不再停机（保持attempt pending、会计仍为INCOMPLETE，观察循环继续），无ACK/身份或账本不匹配/签名hash不符/风控触发仍硬停，订单FINAL或超期仍无法证明时仍停并携带既有码；该路径的停机统一走stop_with_detail，只承载已有码，不新增分类、事件或自由文本。
 
 2026-11-22 R2b事实补注：`signed_hash`只用于事件投影口径（`live_events.rs`按hash把事件归属本窗口订单）；账户delta的`open_orders`规则只认`venue_order_id`（`live.rs::only_in_flight_order`：恰好一个已ACK、持有venue_order_id且未闭合的attempt），hash命中不解锁任何挂单；两者不一致时按fail-closed拒绝，不放行。
 
 2026-11-22 数值口径统一（V1.2）：§4.4/§5.2 的当前生效契约统一为 C0=98*S、0.5*S≤w≤1*S、K_m+P_m+w≤1*S、K+P+w≤10*S、B=98*S+R−K、net_pnl=NAV−98*S，启动可用 USDT≥98，配置身份为 98/1/1/10/20 且最小下单门槛 0.5（`live_accounting.rs:30–40`、`live.rs:746–754`、`taker.rs:419–436`、`live_control.rs:386–395`、`btc5m_control.py:307–308,319,1709`）；§4.4 中“单笔恰2 USDT”的历史算术向量按原值保留并加取代说明，不再代表可发送尺寸。仅文档数值对齐，不改代码/经济公式/授权语义。
+
+2026-11-23 R14 行为补注：候选在本窗口没有任何未决订单事实时被拒（例如 ROUND_TOO_LATE 在提交前拒绝），不构成致命事实缺失，只记录 blocked 事件并继续该窗口，只有确有一个在飞订单、其事实到既有 `UNREAD_FACTS_BUDGET` 仍不可见才以 `FACT_INCOMPLETE` 停窗。live 读路径（账户读、执行读）的瞬时失败改用 paper 的连续失败计数加预算语义：期间禁止新增风险但继续观察，成功即自动清零并恢复，只有连续失败超过具名 `READ_FAILURE_BUDGET`（120s，沿用 `UNREAD_FACTS_BUDGET` 的既有常量风格）才以既有 `READ_UNAVAILABLE` / `DATA_UNAVAILABLE` 停机；行情/报价读保持既有 drive 的 `failed_ticks` 路径（`MAX_FAILED_TICKS` 达上限只撤挂单、不退出窗口，不使用 `READ_FAILURE_BUDGET`），run 内行情侧唯一既有的 `ReadUnavailable` 是 guard 的空候选簿拒绝，未改动。`refresh_live_risk` 中缺新鲜 mark 的 `UnknownMark` 属可恢复的估值缺口、按上述降级处理，而现金/gas 等事实缺口与 `Conflict` 保持原有停机语义（`DATA_UNAVAILABLE` / `FACT_CONFLICT`），不因缺 mark 而降级事实缺口。
