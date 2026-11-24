@@ -4,15 +4,64 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 / 版本 | Draft V1.15；R16 T1 候选，待主控文档 Gate；非 R16 实现/独立 Validate/真实运行 PASS |
-| 本次窄修订 | V1.15，2026-11-23：R16 拒绝诊断、R15 三 minor 闭合要求、本 run 精确 claim 归属及有界 WAIT_CASH 驱动恢复；现行增量见下节，历史版本原义保留 |
+| 状态 / 版本 | V1.16；R17 Light Principal delta 已冻结，待 Implement / 独立 Validate；非修复或真实运行 PASS |
+| 本次窄修订 | V1.16，2026-11-24：仅 accepted 完整执行事实的生命周期等待、签名到期及120s尾查；R16及更早记录保留为历史 |
 | 作者 | YQuant Principal / yquantprincipal |
-| 创建 / 更新 | 2026-11-19 / 2026-11-23，Asia/Shanghai（UTC+08:00） |
-| 来源 RFC | [RFC-07-007](../../rfc/07_trading/RFC-07-007-btc5m-live-parity-and-operations.md) V1.15，§R16 为本轮决策来源 |
-| 工作区 / 来源任务 | /home/pascal/workspace/yquant-investment；初版 t_b946f2c3；本轮 t_3691ff23 |
-| 后续 Design | [DESIGN-07-007](../../design/07_trading/DESIGN-07-007-btc5m-live-parity-and-operations.md) 已存在；本卡只读，R16 source/wire/consumer 映射须由下阶段修订后才可 Implement |
+| 创建 / 更新 | 2026-11-19 / 2026-11-24，Asia/Shanghai（UTC+08:00） |
+| 来源 RFC | [RFC-07-007](../../rfc/07_trading/RFC-07-007-btc5m-live-parity-and-operations.md) V1.16，§R17 |
+| 工作区 / 来源任务 | /home/pascal/workspace/yquant-investment；初版 t_b946f2c3；本轮 t_7987b726 |
+| 对应 Design | [DESIGN-07-007](../../design/07_trading/DESIGN-07-007-btc5m-live-parity-and-operations.md) V1.16，§R17 精确 seam / allowlist / G3 与回归 |
 | 执行 / 验收 | Principal Design；Developer Implement；Reviewer 独立 Validate；主控 Gate/Closeout |
 
+
+## R17：完整 accepted 执行事实的有界等待（2026-11-24）
+
+本节仅实现RFC §R17，优先于旧R14补注中“所有在飞零成交一律120s”的解释。R16/冷历史/接管已实现，不重做旧Draft缺口或旧Gate；其账务、现金600s、unknown、Final、身份/额度及授权保持。事实及未取得的历史raw status/链状态见RFC §R17.1；本节为待实施合同，不是业务测试结果。
+
+R5 t_74460a41原任务/验收将UNKNOWN与0合并为120s到点停机，完整零成交与真正缺失的区别当时未冻结；本节补足该生命周期语义，不追认旧实现违约、不归因今天launcher/reader，不重开旧卡。详细Git/时间来源见根因报告§6及RFC §R17.1。
+
+### R17.1 唯一准入与事实分类
+
+仅显式controlled PredictFun live启用；旧venue默认不提供lifetime便不获新宽限。正常pending须同时满足：
+
+- 当前run恰一个未闭合且可能已提交的attempt；其记录及本次snapshot均Submission::Accepted，原accepted venue_order_id非空且精确匹配、signed_hash合法且同原bound、账户/chain/market/token/side/local_attempt及原requested/签名amount约束全部一致。Unknown、多owner、未知提交不进入正常pending。
+- 必须是本次真实execution读取，完整分页、`gross_q_before == gross_q_after == accounting_gross_q == quantity.gross_q`，五现金/费用/库存项KNOWN且各覆盖当前gross_q；`accounting_complete()`及原apply/累计单调/费用/net/风险检查通过。零成交vwap沿原N/A语义，不强造价格。不能仅凭旧watermark、旧完整读或重复generation推断当前健康；重复旧generation不重置任何时钟或清真实失败。
+- expiry来自该attempt原签名bound，正整数Unix seconds、可表示为UTC且checked毫秒算术不溢出，所有绑定一致；首次正常pending时尚未到该expiry。缺失、坏值、错hash/identity、无法证实归属不获宽限；错误沿原类型硬停，单纯不支持/缺expiry沿原unread预算，不推now+300、不回填AttemptRecord或改全仓构造器。
+
+OPEN→Accepted/Open，FILLED/CANCELLED/EXPIRED/INVALIDATED按原submission/closure映射；未识别status→Unknown/Unproven，不能因历史accepted而覆盖本次Unknown。零/部分成交、Closure::Open或Unproven可在完整事实与上述准入下观察；不把FILLED部分量或终态文本直接Final。已有部分成交仍经原累计增量/费用/net/mark/generation路径，不能因gross_q>0就停止跟踪非Final订单；完整Final路径保持原判定，不强制所有成交等到expiry。
+
+### R17.2 固定双时钟算法（唯一预算口径）
+
+时间单位为毫秒；E为已验证签名expiration换算UTC毫秒。B为原UNREAD_FACTS_BUDGET=120s（生产120000ms；原测试参数可缩短，不改公开配置）。首次满足§R17.1时在原phase1.clock取得W0=(utc,elapsed_ms)，冻结完整逻辑键及E；记：
+
+`remaining = checked(E - W0.utc)`（首次须>0）；`P_m = checked(W0.elapsed_ms + remaining)`；`T_w = checked(E + B)`；`T_m = checked(P_m + B)`。
+
+这些值持有于原run内同attempt的等待元数据，跨helper返回/下一tick保留，不是每次调用的Instant。pending有效阶段为 `now.utc < E && now.elapsed_ms < P_m`；任一先到进入尾查，尾查结束锚点仍为T_w/T_m，不是在发现到期的now再加120s。最终有界条件为 `now.utc < min(T_w,deadline_at) && now.elapsed_ms < min(T_m,run_deadline_elapsed_ms)`；任一等号或超过不再恢复/新增风险。市场300s轮次结束不是E，MARKET_ORDER_TTL_SECS=300只解释原签名，不参与重建等待寿命。
+
+每次tick、read前后、准备恢复及停止观察检查原双时钟。elapsed须包含暂停（现有SystemClock/CLOCK_BOOTTIME）；wall或elapsed相对上一读回退、取时失败、算术溢出均沿原DATA_UNAVAILABLE/时钟fail-closed路径，不夹0、不重锚。进程调度暂停至边界外，恢复即判超界，不能再补一段尾查；wall前跳可更早终止，wall回拨不能延长。成功读、重复快照、部分/晚到成交、generation变化、换市场、临时读失败与恢复均不重置W0/E/P_m/T_w/T_m；同一逻辑键不得删除后重建以续命。仅实际Final及原恢复条件成立后才清本次等待；硬stop/超界保留耗尽事实，原final收尾不能重新给它600s或120s恢复额度。进程重启不复用elapsed原点，仍走现行冷启动/人工接管，不新增恢复存储。
+
+真正缺失/Unknown仍以首次该连续缺失起点U0计原120s双时钟上限；真正execution读取失败仍走R14 Execution failure streak及原120s，不因订单有较晚expiry而暂停。重入helper不能重置U0；收到新的、当前完整且绑定正确的成功读才可按原规则清对应失败，不清W0。连续缺失/读失败截止、T_w/T_m、原deadline/硬stop取更早者；交替正常pending与短故障不会延长固定生命周期。完整成功但矛盾不是“暂时失败”，立即沿原冲突保护；原已有硬停缺失分支不改成宽限。无expiry的旧venue/旧fixture保留原预算及拒绝语义，不授予推测性生命周期。
+
+### R17.3 控制流、Final及终止优先
+
+- 在原Broker/drive内观察：每个原poll tick仍sync同hash execution、原账户/必要mark/官方结果；候选被拒触发的re_read也消费同一份元数据，不能只从unread筛掉零成交后不轮询。正常pending不是RunControl硬stop或CASH_PENDING，`must_end`不因合法pending为true，但`may_add_risk=false`；各清失败/刷新风险分支也不得意外打开风险。无新RESERVE/sign/POST/补单/自动cancel，不创建第二runner或状态机。只中断只读future，不丢弃可能提交的发送future，不跨await持State锁或递归获取operation lane。
+- 当前读先沿原consume_snapshot/apply/事件/账务消费。释放仍只由原Actual Final且完整分页/quantity/费用/net路径执行，normal pending和时间到期自身不释放；partial已证实支出按原账本应用，未用剩余预占不因等待释放。Final后风险/mark/receipt/generation/账户不完整仍不得恢复。清等待后下一原tick重采输入，经同DecisionCore/预算/ACK/最终许可；不对旧candidate续发。
+- 每次观察先判已有硬stop、父/输出/loss/identity冲突、原deadline及已耗尽预算；与Final同tick时先关新增，Final可如实补事实，不撤销硬stop。deadline沿DEADLINE、真实读失败耗尽沿原READ_UNAVAILABLE/DATA_UNAVAILABLE、未知提交沿原保护；生命周期尾查耗尽仍无Final沿FACT_INCOMPLETE并接管，禁止新stop reason。FINAL不完整时预占/风险保留，不能因exit0标COMPLETE。
+- 原ChainRead::closed不放松：完整FILLED且q=requested可闭合；否则必须认可终态FILLED/CANCELLED/EXPIRED/INVALIDATED，再有固定链块timestamp严格大于签名expiry，或同路由filled-or-cancelled/nonce失效。OPEN及未知status即使本机已过expiry仍不算Final；本机时钟决定“等多久”，固定区块证据决定“可否关闭”，两者不混用。
+- 本次只允许原日志诊断，封闭字段为 `venue_status`=OPEN/FILLED/CANCELLED/EXPIRED/INVALIDATED/UNRECOGNIZED、`expiration`=验证后的Unix seconds或null、`block_time`=该次固定块Unix seconds十进制字符串或null、`closure_branch`=FILLED_COMPLETE/SIGNED_EXPIRY/CHAIN_CLOSED/NONCE_INVALID/STATUS_UNPROVEN/STILL_EXECUTABLE/READ_UNAVAILABLE；判定顺序严格复用上述原分支，非新增资金状态。既有log framing/长度/脱敏继续有效，无raw自由文本、签名、JWT、URL/body，无新event_kind、wire键、reason或sink；没有读到的值明确null，不造历史status。
+
+### R17.4 必需回归（后续离线执行，非本卡已测）
+
+| 编号 | 真实消费者路径 / 输入 | 必须证明及反例 |
+|---|---|---|
+| D17-01 | fake双时钟+native PredictFunTrader/account reader→原Broker/sync/resolve→drive；重放ledger的两组accepted/market_end/expiry/stop时点 | 在121.792/123.679s与各自107/105次完整零读取不误stop，持续同hash原读取；不是硬编码OPEN假称历史raw status，而是分别注入受支持status假设并明示 |
+| D17-02 | 签名300s/缺失120s；E前/等号/后、E+120s前/等号/后，原deadline更早/同tick；晚调度至尾查外 | 正常完整零跨120s仍观察；尾查不从醒来时间起算，等号无风险恢复；成功读/重复generation/换轮/暂停/双时钟任一先到/回拨/缺clock均不能重置上界 |
+| D17-03 | 实际REST双读/matches分页/chain固定块→真实Final/原producer/严格writer与reader→同run下一新轮fake执行器 | expiry后仍OPEN/UNRECOGNIZED、q部分FILLED、只有本机过期、只有零持仓均非自动Final；除原FILLED完整量分支外，链timestamp==E且无其它关闭证明仍不Final；认可终态+timestamp>E或原链/nonce证明才关闭。Final+当前账户/risk/mark/generation合法才可续轮，旧attempt sign/POST恰一次、无cancel/补余量 |
+| D17-04 | 当前完整零→partial/晚到fill→Final，重复/旧generation、费用页缺失、数量变化、1atom差/overfill/错身份 | 原累计账务一次应用、净风险与预占规则不变；partial未Final不释放剩余/不新单；Unknown/缺分页/缺五项/错误hash或venue ID/坏缺expiry/多个owner不得宽限，真正缺失/连续失败120s仍stop，完整成功矛盾立即硬stop |
+| D17-05 | pending先到与硬stop先到、读中deadline/loss/父EOF/control/output、与Final同tick | 无一被pending遮蔽，第一硬stop保留；终止后Final仅补事实，不能恢复；read可中断且无死锁/热循环，读失败成功仅清对应failure，不清生命周期 |
+| D17-06 | 生产原有tracing→既有脱敏stderr/log边界；native producer→原first writer/reader；paper/live真实共同账务/结算/风险消费者配对 | 状态分类未知为UNRECOGNIZED、expiry/block_time缺则null、关闭分支准确，注入自由敏感status/错误不泄露；wire及旧合法流不变，paper/其它venue行为不变，R16现金/冷历史/旧接管不退化 |
+
+每项至少由实际native适配器和原Broker/drive组合提供关键正反例，不以fake OrderVenue helper单测替代；fake仅transport/clock/订单签名替身，拒绝真实网络/凭据/账户/DB。最终候选身份与受影响回归由独立Validate记录在既有卡及其授权证据位置，本卡不新建报告或路径门禁。实现文件/G3及原测试保全见Design §R17.3/5；本卡业务测试、构建、生产/模拟运行均NOT_EXECUTED。
 
 ## R16：本轮生效增量（2026-11-23）
 
@@ -425,12 +474,13 @@ T1仅静态核对两实体/互引/版本/来源路径/字段和验收映射、sc
 
 真实Gas预算、批准额度、期限、退出/取消/人工回收目标和可达接管者均为以后实测的明确授权输入，不从历史余额/旧budget flag推定，不在本卡填伪值。本阶段两文档完成静态检查后交主控Gate，按原Full图推进，不自行创建真实运行/同卡重复review或提前Implement。
 
-历史参数化修订 V1.4：t_298e36df / Pascal Light；其参数化契约继续优先于历史固定示例；本轮当前版本为元数据及§R16的V1.15。
+历史参数化修订 V1.4：t_298e36df / Pascal Light；其参数化契约继续优先于历史固定示例；本轮当前版本为元数据及§R17的V1.16。
 
 ## 版本记录
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| V1.16 | 2026-11-24 | R17：完整accepted准入、固定签名expiry双时钟及120s尾查/故障预算、原Final/预占/硬stop不变、封闭log诊断及D17-01–06 native/drive回归；Light文档delta，无业务实测。 |
 | V1.0 | 2026-11-19 | 冻结phase1 live同core/FINAL_SEND、实际原子量与新live白名单、窗口/单实例/拒绝冷启动、MANUAL_PAUSE回收及24项离线正反例验收 |
 | V1.1 | 2026-11-22 | 事实补注：已有ACCEPTED且带venue_order_id、closure仍非FINAL的订单视为在飞；在飞期间的未完成快照为事实未到，不得作为run级停机理由；只有无ACK/身份或账本不匹配/签名hash不符/风控触发，或订单已FINAL/超期仍无法证明时，才停机并携带既有失败码 |
 | V1.2 | 2026-11-22 | 纯文档数值对齐：§4.1/§4.4 的当前生效契约改为 C0=98 USDT、单笔 0.5≤w≤1、单市场 ≤1、总额 ≤10、B 从 98 起、恒等式 NAV/98；A-020 的旧 100/2/2 作为历史验收事实保留原文并加显式取代说明。无代码/语义/金额授权变更 |

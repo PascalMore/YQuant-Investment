@@ -4,17 +4,39 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 / 版本 | Draft V1.15；R16 T1 RFC/SPEC 候选，待主控 Gate；不是 R16 实现、独立 Validate 或真实运行通过 |
-| 本次窄修订 | V1.15，2026-11-23：R16 拒绝诊断、R15 三 minor 闭合要求、本 run 精确 claim 归属及有界 WAIT_CASH 驱动恢复；现行增量见下节，历史版本原义保留 |
+| 状态 / 版本 | V1.16；R17 Light Principal delta 已冻结，待 Implement / 独立 Validate；不代表修复已运行或生产放行 |
+| 本次窄修订 | V1.16，2026-11-24：仅 accepted 完整执行事实的生命周期等待、签名到期与120s尾查；R16及更早记录保留为历史 |
 | 作者 | YQuant Principal / yquantprincipal |
-| 创建 / 更新 | 2026-11-19 / 2026-11-23，Asia/Shanghai（UTC+08:00） |
-| 工作区 / 来源任务 | /home/pascal/workspace/yquant-investment；初版 t_b946f2c3；本轮 t_3691ff23 |
-| 来源决策 | Pascal 2026-11-23 已批准本次受限 Full 研发及离线验证；不包括部署、生产选择器/activation、签名授权或资金动作 |
-| 对应 SPEC | [SPEC-07-007](../../spec/07_trading/SPEC-07-007-btc5m-live-parity-and-operations.md) V1.15，§R16 为本轮可计算契约 |
-| 后续 Design | [DESIGN-07-007](../../design/07_trading/DESIGN-07-007-btc5m-live-parity-and-operations.md) 已存在；本卡只读，R16 映射由下阶段修订，未对齐前不得 Implement |
+| 创建 / 更新 | 2026-11-19 / 2026-11-24，Asia/Shanghai（UTC+08:00） |
+| 工作区 / 来源任务 | /home/pascal/workspace/yquant-investment；初版 t_b946f2c3；本轮 t_7987b726 |
+| 来源决策 | Pascal 在根因及最小方案后明确“请修复尽快”；沿 Light，仅补等待契约与 G3 Design；不授权本卡代码/网络/账户/生产变更 |
+| 对应 SPEC | [SPEC-07-007](../../spec/07_trading/SPEC-07-007-btc5m-live-parity-and-operations.md) V1.16，§R17 为本轮可计算契约 |
+| 对应 Design | [DESIGN-07-007](../../design/07_trading/DESIGN-07-007-btc5m-live-parity-and-operations.md) V1.16，§R17 为最小 seam / allowlist / G3 与回归映射 |
 | 依赖 | 07-002 V1.1、07-003 V0.5、07-004 RFC/SPEC V1.1 / Design V1.3、07-005 V1.0、07-006 V1.1；实际能力以当前源码及独立证据为先 |
 | 角色 | 主控 Gate/Closeout；Principal Design；Developer Implement；Reviewer 独立 Validate |
 
+
+## R17：accepted 订单生命周期等待窄修订（2026-11-24）
+
+### R17.1 事实、基线与有限替代
+
+事实源为[根因报告](../../../data/reports/2026-11-24-btc5m-unproven-root-cause/report.md)及其 `evidence/causal-ledger.json`。订单8882120994/8942043150分别107/105次完整零成交读取，五现金/费用/库存字段KNOWN、分页完整，却在accepted后121.792/123.679s以FACT_INCOMPLETE停止，距签名expiry仍有176.432/174.151s。已定位等待分类缺陷，不宣称解释未成交原因。原raw REST status未记录；key-only GET403不证明认证根因，历史eth_call失败不证明当时链状态；到期后原生六声明对账闭合是后来观察，不能追认停机时Final。
+
+当前 R16、冷历史及旧窗口接管均为已有实现基线，不重开其开发或已关闭门禁；接管独立结论 t_84db8f46 为 PASS_OFFLINE_PRELAUNCH_ONLY。旧§R16及下文 Draft、缺口、候选路径、待下一阶段叙述均只保留各自历史含义，不是本轮待办或新授权。R17仅替代“完整零成交仍一律按unread 120s终止”的行为及对应历史补注；R16现金等待600s、原Final/账务/风险/冷启动保护均不变。
+
+历史归因以根因报告§6为准：300s TTL原已存在；R5前run010在完整零成交OPEN后下一候选被拦时约0.77s即FACT_INCOMPLETE。R5 t_74460a41于2026-11-22 16:41–17:11（Asia/Shanghai）把UNKNOWN/0合并为120s有界重读，任务及验收本身要求always-empty到点停机；commit `4b6420f6a11eb5303d1a94949037f52b866d24c3` 的2026-11-23 03:31为自动归档时间，不是首次编码时间。因此是旧过早停机未修完整、R5留下当前生命周期分类缺口，不是今天launcher/reader引入，也不简单归因开发者违约；不重开旧卡。正常已知零成交是成功取得当前数量/账务事实、只是未证明Final，与UNKNOWN/读取缺失不是同一事实类别。
+
+### R17.2 冻结业务决定
+
+1. 仅唯一已知accepted、精确attempt/hash/venue ID/账户/market/token/side绑定、当前完整分页/数量/账务且无冲突的未闭合订单，可以保留原保守预占，持续原execution读取至其已验证签名expiration，再用原120s上限尾查。寿命不来自市场轮次结束、轮询时间或重新构造now+300；MARKET_ORDER_TTL_SECS=300只是当前签名政策，不是新的等待常量。
+2. 正常pending不等于Final、不解锁风险。完整零成交可等待；OPEN仍为Open；未知status沿原Unknown处理，不获宽限；部分/晚到成交继续原累计账务/费用/generation/估值消费者，非Final不得释放剩余预占或产生下一单。当前读真正缺失/失败、未知提交仍保留原120s保护，不能全局改为600s。完整定义、双时钟唯一算法、故障交错及同tick优先级见SPEC §R17.1–3。
+3. 等待期间0新增订单/RESERVE/重签/重发/自动撤单，保留同hash/tombstone，无风险恢复；原run deadline、loss、identity/事实冲突、父失联、输出及其它硬stop优先。只有实际Final且原完整账务/风险/mark/receipt/generation通过才可清本订单等待，下一tick重新采集输入，经原发送门继续同run；不是复用过期candidate或自动重启。
+4. 到期不自动Final；到期后仍无权威关闭证明，最迟在固定expiry+120s（或原窗口/硬stop更早）沿原错误终止并保留未决风险。首次pending的双时钟上限不被成功读、重复快照、轮次切换、调度暂停、回拨或重新进入helper重置。关闭证明保持原ChainRead::closed的严格条件，不能将零持仓/市场结束/REST终态任一单项当成Final。
+5. 诊断仅原平台status封闭分类、签名expiry、固定区块时间与关闭分支；复用既有脱敏log，不改事件schema/type、资金恒等式或reader。自由status一律UNRECOGNIZED，不记录原响应、JWT、签名或异常文本；精确落点及不改wire的证明见Design §R17.4。
+
+### R17.3 代价与交接
+
+资金可保守占用至expiry及有界尾查，机会吞吐可能下降；不保证成交、收益、真实延迟或24h稳定。仅一次受限Implement与独立Validate，必需回归见SPEC §R17.4；不新建平台、服务、配置或Full阶段。此卡仅原三文档增量与静态检查，业务实现/测试/构建/真实签名或交易均NOT_EXECUTED；旧工程PASS不代表本缺陷已修复，也不增加部署或启动授权。
 
 ## R16：本轮生效增量（2026-11-23）
 
@@ -228,12 +250,13 @@ T1 两文档静态一致性/引用/范围/hash → 主控 Gate → T2 独立 Des
 - [当前源码线索评估](../../../data/reports/2026-11-19-btc5m-live-and-hybrid-assessment/report.md)：含2026-11-19官方公开规则链接；本卡重新静态定位源码，不把报告当实现答案。
 - skills/data/data_interface/mongo_writer.py:9–21,31–53,69–109；skills/data/unified_data/local_mongo_adapter.py:8–33：只读核对依赖/职责，不导入、不读取凭据、不连接数据库。
 
-历史参数化修订 V1.2：t_298e36df / Pascal Light；其参数化契约继续优先于历史固定示例；本轮当前版本为元数据及§R16的V1.15。
+历史参数化修订 V1.2：t_298e36df / Pascal Light；其参数化契约继续优先于历史固定示例；本轮当前版本为元数据及§R17的V1.16。
 
 ## 版本记录
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| V1.16 | 2026-11-24 | R17 Light窄修订：已知accepted完整事实与真实缺失分责，签名expiry及固定双时钟120s尾查、保留原Final/风险与硬stop；仅三文档增量，无源码/业务运行/上线。 |
 | V1.0 | 2026-11-19 | 冻结live经济parity、实际账务证据、两种值守及最小冷启动拒绝/资金回收边界；研发与真实动作分离，保护当前paper和冻结研究 |
 | V1.1 | 2026-11-22 | R2 窄纠错：§5.3 明确 supervised≤6h/unattended≤24h 共用判定、实际 cost+reserved≥10u 黏性停止并原 drive 安全返回，以及最新官方/历史 token-side 严格一致后才解释零兑付；不改经济额度、paper、事件版本或运行授权。 |
 | V1.2 | 2026-11-22 | 公开 run JSON 参数化（Light）：新受控入口以 controlled_run={budget_usdt,duration_seconds,operations_mode} 与本 run 的 order/limits 冻结全 run 金额与时限，C0/loss/caps 取本 run 值；legacy 缺省与历史记录保持原值。不新增经济授权、真实交易许可或恢复语义。 |
