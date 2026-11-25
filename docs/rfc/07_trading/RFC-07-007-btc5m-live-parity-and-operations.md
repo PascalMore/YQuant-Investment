@@ -16,6 +16,18 @@
 | 角色 | 主控 Gate/Closeout；Principal Design；Developer Implement；Reviewer 独立 Validate |
 
 
+## 发送前保守 edge 预检与候选级拒绝增补（2026-11-25，Pascal明确授权）
+
+本节为用户本次“两个事情一并优化，由主控接手”的窄行为增补，优先于历史将所有SIGNED_BOUND_UNPROVEN笼统硬停的表述，不重开R17/结算/接管工程，不修改最坏资金或份额证明。分开“证明缺失/矛盾”与“已证明约束下经济性不合格”。本节不是已测试或生产放行结论。
+
+1. 仅受控PredictFun live候选进入原下单准备时，在本候选RESERVE/sign/POST之前，用已有冻结gross数量Q、候选fee_rate_bps、candidate.fair、候选限价下原reservation现金A与原min_edge，按最终保守检查相同整数公式预检。N_min=Q-floor(Q*b/10000)；V=floor(N_min*fair)沿原exact_floor_mul；所需利润原子量沿原cash_at_limit_atoms(Q,min_edge)。仅V-A>=所需利润才继续；经济性不通过跳过候选、无attempt/预占/签名/POST，不停止窗口。预检是原live Broker准入，不修改共享core/paper模型输出及初筛fee模型，也不保证之后账户/时效/真实签名检查通过。
+2. 原guard所有身份/hash/数量/fee/route/签名/receipt/generation/风险检查必须先通过；已证明且正的N_min下，仅经济性不合格、阶段仍为发送许可前的Candidate且原attempt仍Prepared/NotSubmitted时，使用原typed CandidateRefused/封闭INPUT_CHANGED，诊断保留EDGE_BELOW_MIN。沿原release_not_submitted仅释放自身预占、保留hash/tombstone及审计，清本候选，不stop、不takeover，下一原tick产生新candidate再评估；不重试旧candidate。
+3. 在Window/send-permit或may-have-submitted/unknown/已发阶段，不扩大软拒绝；无法证明bound、零/非法数量、fee/route/identity/hash不符、算术或取时错误、账户异常、ACK/输出/父失联、loss latch等继续原硬保护。不能仅凭NOT_SUBMITTED或字符串包含edge把其他错误降级。不撤销已有stop，不重启旧run。
+4. 共享小函数只复用已存在的minimum_net_shares/exact_floor_mul/cash_at_limit_atoms整数规则，预检和最终guard共用经济性判断；费率签名域原cap、min_edge=0.03、min_secs_left=30、10s新鲜度、预算/敞口/损失阈值、allowance、R17等待/Final、结算及接管均不改。
+5. 原生回归分别证明：真实core合格但保守不足的历史参数候选在原Broker预检0sign/POST/RESERVE且运行继续；原guard已准备场景的纯经济性拒绝为typed候选级，Window/真实无证明仍硬错；拒绝后同一Broker/adapter/core下一新候选正常单次fake POST，旧候选不可复用。保留等号/±1atom、零数量/坏费率/身份/bound/未知发送反例，并通过原producer→Python严格reader消费。公式回算不是native RED；必须先原生RED再GREEN。
+
+实现限定BOT原controlled.rs（小经济性helper）、taker.rs（仅准备前预检）、live_control.rs（仅已证明经济性分级）、原live004_regression.rs回归。必要原fixture最小参数化可用tests.rs/controlled/r16_fixture.rs，不新增平台/runner/schema。live_control.rs已1201–2400受控，本次仅替换原check_locked分支、职责不增，不继续堆无关逻辑；共享算法放controlled.rs以保持父职责。两binary重建至本主题新candidate-edge目录，旧制品不覆盖；原control selector及signer reader pin机械绑定、完整source身份新冻结。原shell/生产activation/guard不改，代码绑定不等于启动许可。本次Light Implement→独立Validate，0open才能离线签收，无真实账户/交易/生产写。
+
 ## R17：accepted 订单生命周期等待窄修订（2026-11-24）
 
 ### R17.1 事实、基线与有限替代

@@ -16,6 +16,78 @@
 
 历史 V1.1 Amendment 记录（非本轮 source pointer）：RFC V1.0 SHA256=`38356736b1132689a276be720eed9ff1cd9c009d3d02a0342f9e595f8f8d8416`、SPEC V1.0 SHA256=`12f8afda7b29026fe9139d49024a92b096a91b7b96411a94718de49cb114d873`当时重新核对一致；原 Design V1.0 SHA256=`58562e2b78c606467b2d8ca60e67493fec49592371857ae85d53aa75c7f2ec49`为当时基线。V1.1只细化内部模块/测试，不升级wire。本轮 source、身份与范围以下节为准，不能把历史未完成清单当R16重建授权。
 
+## 发送前保守 edge 预检与候选级拒绝增补（2026-11-25，Pascal明确授权）
+
+本节为用户本次“两个事情一并优化，由主控接手”的窄行为增补，优先于历史将所有SIGNED_BOUND_UNPROVEN笼统硬停的表述，不重开R17/结算/接管工程，不修改最坏资金或份额证明。分开“证明缺失/矛盾”与“已证明约束下经济性不合格”。本节不是已测试或生产放行结论。
+
+1. 仅受控PredictFun live候选进入原下单准备时，在本候选RESERVE/sign/POST之前，用已有冻结gross数量Q、候选fee_rate_bps、candidate.fair、候选限价下原reservation现金A与原min_edge，按最终保守检查相同整数公式预检。N_min=Q-floor(Q*b/10000)；V=floor(N_min*fair)沿原exact_floor_mul；所需利润原子量沿原cash_at_limit_atoms(Q,min_edge)。仅V-A>=所需利润才继续；经济性不通过跳过候选、无attempt/预占/签名/POST，不停止窗口。预检是原live Broker准入，不修改共享core/paper模型输出及初筛fee模型，也不保证之后账户/时效/真实签名检查通过。
+2. 原guard所有身份/hash/数量/fee/route/签名/receipt/generation/风险检查必须先通过；已证明且正的N_min下，仅经济性不合格、阶段仍为发送许可前的Candidate且原attempt仍Prepared/NotSubmitted时，使用原typed CandidateRefused/封闭INPUT_CHANGED，诊断保留EDGE_BELOW_MIN。沿原release_not_submitted仅释放自身预占、保留hash/tombstone及审计，清本候选，不stop、不takeover，下一原tick产生新candidate再评估；不重试旧candidate。
+3. 在Window/send-permit或may-have-submitted/unknown/已发阶段，不扩大软拒绝；无法证明bound、零/非法数量、fee/route/identity/hash不符、算术或取时错误、账户异常、ACK/输出/父失联、loss latch等继续原硬保护。不能仅凭NOT_SUBMITTED或字符串包含edge把其他错误降级。不撤销已有stop，不重启旧run。
+4. 共享小函数只复用已存在的minimum_net_shares/exact_floor_mul/cash_at_limit_atoms整数规则，预检和最终guard共用经济性判断；费率签名域原cap、min_edge=0.03、min_secs_left=30、10s新鲜度、预算/敞口/损失阈值、allowance、R17等待/Final、结算及接管均不改。
+5. 原生回归分别证明：真实core合格但保守不足的历史参数候选在原Broker预检0sign/POST/RESERVE且运行继续；原guard已准备场景的纯经济性拒绝为typed候选级，Window/真实无证明仍硬错；拒绝后同一Broker/adapter/core下一新候选正常单次fake POST，旧候选不可复用。保留等号/±1atom、零数量/坏费率/身份/bound/未知发送反例，并通过原producer→Python严格reader消费。公式回算不是native RED；必须先原生RED再GREEN。
+
+实现限定BOT原controlled.rs（小经济性helper）、taker.rs（仅准备前预检）、live_control.rs（仅已证明经济性分级）、原live004_regression.rs回归。必要原fixture最小参数化可用tests.rs/controlled/r16_fixture.rs，不新增平台/runner/schema。live_control.rs已1201–2400受控，本次仅替换原check_locked分支、职责不增，不继续堆无关逻辑；共享算法放controlled.rs以保持父职责。两binary重建至本主题新candidate-edge目录，旧制品不覆盖；原control selector及signer reader pin机械绑定、完整source身份新冻结。原shell/生产activation/guard不改，代码绑定不等于启动许可。本次Light Implement→独立Validate，0open才能离线签收，无真实账户/交易/生产写。
+
+## 6.6 原入口已知 payout-owner 审计误停的受限交接（2026-11-25）
+
+Pascal 已授权在原 `start-btc5m-live.sh → btc5m_launch.py --auto-prepare` 补齐本类准备。此条只覆盖已知 legacy reader 把同 market/token 的零风险未提交 attempt 计入 payout owner 导致的 `OUTPUT_INVALID / AUDIT_UNAVAILABLE`、缺 final；不是通用 audit reset。旧 run、events、ended、seed/native 均不改写；恢复证明是新 launch-attempt 的派生证据，不是原 final，不把旧 audit 标 COMPLETE。
+
+资格必须同时满足：旧 metadata、公配置、guard candidate digest、activation、seed/native hash、初始 STARTUP 对账/C0 完整绑定；旧已保存 prefix 每条按 canonical reader 严格重放。只接受已确认的 legacy reader/controller SHA 和旧 run 冻结的 legacy 交易 binary SHA（不是当前升级候选的 selector SHA）；该历史 binary 的发送前 PREPARED 必须先落盘并获得 ACK，controller 在第一条输出拒绝后关闭输入且不再 ACK。所有 prefix attempt 必须为有完整 Final execution 的已接受经济订单，或全轨迹从未发送且 CLOSED、无 execution/venue/reserve/applied 的零风险尝试；真实经济 owner 必须唯一且全部已纳入最后完整 reconciliation 的 generation，无未决发送许可。其它 stop、loss latch、未知提交、缺页、未闭合、强杀/清理异常均拒绝。
+
+首个 stop-output 必须完整未截断、stdout、换行且 child 正常退出，恰为 prefix 下一序号的 payout。只允许其中唯一 token 脱敏槽从该 market 唯一已审计经济 owner 派生；长度须与所记原长度一致，派生帧须通过完整严格 stage，且确有同 identity 的零风险候选可解释原唯一性失败。该派生帧不写回旧 events、不当作原始 wire，不独立证明现金到账。
+
+下一 C0 = 旧 public C0 − 全部本窗已审计净买入成本（不是 fresh balance 拟合）。保守按全部成本检查旧及新损失阈值；不放宽任何预算/交易限额。预期历史 = 旧 native 全部 claimed_win/settled_zero + 每个唯一经济 owner 的已校验结算记录；必须精确无序多重集相等，任何新增/遗漏/重复/字段变更拒绝。两次原生 fresh reader 都须完整、分页完毕、账户一致、明确 `positions: []`、无 open、已解释历史、gas 达标；`cash − 全部已到账 claimed_win = 独立 C0` 到 atom，完整账户 facts 一致。正赔付要求 fresh 原生 claimed_win 已确认，不以 CASH_PENDING 或估计权益代替。本受限类别仅接受已审计零赔付或全额赔付，DRAW/其它比率继续拒绝，不推断新的结算语义。
+
+只在上述证明完成后沿既有完整 guard CAS、activation drift、锁及新窗口机制交接。新 attempt 单独保存 prefix/stop/seed/native hash、派生标记、成本和 C0、完整预期历史及双 fresh hash。保留旧窗口失败事实。原 shell、双 binary/4pin、reader、guard、signer、Rust 和策略/阈值均不改；不新增 CLI/启动器、服务或自动重启。
+
+G3：launcher 只保留原流程编排和新分支挂接；纯审计资格与预期历史推导放 `btc5m_payout_recovery.py`，无网络/凭据/子进程/业务写入。controller 只在 LIVE_PATHS 增加该 helper 和回归叶，不扩展职责。受控扩张仅用于本受限分支；下一次新增独立恢复类别前重新审查提取，不把证明逻辑持续堆入 launcher/controller。新增测试独立 colocate，复用原 native_main 假外部边界；范围由独立 Validate 审核。
+
+验收为 Light Implement → 独立 Validate，全部正反例和保护身份通过且 0 open 才 `PASS_OFFLINE_RESTRICTED_PAYOUT_AUDIT_TAKEOVER_ONLY`。离线 fixture 不表示真实账户已闭合；真实对账与启动仅由未来用户原入口调用触发，本次研发不读真实账户、不改生产 guard、不启动交易。
+
+## 结算辅助 GET 的账户错误出口补齐（2026-11-25）
+
+本节是既有 R14/R16 读取失败分层遗漏的窄修补，不改变策略、账务、预算、时效或风控契约。真实 `253cedc2d9f845ac` 只保存了 `RECONCILIATION_REQUIRED / UNKNOWN`，没有底层 HTTP/body；不得据离线复现断言历史请求是 429、503、超时或资金异常。
+
+`account/runtime_claims.rs::read_runtime_account_observation` 唯一结果出口复用 `request::account_read_error(error, "RUNTIME_ACCOUNT")`。包括官方 market/settlement 的辅助读取在内，typed HTTP/reqwest 错误沿原 ReadUnavailable → 既有固定 read-failure streak 降级，期间不新增风险；完整账户读恢复才沿原入口恢复。连续故障不重新锚定预算，超限仍硬停，已硬停不得因后续成功读解除。serde/schema 错误仍 FactIncomplete 硬停；既有 VenueError、身份/generation/账务冲突原样保留；未知非 typed 原因仍 UNKNOWN 安全硬停。不记录 raw body、URL 或凭据，不靠字符串猜测瞬态。
+
+生产逻辑只改上述小出口；native fixture/test 只扩原 `controlled/r16_fixture.rs`、`live_control/tests/r16_cash_drive.rs`，Python 严格消费原生输出只在原 `test_btc5m_r16_integrated.py` 加用例，不扩大 `account.rs`、`live.rs` 或父模块。回归覆盖同 broker/trader/core 的成交→官方结算/到账→GET 故障→读取恢复→下一新候选单次提交，正/零赔付、HTTP/reqwest 类型、非法数据、未知原因、固定预算耗尽与重复读不重复记账。
+
+双 binary 离线重建到本主题 `candidate-settlement-read` 新目录，只机械更新原 controller/signer 的四个 path/hash pin 及对应测试。§6.6 的 ACK 证明仍严格绑定旧 run 的三个 legacy SHA；当前新候选按现行身份/双 fresh 门单独核验，不要求它等于历史 binary，也不泛化 legacy 资格。`qualify` 去掉无关当前 selector 参数，调用点同步；旧证据与未知停机类别不改。本轮不为 `253` 的 UNKNOWN 新增交接类别，原入口仍须保守拒绝该未闭合旧窗口；离线修复不等于可直接启动。wrapper、旧 run、seed/native、guard/activation、配置及交易阈值均不改；保留独立 Validate。
+
+## 6.9 结算辅助读取误停根因修复（2026-11-25）
+
+Pascal批准按根因复核建议直接修复，Implement=YQuant，独立Validate保留；本节取代§6.8对category缺陷“本轮不修”的后续执行范围，不追改历史。历史4549具体HTTP仍未知，保留旧INCOMPLETE/证据、生产双binary/四pin/activation和原启动接管。仅研发修复，不含生产构建绑定或实盘启动。
+
+在原MarketData加默认委托market的settlement_market；仅PredictFun覆盖为同一私有market读取owner的严格category模式。普通market保持可选fallback，必需结算读取的typed HTTP/transport保留至既有account_read_error；不复制解码、不以旧缓存/仅WON或LOST代替完整官方事实。official_settlement与settle_controlled_live均消费严格路径，schema/成功但缺事实/身份和份额或官方结果冲突仍按原硬停。
+
+账户读取保留原Read streak；结算批次使用同一ControlledLiveState内独立Settlement streak，复用原120s常量/note_failure/clear_failure，无新增配置或runtime。结算批次任一typed ReadUnavailable立即结束本批且使账户receipt失效，清晰返回错误，降级期间may_add_risk=false；完整批次成功才清Settlement streak。账户成功、估值成功不得清Settlement，反向也不得清Read；重复失败保留since，等号预算耗尽停止，后续成功不解除既有sticky stop/deadline/loss。未取得完整权威事实不推进本批未处理市场结论；已应用claim仍幂等。清理阶段失败不可伪称完整闭账。
+
+四个库存同名错误仅在既有脱敏tracing出口标固定分支、token、预期/实际atoms、固定block；category失败只记录固定操作/typed分类，不输出raw error/body/header/query。wire/公开stop枚举不变。
+
+G3边界：predict_fun.rs现2316行只提取原market body并加私有严格开关，最终不跨2400；venue.rs1070行仅默认方法；account.rs2923行架构例外仅一行换严格调用及原position处四行分支日志，禁止在其叠算法。live_accounting.rs1263行仅原受控结算读错分派及整批清streak，保持<2400；live_control.rs1814行只增独立streak和既有构造/match，不引第二风控状态机；测试集中原r16_cash_drive.rs840行和原197行fixture及现有Python消费者，若超1200则新小叶需完整身份纳入，不挤行/删断言。live.rs不新增算法；若需诊断仅原边界调用。独立Validate审查增长原因和职责。本轮不做无关模块重构。
+
+验收先category故障真实RED，再账户与原settle_resolved/drive两消费GREEN，覆盖market/category 429/503/transport、成功缺事实/schema、数量1atom/身份/官方修订、正赔付未burn、零赔付合法残留、双streak不互清及120s等号/幂等/超限sticky/deadline。保留同adapter/Broker/DecisionCore跨轮和Rust producer到Python严格reader；只fake外部边界。自测后独立Validate，0open才限定离线PASS；不把隔离单例或旧启动PASS当运行时已修。
+
+## 6.8 已结算终态 INVENTORY_MISMATCH 的受限交接（2026-11-25）
+
+Pascal批准Light并明确要求YQuant接手实现，沿原shell→launcher，不启动实盘。复用§6.7的完整审计、checkpoint/零经济尾部、独立C0、双fresh精确历史及原CAS交接；新增资格只识别已核验交易binary SHA `9e437aa8fc047bbeccc60d5895e9d3418848819e7be9b16bf080fb2b4fbd78e3`与旧88源canonical文件清单SHA `83b07c5e21547216526189db6d111b82a8b7140c4a5dd17b9394a7e9e745d960`组合，精确匹配完整审计、正常退出且无持仓/预占/未决的RECONCILIATION_REQUIRED/INVENTORY_MISMATCH终态。不修改旧UNKNOWN/legacy允许集合，不凭枚举证明历史误报或HTTP原因。
+
+已接受且完整FINAL零成交的订单不冒充never-sent：保留其signed hash、venue/market/token、代次、完整零经济事实和声明；其quantity/gross/final/applied/fee均须为零，既无claim也不扣成本。其余正成交owner必须已完整FINAL、费用覆盖精确、官方零赔付或全额现金确认；DRAW、pending、未知或尾部新经济事实仍拒绝。所有已接受终态订单按审计次序加入下一窗口原声明，从第一次fresh起全部核验。
+
+旧public C0减全部已审计净买入成本独立锚定新C0，损失和额度沿旧新两端限制；既有已到账claim独立计入完整历史，不以fresh余额拟合。原pinned native双读都须完整/稳定、账户gas与分页合格、明确空positions/open、完整官方历史精确多重集与现金逐atoms相等。仅全部通过才走原activation/full-schema guard CAS/单次controller；CAS失败沿原顺序可能已发布activation，但不得删除旧guard或启动child，不宣称所有失败均零本地写。历史final/seed/native不改，派生proof仅存在新attempt，旧run仍INCOMPLETE。
+
+纯资格沿`btc5m_account_recovery.py`复用，launcher仅分派；新colocate叶进入LIVE_PATHS，发布新完整源身份。Rust/双binary/四pin/signer/reader协议、策略、shell、生产配置、category读取缺陷不在本轮变更范围。真实旧4549 prefix+fake fresh+原main和反例须独立Validate；离线通过不代表真实账户闭合或启动授权。
+
+## 6.7 已审计终态、末次账户复核 UNKNOWN 的受限交接（2026-11-25）
+
+Pascal授权主控直接补齐原auto-prepare，实际实现者YQuant，独立Validate保留。本节新增ACCOUNT_READ资格，不放行所有UNKNOWN，也不追认历史HTTP原因。仅支持固定已审计legacy源身份、正常退出、完整canonical审计和final、无损失锁/预占/未决/持仓，停止及ended精确为RECONCILIATION_REQUIRED/UNKNOWN、FACT_INCOMPLETE形状。
+
+最后完整RUNTIME reconciliation必须无open/positions、账务COMPLETE/NONE、cost/reserved0、无pending。其时所有attempt须已权威FINAL且完整经济事实/覆盖/owner/结算闭合，或全轨迹零风险从未发送已关闭；正赔付必须已CASH_CONFIRMED。最后对账之后只允许相同attempt的经济字段完全不变、generation不回退的zero-delta FINAL、无candidate的EVALUATE、同一UNKNOWN stop/HANDOFF及final。每条尾execution须与该checkpoint的完整执行投影相同（除observed_at/generation），最终attempt集合/经济账务/claim不能变化。尾更新不是新的账户对账，不伪造最新generation已重对账；新双fresh必须独立证明所有声明订单、结算和现金。
+
+旧public C0与seed/native/STARTUP互证。新C0=旧public C0−全部本窗已审计净买入成本；最后对账cash=新C0+本窗已确认赔付。新C0不含任何历史/本窗claim，fresh现金减全部已到账claimed_win须精确等于新C0。保守全成本检查旧、新loss门，不按余额拟合或重新获得损失额度。预期历史=旧native完整claimed_win/settled_zero+每个本窗唯一经济owner已确认全额/零赔付；只接受claim为0或净份额，非该两类拒绝，不引入DRAW恢复。两次原生fresh均完整、分页完毕、身份/gas合格、无open且明确positions[]、精确历史多重集与现金atom闭合，任一失败不得写生产交接或启动。
+
+实现放新btc5m_account_recovery.py纯证明叶；launcher只在原重放收集最后完整checkpoint/tail并调用资格，在原双fresh分支复用精确历史比对和loss检查，写新attempt/account-read-recovery.json后沿原guard完整CAS/activation drift/账户锁机制交接。不改旧run/final/seed/native、双binary/4pin/signer/Rust、shell/配置/策略/门槛。不新增CLI/第二启动器/reset/服务/自动重启。旧UNKNOWN仍为旧UNKNOWN；独立证明不是旧审计成功。新叶及colocate测试进入LIVE_PATHS，controller及大测试仅机械成员迁移；launcher受控扩张只增加薄分派，不堆证明。失败矩阵、真实旧prefix+合成fresh→新窗口及原恢复分支回归须独立验收0open；离线PASS不是生产启动或账户已闭合，本次研发不调用真实账户或生产写。
+
 ## R17：订单生命周期等待与 G3 最小设计（2026-11-24）
 
 ### R17.1 已实现基线及唯一待修缺陷
@@ -538,6 +610,37 @@ keyring缺失/locked/Prompt在child前拒绝，不Unlock/重读秘密loop/file f
 新增stop typed事件固定reason/takeover_required，本地严格写入并耐久则alert_status=LOCAL_RECORDED；写失败不能虚构已记录，exit非健康/ARMED/缺ended共同作为诚实证据。当前fake接收者只能证明本地调用，不能写外部DELIVERED；未来具体告警接收渠道/可达人员/响应责任另授权确认，发送失败仍停新增。本轮不新增网络告警sender、systemd或自动restart。
 
 人工接管沿原账户/同hash/SDK能力，需核全窗口attempt/hash/late fill、部分量及fees/net、open/removing、官方结果/claim/份额及现金/Gas/R/U/latch；hash缺失或关键日志坏则完整官方账户历史查证。新budget flag、余额健康、换run/collection均不是恢复许可。本轮无自动或手动通用reset按钮；屏障轮转/新实验是以后具体授权操作，原文档保留，同窗口loss已触发不得新增。无法解释就继续阻断。
+
+### 6.4 指定已 Final 库存误停的下一窗口交接（2026-11-25 受限增补）
+
+Pascal 明确要求在原固定启动入口补齐 `RECONCILIATION_REQUIRED / INVENTORY_MISMATCH` 的受限恢复，而非手工绕行；这是操作者重新调用原入口时的下一窗口交接，不是原 run 回 READY、自动重启或通用 reset。仅正常退出、完整 canonical 旧审计、无 latch、零 reservation/无 unresolved、唯一本 run 已接受且完整 Final 的正净库存 BUY 可取得新鲜查证资格；其他已发送/未知/未闭合 attempt、其它首停原因一律不借此放行。
+
+旧 public C0 与种子必须一致；种子引用的完整旧 native reconciliation 验 hash，并以旧 started 时点验证其当时的新鲜度，初始完整 reconciliation 与其现金一致。下一 C0 先独立锚定为旧 C0 减本 run 已审计净买入成本，绝不按 fresh 余额拟合。潜在全额亏损达到旧或新配置 loss 门限仍拒绝；旧 run 的损失与 INCOMPLETE 不改写。原签名/hash/venue/market/token/当前完整 generation、费用、applied 净份额和 Final position 必须一致。
+
+原两次 pinned reader 从第一次起都使用新锚；各次必须完整/native0、精确同账户/全部历史、空 open/position、原 Gas 门槛与现金等式通过。同一新 token 必须新增恰一条官方 RESOLVED/CLOSED/LOST/0 的 settled_zero；原完整 claimed_win/settled_zero 多重集不变，两读所有账户事实稳定。少一 atom、positive/draw/unknown、无关 claim 抵消或任一缺口均拒绝。记录旧/新 C0、成本和两次 native 证据 hash，原 audit/种子不改。
+
+通过后仅进入现有 activation 原子发布、全 schema 精确 guard CAS、原 controller 单次交接；无重试、无额外 secret/child 路径，不改 guard/wire schema、签名、策略、额度或同窗 sticky/latch。原 HEALTHY/CASH_PENDING/UNFILLED_ORDER 兼容保留。真实账户/生产轮换与实盘启动仍需具体授权，不由本离线修复代做。
+
+### 6.5 指定“已证明未发送的保守 edge 误停”的下一窗口交接（2026-11-25 受限增补）
+
+Pascal 明确要求在原固定启动入口补齐“原固定入口可重新开窗”的最后一条受限分支：当旧 run 的停机原因**本身就是经济性 edge 不合格**（`EDGE_BELOW_MIN`，发生在发送许可之前），且该 run 已用完整 canonical 证据证明**本窗从未发送过任何订单**时，操作者重新调用原入口应能开新窗，而非落入 `HISTORY_REQUIRES_TAKEOVER`。这仍是操作者重新调用原入口时的下一窗口交接，不是原 run 回 READY、自动重启或通用 reset。
+
+**资格判定必须逐项来自本窗自身的完整证据，不得只凭末态摘要：**
+
+- 旧 run 正常退出（launcher/child 退出码、信号、强制清理全部健康）、`audit_complete=true`、无 loss latch、`cash_complete=false`、`takeover_required=true`、`run_status=STOPPED`、`stop_reason=FACT_INCOMPLETE` 且 `stop_detail` 为空、`incomplete_detail` 为空。
+- `unresolved` 必须为空、`positions` 必须为空、账务 `reserved=0`、`cost=0`、无待兑付。
+- 本窗**每一个** order 事件都必须以 `attempt_phase=CLOSED` 且 `submission=NOT_SUBMITTED` 收尾，其 diagnostic 必须是 `stage=FACTS` + `detail=EDGE_BELOW_MIN`；任一 order 事件出现 `MAY_HAVE_SUBMITTED`/`SUBMITTED`、`UNKNOWN`/`ACCEPTED`/`REJECTED_FINAL`、或任何 venue id，即不得走本分支。
+- 本窗不得出现任何 execution 或 payout 事件；候选不得到达 `FINAL_SEND` 阶段——该阶段只存在于已请求发送的订单。
+
+**新 C0 绑定（不得按 fresh 余额拟合）：** 旧 public config 的 C0、旧 `attempt-reserved.json` 种子预算与种子引用的完整旧 native reconciliation（验 hash，并按旧 started 时点验证其当时新鲜度、完整/账户身份一致/空 open/空 position）三者必须一致；初始完整 reconciliation 的现金须与旧 native 一致。下一 C0 **保持旧 C0 不变**（本窗未产生库存与成本），`net_loss_atoms=0`。旧历史 `claimed_win`/`settled_zero` 原样保留，且新窗的 declared history 只能沿用旧种子声明的 hash 列表——**本窗自己那份“已证明未发送”的 signed_hash 不进入 venue 历史**；若它与旧历史碰撞则直接拒绝。
+
+**运行时两次原链新鲜完整读取：** 任何 activation/guard 轮换或 child 之前，原链恰好两次新鲜完整 native 读；两次都必须身份/历史/pagination/open_orders/明确 positions=[]/现金等式通过，且**完整历史 claim/settled_zero 多重集与旧 native 锚精确相等**：允许排列变化，禁止新增、重复、删除、字段改写或等额抵消。本窗未发送，不借此分支解释额外结算记录。两读之间任一字段缺失/null/错类型/±1atom/任一不完整或 drift 均拒绝；现金减 claims 必须精确等于独立锚定的 C0。不新增人工重算 C0 命令、额外 Activation 阶段或独立预检服务。
+
+**G3 受控扩张说明：** `btc5m_launch.py` 因新增上述受限恢复资格、旧现金锚与原双读接线进入 1201–2400 行档位；仍只负责原 CLI 的启动前核验和交接，不承担交易执行、签名、venue 查询实现或通用恢复。增长仅来自本节证明义务；下一次增加新的恢复类别或实质性扩展前，应将纯旧审计/恢复资格按职责提取到受完整身份清单覆盖的模块，保持原 CLI/API 不变。本次由既有独立 Validate 检查职责边界、增量范围及反例，不新增架构阶段。
+
+**旧审计不可改写：** 旧 run/events/ended/config/seed 保持原字节，不改成 COMPLETE；新窗口另写自己的受限恢复证据（`unsent-edge-recovery.json`：旧/新 C0、净损失、未发送 hash 列表、两次 native 证据 hash），沿用单实例/原授权/完整 guard CAS/失败不自动重启。
+
+**其它恢复类别一律不退化：** 原 HEALTHY/CASH_PENDING/UNFILLED_ORDER/FILLED_INVENTORY 兼容保留；上述任一资格项不成立即回到原 `HISTORY_REQUIRES_TAKEOVER`。
 
 ## 7. 新live wire、字段投影和真实消费者
 
