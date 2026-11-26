@@ -4,17 +4,84 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 / 版本 | V1.16；R17 Light Principal delta 已冻结，待 Implement / 独立 Validate；不代表修复已运行或生产放行 |
-| 本次窄修订 | V1.16，2026-11-24：仅 accepted 完整执行事实的生命周期等待、签名到期与120s尾查；R16及更早记录保留为历史 |
+| 状态 / 版本 | V1.19；R20非原子现金最小修复需求冻结，Design当前V1.18 §R19，R20待下游；不表示实现/独立验收或生产放行 |
+| 本次窄修订 | V1.19，2026-11-26：仅cumulative逐腿floor候选及原settled精确核对；closure/Final/remaining/expiry/市场判定不变；R19独立目标不改 |
 | 作者 | YQuant Principal / yquantprincipal |
-| 创建 / 更新 | 2026-11-19 / 2026-11-24，Asia/Shanghai（UTC+08:00） |
-| 工作区 / 来源任务 | /home/pascal/workspace/yquant-investment；初版 t_b946f2c3；本轮 t_7987b726 |
-| 来源决策 | Pascal 在根因及最小方案后明确“请修复尽快”；沿 Light，仅补等待契约与 G3 Design；不授权本卡代码/网络/账户/生产变更 |
-| 对应 SPEC | [SPEC-07-007](../../spec/07_trading/SPEC-07-007-btc5m-live-parity-and-operations.md) V1.16，§R17 为本轮可计算契约 |
-| 对应 Design | [DESIGN-07-007](../../design/07_trading/DESIGN-07-007-btc5m-live-parity-and-operations.md) V1.16，§R17 为最小 seam / allowlist / G3 与回归映射 |
+| 创建 / 更新 | 2026-11-19 / 2026-11-26，Asia/Shanghai（UTC+08:00） |
+| 工作区 / 来源任务 | /home/pascal/workspace/yquant-investment；初版 t_b946f2c3；本轮 t_6cbc04c3 |
+| 来源决策 | Pascal 2026-11-26最新最小范围：只修NON_ATOMIC_CASH，不改闭合语义，不新增模块/配置/错误码族；本卡仅RFC/SPEC，不授权代码/真实API/账户/生产变更 |
+| 对应 SPEC | [SPEC-07-007](../../spec/07_trading/SPEC-07-007-btc5m-live-parity-and-operations.md) V1.19，§R20.1–R20.7、D20-01–02；R19等既有目标保留 |
+| 对应 Design | [DESIGN-07-007](../../design/07_trading/DESIGN-07-007-btc5m-live-parity-and-operations.md) 当前V1.18 §R19；R20待既有下游t_0722b40a，本卡不改Design |
 | 依赖 | 07-002 V1.1、07-003 V0.5、07-004 RFC/SPEC V1.1 / Design V1.3、07-005 V1.0、07-006 V1.1；实际能力以当前源码及独立证据为先 |
 | 角色 | 主控 Gate/Closeout；Principal Design；Developer Implement；Reviewer 独立 Validate |
 
+
+## R19：第③项原请求出口观测与共享配额调度（2026-11-26，需求冻结）
+
+### R19.1 已验基线、目标与非目标
+
+本节及SPEC §R19只冻结③需求，优先替代本文旧阶段状态及R18中“②③④尚未冻结”的时点描述，不重写R18及①②已验行为。[①最新签收](../../../data/reports/2026-11-26-btc5m-rest-quota-part-1/report.md)为t_a9dea389/run4143及主控Closeout，11目标fixture账户普通REST每观察24→2、部分资格24→4；[②最新签收](../../../data/reports/2026-11-26-btc5m-rest-quota-part-2/report.md)为t_3c4556a5/run4146及主控Closeout，同5系列fixture发现冷6→2、热1，两页目录冷3、热1。均为离线且未部署；不以旧分析中的未实现措辞重开①②，不冒充生产配额实测。
+
+③目标是在原PredictFun REST出口真实观测每次HTTP尝试及其归因，并在同一进程的全部该出口消费者间共享配额准入，消费当前服务端APP反馈、限制自身发量、遇429在reset前阻止同桶继续发送。不能仅打印日志、仅给单调用sleep或全拒绝后签收。保留①同run历史免读、②目标路由/300秒目录、所有当前账户/全分页matches与本run结算读取；不通过删必要读、延长poll/freshness或故障预算换取降耗。
+
+非目标：未知外部进程/主机的配额协调、APP控制台/密钥管理、Redis/分布式限额/独立服务、新HTTP客户端/runner、全WebSocket、自动重试写请求，以及④任何实现。原Closed+Accepted/本run结算扫描仍按既有基线，不借本项结束其轮询。原fixed deadline、R17生命周期、R16现金等待、120s账户/执行/结算读失败预算、行情自身failed_ticks政策、10s发送freshness、≤5s工程目标、资金/签名/ACK/未知提交保护均不变；≤5s不因配额等待改为新的宽松门禁，也不保证配额不足时可交易。
+
+### R19.2 配额事实、权威性与边界
+
+事实来源是[既有只读分析](../../../data/reports/2026-11-26-btc5m-rest-quota-analysis/report.md)§1/2/5及其三份`evidence/headers-*.json`，本卡不访问真实API/控制台/账户/凭据。保存的公共目录、rounds及实际`/v1/markets/orderbooks?ids=…`均为250/60s；后者不得套单市场orderbook的500。官方限额文档当时说明APP内key共享、固定窗口、429和相对秒数RateLimit-Reset；普通旧key240/60s、新APP普通250/60s、交易500/60s、search120/60s是来源边界，不是本key额度的当前证明。相同Remaining=249及s-maxage=3不证明每route独立、缓存请求免费或服务端失效。
+
+配额scope覆盖同进程、同固定API部署的原出口，不能按caller、route、JWT、账户、key实例或client克隆分裂预算。没有公开APP身份可核时，同部署客户端保守共用，不读取/散列/落盘秘密来识别APP；不同部署隔离。路由按实际路径及明确规则归桶，服务端数字反馈约束对应桶，`rpm`等标签不独立证明跨桶同一身份；未知路由不得另领一份可能与已知桶重叠的信用，按SPEC保守同时约束其可能共享桶，不推定它真实归属。原生HTTP交接尝试数是本进程可证事实，不证明socket已发字节或服务端已扣额；Remaining是可能受APP外部请求/缓存/并发影响的服务端反馈，不可相减伪算本程序消耗。
+
+本项必须同时有本地发送上界与服务端剩余额度约束。缺头、坏头、缓存/乱序响应不能补回已经消耗的额度；未取得可信反馈时使用明确保守预算，不无限放行，也不要求先人为打出429。可解释多窗全部同时满足，不能挑最大窗口；无法安全解释的更强政策拒绝受影响准入，不能静默丢掉。具体可计算规则、未知/失效输出见SPEC §R19.2–R19.5。
+
+### R19.3 发送、失败与观测要求
+
+1. 观测必须区分固定method/规范化route/bucket/caller、HTTP attempt与逻辑读、分页/批次/401刷新/冷auth、RPC/其它服务及audit事件。每次实际REST交接只计一次，成功/429/其它HTTP/transport/取消分别可见；排队或本地拒绝不是已发HTTP。不记录URL/query、cursor/ids列表、body、账户地址、key/JWT/signature、raw headers/错误链；沿原脱敏log，不扩live审计wire/schema，不建新sink。
+2. 所有原出口请求均须预算准入，含auth、分页和写请求；同桶429对所有优先级生效，普通桶冷却不凭空冻结独立交易桶，依赖未完成则仍不能新交易。优先保证已发生风险的账户/执行/结算核验及原已授权取消，再是当前决策/发送准备，最后目录发现/后台读取；优先级不是额度豁免，不抢占已交接请求。取消/deadline/父失联必须及时终止等待、无额度泄漏；不得持Broker/发送锁跨异步排队。
+3. 配额等待计入原观察请求年龄及所属读失败时钟，不能把等待当成功读、刷新receipt/generation或重新给120s。无额度在相应既有错误出口产生安全typed失败；当前读确实完整成功才按原规则清对应失败，不清其他streak、硬stop或deadline。429不在helper内部自动重试；后续原tick/同hash只读可在准入允许后继续。
+4. `controlled_write`仍须在`with_send_permit`内第一次poll唯一request future。任何可等待的额度获取在原最终同步许可前完成；许可内重新同步确认额度、stop/身份/receipt/generation/freshness/expiry及原FINAL_SEND条件后，紧邻首次transport poll。若资格被并发429/预算变化撤销且尚未交接，必须0POST并走原明确未发送拒绝/自身预占处理，不在已消费原子许可后sleep或以排队Pending冒充已交接；旧candidate不得获额后直接重放。第一次真正交接后Pending/超时/401/429/响应坏均不重POST、不重新签名或释放未知风险。429官方“不处理”不自动推翻原本地MayHaveSubmitted/Unknown保护。
+
+### R19.4 收益、验收与阶段交接
+
+①②节省已经实现，③不得重复报功。③在相同业务输入/成功请求序列、无节流的离线正例中，不新增REST/RPC、不删当前必要读且健康路径能到原fake发送；饱和/429反例必须实际减少reset前原会继续发出的尝试，同桶并发不得超配，恢复后继续原消费者，不能只测limiter helper。目标是可审计的本进程配额遵守和减少已知冷却期无效请求，不保证服务端零429、固定生产降耗百分比或24小时稳定；服务端外部竞争/新事实/分页/认证成本逐项披露，不把这个边界当作降低①②或发送freshness目标。
+
+必需验收为SPEC D19-01–08：真实原出口→adapter/account/Broker/drive与受控发送，离线替换transport/clock，涵盖冷/热auth、分页/批次、缓存/坏/多窗头、并发/乱序/取消/reset、发送前后边界、原120s/deadline/strict reader和①②组合。原生计数、等待与发送时点、命令/native exit/最终source身份及未测项分列，不用公式/旧报告冒充本项业务PASS。
+
+RFC/SPEC阶段只修改两文档至V1.18；R19需求closed，无需新增平台或额外阶段。内部函数/状态/锁顺序/精确allowlist/G3/fixture与身份闭包由独立Design阶段落实，不在需求阶段抢写。阶段指针同步：Design现为V1.18 §R19.1–R19.9（t_edbfef11），主控仍须核三文档及可执行边界后另放既有Implement行政HOLD，不能凭parent done自动跳阶段。③业务实现/验收/真实配额/部署/交易均未做，④后续未冻结/未实现；后续必要证据仅用`data/reports/2026-11-26-btc5m-rest-quota-part-3/`，不另写任务镜像。
+
+## R18：第①项已核清历史基线免重复读取（2026-11-26，需求冻结）
+
+### R18.1 目标、范围与事实边界
+
+目标是将启动时经原完整核验、已最终结算且现金账务已核清的旧记录，冻结为同次运行的内存历史基线；在原消费者后续完整账户观察及跨BTC5m策略轮次时，实际免除这些旧记录订单详情及官方market/category解释的逐条重复请求。启动前原双fresh与完整审计继续，不得先拿旧文件或本地Closed作为资格。仅第①项，②③④均为后续未冻结/未实现；本节不预设后项接口、参数或实现。原R17、发送前edge及其他既有契约不变。
+
+来源为[只读调查](../../../data/reports/2026-11-26-btc5m-rest-quota-analysis/report.md)及其 `evidence/historical-proof-load.json`、`offline-native-counts.json`。旧保存输出有5条 claimed_win、6条 settled_zero、11个独立 market/token；这些数量不是可跨轮复用资格。调查的热态单页模型为每次账户普通 REST 24 次，其中22次为历史结果；全部具备资格时才有24→2、5秒情景288→24/min的上限收益。该数字是条件需求模型，不是旧运行 HTTP 总量，也不是本项实现后实测。
+
+复用前轮定位并定向核实的原消费者输入（路径相对BOT；不是新实现）：
+
+- `src/service/predict_fun/account.rs:461–505,531–576`：`explain_positions_mode`比较历史净量与当前持仓，缺失token经`official_settlement`的完整market/category、round及有序token pair得到Confirmed的零/正兑付解释；启动正claim还须原`claimed_cash_matches`的逐atoms现金等式。不能仅以总现金拟合代替历史/官方事实核验。
+- `account.rs:628–816`：`reconcile_account_history`从第一页走完账户matches分页，未知hash仍拒绝；`history_proven`已有订单Final且账务完整后的净贡献复用。它不单独证明官方结算/到账已核清，本项不得重建增量历史管道或把已有节省重复报为新增收益。
+- `account/runtime_claims.rs:8–46,54–119`及`src/bot/runtime/live.rs:648–766,938–964`：原账户读包含positions/history、open orders、账户身份与链余额；`seed_predict`在完整性、精确现金/预算、身份、挂单和持仓一致性检查后才设原账户baseline。运行时本run的bound claim仍核身份、execution generation、链库存及官方结果，不因本项成为旧历史。
+- `src/service/predict_fun.rs:929–951`的严格market/category读取及`src/bot/runtime/live_accounting.rs:669–723`的本run逐市场结算、发布后fresh账户/现金复验保留；本项只豁免已核清启动历史解释，不修改通用`settlement_market`、本轮Final或`revised_result`比较规则。
+
+权威性边界：基线保存的是原严格消费者已成功核清的历史事实与账务解释，依据是Pascal明确批准的运行期免轮询政策，不是远端全部字段永久不变的证明。此前取得的[官方 Resolution](https://dev.predict.fun/concepts/resolution)与[Markets and categories](https://dev.predict.fun/concepts/markets)概述不作为精确部署的合约审计结论。已核清基线不再主动轮询字段修订，因此未读取的远端价格/状态/payout修订或重组不能声称被检测；若当前读取已发现矛盾，仍须原硬保护。旧block/run/研究与拒绝事实保留在Kanban历史，不再作为本节待决门槛。
+
+### R18.2 启动资格、有效范围与安全要求
+
+1. 资格须同时具有启动原双fresh/完整账户与历史核验成功、绑定订单Final且账务完整的净贡献、原严格官方结果Confirmed、结算与到账解释已核清、身份/路由一致且无已知冲突。沿原赢/零/半兑付和现金等式，不新发明finality状态或证明协议；本地Closed、声明、空仓、总现金吻合或旧proof文件存在均不足。完整round/provider附加要求仅决定能否免重复读取，不强化原启动准入或通用结算器；仅附加元数据不合格的目标不纳入基线，继续原严格读取，可形成空/部分合格成员集。原有身份/账务/结果冲突、未到账等拒绝保持，合格正例必须真实减少请求，不能以全部不命中签收。
+2. 仅绑定必要的account/run/deployment/chain及资产合约route、market、有序YES/NO token pair、目标token/side、历史订单hash/净贡献及原结算/到账解释。基线只在原启动全部核验成功后生效，不回写旧proof/运行证据；启动失败不得部分激活。仅同run内存有效，跨重启/换run/换account不沿用，重新走原完整启动核验。
+3. 同scope下符合资格的启动历史必须跨tick/策略轮次实际复用，不再按tick、固定60秒或其他TTL重读旧订单详情及官方market/category；无后台刷新。正常generation推进、跨市场及缓存访问不自动使全部基线失效，也不更新历史证据的观察时间来伪造fresh。当前观察receipt/generation仍来自实际当前读取。
+4. 当前余额、gas/allowance、positions、open orders、全量账户matches、新执行/费用、未结算/未到账claim及结果发布后fresh账户/现金核验仍沿原路径。matches仍每次从第一页走完整分页，缺页/失败不得解释成无新历史；不为降耗省略此扫描。
+5. 当前读发现新未知hash/token、历史净贡献/费用/持仓或身份/route不一致时，基线不得遮蔽，受影响对象沿原必要证明/typed失败处理；已知结果/身份冲突沿原硬停，保留旧证据与风险，不降级miss吞冲突。无资格对象原严格读取失败不得回退旧成功。真实scope变化不继承旧资格，不能与普通轮次/generation推进混淆。
+6. 启动已核清正claim的现金已计入原baseline，不能再次记为本run收益/现金；零兑付不造现金，半兑付及±1atom拒绝不变。本run新增事项不纳入启动基线，继续原Final/结算/到账与R16核销；原fixed deadline、120秒读失败预算、sticky stop、未知提交和所有签名/交易阈值不变。
+
+### R18.3 收益、验收与阶段边界
+
+已核清启动历史在后续观察不再产生其逐条订单详情和官方解释请求，是本项必须达到的行为；全miss、同观察内去重或保留全部原读取不能签收。旧11条保存输出不被本卡追认资格，Design/Implement须从原启动成功输入得到资格，并以synthetic transport经原消费者形成正例，而不是新增“所有REST字段永不修订”的前提。
+
+后续按SPEC §R18.4的D18-01–06，以同输入原adapter→account→Broker连续观察及原producer→严格reader证明普通REST净减少；单列原启动成本、已有history_proven收益、新增资格/冲突处理成本与RPC，不用公式或helper计数冒充原消费者实测。反例包括启动未核清/未到账、缺页、新hash/token、净量/route/身份变化、已观测冲突、重启、跨60秒及当前generation推进；未读到的远端修订明确为不检测，而非伪称硬停覆盖。
+
+需求决策已闭合：Pascal批准的启动已核清历史免轮询，取代未实施60秒TTL建议及旧草案的永久不可修订/逐轮全字段修订检测前提；不引入TTL、后台服务、DB、WebSocket或finality平台。这里只冻结目标、资格/失效和验收，具体接缝、函数、文件范围及回归方法交原Design阶段。主控核两份文件一致性后解除既有Design卡行政HOLD；本卡done本身不构成实现/Validate/生产许可，也不允许启动后项。
 
 ## 发送前保守 edge 预检与候选级拒绝增补（2026-11-25，Pascal明确授权）
 
@@ -189,7 +256,7 @@ live 在等待账户/盘口/授权/签名/认证之后、第一次可能 POST �
 
 现行总敞口是已存在的成本加未闭合预占：`cost + reserved >= 10 USDT`（含等号）即复用黏性 stop → 有界安全收尾 → 原 drive 返回，不空转、不自动重启；仅拟新增单会使合计超限时只拒该候选，不把尚未产生的订单算成实际敞口。沿既有安全 reason/detail 表达 `MANUAL_STOP / TOTAL_CAP`，保留原先停止原因、20 USDT loss latch、在飞/未知订单、unresolved 与接管信息，不宣称退出就是平仓。paper 交易语义与现行 98/1/1/10/20/allowance100 不变。
 
-history-only 仓位仅在最新官方结果明确包含目标 token、Yes/No token 对与历史 known 市场的侧别绑定一致，且沿原 settlement 判定得到 RESOLVED/CLOSED、非 contested、payout=0 时解释归零。同 market id 不足以证明身份；缺失、替换、互换或重复/额外 outcome 均 fail-closed，且不得污染后续读取的已知 token 绑定。平局与正兑付只在官方结果已确认、且该 token 的 claim 按 inventory×payout（1e6/5e5）逐 atoms 与持仓精确相等、budget+Σclaim 逐 atoms 等于观测 collateral 时可解释为已收到；未确认、矛盾、未结算、额外持仓、数量不符或任一 atom 差异仍拒绝解释，不新增请求种类或客户端。
+启动完整核验及无R18基线资格对象的严格解释中，history-only 仓位仅在最新官方结果明确包含目标 token、Yes/No token 对与历史 known 市场的侧别绑定一致，且沿原 settlement 判定得到 RESOLVED/CLOSED、非 contested、payout=0 时解释归零。同 market id 不足以证明身份；缺失、替换、互换或重复/额外 outcome 均 fail-closed，且不得污染后续读取的已知 token 绑定。平局与正兑付只在官方结果已确认、且该 token 的 claim 按 inventory×payout（1e6/5e5）逐 atoms 与持仓精确相等、budget+Σclaim 逐 atoms 等于观测 collateral 时可解释为已收到；未确认、矛盾、未结算、额外持仓、数量不符或任一 atom 差异仍拒绝解释，不新增请求种类或客户端。启动已完整核清且仍满足R18资格的旧记录在同run后续观察复用原解释，不再重读其官方结果或重计旧claim；当前账户事实及本run新claim继续原fresh读取与现金核销。
 
 无人值守本轮定义为“获限额限时的一次进程内运行，异常停新风险、无人自动重启”。成功首启和至少两轮不同市场的离线正路径必须可走；无风险后健康进程可继续，不能用全拒绝满足验收。异常/断网/关键输出失败/父失联/期限均停新增；允许有界同订单查询和已授权取消，不自动卖出/approve/转账。冷启动永不自动恢复；人工必须核对全部未知 hash/风险窗口损失及官方资金事实，新 run 不能抹掉旧 latch。
 
@@ -262,12 +329,15 @@ T1 两文档静态一致性/引用/范围/hash → 主控 Gate → T2 独立 Des
 - [当前源码线索评估](../../../data/reports/2026-11-19-btc5m-live-and-hybrid-assessment/report.md)：含2026-11-19官方公开规则链接；本卡重新静态定位源码，不把报告当实现答案。
 - skills/data/data_interface/mongo_writer.py:9–21,31–53,69–109；skills/data/unified_data/local_mongo_adapter.py:8–33：只读核对依赖/职责，不导入、不读取凭据、不连接数据库。
 
-历史参数化修订 V1.2：t_298e36df / Pascal Light；其参数化契约继续优先于历史固定示例；本轮当前版本为元数据及§R17的V1.16。
+历史参数化修订 V1.2：t_298e36df / Pascal Light；其参数化契约继续优先于历史固定示例。本轮RFC/SPEC V1.18 §R19仅冻结③需求；①②按R19.1复用已验未部署基线。R18及旧阶段状态保留各自历史时点含义，不覆盖本轮元数据；R17及既有行为不变，③无实现/验收或生产放行。
 
 ## 版本记录
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| V1.18 Design指针同步 | 2026-11-26 | t_edbfef11仅把对应Design/阶段元数据机械同步为V1.18 §R19.1–R19.9；下方RFC/SPEC阶段历史记录保留，R19需求语义及D19验收不改，Implement仍须主控Gate。 |
+| V1.18 | 2026-11-26 | R19仅③RFC/SPEC：复用①②已签收未部署基线；冻结原REST脱敏计数、显式route/bucket/caller、单进程APP共享预算/头部权威性、多窗/并发/取消/429reset、controlled首次poll同步准入和D19-01–08。Design仍V1.17 R18、③待下一阶段；不改代码/测试/阈值/生产状态，不冻结④。 |
+| V1.17 | 2026-11-26 | R18仅第①项：依Pascal决策冻结启动完整核验、已最终结算且现金账务核清的同run内存历史基线，免周期重读旧订单详情及官方解释；保留fresh当前账户、全分页matches/已知冲突保护与本run结算。替代未实施TTL及永久不可修订/全字段逐轮修订检测前提，同步SPEC资格和D18验收；仅两文档，无代码/业务实测/生产变更。 |
 | V1.16 | 2026-11-24 | R17 Light窄修订：已知accepted完整事实与真实缺失分责，签名expiry及固定双时钟120s尾查、保留原Final/风险与硬stop；仅三文档增量，无源码/业务运行/上线。 |
 | V1.0 | 2026-11-19 | 冻结live经济parity、实际账务证据、两种值守及最小冷启动拒绝/资金回收边界；研发与真实动作分离，保护当前paper和冻结研究 |
 | V1.1 | 2026-11-22 | R2 窄纠错：§5.3 明确 supervised≤6h/unattended≤24h 共用判定、实际 cost+reserved≥10u 黏性停止并原 drive 安全返回，以及最新官方/历史 token-side 严格一致后才解释零兑付；不改经济额度、paper、事件版本或运行授权。 |
@@ -279,3 +349,48 @@ T1 两文档静态一致性/引用/范围/hash → 主控 Gate → T2 独立 Des
 | V1.9 | 2026-11-23 | R13c 窄修订：claim 先判定后入账（账户读回只记为已证明待兑付，已确认官方结果逐 atoms 精确相等才入账为现金）；canonical reader 与 Rust 侧对同一合法流给出一致结论（已兑付持仓不进终态 positions、reader 观察 CASH_CONFIRMED 后不再视为停窗） |
 | V1.10 | 2026-11-23 | R13d 窄修订：reader 收到 payout `CASH_CONFIRMED` 且该等待由 `CASH_PENDING` 造成时同步解除 `stopped`（其它原因停止仍黏性，并以 producer→reader 双用例覆盖续单与反例）；逐 atoms 预算门等指针改为符号锚定（`seed_predict` 的 `cash_matches_budget_and_claims` 不等即 bail `CASH_BUDGET_MISMATCH`，行号仅辅助）；移除 `live.rs` 未使用的 `cleared_waits`；不改经济、额度或授权语义 |
 | V1.15 | 2026-11-23 | R16 T1：对齐 R15/R13/R14 已验基线；冻结兼容拒绝诊断、R15 三 minor 闭合、本 run 精确 claim 与600s/deadline有界 WAIT_CASH 续驱动及新测量/验收定义。仅 RFC/SPEC，不表示实现或部署；R15 原卡历史结论不变。 |
+| V1.19 | 2026-11-26 | R20 RFC/SPEC按Pascal最新范围冻结：仅非原子现金逐腿floor候选与原settled逐atoms核对、双消费者及D20-01–02；撤回本卡未签收的expiry/市场终态新闭合分支；Design/实现/独立验收待下游，不授予重启。 |
+
+## R20：冷启动 NON_ATOMIC_CASH 的最小现金计算修复（2026-11-26，需求冻结）
+
+### R20.1 当前修订、事实与有限替代
+
+本节及 [SPEC-07-007](../../spec/07_trading/SPEC-07-007-btc5m-live-parity-and-operations.md) V1.19 §R20.1–R20.7为本次现行需求；旧尾注和旧版本行保留其历史阶段含义。对应 [DESIGN-07-007](../../design/07_trading/DESIGN-07-007-btc5m-live-parity-and-operations.md) 当前仍V1.18 §R19，R20由既有下游t_0722b40a落实。本节按Pascal最新授权收窄本卡未签收的R20草稿：仅修cumulative及必要直接调用点，不重构/重命名/迁移，不新增模块、运行时、框架、配置或错误码族；不新增闭合证明分支。
+
+事实源：[根因报告](../../../data/reports/2026-11-26-btc5m-history-not-closed-root-cause/report.md) 及同目录 `evidence/venue-order-matches.json`、`chain-orderfilled.json`、`root-cause-arithmetic.json`、`poststop-read-{1,2,3a}/summary.json`。run `btc5m-live-4d633f8696984a73` 的 Accepted 订单 `0x48a26f35ecf5651d1409958c7fc0aacd2f453c621ed9b0213bce6f6a2d06baef` 有两腿真实成交；现金 `999399999999999999`、gross shares `2629999999999999999`、share fee `52599999999999999`、net shares `2577400000000000000` 均为 atoms，现金币种 USDT。原声明移除后变为 UNEXPLAINED_HISTORY，不能删声明逃避该成交。
+
+静态源码及保存的整数重放证明：两腿输入会在`fills.rs::cumulative`的非零余数拒绝分支失败，经`read_order_execution`错误降级进入`startup_history`的HISTORY_NOT_CLOSED/native exit 4。原生记录只捕获外层错误，未捕获原生细粒度NON_ATOMIC_CASH，故这是源码+数值定位，不是排除所有并存条件的运行追踪。同时，正确CTF Exchange的`getOrderStatus`为`(false,1)`，不是链上关闭；另一neg-risk路由`(false,0)`与本单无关。市场RESOLVED/CLOSED、任务给定签名已过期均不升级为Final证明。
+
+数学措辞澄清：价格 `0.38` 本身可精确编码为 `p=380000000000000000`；不能整除的是份额 atoms 与价格 atoms 的乘积换算为现金 atoms 的结果。此澄清不改变已确诊的 NON_ATOMIC_CASH 故障链，不把有效成交认作非法小数。
+
+R20只替代“非零余数本身即拒绝”的现金计算条件；原settled其余拒绝条件全部保留。SPEC §R17.3/D17-03、closure/Final、remaining=1、签名过期/nonce/市场状态的判定一律不改。主控已核实引入来自2026-11-13 commit `0b8b310`（07-002）；今日①仅抽取startup_history文件未改语义，本卡不重复追查归因。
+
+### R20.2 权威金额与非原子成交决策
+
+1. 订单实际 gross cash 的第一权威为正确 chain/deployment/exchange、该账户原订单的成功 canonical 回执中的完整 ABI `OrderFilled` 金额，并须被同回执 collateral/CTF 实际转账独立印证。BUY 取 makerAmountFilled 为现金、takerAmountFilled 为 gross shares；SELL 相反。事件资产 ID/owner/hash/token/side/market 均须正确；不是任意同 tx 事件或余额变化。topic0 `0xd0a08e8c` 仅是报告中的前缀，不能据此取代完整 ABI topic 校验。
+2. 第二层为官方明确给出的逐原子结算金额：若存在，必须与上述链上事实精确相等；冲突即拒绝，不能按优先级静默覆盖。当前 `ApiLeg` 只有 amount/price/fee，没有独立现金字段，不虚构该字段、接口或新 provider。本次不增加无链证明的官方现金 fallback。
+3. `q*p` 的整数商仅为报价导出的核对候选，不是支付事实。令 `S=10^18`，逐腿宽整数 `q_i*p_i=S*f_i+r_i`、`0<=r_i<S`；有成交时必须计算 `f_i=floor(q_i*p_i/S)`，保留余数含义，不用浮点、不四舍五入、不先合并余数再 floor。`r_i>0` 不是非法成交；`r_i=0` 也不能豁免链上证明。候选金额与实际金额必须分清来源，未验证候选不得以 Known 支付/可用余额对外使用。
+4. 本次支持当前精确十进制报价及逐腿floor规则：原settled逐tx检查本单有效腿`sum(f_i)`与事件现金精确相等，gross shares/fee相等，并核对实际转账净额。全部通过后，数值已被权威实额印证，允许沿原字段/数据流记账；不要求新增事件金额存储、改变settled返回类型或重构数据流。无唯一腿对日志映射时沿原同tx完整集合比较，不虚造配对、不跨tx抵销。差任意1 atom仍拒绝；来源规则不符时不得反改候选求等。
+5. 只允许“计算 floor 候选 → 原独立链核对 → 以链上实额记账”；禁止仅删 NON_ATOMIC_CASH 后把 floor 直接视为精确实额，禁止链上值同时充当唯一 expected/actual 而取消报价/数量/费用/转账的独立核对。缺 tx、receipt、fee、完整分页或数量稳定性时保持 Unknown/Unproven，冲突沿原拒绝路径；不得报零、完整或释放风险。正常完整零成交沿原零账务规则，不伪造空 OrderFilled。
+
+真实两腿的 `(f,r)` 分别为 `(132822872628722271,600000000000000000)`、`(866577127371277728,20000000000000000)`，对应链上现金逐 tx 精确相等，因此不能仅因余数而拒绝。把任一 tx 现金增/减 1 atom、把 fee 或实际转账增/减 1 atom，都必须不完整/拒绝。另有合成边界：两腿各 `q=2,p=380000000000000000` 时逐腿 floor 合计 0，合并后 floor 为 1；只能取前者作候选，但这不宣称该微量交易获准实际下单。
+
+### R20.3 闭合语义完全保留
+
+Final 仍表示本单最终可记账成交数量已封闭且不能再产生新增执行，不表示“requested 全成”。实际历史接受仍须 `pages_complete && accounting_complete && closure==Final`；请求数量不补齐、净库存不抹零、未执行余量不记作成交。原完整 FILLED/终态+固定块过期/正确路由关闭或 nonce 失效的合法分支保留，不对一般订单新增市场终结前提。
+
+不新增expiry+市场终态联合证明，不把OPEN过期、remaining=1、市场结束、零仓、min_net_shares达标或金额吻合变成Final。原`closed()`与`read_order_execution`的组合判定原样保留，精确分支复述见SPEC §R20.5；完整成交或原合法终态证明仍可按既有规则Final。算术修复后若原关闭证明不成立，历史读取仍以HISTORY_NOT_CLOSED拒绝，属于预期结果，不是放宽闭合的理由；OrderFilled成功只证明该部分成交，不证明整单或当前账户闭合。
+
+### R20.4 双消费者、不变项与验收
+
+`btc5m_reconcile` 和交易二进制共享原 crate：必须共同采用同一金额来源、floor 核对、费用/净额、closure 语义，并从同一候选源码重建两者；源文件/二进制身份、原 selector/pin 的一致性由 Design 落实。不得只修 reader、只修交易子进程或用旧 reader 配新交易 binary；未完成双消费者核验不能认为冷启动链修复已交付。
+
+不得放宽 `settled()` 的回执成功、transactionHash、canonical block hash/number 与固定块界限、每条 log 的 removed/tx/block/logIndex 身份、完整 ABI topic/emitter、实际 USDT/CTF 转账、事件金额/资产/fee 及净额核对；身份/代币/市场/路由绑定、分页/数量稳定性、未知历史 hash、预算/损失/敞口、10s 新鲜度、Final/风险释放条件、sticky stop、fail-closed takeover 均保留。只读修复不签名、不下单、不撤单、不补余量、不 claim/转账、不写 DB/guard/activation、不变更长期调度。
+
+可执行验收收窄为SPEC §R20.6 D20-01–02：至少一个非原子正例与一个链上现金错配反例，复用已有测试文件/Scenario，必要边界在同一用例参数化，不新增平行框架、不扩大套件时长；既有回归按受影响路径复用。正例必须区分结算通过与历史Final；不得强迫真实remaining=1历史成功。实现者自测与独立Validate分开；本卡只做文档静态核验，不声称Rust测试或账户修复PASS。
+
+### R20.5 风险、阶段与授权分离
+
+本次算术修复需求closed、范围内open为空；独立未决事项为真实历史单Final及旧窗口恢复资格，均不阻塞本次最小修复，也不授权实现者解决。Design只落实最小调用点、精确allowlist/G3、既有Scenario和双binary身份；如需新增模块或改closure才可实现目标，先停止报告缺口/最小选项，由Pascal裁定。需要重建两二进制时沿用原命令并保留`--locked --offline`，不覆盖已发布旧制品；本卡不构建。
+
+旧窗口 OUTPUT_INVALID 已由独立事项修复验收，见 [报告 §12](../../../data/reports/2026-11-26-btc5m-execution-facts-output-fix/report.md)；不修改 Python 观察者或重做该问题。本卡/后续工程修复通过均不等于可重启：仍须原受控入口 fresh 双读、独立验收、主控明确核对；旧窗口恢复资格另行裁定，旧 stop/guard 不解除。Pascal 对修复的同意不变成交易/生产写入授权。本阶段无账户/API/凭据访问，无 Design/代码变更，无真实或模拟交易。
