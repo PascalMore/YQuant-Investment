@@ -4,13 +4,13 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 / 版本 | V1.19；R20非原子现金最小修复需求冻结，Design当前V1.18 §R19，R20待下游；不表示实现/独立验收或生产放行 |
-| 本次窄修订 | V1.19，2026-11-26：仅cumulative逐腿floor候选及原settled精确核对，D20-01–02；closure/Final/remaining/expiry/市场判定不变；R19独立目标不改 |
+| 状态 / 版本 | V1.20；§R21 下单前异常退出的受限恢复规格冻结；R21 Design/实现/独立验收未交付，实盘仍 HOLD |
+| 本次窄修订 | V1.20，2026-11-27：只新增指定历史窗口的资格及原双读接线契约；D21-01–07；R20 及更早契约保留 |
 | 作者 | YQuant Principal / yquantprincipal |
-| 创建 / 更新 | 2026-11-19 / 2026-11-26，Asia/Shanghai（UTC+08:00） |
-| 来源 RFC | [RFC-07-007](../../rfc/07_trading/RFC-07-007-btc5m-live-parity-and-operations.md) V1.19，§R20.1–R20.5；仅非原子现金最小修复 |
-| 工作区 / 来源任务 | /home/pascal/workspace/yquant-investment；初版 t_b946f2c3；本轮 t_6cbc04c3 |
-| 对应 Design | [DESIGN-07-007](../../design/07_trading/DESIGN-07-007-btc5m-live-parity-and-operations.md) 当前V1.18 §R19；R20待既有下游t_0722b40a，本卡不改Design |
+| 创建 / 更新 | 2026-11-19 / 2026-11-27，Asia/Shanghai（UTC+08:00） |
+| 来源 RFC | [RFC-07-007](../../rfc/07_trading/RFC-07-007-btc5m-live-parity-and-operations.md#r21) V1.20，§R21.1–R21.4 |
+| 工作区 / 来源任务 | /home/pascal/workspace/yquant-investment；初版 t_b946f2c3；本轮 t_247f4962 |
+| 对应 Design | [DESIGN-07-007](../../design/07_trading/DESIGN-07-007-btc5m-live-parity-and-operations.md) §6.3–6.5（含 G3）为只读基线；已落盘 §R20 V1.19 不变，§R21 待 t_74644667 同步 |
 | 执行 / 验收 | Principal Design；Developer Implement；Reviewer 独立 Validate；主控 Gate/Closeout |
 
 
@@ -648,6 +648,7 @@ T1仅静态核对两实体/互引/版本/来源路径/字段和验收映射、sc
 | V1.14 | 2026-11-23 | R15 窄修订（延迟，不改门禁）：live 的账户全量读前移到 tick 获取决策输入之前（drive 的 `sync_live`），发送准备复用这次 receipt-bound 读——守卫在 facts/ack/permit 每次仍复验完备性、身份、ledger generation、attempt 绑定与 10s 新鲜度（`MAX_ACQUISITION_AGE_MS` 未改）；账户读各腿（持仓/挂单分页/`/account`/链快照/历史）并发、按原顺序校验返回原 reason；已证明 `Closure::Final` 且账务完整的关闭历史订单记忆化其净贡献，仍每轮扫 `/orders/matches`，新出现的未声明 hash 仍 `RECONCILIATION_REQUIRED:UNEXPLAINED_HISTORY`；发送路径仅并行可证明独立的读（book 与链快照、balances 与 authorize），签名/ACK/POST 与依赖前序结果的调用保持串行。不改经济、额度、allowance、stop reason 词汇、fail-closed 语义或 paper 路径行为 |
 | V1.15 | 2026-11-23 | R16 T1：对齐 R15/R13/R14 已验基线；冻结兼容拒绝诊断、R15 三 minor 闭合、本 run 精确 claim 与600s/deadline有界 WAIT_CASH 续驱动及新测量/验收定义。仅 RFC/SPEC，不表示实现或部署；R15 原卡历史结论不变。 |
 | V1.19 | 2026-11-26 | R20 RFC/SPEC按Pascal最新范围冻结：仅非原子现金逐腿floor候选与原settled逐atoms核对、双消费者及D20-01–02；撤回本卡未签收的expiry/市场终态新闭合分支；Design/实现/独立验收待下游，不授予重启。 |
+| V1.20 | 2026-11-27 | R21：冻结指定旧窗的原始证据/原生控制流/旧 C0 绑定、两次新鲜原生只读、activation/全 guard CAS/单次交接及 D21-01–07；旧审计与其他恢复不改，不授权实盘。 |
 
 2026-11-23 R14 行为补注：候选在本窗口没有任何未决订单事实时被拒（例如 ROUND_TOO_LATE 在提交前拒绝），不构成致命事实缺失，只记录 blocked 事件并继续该窗口，只有确有一个在飞订单、其事实到既有 `UNREAD_FACTS_BUDGET` 仍不可见才以 `FACT_INCOMPLETE` 停窗。live 读路径（账户读、执行读）的瞬时失败改用 paper 的连续失败计数加预算语义：期间禁止新增风险但继续观察，成功即自动清零并恢复，只有连续失败超过具名 `READ_FAILURE_BUDGET`（120s，沿用 `UNREAD_FACTS_BUDGET` 的既有常量风格）才以既有 `READ_UNAVAILABLE` / `DATA_UNAVAILABLE` 停机；行情/报价读保持既有 drive 的 `failed_ticks` 路径（`MAX_FAILED_TICKS` 达上限只撤挂单、不退出窗口，不使用 `READ_FAILURE_BUDGET`），run 内行情侧唯一既有的 `ReadUnavailable` 是 guard 的空候选簿拒绝，未改动。`refresh_live_risk` 中缺新鲜 mark 的 `UnknownMark` 属可恢复的估值缺口、按上述降级处理，而现金/gas 等事实缺口与 `Conflict` 保持原有停机语义（`DATA_UNAVAILABLE` / `FACT_CONFLICT`），不因缺 mark 而降级事实缺口。
 
@@ -736,3 +737,58 @@ closed：非零余数不单独拒绝、逐腿floor候选/原settled权威实额�
 范围外待决：真实remaining=1订单能否按原规则Final，以及旧OUTPUT_INVALID窗口恢复资格，均未完成、不阻塞本次算术修复，却阻止宣称可重启；本阶段未核清完整receipt/transfer及真实闭合输入，不赋予新增expiry/市场证明语义。修复后原生读仍可fail-closed，只有另获授权的fresh原生读可报告当前账户结果。修复通过不等于可重启，仍须原受控入口fresh双读、独立验收与主控核对。旧OUTPUT_INVALID观察者修复已有独立验收，见 [报告 §12](../../../data/reports/2026-11-26-btc5m-execution-facts-output-fix/report.md)，不表示原启动脚本已能恢复该窗口；不新增恢复分支。
 
 本卡仅 RFC/SPEC 追加及文档检查；Design 未更新、业务实现/构建/业务测试/账户读取均 NOT_EXECUTED。不读凭据、不调场馆 API、不签名/POST/撤单/补余量/claim/转账、不写 DB/guard/activation、不改调度/真实交易配置。不额外创建任务或恢复平台，沿预建 Design→Implement→独立 Validate；主控核对产物和所需授权后推进，不由阶段 done 自动授予生产或旧窗口恢复许可。
+
+<a id="r21"></a>
+## R21：指定窗口下单前异常退出的受限恢复契约（2026-11-27）
+
+### R21.1 来源、作用域与状态
+
+本节落实 [RFC-07-007 V1.20 §R21.1–R21.4](../../rfc/07_trading/RFC-07-007-btc5m-live-parity-and-operations.md#r21)，只在原 `scripts/start-btc5m-live.sh` → `tools/predictfun/btc5m_launch.py` 的 `--auto-prepare` 启动准备中扩展一个历史资格；不改 Shell 或暴露新入口。只适用于旧 `btc5m-live-4d0577d73dee4106` 与旧交易制品 SHA-256 `06954cb544d700c5c18933018aca949d897e67182c5a28668a2cb9b8834e8543` 联合绑定的精确窗口。按 [Design](../../design/07_trading/DESIGN-07-007-btc5m-live-parity-and-operations.md) §6.3–6.5 继承故障、接管和 G3。§6.5 的 `UNSENT_EDGE` 仍须完整旧审计；其“最后一条”是当时范围，不排斥本次单窗补充。RFC/SPEC §R20 及其历史阶段描述不改；R21 不改变 `HISTORY_NOT_CLOSED`、Final 或任何场馆闭合条件。
+
+定点证据为 [pre-send-exit-recovery-intake.json](../../../data/reports/2026-11-27-btc5m-fact-incomplete-stop/evidence/pre-send-exit-recovery-intake.json)（SHA-256 `a98ce32fa6b45395ed79f1e46e7dbccfc95e8ce07099ffdf8f4ea2833456e729`，16 项本地交叉检查）。其中 `source_sha256` 列出应读取并核验的原字节路径；`checks`、历史读数摘要及现有 `exit 4 / HISTORY_IDENTITY` 均不是独立准入信号。[旧制品及来源绑定](../../../data/reports/2026-11-27-btc5m-fact-incomplete-stop/evidence/closed-reread-bound-candidate/binding.json) 与 [新制品绑定](../../../data/reports/2026-11-27-btc5m-fact-incomplete-stop/evidence/context-root-production-binding.json) 分属不同证明：新交易制品 SHA-256 `66f1286dae49bfc9b4ce2d7e66897c42d1034d20cccd341bfeac8f65d3482f21`，未换 reconciler；`t_6b2c9b97` 的[独立离线验收](../../../data/reports/2026-11-27-btc5m-fact-incomplete-stop/evidence/context-root-fixed-candidate/validation.md) 仅覆盖打包/凭据前门禁，不能当作本资格或实盘验证。
+
+### R21.2 进入新鲜对账前必须闭合的历史证据
+
+下列条件为合取，只认同一次执行、同一份冻结证据；先闭合历史，再触达新的原生账户读取。Design 须精确展开路径/字段/校验顺序，不把 intake 的 `true`、run/错误名白名单或摘要相等单独当作验证。
+
+| 绑定 | 必须成立 |
+|---|---|
+| 唯一窗口、旧 guard/activation | 对应唯一旧 run 目录与唯一启动尝试目录；旧 `started.json`、`live-context.json`、`public-config.json`、`ended.json`、启动尝试/轮转记录，共同与现有账户锁下 `_check_old_guard` / `_old_activation` 查得的同一 `ARMED` 窗口及存储绑定一致。逐项核对 run、风险窗、授权引用、账户身份、候选 digest、旧时序与模式，保留原完整校验。旧 metadata 仍经 `btc5m_live_events.check_metadata` / `candidate_digest` 的既有身份规则，不能拿当前候选摘要换旧摘要。 |
+| 完整来源与旧原生因果 | `started` 的完整候选身份（HEAD、文件成员与摘要、交易二进制）须与旧绑定相符，原 `launch-dispatch.json` 实际记录的命令/参数、制品与规范 context 路径归属同一窗口，且只有一次 controller 调用承诺和记录、没有重试证据。旧制品实际字节及相关源字节须有绑定，以 `src/main.rs::main` → `src/config/controlled_live.rs::read_live_context` 的可审计顺序、原调用和旧制品独立差分共同证明：同一错误分支在 control pipe/activation/manifest 读取、业务配置及 `bot::run` 前返回，因此未进入账户业务、签名、permit/ACK/可能发送路径。差分不是历史执行追踪，不以新制品或源码相似替代旧绑定。 |
+| 原日志与退出 | 原 `run-log.txt` 精确为该次唯一 tagged `[stderr] Error: CONTROLLED_MODE: LIVE_CONTEXT_PATH` 行及行尾，`events.jsonl` 是原始零字节；`ended.json` 为 `PROCESS_FAILED` / launcher=1 / child=1 / signal=null / forced_cleanup=false，`audit_complete`、`cash_complete`、`execution_complete` 都为 false，`final_accounting`/`final_event_seq` 为 null，`incomplete_reason=AUDIT_UNAVAILABLE` 且原 takeover 标记保留。日志与空事件只做交叉证据；截断、额外字节/事件、冲突或存在任何后续许可、未知发送或成交证据，不得进入本分支。不得改写旧 run 或合成 final、账务、零风险或完整审计记录。 |
+| 旧尝试、轮转、C0 与声明 | 原 `barrier-rotation.json`、`attempt-reserved.json`（seed）、原调用与 `started` 必须互相闭合；seed 固定一次 handoff/no retry，并绑定 `reconciliation.json` 原字节摘要。以旧 run public-config 定值为 C0 权威，核验与尝试配置、seed 预算及旧原生读中的现金等式相同；本窗 C0 为 `80760100000000000001` USDT atoms，无该失败窗引入的成本或损益调整。沿旧 seed 的完整有序 25 条声明，核对 dispatch、两次读及汇总；不追加、移除、重排、去重、以空列表替代或推断本窗出现新订单。 |
+| 旧双读与汇总 | `reconciliation-pass-1.json`/`reconciliation-pass-2.json` 的原始摘要须与旧 `account-read-recovery.json` 当时的证明相符；与 seed 引用的 `reconciliation.json` 一起交叉核对同账户、声明、两读当时合法时序、完整只读成功链、分页/历史解释、显式空挂单/持仓、Gas 与逐 atom 现金等式。以旧提交/启动时点及当时门槛验证原新鲜度；若原生 exit 未单独存档，只能由已绑定的原完整读结果与原 anchored `prepare_account` 成功链共同证明，不补造退出记录。两读与汇总的规范化完整账户事实及完整 `claimed_win`/`settled_zero` 多重集一致。它们只证明旧基线，不计入新鲜双读；当时 `account-read-recovery.json` 是旧启动准备的来源，不是本失败窗的新 final。 |
+
+`btc5m_launch._stopped_window` 原拒绝基线为 exit 4 / `HISTORY_IDENTITY`；`btc5m_payout_recovery.known_ended` 只认其原 `OUTPUT_INVALID` / child=0 形态，不扩展、不改 `check_ended`。对本精确对象完整证明后只返回可进入原 `prepare_account` 的受限资格、旧 C0、完整声明及可追溯历史基线；其余保留原分类/拒绝。缺失、歧义、不匹配、原始材料不可信或原生顺序无法可靠证明均 **NO-GO**：本类 0 次新鲜账户读、0 次 activation 发布/guard CAS/controller；保留原拒绝或接管，不以余额相符反推未发送。
+
+### R21.3 两次新鲜完整原生只读
+
+复用 `btc5m_launch._main` 的 `AccountLock`、guard 快照及 `prepare_account` → `local_signer.reconcile_account`；仅同一次原启动准备内依序两次，第一读之前已将旧 C0 与同一完整有序声明绑定到两次输入。不得走普通首读容许 exit 4 或由 `cash - claims` 反定 C0 的分支；失败立即终止，不补读、不自动重试、无新增人工轮次。两次必须各自是此次实做的原 pinned reader、原生 exit 0、`read_only=true`、`complete=true`、原账户身份/完整分页和历史解释（含 `positions_match_history` / `positions_explained`），且各自满足原新鲜度。不能用缓存、旧两读、聚合 `reconciliation.json` 或同一次读的复制品充数。
+
+各次应显式包含 `open_orders=[]` 和 `positions=[]`，不以默认空值接受缺键；必须过原 Gas 门、`_cash_snapshot(..., require_complete=True)` 及逐 atom `collateral_atoms = C0 + Σ(confirmed claimed_win.claim_atoms)`，无容差，不以等额抵销代替逐项核对。两读规范化的完整账户事实须一致（沿 `_account_facts` 比较业务事实，不把读时间/采样块等采样元数据误当漂移；字段完整/可解释仍各自验证）。各次的完整 `claimed_win`、`settled_zero` 多重集必须分别与已证旧锚严格相同，只允许记录排列变化，拒绝缺失、null、重复增量、删除、字段改写及新增历史，即使总金额不变。声明列表按原有序比较，与派彩多重集的排列规则不同。保留原 `preflight` 对输出配置/对账记录的复验，并在新尝试的原证据目录保留旧来源、锚及两次新原生输出的可追溯绑定；不回填历史文件。
+
+### R21.4 原 activation、全 guard CAS 与单次交接
+
+`btc5m_launch.launch` 仍在任何轮换前做原授权/部署/参数、`read_barrier` 全快照一致性及 activation/context 核验。沿原账户锁保护准备与轮转；两读及其校验成功后，沿原 `activate` 的旧字节一致性、原子发布与读回，再由 `rotate` 按**全**旧 guard 快照 CAS、检查仅删除一条且读回已不存在，最后才能按原账户锁交接顺序移交 `dispatch` → `btc5m_control.run` 一次，不放宽任何原控制端授权或 guard 校验。旧 run 不回 READY，不重置 loss latch，不把 R21 视为取消原冷启动或后续运行门禁。
+
+第一读失败时只有 1 次已尝试原生读，不启动第二读；第二读失败时至多 2 次。两类均无 activation 发布、guard CAS 或 controller。双读以后，guard 漂移或发布前 activation 字节漂移拒绝交接；CAS 失败可能已经发布 activation，读回失败也可能已经发生部分副作用。按原顺序如实保留状态，不声称两系统原子事务，不自动回滚/修复/重试，不 dispatch。仅本次全部门禁通过可有一次交接，交接返回也不是实盘启动成功证明。
+
+### R21.5 可证伪验收（后续离线执行）
+
+用冻结原件的受控 fixture，通过原消费者和明确的外部替身；故障注入在隔离副本，不能改原件。记录每例实际 reads、activation 发布、全 guard CAS/读回、controller 次数、拒绝阶段/码与原证据前后摘要。除历史拒绝基线外不给本节发明公开退出码；由 Design 映射既有拒绝边界。
+
+| ID | 输入或扰动 | 断言 |
+|---|---|---|
+| D21-01 | 冻结原窗 fixture：先旧 `_stopped_window` 路径，再用候选原 parser/main，只替换外部边界，以替身提供两个足额、完整且无漂移的新鲜读结果 | 旧入口 exit 4 / `HISTORY_IDENTITY`；候选历史资格不改旧 `INCOMPLETE`，两次原生读边界调用从第一次起用旧 C0 与同一份 25 条声明；原门禁齐备才有一次 activation 发布、一次全 guard CAS 成功及一次 controller 交接。不得只过纯 helper。 |
+| D21-02 | 改 run/账户/风险窗/授权/digest、缺/重复归档、交易二进制或来源不匹配；截断 stderr、追加日志/事件、信号/强制清理、出现发送许可/未知提交/晚到成交 | 即使余额相符也不获本类资格；0 新鲜账户读，0 发布/CAS/controller，不生成旧 final。 |
+| D21-03 | 原轮转或单次 dispatch 证据冲突、错 seed 或 reconciliation SHA、错旧 C0、历史两读/汇总/声明不闭合（含历史证明 hash 不符） | 0 新鲜账户读，0 发布/CAS/controller；旧两读不能代替新两读。 |
+| D21-04 | 任一新读非 0、不完整、不新鲜、错身份/声明、挂单或持仓非空/缺失、Gas 低或现金差 ±1 atom | 首读失败仅 1 次，次读失败仅 2 次；0 发布/CAS/controller，无拟合、重读或重试。 |
+| D21-05 | 两读规范化事实漂移；或两次均呈现同一份额外/删改/重复历史（含净额不变）；对照仅重排原两类记录 | 漂移或历史改变拒绝，0 发布/CAS/controller；仅重排且完整原子事实无差异不误拒。若首读已经违背历史基线，不做第二读。 |
+| D21-06 | 锁/旧 guard/旧 activation 不符；双读后 guard 或 activation 漂移；activation 发布/读回失败；CAS 失败或读回仍有 guard | 锁或历史前置失败 0 原生读；双读后漂移 2 次读且无发布/CAS；activation 未通过则不做 CAS，即使文件可能已发布；CAS 或其读回失败不得二次尝试或 dispatch，单列可能已发布/轮转的事实。 |
+| D21-07 | 普通健康、原受限恢复及其拒绝例（包括 `OUTPUT_INVALID`/child=0 原分类、`UNSENT_EDGE` 完整审计要求、未知提交/晚到成交、loss latch 与风险阈值触发） | 旧接受、拒绝与副作用语义逐项不变，不引入任何其他窗口、停因或恢复类旁路。 |
+
+### R21.6 不变项与阶段交接
+
+不改 Shell、Rust、原制品/编译路径修复、guard/activation/事件 wire 及 DB 接口/schema、签名、策略、交易参数、风险阈值、原授权、历史证据；不新增通用重启逻辑、公共参数、服务、人工对账轮次或替代入口。T2 `t_74644667` 只同步 Design 和来源指针，依 §6.5 G3 规划纯历史资格及 launcher 最小接线、确切 allowlist、实际 `btc5m_control.public_identity`/`LIVE_PATHS` 及固定身份测试闭合。需要扩大范围或无法可靠闭合时停止，不另作放宽。
+
+本轮只做 RFC/SPEC 和静态证据检查，未运行 launcher、账户、guard/activation、RPC、网络、业务测试或生产操作；未更改 Design、代码、制品、历史证据，不 commit/push。Design/实现/独立 Validate 与真实账户/生产授权分开；本契约及未来离线通过均不表示生产恢复，当前实盘仍 HOLD。

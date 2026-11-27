@@ -4,14 +4,14 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 / 版本 | V1.19；R20非原子现金最小修复需求冻结，Design当前V1.18 §R19，R20待下游；不表示实现/独立验收或生产放行 |
-| 本次窄修订 | V1.19，2026-11-26：仅cumulative逐腿floor候选及原settled精确核对；closure/Final/remaining/expiry/市场判定不变；R19独立目标不改 |
+| 状态 / 版本 | V1.20；§R21 下单前异常退出的受限恢复需求冻结；R21 Design/实现/独立验收未交付，实盘仍 HOLD |
+| 本次窄修订 | V1.20，2026-11-27：只覆盖指定旧窗口与旧制品；旧审计不改，历史资格不等于当前账户或启动许可；R20 及更早契约保留 |
 | 作者 | YQuant Principal / yquantprincipal |
-| 创建 / 更新 | 2026-11-19 / 2026-11-26，Asia/Shanghai（UTC+08:00） |
-| 工作区 / 来源任务 | /home/pascal/workspace/yquant-investment；初版 t_b946f2c3；本轮 t_6cbc04c3 |
-| 来源决策 | Pascal 2026-11-26最新最小范围：只修NON_ATOMIC_CASH，不改闭合语义，不新增模块/配置/错误码族；本卡仅RFC/SPEC，不授权代码/真实API/账户/生产变更 |
-| 对应 SPEC | [SPEC-07-007](../../spec/07_trading/SPEC-07-007-btc5m-live-parity-and-operations.md) V1.19，§R20.1–R20.7、D20-01–02；R19等既有目标保留 |
-| 对应 Design | [DESIGN-07-007](../../design/07_trading/DESIGN-07-007-btc5m-live-parity-and-operations.md) 当前V1.18 §R19；R20待既有下游t_0722b40a，本卡不改Design |
+| 创建 / 更新 | 2026-11-19 / 2026-11-27，Asia/Shanghai（UTC+08:00） |
+| 工作区 / 来源任务 | /home/pascal/workspace/yquant-investment；初版 t_b946f2c3；本轮 t_247f4962 |
+| 来源决策 | Pascal 2026-11-27：只优化原启动准备；逐项证明旧窗口在业务/下单前终止后才可进入原双读；原入口、风控及生产授权边界不变 |
+| 对应 SPEC | [SPEC-07-007](../../spec/07_trading/SPEC-07-007-btc5m-live-parity-and-operations.md#r21) V1.20，§R21.1–R21.6、D21-01–07 |
+| 对应 Design | [DESIGN-07-007](../../design/07_trading/DESIGN-07-007-btc5m-live-parity-and-operations.md) §6.3–6.5（含 G3）为只读基线；已落盘 §R20 V1.19 不变，§R21 待 t_74644667 同步 |
 | 依赖 | 07-002 V1.1、07-003 V0.5、07-004 RFC/SPEC V1.1 / Design V1.3、07-005 V1.0、07-006 V1.1；实际能力以当前源码及独立证据为先 |
 | 角色 | 主控 Gate/Closeout；Principal Design；Developer Implement；Reviewer 独立 Validate |
 
@@ -350,6 +350,7 @@ T1 两文档静态一致性/引用/范围/hash → 主控 Gate → T2 独立 Des
 | V1.10 | 2026-11-23 | R13d 窄修订：reader 收到 payout `CASH_CONFIRMED` 且该等待由 `CASH_PENDING` 造成时同步解除 `stopped`（其它原因停止仍黏性，并以 producer→reader 双用例覆盖续单与反例）；逐 atoms 预算门等指针改为符号锚定（`seed_predict` 的 `cash_matches_budget_and_claims` 不等即 bail `CASH_BUDGET_MISMATCH`，行号仅辅助）；移除 `live.rs` 未使用的 `cleared_waits`；不改经济、额度或授权语义 |
 | V1.15 | 2026-11-23 | R16 T1：对齐 R15/R13/R14 已验基线；冻结兼容拒绝诊断、R15 三 minor 闭合、本 run 精确 claim 与600s/deadline有界 WAIT_CASH 续驱动及新测量/验收定义。仅 RFC/SPEC，不表示实现或部署；R15 原卡历史结论不变。 |
 | V1.19 | 2026-11-26 | R20 RFC/SPEC按Pascal最新范围冻结：仅非原子现金逐腿floor候选与原settled逐atoms核对、双消费者及D20-01–02；撤回本卡未签收的expiry/市场终态新闭合分支；Design/实现/独立验收待下游，不授予重启。 |
+| V1.20 | 2026-11-27 | R21 RFC/SPEC：冻结单一旧窗口的下单前异常退出证明、旧 C0 下两次新鲜完整原生只读、原 activation/全 guard CAS/单次交接与 D21-01–07；原证据不改，不授权运行或恢复实盘。 |
 
 ## R20：冷启动 NON_ATOMIC_CASH 的最小现金计算修复（2026-11-26，需求冻结）
 
@@ -394,3 +395,28 @@ Final 仍表示本单最终可记账成交数量已封闭且不能再产生新�
 本次算术修复需求closed、范围内open为空；独立未决事项为真实历史单Final及旧窗口恢复资格，均不阻塞本次最小修复，也不授权实现者解决。Design只落实最小调用点、精确allowlist/G3、既有Scenario和双binary身份；如需新增模块或改closure才可实现目标，先停止报告缺口/最小选项，由Pascal裁定。需要重建两二进制时沿用原命令并保留`--locked --offline`，不覆盖已发布旧制品；本卡不构建。
 
 旧窗口 OUTPUT_INVALID 已由独立事项修复验收，见 [报告 §12](../../../data/reports/2026-11-26-btc5m-execution-facts-output-fix/report.md)；不修改 Python 观察者或重做该问题。本卡/后续工程修复通过均不等于可重启：仍须原受控入口 fresh 双读、独立验收、主控明确核对；旧窗口恢复资格另行裁定，旧 stop/guard 不解除。Pascal 对修复的同意不变成交易/生产写入授权。本阶段无账户/API/凭据访问，无 Design/代码变更，无真实或模拟交易。
+
+<a id="r21"></a>
+## R21：指定窗口下单前异常退出的受限恢复（2026-11-27，需求冻结）
+
+### R21.1 决策与范围
+
+仅在操作者另获原授权、重新调用原固定 `scripts/start-btc5m-live.sh` → `tools/predictfun/btc5m_launch.py` 时，允许一个**已证明在业务/下单路径之前异常退出**的旧窗取得下一窗口的对账资格。旧 run 不回 READY。本条只适用于 `btc5m-live-4d0577d73dee4106` 与旧交易制品 SHA-256 `06954cb544d700c5c18933018aca949d897e67182c5a28668a2cb9b8834e8543` 及其完整冻结身份的交集，不是针对 `PROCESS_FAILED`、`LIVE_CONTEXT_PATH` 或空日志/空事件的通用规则。具体判据见 [SPEC V1.20 §R21](../../spec/07_trading/SPEC-07-007-btc5m-live-parity-and-operations.md#r21)；R20 及更早条款的当时阶段说明保留，R21 不改其业务语义。
+
+### R21.2 事实、证据与 NO-GO
+
+[冻结 intake](../../../data/reports/2026-11-27-btc5m-fact-incomplete-stop/evidence/pre-send-exit-recovery-intake.json) SHA-256 `a98ce32fa6b45395ed79f1e46e7dbccfc95e8ce07099ffdf8f4ea2833456e729`：保存了 16 项本地交叉检查、原证据路径/摘要及原 `btc5m_launch._stopped_window` 离线重放结果（exit 4 / `HISTORY_IDENTITY`）。[旧窗口](../../../data/reports/2026-11-27-btc5m-controlled-paper/evidence/btc5m-live-4d0577d73dee4106/ended.json) 只留一条带 stderr 标签的 `LIVE_CONTEXT_PATH`、零事件与 `PROCESS_FAILED`（launcher/child 均 1、无 signal/forced cleanup），审计仍 `INCOMPLETE`。既有 `btc5m_payout_recovery.known_ended` 的 `OUTPUT_INVALID`/child 0 特例不覆盖它，也不得扩展该特例代替本条。
+
+只在同一旧账户、run、风险窗、授权引用、candidate digest、全量来源和制品身份均能从原件交叉绑定，且能按**该旧制品**的原生执行顺序证明 `src/main.rs::main` → `src/config/controlled_live.rs::read_live_context` 在加载业务配置、业务账户处理、签名和发送之前即返回路径错误时，才继续验证旧启动尝试/轮转、seed、原 public C0、保存的两次完整原生读及完整声明。绑定的诊断摘要是索引，不是事实替代；单条 stderr、空事件、余额相符、无挂单、后来修好制品均不能证明未发送。缺、错、歧义、截断、可疑后续活动或不能证实控制流，结论均为 **NO-GO**，保留原拒绝/接管，不用人工回填历史、伪造 final/audit 或制造通用例外求绿。
+
+[已修制品绑定](../../../data/reports/2026-11-27-btc5m-fact-incomplete-stop/evidence/context-root-production-binding.json) 和独立离线验收 `t_6b2c9b97` 只证明新制品的规范路径门禁及其绑定，不重做构建路径修复，不用新制品反证历史，也不代表旧窗口可启动或当前账户已核清。
+
+### R21.3 新鲜证明与原交接
+
+历史资格只授予原 `prepare_account` 的入口。原账户锁及 guard 保护中，原 pinned reconciler 从第一读就使用已证明不变的旧 C0 与同一份原完整声明；保存的历史两读不能抵扣。两次分别为新鲜、完整且原生 exit 0 的独立只读；任一失败立即拒绝，不重试。两次都要按 atom 核对 `collateral = C0 + Σ confirmed claimed_win.claim_atoms`、显式零挂单/零持仓、原 Gas 门槛、完整账户事实无漂移、两类历史派彩/零派彩完整多重集不变。新余额不得反推 C0、改声明或解释新增历史。
+
+仅在全部通过后才进入原 activation 一致性校验与原子发布、全 guard 快照 CAS、原 controller 最多一次交接；不是跨文件和 DB 的原子事务。失败无自动重试，已有副作用按真实阶段如实保留。普通健康、既有受限恢复、未知提交/晚到成交、loss latch、风险阈值及 stop 语义不变。
+
+### R21.4 非目标与交付门禁
+
+不改外层 Shell，不增重启逻辑、CLI/公共参数、新 DB/schema、交易参数、服务、人工双轮对账、旁路入口或生产操作。Design 按既有 §6.3–6.5（尤其 §6.5 G3）冻结纯资格职责、原入口薄接线及身份清单，不能借机搬动无关分支。放行实现前须完成 T2 来源/版本同步与主控核对；后续独立 Validate 按 SPEC D21-01–07 离线验证原消费者路径，不能用 helper 通过或本阶段 `git diff --check` 代替。T1 只交付合同，不确认真实账户、guard/activation、生产或实盘重启，实际状态保持 HOLD。

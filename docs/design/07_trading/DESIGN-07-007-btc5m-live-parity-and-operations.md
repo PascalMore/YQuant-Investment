@@ -4,15 +4,15 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 / 版本 | V1.18；R19第③项最小设计冻结，待主控三文档/allowlist/G3 Gate；①②已独立离线签收未部署，③未实现/未验收 |
-| 本次窄修订 | V1.18，2026-11-26：仅原REST观测、单进程共享额度、有限解析/调度与controlled首次poll、原读预算接线；不叠加历史allowlist |
-| 作者 / 创建 / 更新 | YQuant Principal；2026-11-19 / 2026-11-26，Asia/Shanghai（UTC+08:00） |
-| 来源 RFC | [RFC-07-007](../../rfc/07_trading/RFC-07-007-btc5m-live-parity-and-operations.md) V1.18，§R19.1–R19.4；R18保留 |
-| 来源 SPEC | [SPEC-07-007](../../spec/07_trading/SPEC-07-007-btc5m-live-parity-and-operations.md) V1.18，§R19.1–R19.8、D19-01–08；R18保留 |
-| 来源任务 | 本轮 t_edbfef11，需求父卡 t_4c0acdf8；R18 t_3c34976b及R17/旧R16保留历史 |
+| 状态 / 版本 | V1.20；[R21 单窗口受限恢复设计](#r21)；仅 T2 设计，未实现、未独立验收，实盘 HOLD |
+| 本次窄修订 | V1.20，2026-11-27：冻结旧窗证据资格、原 `prepare_account` 双读接线、原发布与全 guard CAS 顺序，及 D21-01–07；不叠加往期 allowlist |
+| 作者 / 创建 / 更新 | YQuant Principal；2026-11-19 / 2026-11-27，Asia/Shanghai（UTC+08:00） |
+| 来源 RFC | [RFC-07-007](../../rfc/07_trading/RFC-07-007-btc5m-live-parity-and-operations.md#r21) V1.20，§R21.1–R21.4 |
+| 来源 SPEC | [SPEC-07-007](../../spec/07_trading/SPEC-07-007-btc5m-live-parity-and-operations.md#r21) V1.20，§R21.1–R21.6、D21-01–07 |
+| 来源任务 | T1 `t_247f4962`（run 4180，由主控核对解锁）→ T2 `t_74644667`；R20/R19 及更早阶段记录保留 |
 | ROOT | /home/pascal/workspace/yquant-investment |
 | BOT | ROOT/skills/trading/auto-trading/prediction-markets/Prediction-Markets-Trading-Bot-Toolkits |
-| 后续 | 本卡仅本Design及RFC/SPEC对应Design指针/同义阶段元数据；既有 t_b73c5571 Implement → t_ad28da03 独立Validate继续行政HOLD，须主控另放；不建卡、不部署/启动交易 |
+| 后续 | 本卡仅修改本 Design；RFC/SPEC 保持 T1 冻结字节（其“Design 未交付”是 T1 时点说明）。主控核对后另行决定 T3，随后独立 Validate；不解锁历史卡，不部署、不启动交易 |
 
 历史 V1.1 Amendment 记录（非本轮 source pointer）：RFC V1.0 SHA256=`38356736b1132689a276be720eed9ff1cd9c009d3d02a0342f9e595f8f8d8416`、SPEC V1.0 SHA256=`12f8afda7b29026fe9139d49024a92b096a91b7b96411a94718de49cb114d873`当时重新核对一致；原 Design V1.0 SHA256=`58562e2b78c606467b2d8ca60e67493fec49592371857ae85d53aa75c7f2ec49`为当时基线。V1.1只细化内部模块/测试，不升级wire。本轮 source、身份与范围以下节为准，不能把历史未完成清单当R16重建授权。
 
@@ -901,7 +901,7 @@ Pascal 明确要求在原固定启动入口补齐 `RECONCILIATION_REQUIRED / INV
 
 ### 6.5 指定“已证明未发送的保守 edge 误停”的下一窗口交接（2026-11-25 受限增补）
 
-Pascal 明确要求在原固定启动入口补齐“原固定入口可重新开窗”的最后一条受限分支：当旧 run 的停机原因**本身就是经济性 edge 不合格**（`EDGE_BELOW_MIN`，发生在发送许可之前），且该 run 已用完整 canonical 证据证明**本窗从未发送过任何订单**时，操作者重新调用原入口应能开新窗，而非落入 `HISTORY_REQUIRES_TAKEOVER`。这仍是操作者重新调用原入口时的下一窗口交接，不是原 run 回 READY、自动重启或通用 reset。
+Pascal 明确要求在原固定启动入口补齐当时范围内最后一条受限分支：当旧 run 的停机原因**本身就是经济性 edge 不合格**（`EDGE_BELOW_MIN`，发生在发送许可之前），且该 run 已用完整 canonical 证据证明**本窗从未发送过任何订单**时，操作者重新调用原入口应能开新窗，而非落入 `HISTORY_REQUIRES_TAKEOVER`。这仍是操作者重新调用原入口时的下一窗口交接，不是原 run 回 READY、自动重启或通用 reset。[R21](#r21) 是另一独立类别，不降低本节 `UNSENT_EDGE` 的完整审计要求。
 
 **资格判定必须逐项来自本窗自身的完整证据，不得只凭末态摘要：**
 
@@ -1217,7 +1217,7 @@ cargo check --locked --offline --all-targets --target-dir <当前profile-scratch
 
 ### R20.1 当前元数据、来源与证据边界
 
-本节为本轮现行Design，版本V1.19；来源为独立的 [RFC-07-007](../../rfc/07_trading/RFC-07-007-btc5m-live-parity-and-operations.md) V1.19 §R20.1–R20.5、[SPEC-07-007](../../spec/07_trading/SPEC-07-007-btc5m-live-parity-and-operations.md) V1.19 §R20.1–R20.7及D20-01–02。来源任务为t_6cbc04c3→本卡t_0722b40a→既有Implement t_3b5efeb4→独立Validate t_39485d04。本卡只追加本Design及版本行，不改RFC/SPEC；文首V1.18、旧尾注及两来源文档“Design待下游”指针保留其前一阶段时点含义，由本节提供已落盘R20的反向互引，不将旧阶段清单累加为本轮授权。R18/R19目标和既有状态不变，本文不是实现、业务PASS或部署许可。
+本节为 V1.19 当时的 Design；来源为独立的 [RFC-07-007](../../rfc/07_trading/RFC-07-007-btc5m-live-parity-and-operations.md) V1.19 §R20.1–R20.5、[SPEC-07-007](../../spec/07_trading/SPEC-07-007-btc5m-live-parity-and-operations.md) V1.19 §R20.1–R20.7及D20-01–02。来源任务为t_6cbc04c3→t_0722b40a→既有Implement t_3b5efeb4→独立Validate t_39485d04。该次仅追加 Design 和版本行，未改 RFC/SPEC；本节的交付状态、身份和部署说明均按当时记录，当前修订来源见文首及 [R21](#r21)。R18/R19目标和既有状态不变；不将旧阶段清单累加为当前授权。
 
 ROOT、BOT沿文首绝对目录。2026-11-26实读BOT HEAD=`b48180539c20f93c3d0a1ca8b0a462fecfb862fc`；fills.rs/account.rs及controller/signer等开工已dirty，startup_history及其测试已存在但未跟踪。本卡保全共享差异，行号仅定位，后续以符号和候选文件hash为准。事实源为 [根因报告](../../../data/reports/2026-11-26-btc5m-history-not-closed-root-cause/report.md) 及同目录evidence下的venue-order-matches.json、chain-orderfilled.json、root-cause-arithmetic.json、poststop-read-{1,2,3a}/summary.json。
 
@@ -1334,10 +1334,113 @@ fixture构造：用historical_trader取得原synthetic订单/签名绑定/两条
 
 范围内设计open为空：只需上述定点修改，不需改调用点、settled接口、模块或closure。范围外仍未完成的是：真实remaining=1订单按原证明是否Final、当前账户能否fresh原生读取成功、以及旧OUTPUT_INVALID窗口恢复资格；它们不阻塞本算术Implement，却阻止声称账户已闭合/原脚本已能恢复/可重启。若实现中证明本算术目标必须扩大范围，先报告缺口与最小选项，由Pascal裁定，不自行解决这些独立目标。后续真实结果仅能来自另获授权的fresh原生读，fixture不替代。
 
+<a id="r21"></a>
+## R21：指定窗口下单前异常退出的受限恢复设计（2026-11-27，V1.20）
+
+### R21.1 决策与来源
+
+只允许原 `scripts/start-btc5m-live.sh` → `tools/predictfun/btc5m_launch.py` 的 `--auto-prepare` 在同一次启动准备中，给已经证明未到达业务/发送路径的唯一旧窗 `btc5m-live-4d0577d73dee4106` 增加进入原双读的资格。操作者仍须另获原授权；旧窗仍是 `INCOMPLETE`，不回 READY、不合成 Final/账务/零损失审计、不解除旧接管。不是用 `PROCESS_FAILED` 或空事件恢复所有异常退出，也不扩展 `btc5m_payout_recovery.known_ended` 的 `OUTPUT_INVALID` / child 0，或 §6.5 的 `UNSENT_EDGE`。历史证明不替代任何新读或运行期门禁。R20 的结算和 `HISTORY_NOT_CLOSED`/Final 不改。
+
+精确上游：RFC V1.20 [§R21.1–R21.4](../../rfc/07_trading/RFC-07-007-btc5m-live-parity-and-operations.md#r21)，SHA-256 `d862cd0f019a7da120947b7f050ea9e2236182e06a3a61a603d1304ac070dc68`；SPEC V1.20 [§R21.1–R21.6 / D21-01–07](../../spec/07_trading/SPEC-07-007-btc5m-live-parity-and-operations.md#r21)，SHA-256 `0431677b12a2d7b724208019a7273a92f1a3fc714aaf8813dd331cb46d63b034`。T2 只读这些 T1 产物，主控解锁核对见卡 `t_74644667`；下文的文件、拒绝与副作用口径落实 SPEC，不新增生产授权。
+
+### R21.2 冻结证据的权威、载入和绑定顺序
+
+路径简称（均相对于 ROOT，源码另注明 BOT）：
+
+- `E = data/reports/2026-11-27-btc5m-controlled-paper/evidence`；`R = E/btc5m-live-4d0577d73dee4106`；`A = E/launch-attempts/btc5m-live-4d0577d73dee4106`。
+- `F = data/reports/2026-11-27-btc5m-fact-incomplete-stop/evidence`。[冻结 intake](../../../data/reports/2026-11-27-btc5m-fact-incomplete-stop/evidence/pre-send-exit-recovery-intake.json) 的原字节 SHA-256 为 `a98ce32fa6b45395ed79f1e46e7dbccfc95e8ce07099ffdf8f4ea2833456e729`；受身份覆盖的资格模块固定此摘要及下表路径角色。固定校验 `source_sha256` 路径集合：`R` 的 `started.json`、`ended.json`、`public-config.json`、`live-context.json`、`events.jsonl`、`run-log.txt`；`A` 的 `attempt-reserved.json`、`barrier-rotation.json`、`launch-dispatch.json`、`account-read-recovery.json`、`reconciliation-pass-1.json`、`reconciliation-pass-2.json`、`reconciliation.json`；`F` 的两份绑定（下表）。逐一验实际原始字节，不能任信 JSON 宣称的路径/摘要或 `checks=true`。额外的固定文件也按下表交叉绑定。保持原读文件大小/严格 JSON 限制；报告文件要是唯一、无链接的本地正规文件及预期路径，拒绝转义、别名、重复、截断或不一致。比较及摘要应来自同一份读取的字节，不采用先验 hash 后重开未经验证的内容。
+
+| 顺序 | 权威及逐项校验（均是合取，失败即停） |
+|---|---|
+| 0. 原入口与实时旧窗 | `_main` 在原 `AccountLock` 内获取完整旧 guard，保留 `_check_old_guard`、`_old_activation`、命令行已有旧身份断言及 `guard._uri_matches`。旧 guard 的 `_id/schema_version/scope/state/run_id/risk_window_id/authorization_ref/candidate_digest/armed_at` 全部保留；`scope` 含固定 `venue/chain_id/account_mode/trading_address/signer_address` 和 `host`，原 `scope_id` 与 `ARMED` 必须成立。仅该旧 `run_id` 进入新分支；原候选中的显式 declared orders 仍须按原规则逐项相同。原错 run/旧身份不匹配仍拒绝，**另外真正符合旧分类的其他窗口**不被此单窗逻辑改判。 |
+| 1. 唯一归档及元数据 | 保留 `_stopped_window` 的唯一旧 run 查找（`*/evidence/<run>/started.json`）；同样要求唯一 `*/evidence/launch-attempts/<run>/attempt-reserved.json`，两个目录必须恰是 `R`、`A`，不走无 seed 的 legacy scratch fallback。严格解码 `started/public/context/ended`，保留 `btc5m_live_events.check_metadata`，用 `candidate_digest(started)` 校验完整 `candidate_identity` 加 `public_config_identity`，并等于 guard/context/activation；旧 digest `dcd196c3a0bfd80bac619b48d57676783dcfe10fc8b8e7af1f48d24e794f7c0d`。旧 `run_id=risk_window_id`；授权引用取原 `R/live-context.json.authorization_ref` 并与 `started`/guard/activation/dispatch 一致，不复制成新授权；`started_at` `2026-11-27T06:17:16.121Z`、`deadline_at` `2026-11-28T06:17:16.121Z`、`unattended`、`signed-future-live` / `phase1_net_shares`。核对 `account_identity` 五字段、`asset_units`、`gas_policy`、`COLD_START_REFUSE`、`MANUAL_PAUSE` 及原风险参数/时窗；guard `armed_at` 符合旧窗时序及原非未来检查。旧 activation 使用 `_old_activation` 已读的同一原始字节，核对 [现行制品绑定](../../../data/reports/2026-11-27-btc5m-fact-incomplete-stop/evidence/context-root-production-binding.json) 的 `activation_sha256_unchanged`（`beb2fc8d07a82ee950484e24520a084f9e47225245f04703e27f43d95aee6f13`），以及 schema、account/risk/auth/digest/mode、not-before/deadline、gas policy、原 `takeover_ref` 字段及 `storage_binding`（deployment、database、collection、credential-env 名、endpoint 标识；不收集秘密）。`A/superseded-activation.json` 是前一窗，不是此旧窗的 activation。 |
+| 2. 旧候选和原生因果 | [旧 `binding.json`](../../../data/reports/2026-11-27-btc5m-fact-incomplete-stop/evidence/closed-reread-bound-candidate/binding.json) SHA-256 `f1ca9f070ca46185c7ccb661f84b4abd271392e85bb4e1462b45b74d8f56d98e`：`started.candidate_identity` 与 `public_identity` 整体精确相等（`main_head` `08beb4d11092192f87a89352f32f0233c9cb9558`、`bot_head` `5616a56e8d7540783ebdc40d6245230f1a7729bb`、旧 `binary_sha256`、`files` 完整路径→摘要映射，无删减/额外项）。固定校验 `selected.polymarket-toolkits.path/sha256/mode`、`selected.btc5m_reconcile.path/sha256/mode`、`shell_entrypoint_sha256`，与原始文件字节交叉绑定；旧交易制品 `F/closed-reread-bound-candidate/polymarket-toolkits` SHA-256 `06954cb544d700c5c18933018aca949d897e67182c5a28668a2cb9b8834e8543`，reader 摘要见 §R21.6。旧来源证明使用旧绑定的全量身份（含 Cargo 和 `source_identity_sha256`），不要求当前工作树的**全部**成员仍等于旧身份；对支撑因果的已验证来源字节逐项核对：BOT `src/main.rs` `87d586b342e99ca9a7fab620cb62b96209d8a5b482c8f3cbb853c88651a79d3b`、`src/config/controlled_live.rs` `3f4b297a207c65207766d4ad961289bd6812b9bc7298c087d370eeb026138883`。旧 controller 来源以旧绑定中的 `files` 及原 `started` 核对（当前 controller 已重新绑定，不能拿当前字节替代旧身份）。同一入口 `scripts/start-btc5m-live.sh` 原 SHA-256 `d34fc27601941c242f3c9dce34c4b98c307b80c7de45891d0e4f89dbbf30cd66`。 |
+| 3. 原调用、轮转与时序 | `A/attempt-reserved.json` 的 `run_id/reserved_utc/committed_budget_atoms/declared_orders/reconciliation_sha256/maximum_controller_invocations/automatic_retry` 原字段齐备，`maximum_controller_invocations=1`、`automatic_retry=false`。`A/barrier-rotation.json` 的 `previous_run_id=btc5m-live-6baf1ef8d6724dfb`，与 `A/barrier-before-rotation.json` 的原 `_id`/scope/`ARMED`/前窗 run 相符（该档案原 SHA-256 `8c495c297332114815286fbec6dea1f64b264c36851fcaa62fde3ff69d44ff51`，不是此次 CAS 输入），`new_run_id=R` 的旧 run ID、`deleted_count=1`、`readback_absent=true`。`A/launch-dispatch.json` 的 `dispatched_utc/launcher_pid/run_id/binary_sha256/deadline_at/operations_mode/controller_invocations/automatic_retry` 与原顺序、run/旧制品一致：PID 为原正整数、一次调用、无重试。用原 `controller_arguments` 的固定 argv 语法逐 token 核对 `--mode`、`--config`（`A/public-config.json`）、`--run-id`、`--predict-budget-confirmation`（链/交易地址/模式）、原公开 `--predict-rpc-url`、`--live-contract`、`--operations-mode`、`--risk-window-id`、`--authorization-ref`、`--deadline-at`、有序 `--predict-reconciled-order`；无未识别、额外重复 flag 或第二次调度。`reserved_utc`、`dispatched_utc` 和旧窗时间按旧 launcher 的毫秒格式对齐，不把 `started_at` 的逻辑窗口起点当作进程真实启动时刻；完整旧第二读须在 reserve/dispatch 前。原 `btc5m_control` 固定子参数的 manifest 是 `R/live-context.json`，不是 dispatch JSON 中任意可选的 child argv；按原 `--controlled-live-manifest` 构造与 UTC+08:00 日期、run 和固定入口证据根闭合。 |
+| 4. 异常退出证明及审计边界 | 固定旧 `started`/原调用与 §R21.3 的原生因果先成立；只接受原 `run-log.txt` 52 字节、同摘要、唯一 tagged `[stderr] Error: CONTROLLED_MODE: LIVE_CONTEXT_PATH`；尾字节为原 native LF 与 `append_run_log` 再加的 LF（`\n\n`），不可 `strip`、行匹配代替原字节比较。`events.jsonl` 须存在且恰 0 字节。`ended` 原 schema `btc5m-controlled-live.v1`、旧 run、`exit_facts={stop_reason:PROCESS_FAILED, launcher_exit:1, child_returncode:1, child_signal:null, forced_cleanup:false}`（严格类型），三项 `audit/cash/execution_complete=false`、`final_accounting/final_event_seq/incomplete_detail=null`、`incomplete_reason=AUDIT_UNAVAILABLE`、`takeover_required=true`。任何许可/ACK、签名发送迹象、未知提交、晚到成交、附加日志/事件、材料缺失或冲突均 NO-GO；没有匹配到证据不是“证明没有发送”。 |
+| 5. 旧 C0 与完整声明 | 唯一 C0 权威是经旧候选 digest 认证的 `R/public-config.json.controlled_run.budget_usdt="80.760100000000000001"`，按原 `_anchor_budget_atoms`/同等原子规则得 `80760100000000000001` USDT atoms。`A/account-read-config.json`（原首读）与 `A/public-config.json`（原次读）都必须与 run config 原字节相同（SHA `04f0d01e1abc9ceb42687bc4041a2afb6403ed998af5e507e4f879c938424ff6`）；seed 预算、来源 proof `next_budget_atoms` 和旧现金等式相符。该失败窗的 C0 **不作**成本/损益调整，也不从这次余额推断。`A/attempt-reserved.json.declared_orders` 原形固定 25 个唯一合法 hash，等于 `launch-dispatch` 的同序声明以及旧两读和汇总中的 `reconciliation.declared_orders`；不排序、去重、追加、删改或代入空声明。来源 proof 用 `window_order_hashes` 交叉核对旧声明的后 8 项，前 17 项对上前窗 seed 的 `declared_orders`（`E/launch-attempts/btc5m-live-6baf1ef8d6724dfb/attempt-reserved.json`，SHA `7d834efcb31b2f640da05cf8a33292095266a0b5b9a59aba352008a0d1e95276`）；不是把前窗新订单再追加一次。 |
+| 6. 两次旧读与汇总 | `A/account-read-recovery.json` 的 `old_run_id` 是原轮转前窗；`fresh_read_sha256` 按序绑定两份 `reconciliation-pass-{1,2}.json` 原字节，`expected_history` 交叉核对两类完整多重集；seed 的 `reconciliation_sha256` 核对 `A/reconciliation.json` 原字节。proof 中前窗经济事实不是本次失败窗的 Final。核对 reader pin、`btc5m-reconciliation-read.v2` / `venue=predict_fun`、同一固定原账户（原地址校验支持原生大小写拼写；不改原件）、`read_only=true`、`reconciliation.complete=true/positions_match_history=true`、`account.pagination_complete=true/positions_explained=true`、显式 `open_orders=[]`/`positions=[]`、Gas 门、两类列表完整及 `collateral_atoms=C0+Σ confirmed claim_atoms`。历史时间参照原 seed/窗口开端和原 `MAX_RECONCILIATION_AGE_SECONDS=900`，不是今天；旧 observation `started_at/finished_at` 与 chain/anchor/块范围完整，按 `first.start ≤ first.finish ≤ second.start ≤ second.finish ≤ reserved_utc ≤ dispatched_utc` 核对，汇总顶层 `finished_at` 等于 pass 2 的 observation，移除该附加键后是 pass 2 的投影。历史两读各自完整且 `_account_facts` 规范化业务事实相同，完整 `claimed_win` / `settled_zero` 多重集与汇总相同。无独立旧 native exit 文件时，仅由原 pinned 输出、proof 哈希、seed/dispatch 及原 anchored `prepare_account` 两次只接受 exit 0 后才交接的成功链证明，不补造进程退出记录。 |
+
+原外层调用的交叉证据为 `E/wrapper/20261127T141559-2447-13708-btc5m-auth-20261127141559-1795760159667967068-e9ef582f/dispatch.json`（SHA `5bd1cd098de01cdd73bd9011cd68752bc17de79994d61a0ae61117fc0001e05a`）：`cwd`/argv 绑定原 venv/launcher、原配置模板、`--auto-prepare`/`unattended`、旧授权引用，`pid` 与 `A/launch-dispatch.json.launcher_pid` 相同，wrapper 时间先于原两读与 controller 调度。只读核对原调用，不重放 Shell；wrapper 记录本身不证明子进程次数或未发送。
+
+### R21.3 下单前因果如何成立
+
+旧制品的实际 SHA、原 dispatch 的模式/参数/规范 context 路径及 `started` 全身份，和相同已验证源码配对。BOT `src/main.rs::main` 先 `Cli::try_parse` / `controlled_run`，随后 `read_live_context(...)?`；BOT `src/config/controlled_live.rs::read_live_context` 先比较 `run.live` 及 `live_manifest_path`（由编译时 `CARGO_MANIFEST_DIR`、UTC+08:00 日期和旧 run 导出固定路径），错即 `LIVE_CONTEXT_PATH`，**早于** `require_control_pipe`、读取 activation/manifest、加载业务配置、处理账户、签名和 `bot::run`；错误在 `?` 返回，无交易路径/permit/ACK/POST。原本传入的是符合 Python 固定构造的路径；不是把任意错误路径认作可恢复。
+
+保留 [t_6b2c9b97 / run 4179 独立验收](../../../data/reports/2026-11-27-btc5m-fact-incomplete-stop/evidence/context-root-fixed-candidate/validation.md) SHA-256 `c4147bc64ac4dc6e587bb966ba79a83ec49f42e3bf392416de9dc981f64189fc`，按已钉住的 [制品绑定](../../../data/reports/2026-11-27-btc5m-fact-incomplete-stop/evidence/context-root-production-binding.json) SHA-256 `3d0921d3ee2eb609276c1b87c996446b5eec9f144dcb63cd17543d22bea78e6a` 核对旧/新实际字节、`independent_offline_validate` 及 `native_probe.cases`。原探针证明旧制品+规范路径 exit 1 / `LIVE_CONTEXT_PATH`，新制品+规范路径 exit 1 / `CONTROL_CHANNEL`，新制品+故意错路径 exit 1 / `LIVE_CONTEXT_PATH`；不是对旧生产进程的 syscall 追踪，也不是当前账户或启动验证。使用旧证据与旧控制流的交集，不能由日志独断，不能以新制品修好反推历史。运行时只核对冻结原件和已绑定的独立结果，不重跑历史交易制品；因果、字节来源或无后续业务路径的证据链不成立即 NO-GO，不调用 fresh reader。
+
+### R21.4 原双读与原交接顺序
+
+1. `_main` 在原账户锁下完成 §R21.2–3。只产生内部资格 `PRE_SEND_EXIT`，提供 `orders`、不变 `budget_atoms`、旧完整两类多重集及证据摘要引用；与旧 Final/账务对象分离。调用方若显式传入不等于原顺序的 `--declared-order`，仍拒绝。锁、旧 guard、旧 activation、来源证明或声明拒绝均发生在第一个 fresh reader 之前。
+2. `prepare_account` 把该类别放入原 anchored 路径，不走普通首读 exit 4 / 从余额锚定的分支。保持同一个 config 预算值和同序 25 条声明，从 `account-read-config.json` 到第二份 `public-config.json` 皆为旧 C0；使用 `control.local_signer.reconcile_account` 原 pin，产生两份不同输出 `reconciliation-pass-1.json`/`-2.json`。没有额外人工轮次、缓存复用、并行、补读或重试。每次原生 exit 0、read-only、完整/固定账户、分页、历史解释与 Gas 门；保留 `_cash_snapshot(..., require_complete=True)`，并在新类额外要求**显式**空 `positions` 和 `open_orders`、两类完整列表齐备、实际是本轮独立采样（调用绑定/输出文件、时序和原 freshness 各自成立）。第二读在第一读通过后开始；允许不同采样块/时间，不以其改变当作账户事实变化，不能用复制第一读应付第二读。
+3. 每读各自精确检查 `collateral_atoms == old_C0 + Σ confirmed claimed_win.claim_atoms`、Gas `>= 2000000000000000` BNB atoms，及完整 `claimed_win`、`settled_zero` 分别与旧锚的多重集相同。按整条记录 canonical bytes 比较、排序但保留重数；空缺/null/类型错、新增/删除/重复增量/字段改写（含净额相同）拒绝，唯允许排列变化；有序声明不适用此排列规则。不要求 fresh Gas 等于历史读的 Gas，但两次 fresh 的 Gas、现金及 `_account_facts` 的全量业务事实须彼此相同；`positions_explained` 单独必为真。首读任何失败时不启动第二读。次读通过本读验证后才比较两次 `_account_facts`。
+4. 只在新 attempt 内用原 `live._create_file` 独占写 `pre-send-exit-recovery.json`（指定旧 run/risk/auth/digest、intake/旧制品/原件与旧两读摘要、旧 C0、原声明、两次 fresh 输出按序摘要）；沿原写 `reconciliation.json` 并在 `prepare_account` 和 `launch` 保留 `preflight`。该证明只记录对账资格和读数，后面失败时已创建的新 attempt 文件可能留存，不能将其解释为 rotation/dispatch 或旧 audit COMPLETE。
+5. 原 `launch` 复验 public config/reconciliation、部署候选与原授权/模式/风控范围，`read_barrier` 以整个旧 guard 与锁下快照比较，`guard.validate_activation` 校验新 activation/context，保存 seed。原 `activate` 再比锁下旧 activation **原字节**，存 `superseded-activation.json`，暂存/校验 `next-activation.json`，`os.replace` 原子发布，目录同步并读回 exact bytes。activation 通过才调用 `rotate`：保存 `barrier-before-rotation`，以**完整旧 record**（不只 `_id`/state/run）`delete_one(record)`，要求 `deleted_count=1`，再以原 scope `_id` 读回不存在，然后写 `barrier-rotation`。按原顺序写 `launch-dispatch` 并单次移交 `dispatch` → `btc5m_control.run`；launcher 在 dispatch 才放原 `AccountLock`，controller 接手重新获取同账户锁及原 guard/activation 门，不能假定两个锁持有者的交接无间隔；不得只因调用返回就宣称 child 或实盘成功。
+
+### R21.5 拒绝面、次数与可观察副作用
+
+矩阵计数为 **本次**尝试，不计旧归档或更早已发生的 guard 写入；读数为调用原 native reader 边界次数，原 signer 前置失败时 native 进程实际启动可更少，另行记录。`P` 为本次 activation 是否已发布，`C` 为旧 guard `delete_one` 次数（不是读 guard 次数），`D/B` 为 controller 交接/新 child 次数。`main` 按现行规则输出 `REFUSED_NO_RETRY` 或 `STOPPED_NO_RETRY`；拒绝时 Python CLI exit 1，历史 replay 的 exit 4 专指原诊断包装 `_stopped_window` 的旧证据结果，不是新增 CLI 码。保留原 signer/controller/guard 的现有脱敏 reason；不吞原拒绝或将失败改健康。
+
+| 首个失败阶段 | 既有拒绝边界 / 期望 reason | 读 / P / C / D/B |
+|---|---|---|
+| parser、重复 run/窗、部署/参数、锁、首读 guard、旧 activation/storage | 原码；如 `BAD_ARGUMENTS`、`DUPLICATE_RUN`/`DUPLICATE_WINDOW`、`CANDIDATE_IDENTITY`、`UNEXPECTED_BARRIER`/`UNEXPECTED_ACTIVATION`/`STORAGE_BINDING`；保留 guard 自有码及严格结构异常的原 `LAUNCH_PREPARATION_FAILED` 出口 | 0 / 0 / 0 / 0/0 |
+| 历史资格：缺/重复旧目录；旧身份/制品/源/因果/日志/退出不符；旧种子/C0/读出/声明不闭合 | `HISTORY_MISSING_OR_AMBIGUOUS`（归档选择），`HISTORY_IDENTITY`（身份/冻结字节/启动退出因果），有绑定材料但旧账务证明不闭合走 `HISTORY_REQUIRES_TAKEOVER`；显式声明不匹配保留 `DECLARED_ORDERS_MISMATCH`。若篡改同时触发 hash 不符，以先到达的摘要门拒绝 | 0 / 0 / 0 / 0/0 |
+| 首/次新读失败（含准备该读前的本地 IO） | native 非 0 / 不完整 `RECONCILIATION_NOT_COMPLETE`，原 signer failure reason 原样；形状/身份/声明/分页/非显式空仓挂单 `RECONCILIATION_FACTS`，过时 `STALE_RECONCILIATION`，Gas/不可用现金 `CASH_OR_GAS_UNAVAILABLE`，差 1 atom `CASH_BUDGET_MISMATCH`，历史多重集变更 `HISTORY_REQUIRES_TAKEOVER`，两读业务事实差 `RECONCILIATION_DRIFT`；按原通用 IO 错误出口 | 到达首次读边界仅 1；到达次读边界仅 2（此前本地失败则截断）/ 0 / 0 / 0/0 |
+| 双读后 proof/seed/preflight、全 guard 再读或新 activation/context 校验；旧 activation 字节漂移 | 原 IO/preflight/guard 码；`BARRIER_DRIFT`（整份再读不同）、`UNEXPECTED_BARRIER`（目标不符）、`ACTIVATION_DRIFT`（发布前旧字节不同） | 2 / 0 / 0 / 0/0 |
+| activation 暂存读回失败 / replace 未发生 | `ACTIVATION_WRITE`（字节校验失败）或原 IO `LAUNCH_PREPARATION_FAILED`；旧 activation 保持，新 attempt 可有暂存 | 2 / 0 / 0 / 0/0 |
+| replace 调用结果不明，或已 replace 但 fsync/读回失败 | `ACTIVATION_WRITE` 或原 IO exit；如已 replace 则已经发布，durability/读回状态按证据分别记已发生/未知；不触达 CAS | 2 / 可能 1 / 0 / 0/0 |
+| 已发布，CAS 前证据写失败 / CAS miss / delete 结果未知 / delete 成功但读回失败或仍有 guard | 原 IO/driver `LAUNCH_PREPARATION_FAILED` 或 `BARRIER_ROTATION`（计数非 1 / 读到 guard）。写 CAS 前证据失败时 C=0；一旦调用 delete 则 C=1，分别保留「未删」「结果不明」「已删但复验未通过」事实；`deleted_count!=1` 短路不读回 | 2 / 1 / 0 或 1 / 0/0 |
+| 已发布且 CAS/读回成功，随后轮转或 dispatch 证据写失败 | 原 IO 出口，旧 guard 已删除且曾读回不存在，不能改报“没有写入”；未发生交接 | 2 / 1 / 1 / 0/0 |
+| 全部门禁通过；交接内部若 controller 拒绝/失败 | 到达 `dispatch` 仅一次；controller/child 结果照原契约记录，controller 可在新 child 前拒绝或在 child 启动后报错；不补调用 | 2 / 1 / 1 / 1/≤1 |
+
+旧目录/终态永不写；失败停止后继动作，不做第二次 activation/CAS/controller，也不自动回滚、清 guard 或重启。全 guard 再读之后仍可能并发漂移；发布后 CAS miss 是正确的拒绝而不是无副作用，不能宣称本地文件和 Mongo 是跨系统原子事务。原 `retryWrites=False`、接管和原 loss latch/风险阈值继续生效。
+
+### R21.6 T3 唯一文件 allowlist、G3 与候选身份闭包
+
+下表路径均以 BOT 为根；仅主控另行批准 T3 后可改，不是 T2 写入许可。R21 不能把现存 dirty delta 当成自己改动，进入 T3 时先冻结原 HEAD/dirty/untracked 及差异基线，逐项归责。不得整仓 checkout/reset 或借修 R21 安全门扩大范围。
+
+| 路径 | 唯一允许变化 |
+|---|---|
+| `tools/predictfun/btc5m_pre_send_exit_recovery.py`（新增） | 纯资格 `qualify`、完整多重集验证 `fresh_history_matches`；固定旧 run/路径角色和 intake 摘要，消费只读证据字节、旧 guard/activation/账户快照和显式历史时钟，返回只给启动准备使用的锚和摘要或类型化拒绝。对大制品可消费 launcher 从固定路径流式算得的字节摘要/文件属性；证据文件的 JSON/哈希和语义校验在纯叶，不引入 DB/凭据/网络/子进程/写盘/CLI，也不 import launcher/controller。 |
+| `tools/predictfun/btc5m_launch.py` | 保留 `_main`/`_stopped_window` 的原锁、旧绑定与原元数据核验；仅对已选定旧 run 在旧 `audit_complete/known_ended` 判定前分派到新叶（共享身份检查仍先执行）；以原安全文件读取边界提供唯一归档/固定来源字节及 `_main` 已验证的 `old_bytes`，不得对其他 run 广撒读文件。无旧 activation/guard 快照不取得新资格；不改其他旧分类的输入/返回。`prepare_account` 只增加此内部 `kind` 的同锚条件、每读的精确事实/历史断言、原新 attempt 证明出口；接线复用 `_cash_snapshot`/`_account_facts`，不移动 `launch`/`activate`/`rotate`/`dispatch`、不重写循环或 `main` 公共错误面。 |
+| `tools/predictfun/btc5m_control.py` | **只**在实际 `LIVE_PATHS` 增加新纯叶和新 colocate 测试叶；不改 selector/pin、reader、child、守护或清理。 |
+| `tools/predictfun/tests/test_btc5m_pre_send_exit_recovery.py`（新增） | D21-01–07 定向 fixture/原入口、矩阵参数化及消费者断言；只允许隔离目录中的读写和外部替身，原件保持不变。 |
+| `tools/predictfun/tests/test_btc5m_control.py` | 只修必要的 `ControlledLiveSupervisorTests.test_deployed_identity_reaches_original_signed_dispatch_and_fixed_manifest` 和 `test_actual_live_public_identity_covers_upstream_and_loaded_files` 的**当前**身份集合/计数及 R21 delta 断言；保留源清单保护、原真实 `public_identity` 和原 dispatch、历史 digest/成员/旧制品断言与 pin。 |
+
+§6.5 G3 按实读基线：`btc5m_launch.py` 1341 行（1201–2400，受控扩张），`btc5m_control.py` 2310 行（同档，只增清单），`tests/test_btc5m_control.py` 2536 行（架构例外，只作机械迁移，不承载新增业务矩阵）。先用新测试把旧路径钉红，再把**本类**纯资格独立成叶、接最窄 launcher 分支，最后闭合身份和原消费者。所有新文件 ≤1200 行；不移动或重写其他恢复分支，不增接线之外的 launcher 职责。若新增证明必须外溢到 controller/guard、现有文件跨档或需额外可写路径，先回主控；不借 G3 做全 launcher 提取或其他架构改修。
+
+实际 `btc5m_control.public_identity({}, live=True)` 取主/子仓 HEAD、真实 `LIVE_BINARY` 字节及 pin，`files` 是函数内固定成员与 `LIVE_PATHS` 的去重并集的实际字节 SHA（包括 dirty、新文件，不是只枚举 Git）。当前已包含 launcher/controller 和 `test_btc5m_control.py`，不重复加；新叶路径和新测试路径各添一次。以冻结 96 成员基线为起点，仅增加这两条则候选为 98；两处当前固定 96 断言修订时，**同时**校验精确新增集合、既有成员无移除及其非 allowlist 的 SHA 不变，不能只改数字。测试中 `added` 与历次快照的 set difference/changed partition 必须区分历史对历史与当前对历史：两新叶验证为当前新增成员，当前比较仍对 `btc5m_launch.py`、`btc5m_control.py` 及本测试文件的 R21 字节变化做精确归责（若该路径已在原差异集合内，不重复计）；原历史断言包括 57/65 等历史数量及旧 hash 不变。主/子实际 HEAD 与五件 T3 文件摘要须另立候选记录，不在自包含测试文件内写它自己的最终摘要。`_main` 的前置身份门与 `launch` 再取身份，经 `candidate_digest` 进入新 activation/context；`btc5m_control.run` 的 signed-live 路径同样产生 `started.candidate_identity` 和 `--controlled-live-manifest`。用真实消费者验证两端 digest 成立，不伪造 identity 或修改旧候选 digest 来求绿。T3/Validate 记录最终实际集合/数量/哈希与前后基线。
+
+制品不重编/不覆盖：当前 `LIVE_BINARY` 对应 `F/context-root-fixed-candidate/polymarket-toolkits` SHA-256 `66f1286dae49bfc9b4ce2d7e66897c42d1034d20cccd341bfeac8f65d3482f21`；`local_signer.RECONCILE_BINARY` 对应 `F/closed-reread-bound-candidate/btc5m_reconcile` SHA-256 `178b251f0e23fdbc6a282471418b75aeecccc20a155ecbce316bd7c23b259f08`。两者 path/SHA 四 pin、权限、已通过绑定和旧 trade 文件都不改；本轮只拟更新 Python 源身份，不把旧冻结 binding 说成新 R21 候选。不得改外层 Shell、Rust、`local_signer`、events/guard/DB 接口或 schema、依赖、策略/参数/账户/风控、历史文件；不加入口、服务、审批、自动重启或额外人工对账。
+
+### R21.7 离线 RED/GREEN 与独立 Validate
+
+原件只读，复制到 `tmp_path` 再做故障注入；固定证据摘要始终对真正归档，不能为了让篡改样本通过改生产锚或 stub 历史资格。若真实副本一改就先被摘要拒绝，测试应断言该优先级，另用隔离的已绑定输入在纯资格层直测字段/因果反例（不修改原件、真实 parser/main 正例不得跳过摘要）。复用 `tests/test_btc5m_launch.py::native_main` 的原真实 parser/lock/guard/controller 模式；替换 Mongo 客户端/secret source、两次 native reader 边界（各自返回 exit/写实际替身原生输出）、child `popen`（及 sandbox 时钟/路径、合成 child 输出），正例不替换 `_stopped_window`、`prepare_account`、`launch`、CAS filter、activation 发布、`public_identity`、controller parser。必要的旧 raw activation fixture 必须来自受控的原公共 activation 字节并验冻结 SHA，不拼造旧 guard 之外的终态；旧活动 guard 用测试存储提供原 schema 的匹配快照，不能访问生产；旧 source pin 不由测试重新生成。新 attempt 的真实文件操作限隔离目录（包括 lock/activation）；不得访问真实 keyring、Mongo、网络、原账户、制品执行路径或交易入口。
+
+旧 activation fixture 不依赖当前 selector 下的生产 activation 文件。若无事先保存的原字节副本，可在测试临时目录按旧 `launch` 的 canonical 序列化从公开原件重放其**字节构造**（不调用 launcher/activation）：本窗 `R/live-context.json` 提供 auth/risk/account/mode/digest、started→not-before/deadline/gas；`A/superseded-activation.json` 只提供沿用的原 `storage_binding`（前窗文件 SHA `70b61dba63eaa16b23dcfa8fe0adad062315be725bd24521d55b4c4f30793d5b`），wrapper 未传 `takeover_ref`，原 `_main` 取本窗授权引用，序列化用 `btc5m-live-activation/1` 及原 LF。只有产出与冻结 `activation_sha256_unchanged` **逐字节摘要一致**才可用于正例；不同即报告证据缺口，不能用仿造摘要、跳过检查或读写实时 activation 兜底。这不是补造历史 activation 或终态。
+
+| SPEC | 实现后的 pytest 节点（同属 `tools/predictfun/tests/test_btc5m_pre_send_exit_recovery.py`） | 证伪断言 |
+|---|---|---|
+| D21-01 | `test_frozen_window_reaches_original_main_once` | 先同一真实 fixture 在旧 `_stopped_window` 记录 `HISTORY_IDENTITY`、诊断 replay exit 4（旧 CLI 拒绝 exit 1）；将候选成功断言跑旧实现应 RED，要与缺 fixture/依赖等基础故障区分。候选 GREEN 经真实 parser/main，原两次读调用各读取自己的输出、两次从首次起使用原 C0 与原 25 条顺序；真实 activation 发布/读回、全 guard CAS/读回、原 controller/假 child 各一次。旧 `ended`/events/hash 和所有源证据前后相同。 |
+| D21-02 | `test_refuses_changed_window_or_exit_before_reads` | wrong run/risk/auth/account/digest、缺/重复归档、错误二进制/源码、尾 LF 截断/额外日志、追加 event、signal/forced_cleanup、permit/ACK、未知提交/晚到成交；即使提供相同余额仍 0/0/0/0/0，无旧 final。其他合法旧分类由 D21-07 验证。 |
+| D21-03 | `test_refuses_changed_seed_and_historical_reads_before_reads` | 原轮转前后 run/删除计数/读回、dispatch argv/重复调用/retry、错误 seed/cash/config、`reconciliation_sha256`、proof 双哈希次序、旧读/汇总时序与 C0/声明、缺/改/重排声明。0/0/0/0/0；历史双读当真仅作基线，不能计作 fresh。 |
+| D21-04 | `test_each_fresh_read_fails_closed` | 首/次 native 非 0（含 4）、不完整/不新鲜/重复读、错地址/声明/分页/解释、任一挂单/持仓非空或缺/null、Gas 低、正负 1 atom；分别只调用 1/2 次，发布/CAS/controller/child 皆 0，不补读。 |
+| D21-05 | `test_exact_fresh_history_and_account_drift` | 保持足额但改第二读 Gas 等业务事实；两读同样出现未知/删除/重复/改写历史或等额抵销，按 §R21.5 分别停在第 1/2 读；两类原全量仅重排且各自产生新鲜采样则通过。 |
+| D21-06 | `test_original_handoff_failures_report_reached_side_effects` | 锁、旧 guard/activation 错；读后全快照（含 host/armed_at）漂移及 activation 字节漂移；暂存/replace/读回失败；发布后 CAS miss/异常、删除成功后读回有 guard 或异常、证据写失败。逐项记录 §R21.5 次数和实际 activation/guard 状态；CAS 注入时真实 filter 必须等于原完整快照；释放顺序正确、无二次操作或 child。 |
+| D21-07 | `test_presend_branch_does_not_claim_other_windows` + 下列原离线回归 | `HEALTHY`/`CASH_PENDING`、`UNFILLED_ORDER`/`FILLED_INVENTORY`、`UNSENT_EDGE`（须旧 COMPLETE audit）、原 `PAYOUT_AUDIT`（含 `OUTPUT_INVALID`/child 0）、`ACCOUNT_READ`、`EXECUTION_AUDIT` 原接受/拒绝及原副作用；未知提交、晚到成交、loss latch、风险阈值按原测试保持拒绝。不能用新 helper 的未命中替代原路径回归。 |
+
+后续执行环境：项目 `ROOT/.venv/bin/python -B -m pytest -p no:cacheprovider -q`；工作目录为 BOT 或按原 fixture 目录结构布置的隔离 BOT，清 `PYTHONPATH/PYTHONHOME`、`TMPDIR` 指当前 worker scratch；报告原件发现沿现有 fixture 的 `BTC5M_TEST_PROJECT_ROOT=ROOT`，只读，临时 guard/activation/新 attempt 与假服务不落到真实 ROOT。先对新测试文件跑上述节点；固定身份入口为 `tools/predictfun/tests/test_btc5m_control.py::ControlledLiveSupervisorTests::test_deployed_identity_reaches_original_signed_dispatch_and_fixed_manifest` 和 `::ControlledLiveSupervisorTests::test_actual_live_public_identity_covers_upstream_and_loaded_files`。原离线 launcher 回归入口为 `tools/predictfun/tests/` 下 `test_btc5m_launch.py`、`test_btc5m_takeover.py`、`test_btc5m_payout_recovery.py`、`test_btc5m_account_recovery.py`、`test_btc5m_read_unavailable_recovery.py`、`test_btc5m_settled_inventory_recovery.py`；以 `test_other_stopped_windows_keep_their_takeover_refusal`、`test_m123_full_barrier_cas_preserves_concurrent_drift`、`test_unsent_edge_recovers_with_two_reads_then_one_rotation`、`test_original_payout_audit_prefix_prepares_only_new_window`、`test_execution_frozen_stop_native_main_prepares_new_window`、`test_real_account_stop_prepares_new_window_only_after_both_complete_reads` 与各自原反例为定位点。补原风险/未知提交：`test_btc5m_parameterization.py::test_loss_threshold_is_the_runs_own_frozen_value` 及 `test_btc5m_live_events.py` 中的 `test_final_send_still_requires_ack_unstopped_unlatched_prefix` / `test_unknown_prior_order_is_not_erased_by_later_not_submitted`。实际运行前核对选定节点的假外部边界，不盲跑含真实 native/网络的同文件其它项，不替换或放宽必需旧回归。对基线已有不绿的项，记录同输入的基线结果与本次增量，不改不相关资产/用例以求绿。
+
+### R21.8 交付与上线边界
+
+Implement 若获主控批准，保留真实 RED、正例 GREEN、变异矩阵、精确 allowlist/G3、候选身份及原业务回归证据，不能自签 PASS。独立 Validate 对最终候选**自行执行**受影响的新、旧节点，按 D21-01–07 逐项提供输入/故障点、拒绝阶段/原因、native 与 CLI exit、两次调用输入及次数、实际 P/C/读回/D/B、原证据前后哈希、候选 HEAD/真实工作树成员/哈希和 argv/cwd；疑义或必需用例不能执行记 NOT_EXECUTED 并不签通过，不绕工具拒绝。旧原生探针和历史诊断只作证据，不作为本轮执行或验收。
+
+本次交付只有 Design 文档及静态核对，无交易/账户代码、launcher、Mongo、activation、网络、构建、pytest、commit/push；没有创造新的启动许可。后续离线候选如不通过则不采用，保留既有绑定、旧 stop/guard/activation 和接管，不在共享树整体回退；如果以后单独获准部署，仍须原授权和原入口按当前身份做 fresh 双读及原 Handoff。Design、Implement 或离线 Validate 通过均不证明账户已核清、guard 可撤或生产可启动；实盘状态 **HOLD**。
+
 ## 版本记录
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| V1.20 | 2026-11-27 | R21：只冻结指定旧窗下单前异常退出的原件/原生因果、旧 C0 与有序声明、原 anchored 双读和多重集、activation/全 guard CAS/单次交接及失败副作用；对齐 RFC/SPEC V1.20 和 D21-01–07，限定 G3/候选身份与独立离线验收。仅改 Design，未实现、未验收、未授权实盘。 |
 | V1.19 | 2026-11-26 | R20最小算术Design：仅cumulative逐腿floor候选+原settled逐tx实额/转账精确核对；closed/Final/remaining/expiry/市场不变；实读G3、两路径allowlist、原Scenario的D20-01/02与同源双制品/四pin同步边界。仅追加本Design，RFC/SPEC只读；未实现、未跑业务测试或真实账户、不部署、不恢复旧窗口。 |
 | V1.18 | 2026-11-26 | R19仅③Design：原REST唯一transport及安全观测、同进程双部署共享S/H/G/有限多窗与429头到冷却、task-local caller/页批、mark前同步quota与首次poll、原读120s/取消适配；四小生产叶、精确allowlist/G3/LIVE_PATHS和D19-01–08原消费者RED/GREEN/strict reader。RFC/SPEC仅指针/阶段元数据同步，需求语义不改；无代码/业务测试/生产动作，Implement行政HOLD。 |
 | V1.17 | 2026-11-26 | R18第①项：原seed全部成功/STARTUP flush后提交同run启动已核清历史，原账户历史解释命中、完整matches新事实/经济/身份保护、无TTL与本runclaim隔离；冻结双默认seam、单生产叶G3迁移、精确source/test/LIVE_PATHS allowlist与D18-01–06原消费者RED/GREEN、计数/回滚边界。仅本Design，无代码/业务实测/生产四pin或旧proof变更。 |
